@@ -2003,7 +2003,10 @@ static void on_hup() {
     /*
     ** Stop every rebalancer
     */
-    export_rebalancer(0);
+    if (expgwc_non_blocking_conf.slave == 0)
+    {    
+      export_rebalancer(0);
+    }
     
     /*
     ** the configuration is valid, so we reload the new configuration
