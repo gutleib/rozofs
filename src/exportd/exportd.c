@@ -355,7 +355,8 @@ void export_reload_one_export_slave(int instance) {
 
     cmd_p += sprintf(cmd_p, "-d %d ",debug_port_value );
           
-    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
+    export_slave_launcher_pid_file(pidfile,instance);
+//    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
 
     // Launch exportd slave
     ret = rozo_launcher_reload(pidfile);
