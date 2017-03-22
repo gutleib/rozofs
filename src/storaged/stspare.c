@@ -60,6 +60,8 @@ static char   storaged_hostname_buffer[512];
 storage_t storaged_storages[STORAGES_MAX_BY_STORAGE_NODE] = { { 0 } };
 uint16_t  storaged_nrstorages = 0;
 
+int       spare_restore_read_throughput=0;
+
 /*
 ** Buffer for reading and analyzing spare files
 */
@@ -174,7 +176,7 @@ void stspare_debug_stat(char * pChar) {
   STSPARE_DEBUG_STRING(spare_restore_enabled,common_config.spare_restore_enable?"Yes":"No");
   STSPARE_DEBUG_STRING(export_host_name_list,common_config.export_hosts);
   STSPARE_DEBUG_INT(spare_restore_loop_delay,common_config.spare_restore_loop_delay);
-  STSPARE_DEBUG_INT(read_throughput_MB,common_config.spare_restore_read_throughput);
+  STSPARE_DEBUG_INT(read_throughput_MB,spare_restore_read_throughput);
 
   pChar -= 2;
   pChar += sprintf(pChar,"\n  },\n");
@@ -215,6 +217,49 @@ void stspare_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   stspare_debug_stat(uma_dbg_get_buffer());
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
 }
+/*
+**______________________________________________________________________________
+**
+** Spare restorer statistics diagnostic functions
+**____________________________________________________
+*/
+void stspare_set_throughput(char * argv[], uint32_t tcpRef, void *bufRef) {
+  int    val;
+  char * p = uma_dbg_get_buffer();
+
+  /*
+  ** Display current throughput value
+  */  
+  if (argv[1] == 0) {
+    goto display;
+  }
+  
+  /*
+  ** Read a new throughput value
+  */
+  if (sscanf(argv[1],"%d",&val)!=1) {
+    p += rozofs_string_append(p,"Unexpected value for throughput \"");
+    p += rozofs_string_append(p,argv[1]);      
+    p += rozofs_string_append(p,"\"\n");
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+    return;
+  }
+
+  
+  spare_restore_read_throughput = val;
+
+display:
+  p += rozofs_string_append(p,"{ \"read_throughput_MB\" : {\n");
+  p += rozofs_string_append(p,"         \"current\"    : ");
+  p += rozofs_u32_append(p,spare_restore_read_throughput);      
+  p += rozofs_string_append(p,",\n         \"configured\" : ");
+  p += rozofs_u32_append(p, common_config.spare_restore_read_throughput);      
+  p += rozofs_string_append(p,"\n  }\n}\n");
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+  return;
+        
+}
+
 /*
 **____________________________________________________
 **
@@ -356,7 +401,7 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
     ** prj[idx] describes projection id (idx-1) that should be written in sid dist[idx-1] 
     */
     sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-            common_config.spare_restore_read_throughput,
+            spare_restore_read_throughput,
 	    fidCtx->data.key.cid, fidCtx->data.dist[idx-1],  fidString,
 	    fidCtx->data.key.chunk, fidCtx->data.prj[0].start, fidCtx->data.prj[0].stop);	 		 
     ret    = system(cmd);
@@ -376,7 +421,7 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
   ** Then let's rebuild the spare file it self hopping it will disappear
   */	
   sprintf(cmd,"storage_rebuild --nolog  -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-          common_config.spare_restore_read_throughput,  
+          spare_restore_read_throughput,  
 	  fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
 	  fidCtx->data.key.chunk, fidCtx->data.prj[0].start, fidCtx->data.prj[0].stop);
   ret    = system(cmd);
@@ -450,7 +495,7 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
       ** prj[idx] describes projection id (idx-1) that should be written in sid dist[idx-1] 
       */
       sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-               common_config.spare_restore_read_throughput,
+               spare_restore_read_throughput,
 	       fidCtx->data.key.cid, fidCtx->data.dist[idx-1],  fidString,
 	       fidCtx->data.key.chunk, fidCtx->data.prj[idx].start, fidCtx->data.prj[idx].stop);
       ret    = system(cmd);
@@ -501,7 +546,7 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
   ** Since every thing has been rebuilt, rebuild the spare file it self hopping it will disappear
   */	
   sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-           common_config.spare_restore_read_throughput,
+           spare_restore_read_throughput,
 	   fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
 	   fidCtx->data.key.chunk, 0, -1);
   ret    = system(cmd);
@@ -788,14 +833,14 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
   ** Let's compute the time credit for each read loop
   */
   start = stspare_get_us(0);
-  if (common_config.spare_restore_read_throughput == 0) {
+  if (spare_restore_read_throughput == 0) {
     /*
     ** No throughput limitation
     */
     loop_delay_us = 0;
   }
   else {  
-    loop_delay_us = (1000000 * BUFFER_SIZE_MB)/common_config.spare_restore_read_throughput;
+    loop_delay_us = (1000000 * BUFFER_SIZE_MB)/spare_restore_read_throughput;
   }
   
   offset        = 0;
@@ -1103,6 +1148,11 @@ void *stspare_thread(void *arg) {
     stspare_stat.seconds_before_next_run = 0;
     
     /*
+    ** Load throughput value from config
+    */
+    spare_restore_read_throughput = common_config.spare_restore_read_throughput;
+     
+    /*
     ** Loop on disk to find out the new spare files and
     ** try to restore them when possible
     */
@@ -1138,6 +1188,7 @@ void *stspare_thread_launch() {
   ** Add a debug topic
   */
   uma_dbg_addTopic("spare", stspare_debug); 
+  uma_dbg_addTopic("throughput", stspare_set_throughput); 
 
   /*
   ** Initialize FID cache
@@ -1463,7 +1514,8 @@ int main(int argc, char *argv[]) {
   
   // Read common config
   common_config_read(NULL);    
-
+  spare_restore_read_throughput = common_config.spare_restore_read_throughput;
+  
   while (1) {
 
     int option_index = 0;
