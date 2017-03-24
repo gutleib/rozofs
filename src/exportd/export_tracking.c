@@ -1572,6 +1572,7 @@ out:
 int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *pattrs) {
     int status = -1;
     lv2_entry_t *plv2 = 0;
+    lv2_entry_t *pplv2 = 0;
     lv2_entry_t *lv2 = 0;
     fid_t child_fid;
     uint32_t child_type;
@@ -1587,6 +1588,32 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     ** load the root_idx bitmap of the old parent
     */
     export_dir_load_root_idx_bitmap(e,pfid,plv2);
+    /*
+    ** Check the case of the nfs inode revalidate
+    */
+    if (strcmp(name,"..")==0 || (strcmp(name,".")==0))
+    {
+       if (strcmp(name,".")==0)
+       {       
+          memcpy(attrs, &plv2->attributes.s.attrs, sizeof (mattr_t)); 
+	  memset(pattrs->fid,0, sizeof(fid_t));     
+          if (test_no_extended_attr(plv2)) rozofs_clear_xattr_flag(&attrs->mode);       
+       }
+       else
+       {
+          /*
+	  ** the parent attrs
+	  */
+	  if (!(pplv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, plv2->attributes.s.pfid))) {
+              goto out;
+	  }
+	  memcpy(attrs, &pplv2->attributes.s.attrs, sizeof (mattr_t)); 
+          if (test_no_extended_attr(pplv2)) rozofs_clear_xattr_flag(&attrs->mode);
+	  memset(pattrs->fid,0, sizeof(fid_t));     	         
+       }
+       status = 0;
+       goto out;    
+    }
     /*
     ** copy the parent attributes
     */
