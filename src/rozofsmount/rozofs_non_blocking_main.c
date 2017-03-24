@@ -28,6 +28,8 @@
 #include "rozofs_fuse.h"
 #include "rozofs_fuse_thread_intf.h"
 #include "rozofs_kpi.h"
+#include "rozofs_cachetrack.h"
+
 // For trace purpose
 struct timeval Global_timeDay;
 unsigned long long Global_timeBefore, Global_timeAfter;
@@ -467,12 +469,15 @@ int rozofs_stat_start(void *args) {
    ** start the file KPI service
    */
    rzkpi_file_service_init();
-
+   /*
+   ** File caching init service
+   */
+   rzcachetrack_file_service_init();
     /*
     ** create the fuse threads
     */
     info("FDL RozoFs Instance %d",args_p->instance);
-    ret = rozofs_fuse_thread_intf_create("localhost",args_p->instance,3);
+    ret = rozofs_fuse_thread_intf_create("localhost",args_p->instance,4);
     if (ret < 0)
     {
        fatal("Cannot create fuse threads");

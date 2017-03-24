@@ -70,7 +70,7 @@
 
 
 int rozofs_rotation_read_modulo = 0;
-static char *mountpoint = NULL;
+char *rozofs_mountpoint = NULL;
 int rozofs_max_storcli_tx =0;  /**< depends on the number of storcli processes */
     
 DEFINE_PROFILING(mpp_profiler_t) ;
@@ -967,7 +967,7 @@ void show_mount(char * argv[], uint32_t tcpRef, void *bufRef) {
     char *pChar = uma_dbg_get_buffer();
     
     pChar += sprintf(pChar, "instance   : %d\n",conf.instance);
-    pChar += sprintf(pChar, "mount      : %s\n",mountpoint);
+    pChar += sprintf(pChar, "mount      : %s\n",rozofs_mountpoint);
     pChar += sprintf(pChar, "export     : %s\n",conf.export);
     pChar += sprintf(pChar, "host       : %s\n",conf.host);
     pChar += sprintf(pChar, "eid        : %d\n",exportclt.eid);
@@ -1543,7 +1543,7 @@ void rozofs_start_one_storcli(int instance) {
     cmd_p += sprintf(cmd_p, "-H %s ", conf.host);
     cmd_p += sprintf(cmd_p, "-o %s ", "rozofsmount");
     cmd_p += sprintf(cmd_p, "-E %s ", conf.export);
-    cmd_p += sprintf(cmd_p, "-M %s ", mountpoint);
+    cmd_p += sprintf(cmd_p, "-M %s ", rozofs_mountpoint);
     cmd_p += sprintf(cmd_p, "-g %d ", rozofs_site_number);
     
     /* Try to get debug port from /etc/services */
@@ -1595,7 +1595,7 @@ void rozofs_start_one_storcli(int instance) {
     
     info("start storcli (instance: %d, export host: %s, export path: %s, mountpoint: %s,"
             " profile port: %d, rozofs instance: %d, storage timeout: %d).",
-            instance, conf.host, conf.export, mountpoint,
+            instance, conf.host, conf.export, rozofs_mountpoint,
             debug_port_value, conf.instance,
             ROZOFS_TMR_GET(TMR_STORAGE_PROGRAM));
 
@@ -1685,7 +1685,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     }
 
     // Check the mountpoint after success connection with the export
-    if (rozofs_mountpoint_check(mountpoint) != 0) {
+    if (rozofs_mountpoint_check(rozofs_mountpoint) != 0) {
         return 1;
     }
     if (retry_count == 0) {
@@ -1694,7 +1694,7 @@ int fuseloop(struct fuse_args *args, int fg) {
                 "rozofsmount failed for:\n" "export directory: %s\n"
                 "export hostname: %s\n" "local mountpoint: %s\n" "error: %s\n"
                 "See log for more information\n", conf.export, conf.host,
-                mountpoint, strerror(errno));
+                rozofs_mountpoint, strerror(errno));
         return 1;
     }
     
@@ -1743,7 +1743,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     put_ientry(root);
 
     info("mounting - export: %s from : %s on: %s", conf.export, conf.host,
-            mountpoint);
+            rozofs_mountpoint);
 
     if (fg == 0) {
         if (pipe(piped) < 0) {
@@ -1767,7 +1767,7 @@ int fuseloop(struct fuse_args *args, int fg) {
         close(piped[0]);
         s = 1;
     }
-    if ((ch = fuse_mount(mountpoint, args)) == NULL) {
+    if ((ch = fuse_mount(rozofs_mountpoint, args)) == NULL) {
         fprintf(stderr, "error in fuse_mount\n");
         if (piped[1] >= 0) {
             if (write(piped[1], &s, 1) != 1) {
@@ -1790,7 +1790,7 @@ int fuseloop(struct fuse_args *args, int fg) {
             sizeof (rozofs_ll_operations), (void *) piped);
 
     if (se == NULL) {
-        fuse_unmount(mountpoint, ch);
+        fuse_unmount(rozofs_mountpoint, ch);
         fprintf(stderr, "error in fuse_lowlevel_new\n");
         usleep(100000); // time for print other error messages by FUSE
         if (piped[1] >= 0) {
@@ -1808,7 +1808,7 @@ int fuseloop(struct fuse_args *args, int fg) {
         fprintf(stderr, "error in fuse_set_signal_handlers\n");
         fuse_session_remove_chan(ch);
         fuse_session_destroy(se);
-        fuse_unmount(mountpoint, ch);
+        fuse_unmount(rozofs_mountpoint, ch);
         if (piped[1] >= 0) {
             if (write(piped[1], &s, 1) != 1) {
                 fprintf(stderr, "pipe write error\n");
@@ -1965,7 +1965,7 @@ int fuseloop(struct fuse_args *args, int fg) {
 
 
     /* try to create a flag file with port number */
-    sprintf(ppfile, "%s%s_%d%s", DAEMON_PID_DIRECTORY, "rozofsmount",conf.instance, mountpoint);
+    sprintf(ppfile, "%s%s_%d%s", DAEMON_PID_DIRECTORY, "rozofsmount",conf.instance, rozofs_mountpoint);
     c = ppfile + strlen(DAEMON_PID_DIRECTORY);
     while (*c++) {
         if (*c == '/') *c = '.';
@@ -2022,7 +2022,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     fuse_remove_signal_handlers(se);
     fuse_session_remove_chan(ch);
     fuse_session_destroy(se);
-    fuse_unmount(mountpoint, ch);
+    fuse_unmount(rozofs_mountpoint, ch);
     exportclt_release(&exportclt);
     ientries_release();
     rozofs_layout_release();
@@ -2446,18 +2446,18 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (fuse_parse_cmdline(&args, &mountpoint, NULL, &fg) == -1) {
+    if (fuse_parse_cmdline(&args, &rozofs_mountpoint, NULL, &fg) == -1) {
         fprintf(stderr, "see: %s -h for help\n", argv[0]);
         return 1;
     }
 
-    if (!mountpoint) {
+    if (!rozofs_mountpoint) {
         fprintf(stderr, "no mount point\nsee: %s -h for help\n", argv[0]);
         return 1;
     }
 
     // Check the mountpoint
-    if (rozofs_mountpoint_check(mountpoint) != 0) {
+    if (rozofs_mountpoint_check(rozofs_mountpoint) != 0) {
         return 1;
     }
     
@@ -2479,7 +2479,7 @@ int main(int argc, char *argv[]) {
       ** Give it a ROZOFS_MOUNT_CHECK_TIMEOUT_MICROSEC delay to stop
       */
       if (delay>=ROZOFS_MOUNT_CHECK_TIMEOUT_MICROSEC) {
-        fprintf(stderr, "Can not mount %s\n", mountpoint);
+        fprintf(stderr, "Can not mount %s\n", rozofs_mountpoint);
         fprintf(stderr, "A RozoFS mount point is already mounted with the same instance number (%d)\n", conf.instance);
         return 1;  	
       }

@@ -80,6 +80,8 @@ add_executable(rozofsmount
    xattr.h
    xattr_main.h
    rozofs_opendir.c
+   rozofs_cachetrack.c
+   rozofs_cachetrack.h
 )
 #pthread need by fuse
 target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})

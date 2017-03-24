@@ -23,14 +23,58 @@
 #include "rozofs_ext4.h"
 #include "xattr.h"
 #include "xattr_main.h"
+#include <rozofs/core/rozofs_fid_string.h>
 
 DECLARE_PROFILING(mpp_profiler_t);
+
+void rozofs_ll_getxattr_raw_cbk(void *this,void *param);
+
 
 #define ROZOFS_XATTR "rozofs"
 #define ROZOFS_USER_XATTR "user.rozofs"
 #define ROZOFS_ROOT_XATTR "trusted.rozofs"
+#define ROZOFS_USER_INOTIFY "user.rozofs.inotify"
+#define ROZOFS_EXPORT_XATTR "rozofs.export"
+#define ROZOFS_USER_EXPORT_XATTR "user.rozofs.export"
 
-void rozofs_ll_getxattr_raw_cbk(void *this,void *param);
+typedef enum 
+{
+   ROZOFS_XATTR_NONE_E = 0,
+   ROZOFS_XATTR_STD_E,
+   ROZOFS_XATTR_NOTIFY_E,
+   ROZOFS_XATTR_EXPORT_E
+} rozofs_xattr_e;
+/*
+**__________________________________________________________________
+*/
+/**
+*   Check if the input ascii buffer contains a RozoFS specific extended attribute
+
+   @param input: extended attribut name
+   
+   @retval: 0 not a rozofs extended attribute
+   @retval <>0: index of the rozofs extended attribute
+*/
+static inline int rozofs_is_rozofs_xattr(const char *input)
+{
+      char *name = (char*)input;	
+      if (strncmp(name,ROZOFS_USER_XATTR,11)==0)
+      {
+	  name +=11;
+      }
+      else if (strncmp(name,ROZOFS_ROOT_XATTR,14)==0)  
+      {
+	  name += 14;	
+      }
+      else
+      {  
+        return ROZOFS_XATTR_NONE_E;
+      }
+      if (name[0] == 0) return ROZOFS_XATTR_STD_E;
+      if (strcmp(name,".inotify") == 0) return ROZOFS_XATTR_NOTIFY_E;
+      if (strcmp(name,".export") == 0) return ROZOFS_XATTR_EXPORT_E;
+      return ROZOFS_XATTR_NONE_E;
+}	
 
 /*
 **__________________________________________________________________
@@ -62,6 +106,14 @@ void rozofs_ll_setxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, con
     DEBUG("setxattr (inode: %lu, name: %s, value: %s, size: %llu)\n",
             (unsigned long int) ino, name, value,
             (unsigned long long int) size);
+
+   /*
+   ** Check if it is a fake setxattr to trigger inotify for the case of SMB
+   */
+   if ((strcmp(name,ROZOFS_USER_INOTIFY)==0)) {
+     fuse_reply_err(req, 0);
+     return;
+    }
 	    
     /*
     ** allocate a context for saving the fuse parameters
@@ -85,7 +137,6 @@ void rozofs_ll_setxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, con
     SAVE_FUSE_PARAM(buffer_p,req);
     SAVE_FUSE_PARAM(buffer_p,ino);
     SAVE_FUSE_PARAM(buffer_p,trc_idx);
-
 
     // Invalidate ientry
     if ((strcmp(name,ROZOFS_XATTR)==0)||(strcmp(name,ROZOFS_USER_XATTR)==0)||(strcmp(name,ROZOFS_ROOT_XATTR)==0)) {
@@ -288,11 +339,7 @@ out:
    @retval 0 : not raw
    @retval 1: raw
 */
-#define ROZOFS_XATTR "rozofs"
-#define ROZOFS_USER_XATTR "user.rozofs"
-#define ROZOFS_ROOT_XATTR "trusted.rozofs"
-#define ROZOFS_EXPORT_XATTR "rozofs.export"
-#define ROZOFS_USER_EXPORT_XATTR "user.rozofs.export"
+
 
 int rozofs_ll_getxattr_check_for_raw_getxattr(const char *name,ientry_t *ie)
 {
@@ -333,6 +380,7 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
     lv2_entry_t *fake_lv2_p = NULL;
     int value_size;
     char *buffer;
+    int  rozofs_ea_value;
 
     uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));
     /*
@@ -381,6 +429,10 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
         errno = ENOENT;
         goto error;
     } 
+    /*
+    ** Get the rozofstype of the extended attribute
+    */
+    rozofs_ea_value = rozofs_is_rozofs_xattr(name);
     
     /*
     ** Check whether ientry is still valid 
@@ -395,36 +447,50 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
       */
       if (rozofs_has_xattr(ie->attrs.mode)==0)
       {
-	if ((strncmp(name,ROZOFS_XATTR,6)!=0)&&(strncmp(name,ROZOFS_USER_XATTR,11)!=0)&&(strncmp(name,ROZOFS_ROOT_XATTR,14)!=0))  
+	if (rozofs_ea_value == 0)  
 	{
           errno = ENODATA;
           goto error;  
 	}
       }
     }
-    if ((strncmp(name,ROZOFS_EXPORT_XATTR,strlen(ROZOFS_EXPORT_XATTR))==0) ||
-        (strncmp(name,ROZOFS_USER_EXPORT_XATTR,strlen(ROZOFS_EXPORT_XATTR))==0))
+    if (rozofs_ea_value > ROZOFS_XATTR_STD_E)
     {
-       char *pChar = buf_export_attr;
-       int export_index;
-       char * pHost = NULL;
-       /*
-       ** Get the IP address of the active exportd
-       */    
-       for (export_index=0; export_index < ROZOFS_HOST_LIST_MAX_HOST; export_index++) { 
-
-	   pHost = rozofs_host_list_get_host(export_index);
-	   if (pHost == NULL) break;
-	   if (export_index==0) pChar += sprintf(pChar, "%s", pHost);
-	   else                 pChar += sprintf(pChar, "/%s", pHost);
-       }
-       pChar += sprintf(pChar, " %u ",exportclt.eid);
-       pChar += sprintf(pChar, "%s ",conf.export);
-       pChar += sprintf(pChar, "%d\n",conf.instance);
-       fuse_reply_buf(req, (char *)buf_export_attr, strlen(buf_export_attr));   
-       goto out; 
     
-    }  
+      if (rozofs_ea_value == ROZOFS_XATTR_EXPORT_E)
+      {
+	 char *pChar = buf_export_attr;
+	 int export_index;
+	 char * pHost = NULL;
+	 /*
+	 ** Get the IP address of the active exportd
+	 */    
+	 for (export_index=0; export_index < ROZOFS_HOST_LIST_MAX_HOST; export_index++) { 
+
+	     pHost = rozofs_host_list_get_host(export_index);
+	     if (pHost == NULL) break;
+	     if (export_index==0) pChar += sprintf(pChar, "%s", pHost);
+	     else                 pChar += sprintf(pChar, "/%s", pHost);
+	 }
+	 pChar += sprintf(pChar, " %u ",exportclt.eid);
+	 pChar += sprintf(pChar, "%s ",conf.export);
+	 pChar += sprintf(pChar, "%d\n",conf.instance);
+	 fuse_reply_buf(req, (char *)buf_export_attr, strlen(buf_export_attr));   
+	 goto out; 
+
+      }
+      if (rozofs_ea_value == ROZOFS_XATTR_NOTIFY_E)
+      {
+	 char *pChar = buf_export_attr;
+	 /*
+	 ** provide the fid of the object : @rozofs_uuid@<FID>
+	 */
+          pChar += sprintf(pChar, "%s/@rozofs_uuid@",rozofs_mountpoint);
+	  rozofs_fid2string(ie->fid,pChar);
+	  fuse_reply_buf(req, (char *)buf_export_attr, strlen(buf_export_attr)+1);   
+	  goto out;     
+      }  
+    }
     
     /*
     ** fill up the structure that will be used for creating the xdr message

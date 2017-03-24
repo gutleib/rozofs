@@ -57,7 +57,7 @@ extern int rozofs_rotation_read_modulo;
 extern int rozofs_bugwatch;
 extern uint16_t rozofsmount_diag_port;
 extern int rozofs_max_storcli_tx ;  /**< depends on the number of storcli processes */
-
+extern char *rozofs_mountpoint;
 extern struct fuse_lowlevel_ops rozofs_ll_operations;
 
 typedef struct rozofsmnt_conf {
@@ -363,7 +363,7 @@ static inline int rozofs_is_directory_inode(fuse_ino_t ino)
 
     if (ino == 1) return 1;
     fake_id.fid[1]=ino;
-    if ((ROZOFS_DIR_FID == fake_id.s.key) || (ROZOFS_DIR == fake_id.s.key))
+    if ((ROZOFS_DIR_FID == fake_id.s.key) || (ROZOFS_DIR == fake_id.s.key)||(ROZOFS_TRASH == fake_id.s.key) )
     {
       return 1;
     }
@@ -374,7 +374,16 @@ static inline ientry_t *get_ientry_by_inode(fuse_ino_t ino) {
     rozofs_inode_t fake_id;
 
     fake_id.fid[1]=ino;
-    if (ROZOFS_DIR_FID == fake_id.s.key) 
+    /*
+    ** check if the fid designate a directory referenced by its FID (relative path) or if is the trash associated with the
+    ** directory: the delete bit in the fid can be set for the case of the trash only.
+    */
+    if (ROZOFS_TRASH != fake_id.s.key)
+    {
+      fake_id.s.del = 0;
+    
+    }
+    if ( ROZOFS_DIR_FID == fake_id.s.key )
     {
       fake_id.s.key = ROZOFS_DIR;
     }
@@ -384,6 +393,10 @@ static inline ientry_t *get_ientry_by_inode(fuse_ino_t ino) {
 
 static inline ientry_t *get_ientry_by_fid(fid_t fid) {
     rozofs_inode_t *fake_id = (rozofs_inode_t *) fid;
+    /*
+    ** check if empty inode to address the case of invalid attributes returned by exportd
+    */
+    if (fake_id->fid[1] == 0) return NULL; 
     if (memcmp(fid, exportclt.rfid, sizeof (fid_t)) == 0){
       return get_ientry_by_inode(ROOT_INODE);
     }
@@ -396,6 +409,10 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
 	int extended_attributes = 0;
 	
 	inode_p = (rozofs_inode_t*) fid;
+	/*
+	** clear the delete bit if the fid does not designate the trash associated with a directory
+	*/
+	if (inode_p->s.key != ROZOFS_TRASH) inode_p->s.del = 0;
 	/*
 	** Check the alloc mode for ientry
 	*/

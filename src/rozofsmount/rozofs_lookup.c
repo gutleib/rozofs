@@ -442,10 +442,44 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
 	   (((nie->pending_getattr_cnt>0)||((nie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(nie->attrs.mode)))
 	   ) 
         {
-	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
-	  goto success;    
+	  /*
+	  ** check if parent and child are either deleted/deleted or active/active
+	  */
+	  int trash_state = 0;
+	  if (rozofs_inode_is_del_pending(ie->attrs.fid)) trash_state = 1;
+	  if (rozofs_inode_is_del_pending(nie->attrs.fid)) trash_state |= 1<<1;
+	  switch (trash_state)
+	  {
+	     case 2:
+	       if (rozofs_inode_is_trash(nie->attrs.fid) == 0)
+	       {
+		 errno = ENOENT;
+		 goto error;
+	       }	         
+	       mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+	       stbuf.st_ino = child;
+	       /*
+	       ** set nlinks to reflect . & ..
+	       */
+	       stbuf.st_nlink =2;
+	       goto success;
+	       break;
+
+	     case 0:
+	     case 3:
+	      mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+	      stbuf.st_ino = child;
+	      goto success; 
+	      break;
+	     
+	      
+	    default: 
+	     errno = ENOENT;
+	     goto error;
+	     break;  	  	  
+	  }	    
 	}                
-      }    
+      }
     }
     /*
     ** fill up the structure that will be used for creating the xdr message
@@ -475,10 +509,12 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
               goto error;
 	  }
 	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+	  stbuf.st_ino = child;
 	  goto success;        
       }      
     }  
 #endif         
+    
 #if 1
     ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,ie->fid,EXPORT_PROGRAM, EXPORT_VERSION,
                               EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,
@@ -501,6 +537,7 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
               goto error;
 	  }
 	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+	  stbuf.st_ino = child;
 	  goto success;
         }
       }
@@ -555,12 +592,12 @@ lookup_objectmode:
       nie->nlookup   = 0;
     }   
     mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+    stbuf.st_ino = nie->inode;
 
 //    info("FDL %d mode %d  uid %d gid %d",allocated,nie->attrs.mode,nie->attrs.uid,nie->attrs.gid);
 success:
     memset(&fep, 0, sizeof (fep));
-    stbuf.st_ino = nie->inode;
-    fep.ino = nie->inode;    
+    fep.ino =stbuf.st_ino;  
     fep.attr_timeout = rozofs_tmr_get_attr(rozofs_is_directory_inode(nie->inode));
     fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));

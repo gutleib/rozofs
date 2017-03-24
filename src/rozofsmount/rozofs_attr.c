@@ -120,6 +120,7 @@ uint64_t rozofs_max_getattr_duplicate = 0;
         if (ie->attrs.mtime != 0) {
 	  mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	  stbuf.st_ino = ino; 
+	  if (rozofs_inode_is_trash(ie->attrs.fid) == 1)
           rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
 	  goto out;           
 	} 
@@ -188,6 +189,7 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
    epgw_mattr_ret_t ret ;
    int status;
    ientry_t *ie = 0;
+   ientry_t *pie = 0;
    xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
    
    uint8_t  *payload;
@@ -195,6 +197,8 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
    XDR       xdrs;    
    int      bufsize;
    mattr_t  attr;
+   mattr_t  pattr;
+   int      parent_attribute_valid = 0;
    struct rpc_msg  rpc_reply;
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
@@ -327,11 +331,33 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
     eid_set_free_quota(ret.free_quota);
         
     memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
-
+    /*
+    ** get the parent attributes
+    */
+    if (ret.parent_attr.status == EP_SUCCESS)
+    {
+       memcpy(&pattr, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+       parent_attribute_valid = 1;
+    }
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
     /*
     ** end of the the decoding part
     */
+    if (parent_attribute_valid)
+    {
+      /*
+      ** get the parent attributes
+      */
+      pie = get_ientry_by_fid(pattr.fid);
+      if (pie != NULL)
+      {
+	memcpy(&pie->attrs,&pattr, sizeof (mattr_t));
+	/**
+	*  update the timestamp in the ientry context
+	*/
+	pie->timestamp = rozofs_get_ticker_us();
+      }           
+    }
     /*
     ** store the decoded information in the array that will be
     ** returned to the caller
@@ -721,13 +747,15 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
 {
     fuse_ino_t ino;
     ientry_t *ie = 0;
+    ientry_t *pie = 0;
 //    struct fuse_file_info *fi = NULL;
     struct stat o_stbuf;
     fuse_req_t req; 
     epgw_mattr_ret_t ret ;
     mattr_t  attr;
     uint32_t readahead = 0;
-
+    mattr_t  pattr;
+    int      parent_attribute_valid = 0;   
     int status;
     uint8_t  *payload;
     void     *recv_buf = NULL;   
@@ -860,12 +888,34 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     */
     eid_set_free_quota(ret.free_quota);
     
-    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));  
+    /*
+    ** get the parent attributes
+    */
+    if (ret.parent_attr.status == EP_SUCCESS)
+    {
+       memcpy(&pattr, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+       parent_attribute_valid = 1;
+    } 
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
     /*
     ** end of the the decoding part
     */
-
+    if (parent_attribute_valid)
+    {
+      /*
+      ** get the parent attributes
+      */
+      pie = get_ientry_by_fid(pattr.fid);
+      if (pie != NULL)
+      {
+	memcpy(&pie->attrs,&pattr, sizeof (mattr_t));
+	/**
+	*  update the timestamp in the ientry context
+	*/
+	pie->timestamp = rozofs_get_ticker_us();
+      }           
+    }    
     mattr_to_stat(&attr, &o_stbuf, exportclt.bsize);
     o_stbuf.st_ino = ino;
     /*
