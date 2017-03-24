@@ -201,6 +201,9 @@ static void usage() {
                             rozofs_tmr_get(TMR_FUSE_ENTRY_DIR_CACHE_MS));
     fprintf(stderr, "    -o rozofssymlinktimeout=N\tdefine timeout (ms) for which symlink targets will be cached (default: %dms)\n",
                             rozofs_tmr_get(TMR_LINK_CACHE));
+    fprintf(stderr, "    -o rozofsenoenttimeout=N\tdefine timeout (ms) for which non existent names will be cached (default: %dms)\n",
+                            rozofs_tmr_get(TMR_FUSE_ENOENT_CACHE_MS));
+
     fprintf(stderr, "    -o debug_port=N\t\tdefine the base debug port for rozofsmount (default: none)\n");
     fprintf(stderr, "    -o instance=N\t\tdefine instance number (default: 0)\n");
     fprintf(stderr, "    -o rozofscachemode=N\tdefine the cache mode: 0: no cache, 1: direct_io, 2: keep_cache (default: 0)\n");
@@ -261,7 +264,8 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("rozofsentrytimeout=%u", entry_timeout, 0),
     MYFS_OPT("rozofsentrytimeoutms=%u", entry_timeout_ms, 0),
     MYFS_OPT("rozofsentrydirtimeoutms=%u", entry_dir_timeout_ms, 0),
-    MYFS_OPT("rozofssymlinktimeout=%u", symlink_timeout, 0),
+    MYFS_OPT("rozofsenoenttimeout=%u", enoent_timeout_ms, 0),
+   
     MYFS_OPT("debug_port=%u", dbg_port, 0),
     MYFS_OPT("instance=%u", instance, 0),
     MYFS_OPT("rozofscachemode=%u", cache_mode, 0),
@@ -420,6 +424,8 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(entry_timeout);
   DISPLAY_UINT32_CONFIG(entry_timeout_ms);
   DISPLAY_UINT32_CONFIG(symlink_timeout);
+  DISPLAY_UINT32_CONFIG(enoent_timeout_ms);
+
   DISPLAY_UINT32_CONFIG(shaper);  
   DISPLAY_UINT32_CONFIG(rotate);  
   DISPLAY_UINT32_CONFIG(no_file_lock);  
@@ -2164,6 +2170,7 @@ int main(int argc, char *argv[]) {
     conf.max_write_pending = ROZOFS_BSIZE_BYTES(ROZOFS_BSIZE_MIN)/1024; /*  */ 
     conf.attr_timeout = -1;
     conf.entry_dir_timeout_ms= -1;
+    conf.enoent_timeout_ms = -1;
     conf.attr_dir_timeout_ms= -1;
     conf.attr_timeout_ms = -1;
     conf.entry_timeout = -1;
@@ -2405,6 +2412,15 @@ int main(int argc, char *argv[]) {
     else
     {
       rozofs_tmr_configure(TMR_FUSE_ENTRY_DIR_CACHE_MS,conf.entry_dir_timeout_ms);        
+    }
+    
+    if (conf.enoent_timeout_ms ==-1)
+    {
+      rozofs_tmr_configure(TMR_FUSE_ENOENT_CACHE_MS,rozofs_tmr_get_enoent());    
+    }
+    else
+    {
+      rozofs_tmr_configure(TMR_FUSE_ENOENT_CACHE_MS,conf.enoent_timeout_ms);        
     }
     
     if (conf.attr_dir_timeout_ms ==-1)

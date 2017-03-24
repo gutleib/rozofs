@@ -742,8 +742,8 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
 	  memset(&fep, 0, sizeof (fep));
 	  errcode = errno;
 	  fep.ino = 0;
-	  fep.attr_timeout = rozofs_tmr_get_attr(0);
-	  fep.entry_timeout = rozofs_tmr_get_entry(0);
+	  fep.attr_timeout  = rozofs_tmr_get_enoent();
+	  fep.entry_timeout = rozofs_tmr_get_enoent();
 	  rz_fuse_reply_entry(req, &fep);
 	  /*
 	  ** OK now let's check if there was some other lookup request for the same

@@ -80,6 +80,12 @@ typedef enum
   TMR_PRJ_READ_SPARE,            /**< guard timer started upon receiving the first projection (read) default 15000 ms */
   TMR_WR_BLOCK,                  /**< guard timer associated to the write block (default 1000 ms )*/
   TMR_LINK_CACHE,                /**< target of symbolic link cache timeout in rozofsmount default 1000 ms )*/
+
+  /*
+  ** ENOENT cache 
+  */
+  TMR_FUSE_ENOENT_CACHE_MS,      /**< Caching ENOENT */
+
   TMR_MAX_ENTRY
 
 } rozofs_timer_e;
@@ -257,7 +263,19 @@ static inline double rozofs_tmr_get_entry(int dir)
   }
   return 0;
 }
+/*__________________________________________________________________________
+*/
+/**
+*  Get the entry cache timer for FUSE in case of non existent entry
 
+*/
+static inline double rozofs_tmr_get_enoent(void)
+{
+  if (rozofs_timer_conf[TMR_FUSE_ENOENT_CACHE_MS].cur_val != 0) {
+    return ((double) rozofs_timer_conf[TMR_FUSE_ENOENT_CACHE_MS].cur_val)/1000;
+  }
+  return 0;
+}
 /*__________________________________________________________________________
 */
 /**

@@ -82,6 +82,10 @@ void rozofs_tmr_init_configuration()
   DEF_TMR(PRJ_READ_SPARE,20,60000,15000,TMR_MS);            /**< guard timer started upon receiving the first projection (read) default 15000 ms */
   DEF_TMR(WR_BLOCK,20,30000,1000,TMR_MS);            /**< guard timer associated to the write block (default 1000 ms ) */
   DEF_TMR(LINK_CACHE,0,30000,1000,TMR_MS);          /**< target of symbolic link cache timeout in rozofsmount default 1000 ms )*/
+  /*
+  ** ENOENT cache
+  */
+  DEF_TMR(FUSE_ENOENT_CACHE_MS,0,30000,2000,TMR_MS);          /**< target of symbolic link cache timeout in rozofsmount default 1000 ms )*/
 
 }
 /*__________________________________________________________________________

@@ -83,6 +83,8 @@ typedef struct rozofsmnt_conf {
     unsigned entry_dir_timeout_ms;
     unsigned attr_dir_timeout_ms;
 
+    unsigned enoent_timeout_ms;  
+    
     unsigned symlink_timeout;
     unsigned shaper;
     unsigned rotate;
