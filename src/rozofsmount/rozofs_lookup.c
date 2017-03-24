@@ -355,6 +355,44 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
         errno = ENAMETOOLONG;
         goto error;
     }
+    /*
+    ** Check the case of NFS that attempt to revalidate an inode that has been flushed from the cache
+    */
+    if ((strcmp(name,"..")== 0) || (strcmp(name,".")==0))
+    {
+       fid_t lookup_fid;
+       rozofs_inode_t *inode_p = (rozofs_inode_t*)lookup_fid;
+       inode_p->fid[0]=0;
+       inode_p->s.eid= exportclt.eid;
+       inode_p->fid[1]=parent;
+              
+       arg.arg_gw.eid = exportclt.eid;
+       memcpy(arg.arg_gw.parent,lookup_fid, sizeof (uuid_t));
+       arg.arg_gw.name = (char*)name;    
+       /*
+       ** Queue the request and attempt to check if there is already the same
+       ** request queued
+       */
+       if (rozofs_lookup_insert_queue(buffer_p,parent,name,req,trc_idx,lookup_flags)== 1)
+       {
+	 /*
+	 ** There is already a pending request, so nothing to send to the export
+	 */
+	 gprofiler->rozofs_ll_lookup_agg[P_COUNT]++;
+	 rozofs_fuse_release_saved_context(buffer_p);
+	 return;
+       }
+
+       
+       ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,lookup_fid,EXPORT_PROGRAM, EXPORT_VERSION,
+                        	 EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,
+                        	 rozofs_ll_lookup_cbk,buffer_p); 
+       if (ret < 0) goto error;
+       /*
+       ** no error just waiting for the answer
+       */
+       return;    
+    }
     if (!(ie = get_ientry_by_inode(parent))) {
         errno = ENOENT;
         goto error;
@@ -441,7 +479,6 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
       }      
     }  
 #endif         
-    
 #if 1
     ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,ie->fid,EXPORT_PROGRAM, EXPORT_VERSION,
                               EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,

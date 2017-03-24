@@ -382,6 +382,9 @@ static inline ientry_t *get_ientry_by_inode(fuse_ino_t ino) {
 
 static inline ientry_t *get_ientry_by_fid(fid_t fid) {
     rozofs_inode_t *fake_id = (rozofs_inode_t *) fid;
+    if (memcmp(fid, exportclt.rfid, sizeof (fid_t)) == 0){
+      return get_ientry_by_inode(ROOT_INODE);
+    }
     return get_ientry_by_inode(fake_id->fid[1]);
 }
 
