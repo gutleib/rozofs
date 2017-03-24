@@ -397,7 +397,6 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
       memcpy(pbuf,name,name_len);
       pbuf--;
       *pbuf='/';
-
       if (memcmp(e->rfid,inode_attr_p->s.pfid,sizeof(fid_t))== 0)
       {
 	 /*
@@ -418,6 +417,7 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
 
     return pbuf;
 }
+
 /*
 **_______________________________________________________________________
 */
@@ -754,7 +754,14 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** This inode is valid
   */
-  pChar = rozo_get_full_path(exportd,inode_attr_p, fullName,sizeof(fullName));  
+  if (exp_metadata_inode_is_del_pending(inode_p->s.attrs.fid))
+  {
+    pChar = rozolib_get_relative_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
+  }
+  else
+  {
+    pChar = rozo_get_full_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
+  } 
   if (pChar) {
     printf("%s\n",pChar);
   }  

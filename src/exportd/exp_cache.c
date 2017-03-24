@@ -549,6 +549,21 @@ lv2_entry_t *export_lookup_fid_internal(export_tracking_table_t *trk_tb_p,lv2_ca
        fid->s.key = ROZOFS_REG;
     }
     /*
+    ** check the case of @rozofs-trash@ directory: need to set the type to directory for doing the
+    ** lookup.
+    */
+    if (fid->s.key == ROZOFS_TRASH)
+    {
+       /*
+       ** switch back to the ROZOFS_REG type for the lookup
+       */
+       fid->s.key = ROZOFS_DIR;
+    }
+    /*
+    ** clear the delete pending bit from the fid
+    */
+    fid->s.del = 0;
+    /*
     ** get the slice of the fid :extracted from the upper part 
     */
     exp_trck_get_slice((unsigned char *)fid,&slice);

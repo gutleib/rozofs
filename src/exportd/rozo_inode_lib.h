@@ -77,7 +77,7 @@ static inline void perf_print(struct perf stop, struct perf start,unsigned  long
 #endif
 	}
 	else
-		printf("\n");
+		printf(", no files\n");
 }
 
 
@@ -314,6 +314,22 @@ void rz_set_verbose_mode(int mode);
 *
 */
 int rozo_lib_export_release();
+
+/*
+ *_______________________________________________________________________
+ */
+ /**
+*   That function is intended to return the relative path to an object:
+    @rozofs_uuid@<FID_parent>/<child_name>
+    example:
+    @rozofs_uuid@1b4e28ba-2fa1-11d2-883f-0016d3cca427
+    
+    @param exportd: pointer to exportd data structure
+    @param inode_p: pointer to the inode
+    @param buf : pointer to the output buffer
+    @param lenmax: max length of the output buffer
+*/
+char *rozolib_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax);
 #ifdef __cplusplus
 }
 #endif

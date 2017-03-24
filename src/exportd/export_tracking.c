@@ -139,7 +139,9 @@ typedef struct _attr_writeback_ctx_t
 
 attr_writeback_ctx_t rozofs_attr_thread_ctx_tb[EXPORT_MAX_ATT_THREADS];
 
-
+/*
+**__________________________________________________________________
+*/
 static char *show_attr_thread_usage(char *pChar)
 {
   pChar += sprintf(pChar,"usage:\n");
@@ -147,7 +149,33 @@ static char *show_attr_thread_usage(char *pChar)
   pChar += sprintf(pChar,"attr_thread                  :display threads statistics \n");
   return pChar;
 }
+/*
+**__________________________________________________________________
+*/
+/**
+*   Evaluate the state of parent for to figure out the delete state
 
+  state 0: VFS active/RozoFS active
+  state 1: VFS active/RozoFS deleted --> the directory has been deleted
+  state 2: VFS delete/RozoFS active --> designates the trash of an active directory: dir/@rozofs-trash@
+  state 3: VFS delete/RozoFS delete --> designates the trash of a deleted directory --> not supported
+  
+  @param fid_interface : fid provided by the client
+  @param fid_inode: fid from the inode context
+  
+  @retval state
+*/  
+static inline int rozofs_export_eval_parent_delete_state(fid_t fid_interface,fid_t fid_inode)
+{
+    int parent_state;
+    
+    if (exp_metadata_inode_is_del_pending(fid_inode))parent_state = 1; /* bit 0: export */
+    if (exp_metadata_inode_is_del_pending(fid_interface)) parent_state |=0x2;                       /* bit 1: VFS    */
+    return parent_state;
+}
+/*
+**__________________________________________________________________
+*/
 /*
 ** When either i_state or i_file_acl is set some extended attribute exist
 ** else no extended is set on this entry
@@ -156,7 +184,9 @@ static inline int test_no_extended_attr(lv2_entry_t *lv2) {
   if ((lv2->attributes.s.i_state == 0)&&(lv2->attributes.s.i_file_acl == 0)) return 1;
   return 0;  
 }
-
+/*
+**__________________________________________________________________
+*/
 void show_attr_thread(char * argv[], uint32_t tcpRef, void *bufRef) 
 {
     char *pChar = uma_dbg_get_buffer();
@@ -599,7 +629,7 @@ int export_repair_missing_attribute_file(char * node_path) {
 * service to check if the bitmap for root_idx must be loaded
 
   @param lvl2 : level 2 entry
-  @param fid : file id of the directory
+  @param fid : file id of the directory--> not used anymore
   @param e:   pointer to the export structure
   
   @retval 0 on success
@@ -637,7 +667,7 @@ int export_dir_load_root_idx_bitmap(export_t *e,fid_t fid,lv2_entry_t *lvl2)
    /*
    ** read the bitmap from disk
    */    
-   if (export_lv2_resolve_path(e, fid, node_path) != 0) goto error;
+   if (export_lv2_resolve_path(e, lvl2->attributes.s.attrs.fid, node_path) != 0) goto error;
    
    /*
    ** Check whether the directory exist
@@ -1586,6 +1616,13 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     int fdp = -1;     /* file descriptor of the parent directory */
     START_PROFILING(export_lookup);
     int root_dirent_mask=0;
+    int show_trash_dir = 0;
+    /*
+    ** Trash case pfid delete bit:
+    **  0: the parent is an active directory
+    **  1: the parent is implicitely the directory trash designated by @rozofs-trash
+    **  
+    */ 
 
     // get the lv2 parent
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid))) {
@@ -1625,6 +1662,43 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     ** copy the parent attributes
     */
     memcpy(pattrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
+    int parent_state = 0;
+    memcpy(pattrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
+    /*
+    ** The parent fid might not have the delete bit asserted even if it has been deleted
+    ** The only case where the parent file has the delete bit pending is when the parent is @rozofs-trash@, otherwise
+    ** we have to test the fid from the i-node context
+    */
+    parent_state = rozofs_export_eval_parent_delete_state(pfid,plv2->attributes.s.attrs.fid);
+    switch (parent_state)
+    {
+       /*
+       ** the VFS targets a directory that is active
+       */
+       case 0:
+        break;
+	
+       /*
+       ** the directory has been trashed
+       */
+       case 1:
+	 // pattrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
+         break;    
+
+       /*
+       ** the directory is active and the VFS indicates "@rozofs-trash@
+       */
+       case 2:
+         break;    
+       /*
+       ** try to enter in the trash of a already trashed directory-> not supported
+       */
+       default:	 
+       case 3:
+	  errno = ENOENT;
+	  goto out;        
+    
+    }
     /*
     ** check direct access
     */
@@ -1661,15 +1735,47 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     /*
     ** check for root of delete pending object
     */
-    if (strcmp(name,"@rozofs-del@") == 0)
+    if (strncmp(name,ROZOFS_DIR_TRASH,strlen(ROZOFS_DIR_TRASH)) == 0)
     {
-       /*
-       ** assert the del pending bit in the returned attributes of the parent and return the parent attributes
-       */
-       memcpy(attrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
-       exp_metadata_inode_del_assert(attrs->fid);
-       status = 0;
-       goto out;    
+       if ((strlen(name) == strlen(ROZOFS_DIR_TRASH)))
+       {
+	 /*
+	 ** check if the parent has a trash for the case of an active directory
+	 */
+	 switch (parent_state)
+	 {
+           case 0:
+	     if (rozofs_has_trash(&plv2->attributes.s.attrs.sids[0]) == 0)
+	     {
+  //             errno = ENOENT;
+  //	     goto out;
+	     }	   
+	     break;
+	   default:
+             /*
+	     ** there is no trash for a directory that is in the trash
+	     */
+	     errno = ENOENT;
+	     goto out;       
+             break;
+	 }
+	 /*
+	 ** assert the del pending bit in the returned attributes of the parent and return the parent attributes
+	 */
+	 memcpy(attrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
+	 exp_metadata_inode_del_assert(attrs->fid);
+	 rozofs_inode_set_trash(attrs->fid);
+	 status = 0;
+	 goto out; 
+       } 
+       else
+       {
+          /*
+	  ** adjust the name
+	  */
+	  name +=strlen(ROZOFS_DIR_TRASH);
+	  show_trash_dir = 1;       
+       }  
     }
 
     fdp = export_open_parent_directory(e,pfid);
@@ -1709,36 +1815,70 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
     */
-    if (exp_metadata_inode_is_del_pending(child_fid))
-    {
-       attrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
-       if (exp_metadata_inode_is_del_pending(pfid)==0)
-       {
-         /*
-	 ** attempt to do a lookup on a deleted file while parent is not the trash
-	 */
-         errno = ENOENT;
-	 goto out;       
-       }    
-    }
-    else
+#if 1
+    switch (parent_state)
     {
        /*
-       ** not a deleted file: so the parent MUST NOT have the delete pending bit asserted
+       ** the VFS targets a directory that is active
        */
-       if (exp_metadata_inode_is_del_pending(pfid))
-       {
-         errno = ENOENT;
-	 goto out;       
-       }    
+       case 0:
+	 if (exp_metadata_inode_is_del_pending(child_fid))
+	 {
+            /*
+	    ** attempt to do a lookup on a deleted file while parent is not the trash
+	    */
+            errno = ENOENT;
+	    goto out;  
+	 }     
+        break;
+	
+       /*
+       ** the directory has been trashed: if the child is a regular file it must be read-only
+       */
+       case 1:
+         /**
+	 * do not clear write mode because of SAMBA
+	 */
+         // if (!S_ISDIR(lv2->attributes.s.attrs.mode)) attrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
+         break;    
+
+       /*
+       ** the directory is active and the VFS indicates "@rozofs-trash@
+       */
+       case 2:
+	 if (exp_metadata_inode_is_del_pending(child_fid)==0)
+	 {
+	   /*
+	   ** Check if the child is a directory for which we need to show its trash: do not assert delete bit
+	   */
+	   if (show_trash_dir)
+	   {
+	     if (S_ISDIR(lv2->attributes.s.attrs.mode))
+	     {
+	         rozofs_inode_set_trash(attrs->fid);
+		 break;	     
+	     }
+	    }
+	    /*
+	    ** do not show the active file when the target is the trash
+	    */
+            errno = ENOENT;
+	    goto out;         
+	 }
+	 /*
+	 ** do not clear write mode because of SAMBA
+	 */
+	 //if (!S_ISDIR(lv2->attributes.s.attrs.mode))attrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
+         break;    
+       /*
+       ** try to enter in the trash of a already trashed directory-> not supported
+       */
+       default:	 
+       case 3:
+	  errno = ENOENT;
+	  goto out;        
     }
-    /*
-    ** clear the delete pending bit of the i-node to avoid a BUSY error on VFS (mainly directory)
-    */
-//    if (!S_ISDIR(lv2->attributes.s.attrs.mode))
-    {
-      exp_metadata_inode_del_deassert(attrs->fid);
-    }
+#endif
     if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->mode);
     status = 0;
 out:
@@ -1756,26 +1896,71 @@ out:
 /*
 **__________________________________________________________________
 */
+/** get parent attributes of a managed file (internal function)
+    In case of failure, the returned attributes are filled with 0
+ *
+ * @param e: the export managing the file
+ * @param pfid: the id of the directory
+ * @param pattrs: attributes to fill.
+ *
+ * @return: none
+ */
+uint64_t  last_export_getattr_log = 0;
+fid_t      rozofs_null_fid = {0};
+
+void export_get_parent_attributes(export_t *e, fid_t pfid, mattr_t *pattrs)
+{
+    uint64_t     ts;
+    char fidstring[256];
+    
+   if (memcmp(rozofs_null_fid,pfid,sizeof(fid_t))==0)
+   {
+     memset(pattrs->fid, 0, sizeof (fid_t));
+     return;
+   }
+    
+   lv2_entry_t *plv2 = 0;
+   if (!(plv2 = export_lookup_fid_no_invalidate_mover(e->trk_tb_p,e->lv2_cache,pfid))) 
+   {
+
+     ts = rdtsc();
+     if (ts>last_export_getattr_log+5000000000UL) {
+       fid2string(pfid,fidstring);
+       warning("export_getattr_parent failed: %s %s", fidstring, strerror(errno));
+       last_export_getattr_log = ts;
+     }
+     /*
+     ** Clear the attributes to avoid a match on get_ientry_by_fid() on rozofsmount
+     */
+     memset(pattrs->fid, 0, sizeof (fid_t));
+     return;
+   }
+   memcpy(pattrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
+   if (test_no_extended_attr(plv2)) rozofs_clear_xattr_flag(&pattrs->mode);                
+}
+/*
+**__________________________________________________________________
+*/
 /** get attributes of a managed file
  *
  * @param e: the export managing the file
  * @param fid: the id of the file
  * @param attrs: attributes to fill.
+ * @param pattrs: parent attributes to fill.
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-uint64_t  last_export_getattr_log = 0;
-int export_getattr(export_t *e, fid_t fid, mattr_t *attrs) {
+int export_getattr(export_t *e, fid_t fid, mattr_t *attrs,mattr_t * pattrs) {
     int status = -1;
     lv2_entry_t *lv2 = 0;
     START_PROFILING(export_getattr);
     uint64_t     ts;
-
+    char fidstring[256];
+    
     if (!(lv2 = export_lookup_fid_no_invalidate_mover(e->trk_tb_p,e->lv2_cache, fid))) {
     
       ts = rdtsc();
       if (ts>last_export_getattr_log+5000000000UL) {
-        char fidstring[256];
 	fid2string(fid,fidstring);
         warning("export_getattr failed: %s %s", fidstring, strerror(errno));
 	last_export_getattr_log = ts;
@@ -1793,17 +1978,18 @@ int export_getattr(export_t *e, fid_t fid, mattr_t *attrs) {
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
     */
-    if (exp_metadata_inode_is_del_pending(fid))
-    {
-       attrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
+    if (exp_metadata_inode_is_del_pending(lv2->attributes.s.attrs.fid) || exp_metadata_inode_is_del_pending(fid))
+    {      
+        /*
+	** do not  clear write mode because of SAMBA
+	*/
+       //if (!S_ISDIR(lv2->attributes.s.attrs.mode)) attrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
     }
     /*
-    ** clear the delete pending bit of the i-node to avoid BUSY error in VFS
+    ** Get the attributes of the parent
     */
-//    if (!S_ISDIR(lv2->attributes.s.attrs.mode))
-    {
-      exp_metadata_inode_del_deassert(attrs->fid);
-    }
+    export_get_parent_attributes(e,lv2->attributes.s.pfid,pattrs);
+
     status = 0;
 out:
     STOP_PROFILING(export_getattr);
@@ -2800,7 +2986,52 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     // get the lv2 parent
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid)))
         goto error;
-        
+    /*
+    ** Check the case of the trash
+    */
+    if (strcmp(name,ROZOFS_DIR_TRASH)==0)
+    {
+      /*
+      ** the creation MUST be rejected if the parent directory is already in the trash
+      */
+      if (exp_metadata_inode_is_del_pending(pfid))
+      {
+        errno=EPERM;
+	goto error;
+      }
+      /*
+      ** check if the directory has already a trash
+      */
+      if (rozofs_has_trash(&plv2->attributes.s.attrs.sids[0]) != 0)
+      {
+        errno = EEXIST;
+	goto error;
+      }
+      /*
+      ** get the attributes of the directory and parent directory
+      */
+      memcpy(attrs, &plv2->attributes.s.attrs, sizeof (mattr_t));	
+      if (test_no_extended_attr(plv2)) rozofs_clear_xattr_flag(&attrs->mode);
+      /*
+      ** assert the delete pending bit on the pseudo trash directory and set the key to ROZOFS_TRASH
+      */
+      exp_metadata_inode_del_assert(attrs->fid);
+      rozofs_inode_set_trash(attrs->fid);
+      
+      memcpy(pattrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
+      if (test_no_extended_attr(plv2)) rozofs_clear_xattr_flag(&pattrs->mode);
+      /*
+      ** re-write the parent attributes since the trash has been added
+      */
+      rozofs_set_trash_sid0(&plv2->attributes.s.attrs.sids[0]);
+      export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */);
+      status = 0;
+      /*
+      ** we are done
+      */
+      goto trash_out;	       
+    
+    }    
     /*
     ** Check parent GID bit
     */
@@ -2907,7 +3138,17 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     /*
     ** check if the parent has the backup extended attribute set (take care of the recursive case only)
     */
-    if (plv2->attributes.s.attrs.sids[0] ==2) ext_attrs.s.attrs.sids[0] = 2;
+    if (((rozofs_dir0_sids_t*)&plv2->attributes.s.attrs.sids[0])->s.backup == ROZOFS_DIR_BACKUP_RECURSIVE) 
+    {
+         ((rozofs_dir0_sids_t*)&ext_attrs.s.attrs.sids[0])->s.backup = ROZOFS_DIR_BACKUP_RECURSIVE;
+    }
+    /*
+    ** check if the parent has the trash extended attribute set (take care of the recursive case only)
+    */
+    if (((rozofs_dir0_sids_t*)&plv2->attributes.s.attrs.sids[0])->s.trash == ROZOFS_DIR_TRASH_RECURSIVE) 
+    {
+         ((rozofs_dir0_sids_t*)&ext_attrs.s.attrs.sids[0])->s.trash = ROZOFS_DIR_TRASH_RECURSIVE;
+    }
     ext_attrs.s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;
     ext_attrs.s.i_state = 0;
     ext_attrs.s.i_file_acl = 0;
@@ -3050,6 +3291,7 @@ out:
     ** check if parent root idx bitmap must be updated
     */
     if (plv2 != NULL) export_dir_flush_root_idx_bitmap(e,pfid,plv2->dirent_root_idx_p);  
+trash_out:
     if(fdp != -1) close(fdp);
     STOP_PROFILING(export_mkdir);
     return status;
@@ -3661,6 +3903,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
     int update_children = 1;
     int rename = 0;
     int write_parent_attributes = 0;
+    int parent_state;
 
     START_PROFILING(export_unlink);
 
@@ -3679,18 +3922,42 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
       }
     }
     /*
-    ** check for rename
+    ** check for rename:
+    **
     */
-    if (exp_metadata_inode_is_del_pending(parent)==0)
+    parent_state = rozofs_export_eval_parent_delete_state(parent,plv2->attributes.s.attrs.fid);
+    switch (parent_state)
     {
-       if ((common_config.export_versioning) || (plv2->attributes.s.attrs.sids[1] != 0)) rename = 1;
-       else rename = 0;
-       update_children = 1;
-    }
-    else
-    {
-       rename = 0;
-       update_children = 0;          
+       /*
+       ** VFS active/RozoFS active
+       */
+       case 0:
+	 if ((common_config.export_versioning) || (rozofs_has_trash(&plv2->attributes.s.attrs.sids[0]) != 0)) rename = 1;
+	 else rename = 0;
+	 update_children = 1; 
+	 break;   
+       /*
+       ** VFS active/RozoFS deleted --> the directory has been deleted
+       */
+       case 1:
+	 rename = 0;
+	 update_children = 0;
+	 break;   
+       /*
+       ** VFS delete/RozoFS active --> designates the trash of an active directory: dir/@rozofs-trash@
+       */
+       case 2:
+	 rename = 0;
+	 update_children = 0;
+	 break;          
+       /*
+       **  VFS delete/RozoFS delete --> designates the trash of a deleted directory --> not supported
+       */
+       default:
+       case 3:
+	 errno = EPERM;
+         goto out;
+	 break;       
     }
     /*
     ** load the root_idx bitmap of the old parent
@@ -3718,10 +3985,14 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
       errno=EACCES;
       goto out;    
     }
-    if (exp_metadata_inode_is_del_pending(parent)==1)
+    /*
+    ** Avoid to delete a an active file if it is referenced with a parent that targets deleted directory 
+    ** or the trash
+    */
+    if ((parent_state==1) ||(parent_state==2))
     {
       /*
-      ** the parent directory is "@rozofs-del@"
+      ** the parent directory is either ROZOFS_DIR_TRASH or a deleted directory
       */
       if (exp_metadata_inode_is_del_pending(child_fid)==0)
       {
@@ -3953,9 +4224,10 @@ duplicate_deleted_file:
     else
     {
       /*
-      ** check if the directory is a deleted directory
+      ** update the deleted count if the directory was either a deleted directory or the 
+      ** pseudo trash of an active directory
       */
-      if (exp_metadata_inode_is_del_pending(parent))
+      if ((parent_state==1) ||(parent_state==2))
       {
 	 plv2->attributes.s.hpc_reserved--;          
       }    
@@ -3998,7 +4270,6 @@ duplicate_deleted_file:
        ** append the delete pending prefix to the object name
        */
        export_build_deleted_name(del_name,NULL,name);
-//       sprintf(del_name,"@rozofs-del@%llx@@%s",(unsigned long long int)key_del,name);
        /*
        ** update the bit in the root_idx bitmap of the parent directory
        */
@@ -4050,8 +4321,10 @@ duplicate_deleted_file:
        */
        exp_store_fname_in_inode(&lv2->attributes.s.fname,del_name,&fid_name_info);           
        /*
+       ** Update the atime of the deleted file to the trash time. To be used by the periodic trash flush process.
        **  Write attributes of deleted file (pending)
        */
+       lv2->attributes.s.attrs.atime =  time(NULL);
        export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* No sync */) ;
     }
 out:
@@ -4759,30 +5032,69 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     int rename = 0;
     int write_parent_attributes = 0;
     int update_children = 0;
+    int parent_state = 0;
     
     START_PROFILING(export_rmdir);
+    
 
     // get the lv2 parent
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid)))
         goto out;
     /*
-    ** check for rename
-    */
-    if (exp_metadata_inode_is_del_pending(pfid)==0)
-    {
-       if ((common_config.export_versioning) || (plv2->attributes.s.attrs.sids[1] != 0))rename = 1;
-       else rename = 0;
-       update_children = 1;
-    }
-    else
-    {
-       rename = 0;
-       update_children = 0;          
-    }
-    /*
     ** load the root_idx bitmap of the  parent
     */
-    export_dir_load_root_idx_bitmap(e,pfid,plv2);
+    export_dir_load_root_idx_bitmap(e,pfid,plv2);    
+    /*
+    ** check if it is an attempt to remove the pseudo trash directory
+    ** If is the case, do not complain
+    */
+    if (strcmp(name,ROZOFS_DIR_TRASH)==0)
+    {
+      memcpy(pattrs, &plv2->attributes.s.attrs, sizeof (mattr_t)); 
+// #warning clear the trash flag on rmdir rozofs-trash
+//      if (plv2->attributes.s.attrs.sids[1]!= 0) {
+//         plv2->attributes.s.attrs.sids[1] = 2;
+//      }
+      status = 0;      
+      goto out;      
+    }
+    /*
+    ** check for rename
+    */
+    parent_state = rozofs_export_eval_parent_delete_state(pfid,plv2->attributes.s.attrs.fid);
+    switch (parent_state)
+    {
+       /*
+       ** VFS active/RozoFS active
+       */
+       case 0:
+	 if ((common_config.export_versioning) || rozofs_has_trash(&plv2->attributes.s.attrs.sids[0])) rename = 1;
+	 else rename = 0;
+	 update_children = 1; 
+	 break;   
+       /*
+       ** VFS active/RozoFS deleted --> the directory has been deleted
+       */
+       case 1:
+	 rename = 0;
+	 update_children = 0;
+	 break;   
+       /*
+       ** VFS delete/RozoFS active --> designates the trash of an active directory: dir/@rozofs-trash@
+       */
+       case 2:
+	 rename = 0;
+	 update_children = 0;
+	 break;          
+       /*
+       **  VFS delete/RozoFS delete --> designates the trash of a deleted directory --> not supported
+       */
+       default:
+       case 3:
+	 errno = EPERM;
+         goto out;
+	 break;       
+    }
     /*
     ** set global variables associated with the export
     */
@@ -4824,8 +5136,20 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     if (rename == 0)
     {
       if (lv2->attributes.s.hpc_reserved != 0) {
-          errno = ENOTEMPTY;
-          goto out;
+          /*
+	  ** Check if the remove is done on the active directory: if it is the case we move it directory
+	  ** in the local trash of the current directory even if that directory has no associated trash
+	  */
+	  if (parent_state == 0) 
+	  {
+	     update_children = 1;
+	     rename = 1;
+	  }
+	  else
+	  {
+            errno = ENOTEMPTY;
+            goto out;
+	  }
       }
     }
     /*
@@ -4883,12 +5207,13 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     else
     {
       /*
-      ** check if the directory is a deleted directory
+      ** update the deleted count if the directory was either a deleted directory or the 
+      ** pseudo trash of an active directory
       */
-      if (exp_metadata_inode_is_del_pending(pfid))
+      if ((parent_state==1) ||(parent_state==2))
       {
-         plv2->attributes.s.hpc_reserved--;          
-      }    
+	 plv2->attributes.s.hpc_reserved--;          
+      }     
     }
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
     /*
@@ -4968,8 +5293,10 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
        */
        exp_store_fname_in_inode(&lv2->attributes.s.fname,del_name,&fid_name_info);           
        /*
+       ** Update the atime of the deleted file to the trash time. To be used by the periodic trash flush process.
        **  Write attributes of deleted file (pending)
        */
+       lv2->attributes.s.attrs.atime =  time(NULL);
        export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */) ;
        /*
        ** update the parent attributes
@@ -5267,6 +5594,176 @@ out:
 
     return status;
 }
+
+
+/*
+**______________________________________________________________________________
+*/
+/** rename (move) a file when the destination is ROZOFS_DIR_TRASH
+
+*/
+int export_rename_trash(export_t *e, fid_t pfid, char *name, fid_t npfid,
+        char *newname_in, fid_t fid,
+	mattr_t * attrs)
+{
+    int status = -1;
+    lv2_entry_t *lv2_old_parent = 0;
+    lv2_entry_t *lv2_to_rename = 0;
+    int write_parent_attributes = 0;
+    fid_t fid_to_rename;
+    int root_dirent_mask_name= 0;
+    uint32_t type_to_rename;
+    uint32_t fake_type;
+    char lv2_path[PATH_MAX];
+    char lv3_path[PATH_MAX];    
+    fid_t fake_fid;
+    int old_parent_fdp = -1;
+    int quota_uid=-1;
+    int quota_gid=-1;
+    
+    // Get the lv2 entry of old parent
+    if (!(lv2_old_parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid))) {
+        goto out;
+    }
+    if (exp_metadata_inode_is_del_pending(pfid))
+    {
+      errno=EPERM;
+      goto out;
+    }
+    /*
+    ** old parent and new parent MUST be the same
+    */
+    if (memcmp(pfid, npfid, sizeof (fid_t)) != 0) 
+    {
+      errno=EPERM;
+      goto out;        
+    }
+    /*
+    ** check if the parent directory has already an active trash
+    */
+    if (rozofs_has_trash(&lv2_old_parent->attributes.s.attrs.sids[0]) != 0)
+    {
+      errno=EPERM;
+      goto out;        
+    }
+    /*
+    ** we have the same parent and the parent has no trash
+    ** We must check if the source name corresponds to an empty directory
+    */
+    /*
+    ** load the root_idx bitmap of the old parent
+    */
+    export_dir_load_root_idx_bitmap(e,pfid,lv2_old_parent);
+    /*
+    ** get the file descriptor associated with the old parent
+    */
+    old_parent_fdp = export_open_parent_directory(e,pfid);
+    // Check if the file/dir to rename exist
+    if (get_mdirentry(lv2_old_parent->dirent_root_idx_p,old_parent_fdp, pfid, name, fid_to_rename, 
+                       &type_to_rename,&root_dirent_mask_name) != 0)
+        goto out;
+    /*
+    ** OK we got the fid of the object to rename, check if is a directory
+    */
+    if (!(lv2_to_rename = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid_to_rename)))
+        goto out;
+
+    if (!S_ISDIR(lv2_to_rename->attributes.s.attrs.mode))  
+    {
+      /*
+      ** we expect that the source is a directory
+      */
+      errno=EPERM;
+      goto out;                  
+    }    
+    /*
+    ** check if the directory is empty
+    */       
+    if ((lv2_to_rename->attributes.s.hpc_reserved!=0) || (lv2_to_rename->attributes.s.attrs.children!=0))
+    {
+      /*
+      ** not empty
+      */
+      errno=EPERM;
+      goto out;          
+    } 
+    /*
+    ** get the usr and group for quota management
+    */
+    quota_uid = lv2_to_rename->attributes.s.attrs.uid;
+    quota_gid = lv2_to_rename->attributes.s.attrs.gid; 
+    /*
+    ** OK the directory is empty, so we can remove it
+    */
+    if (export_lv2_resolve_path(e, fid, lv2_path) != 0)
+          goto out;
+    /*
+    ** once the attributes file has been removed 
+    ** consider that the directory is deleted, all the remaining is best effort
+    */
+    sprintf(lv3_path, "%s/%s", lv2_path, MDIR_ATTRS_FNAME);
+    unlink(lv3_path);    
+    // remove from the cache (will be closed and freed)
+    if (export_attr_thread_check_context(lv2_to_rename)==0) lv2_cache_del(e->lv2_cache, fid_to_rename);
+    /*
+     ** rmdir is best effort since it might possible that some dirent file with empty entries remain
+     */
+    rmdir(lv2_path);
+    /**
+    * releas the inode allocated for storing the directory attributes
+    */
+    if (exp_attr_delete(e->trk_tb_p,fid_to_rename) < 0)
+    {
+       severe("error on inode %s release : %s",name,strerror(errno));
+    }
+    /*
+    ** attributes of the parent must be updated first otherwise we can face the situation where
+    ** parent directory cannot be removed because the number of children is not 0
+    */
+    if (lv2_old_parent->attributes.s.attrs.children > 0) lv2_old_parent->attributes.s.attrs.children--;
+    lv2_old_parent->attributes.s.attrs.nlink--;    
+    /*
+    ** update export nb files: best effort mode
+    */
+    export_update_files(e, -1);
+    /*
+    ** update the quota
+    */
+    rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC,lv2_old_parent->attributes.s.attrs.cid);
+    /*
+    ** remove the entry from the parent directory: best effort
+    */
+    del_mdirentry(lv2_old_parent->dirent_root_idx_p,old_parent_fdp, pfid, name, fake_fid, &fake_type,root_dirent_mask_name);
+    /*
+    ** Assert the trash flag on the parent directory
+    */
+    rozofs_set_trash_sid0(&lv2_old_parent->attributes.s.attrs.sids[0]);
+    write_parent_attributes =1;
+    /*
+    ** provide the attributes of the parent directory and assert the deleted by on the fid;
+    */
+    memcpy(attrs,&lv2_old_parent->attributes,sizeof(mattr_t));
+    if (test_no_extended_attr(lv2_old_parent)) rozofs_clear_xattr_flag(&attrs->mode);
+    exp_metadata_inode_del_assert(attrs->fid);
+    rozofs_inode_set_trash(attrs->fid);
+    
+    status = 0;
+
+out:
+    /*
+    ** check if parent root idx bitmap must be updated
+    */
+    if (lv2_old_parent != NULL) 
+    {
+       if (write_parent_attributes) export_lv2_write_attributes(e->trk_tb_p,lv2_old_parent,0/* No sync */);
+       export_dir_flush_root_idx_bitmap(e,pfid,lv2_old_parent->dirent_root_idx_p);
+    }
+    
+    if(old_parent_fdp != -1) close(old_parent_fdp);  
+
+    return status;
+
+}
 /*
 **______________________________________________________________________________
 */
@@ -5282,7 +5779,7 @@ out:
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
-        char *newname, fid_t fid,
+        char *newname_in, fid_t fid,
 	mattr_t * attrs) {
     int status = -1;
     lv2_entry_t *lv2_old_parent = 0;
@@ -5304,14 +5801,43 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     int root_dirent_mask_newname =0;
     int xerrno = 0;
     int deleted_object = 0;
-    
+    int source_is_trash = 0;
+    int restore_from_trash_with_same_name = 0;
+    char *newname = newname_in;
+
     START_PROFILING(export_rename);
+    
+    /*
+    ** check the case of a rename towards the trash
+    */    
+    if (strcmp(newname,ROZOFS_DIR_TRASH) == 0)
+    {
+        status = export_rename_trash(e,pfid,name,npfid,newname_in,fid,attrs);
+        goto out;            
+    }
 
     // Get the lv2 entry of old parent
     if (!(lv2_old_parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid))) {
         goto out;
     }
+    // Get the lv2 entry of newparent
+    if (!(lv2_new_parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, npfid)))
+        goto out;
+
+    /*
+    ** The parent could be either @rozofs-trash@ or a deleted directory, so we have to evaluate the fid within the context
+    ** when the parent fid is not the trash to figure-out if source is trash
+    */
+    if (exp_metadata_inode_is_del_pending(lv2_old_parent->attributes.s.attrs.fid) || exp_metadata_inode_is_del_pending(pfid))
+    {
+      source_is_trash = 1;
+    }
+    /*
+    ** clear the delete bit and set the key to ROZOFS_DIR since it is the trash
+    ** it is needed  to compare the old_parent with the new_parent
+    */
     exp_metadata_inode_del_deassert(pfid);
+    rozofs_inode_set_dir(pfid);
 
     // Verify that the old parent is a directory
     if (!S_ISDIR(lv2_old_parent->attributes.s.attrs.mode)) {
@@ -5320,22 +5846,71 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     }
     /*
     ** check if the new parent is a deleted directory: if it is the case
-    ** reject the service
+    ** reject the service: it can be either a deleted directory or @rozofs-trash@
     */
-    if (exp_metadata_inode_is_del_pending(npfid))
+    if (exp_metadata_inode_is_del_pending(lv2_new_parent->attributes.s.attrs.fid) || exp_metadata_inode_is_del_pending(npfid))
     {
-        errno = ENOTDIR;
+        errno = EPERM;
         goto out;    
+    }
+    /*
+    ** check that the source name does not match with the rozofs-del prefix
+    */
+    if (strcmp(name,ROZOFS_DIR_TRASH) == 0)
+    {
+        errno = EPERM;
+        goto out;            
     }
     /*
     ** check that the destination name does not match with the rozofs-del prefix
     */
-    if (strncmp(newname,"@rozofs-del@",10) == 0)
+    if (strcmp(newname,ROZOFS_DIR_TRASH) == 0)
     {
         errno = EROFS;
         goto out;            
     }
-    
+    if (source_is_trash)
+    {
+       /*
+       ** do not care about the fact that parent are the same: we strip the prefix appended
+       ** by rozofs when both source name and destination are the same
+       */
+       /*if (memcmp(pfid,npfid,sizeof(fid_t)) == 0) */
+       {
+          /*
+	  ** check the filenames
+	  */
+	  restore_from_trash_with_same_name = 1;
+	  if (strcmp(name,newname)== 0)
+	  {
+	     char *p;
+	     int count;
+	     /*
+	     ** same name: it is an untrash: strip the rozofs-del pattern
+	     */
+	     count = 0;
+	     p=newname;
+	     while (*p != 0)
+	     {
+	        if (*p == '@') 
+		{
+		  count++;
+		  if (count == 3) {
+		     p++;
+		     break;
+		   }
+		}
+		p++;	     
+	     }
+	     if (count !=3) 
+	     {
+	       errno = EROFS;
+	       goto out;
+	     }
+	     newname = p;	  
+	  }       
+       }    
+    }
     /*
     ** load the root_idx bitmap of the old parent
     */
@@ -5363,9 +5938,6 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
       export_dir_load_root_idx_bitmap(e,fid_to_rename,lv2_to_rename);
       export_open_parent_directory(e,fid_to_rename);
     }  
-    // Get the lv2 entry of newparent
-    if (!(lv2_new_parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, npfid)))
-        goto out;
 
     // Verify that the new parent is a directory
     if (!S_ISDIR(lv2_new_parent->attributes.s.attrs.mode)) {
@@ -5382,9 +5954,22 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     ** open the directory
     */
     new_parent_fdp = export_open_parent_directory(e,npfid);
-    // Get the old mdirentry if exist
+    /*
+    ** Check if the destination already exist
+    **  In the case of a rename where the source is a deleted file and when both source and destination are the
+    **  same the service fails if the destination already exists
+    */
     if (get_mdirentry(lv2_new_parent->dirent_root_idx_p,new_parent_fdp, npfid, newname, 
                       fid_to_replace, &type_to_replace,&root_dirent_mask_newname) == 0) {
+	/*
+	** check if the source is a file/directory of the trash and if the user want the same name as newname
+	** In that case we reject the rename
+	*/
+	if (restore_from_trash_with_same_name)
+	{
+	  errno = EPERM; /** EEXIST could be fine with Linux but seems to not working with SAMBA */
+	  goto out;
+	}
 
         // We must delete the old entry
 
@@ -5603,19 +6188,24 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 		       pfid, name, fid_to_rename, &type_to_rename,root_dirent_mask_name) != 0)
         goto out;
 
-    if (memcmp(pfid, npfid, sizeof (fid_t)) != 0) {
-
-        lv2_new_parent->attributes.s.attrs.children++;
-        if (deleted_object) lv2_old_parent->attributes.s.hpc_reserved--;
-        else lv2_old_parent->attributes.s.attrs.children--;
-
-
-        if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
-            lv2_new_parent->attributes.s.attrs.nlink++;
-	    if (deleted_object) lv2_old_parent->attributes.s.hpc_reserved--;
-            else lv2_old_parent->attributes.s.attrs.nlink--;
-        }
-
+    if (memcmp(pfid, npfid, sizeof (fid_t)) != 0) {       
+        if (deleted_object)
+	{
+          lv2_new_parent->attributes.s.attrs.children++;
+          if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {	
+	    lv2_new_parent->attributes.s.attrs.nlink++;
+	  }
+	  lv2_old_parent->attributes.s.hpc_reserved--;		  
+	}
+	else
+	{	
+	  lv2_new_parent->attributes.s.attrs.children++;
+	  lv2_old_parent->attributes.s.attrs.children--;
+	  if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
+	    lv2_new_parent->attributes.s.attrs.nlink++;
+	    lv2_old_parent->attributes.s.attrs.nlink--;
+	  }	
+	}
         lv2_new_parent->attributes.s.attrs.mtime = lv2_new_parent->attributes.s.attrs.ctime = time(NULL);
         lv2_old_parent->attributes.s.attrs.mtime = lv2_old_parent->attributes.s.attrs.ctime = time(NULL);
 
@@ -5659,7 +6249,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     
     }
     /*
-    ** update the parent fid of the inode that has been rename
+    ** update the parent fid of the inode that has been renamed
     */
     memcpy(&lv2_to_rename->attributes.s.pfid,npfid,sizeof(fid_t));
         
@@ -6159,11 +6749,13 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
      rozofs_inode_t *fake_inode = (rozofs_inode_t*)fidtmp;
      memcpy(fidtmp,lv2->attributes.s.attrs.fid,sizeof(fid_t));
      fake_inode->s.key = ROZOFS_REG_S_MOVER;
+     fake_inode->s.del = 0;
      DISPLAY_ATTR_TITLE( "FID_S"); 
      rozofs_uuid_unparse(fidtmp,p);
      p += 36;
      *p++ = '\n';     
      fake_inode->s.key = ROZOFS_REG_D_MOVER;
+     fake_inode->s.del = 0;
      DISPLAY_ATTR_TITLE( "FID_M"); 
      rozofs_uuid_unparse(fidtmp,p);
      p += 36;
@@ -6208,6 +6800,8 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   DISPLAY_ATTR_TXT_NOCR("CREATE", bufall);
   ctime_r((const time_t *)&lv2->attributes.s.attrs.mtime,bufall);
   DISPLAY_ATTR_TXT_NOCR("MTIME ", bufall);
+  ctime_r((const time_t *)&lv2->attributes.s.attrs.atime,bufall);
+  DISPLAY_ATTR_TXT_NOCR("ATIME ", bufall);
   if (test_no_extended_attr(lv2)) {
     DISPLAY_ATTR_TXT("XATTR", "NO");  
   }
@@ -6217,8 +6811,13 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   }
   DISPLAY_ATTR_INT("I-STATE",lv2->attributes.s.i_state);
   if (S_ISDIR(lv2->attributes.s.attrs.mode)) {
+    rozofs_dir0_sids_t byte_sid0;
+    int backup_val;
+    byte_sid0.byte = lv2->attributes.s.attrs.sids[0];
+    backup_val = byte_sid0.s.backup;
+    
     DISPLAY_ATTR_TXT("MODE", "DIRECTORY");
-    switch (lv2->attributes.s.attrs.sids[0])
+    switch (backup_val)
     {
        case 0:
        default:
@@ -6235,7 +6834,11 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     {
        DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.attrs.cid);    
     }
-    switch (lv2->attributes.s.attrs.sids[1])
+    /*
+    ** display trash information
+    */
+    backup_val = byte_sid0.s.trash;
+    switch (backup_val)
     {
        case 0:
        default:
@@ -6243,8 +6846,19 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
          break;
        case 1:
          DISPLAY_ATTR_TXT("TRASH", "YES");
-         break;         
+         break;       
+       case 2:
+         DISPLAY_ATTR_TXT("TRASH", "YES (RECURSIVE)");
+	 break;     
     }  
+    if (byte_sid0.s.root_trash)
+    {
+      DISPLAY_ATTR_TXT("R_TRASH", "YES");
+    }
+    else
+    {
+      DISPLAY_ATTR_TXT("R_TRASH", "NO");    
+    }
     DISPLAY_ATTR_INT("CHILDREN",lv2->attributes.s.attrs.children);
     DISPLAY_ATTR_INT("NLINK",lv2->attributes.s.attrs.nlink);
     DISPLAY_ATTR_LONG("SIZE",lv2->attributes.s.attrs.size);
@@ -6615,20 +7229,45 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
       errno = ENOTDIR;
       return -1;
     }
-    if (lv2->attributes.s.attrs.sids[0]!= (sid_t)valint)
+    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.backup!= valint)
     {
       /*
       ** Save new distribution on disk
       */
-      lv2->attributes.s.attrs.sids[0]=(sid_t)valint;
+      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.backup= valint;
       return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
     }
     return 0;
   }
   /*
-  ** case of the versioning
+  ** case of the trash
   */
-  if (sscanf(p," versioning = %d", &valint) == 1) 
+  if (sscanf(p," trash = %d", &valint) == 1) 
+  {
+    if ((valint < 0) || (valint > 2))
+    {
+      errno = ENOTDIR;
+      return -1;        
+    }
+    if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
+      errno = ENOTDIR;
+      return -1;
+    }
+    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.trash!= (sid_t)valint)
+    {
+      /*
+      ** Save new distribution on disk
+      */
+      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.trash=(sid_t)valint;
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+    }
+    return 0;
+  }
+
+  /*
+  ** case of the root trash
+  */
+  if (sscanf(p," root-trash = %d", &valint) == 1) 
   {
     if ((valint < 0) || (valint > 1))
     {
@@ -6639,12 +7278,12 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
       errno = ENOTDIR;
       return -1;
     }
-    if (lv2->attributes.s.attrs.sids[1]!= (sid_t)valint)
+    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.root_trash!= (sid_t)valint)
     {
       /*
       ** Save new distribution on disk
       */
-      lv2->attributes.s.attrs.sids[1]=(sid_t)valint;
+      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.root_trash=(sid_t)valint;
       return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
     }
     return 0;

@@ -48,7 +48,86 @@ static inline int rozofs_has_xattr(uint32_t mode)
  {
     return (mode&ROZOFS_HAS_XATTRIBUTES)?0:1; 
  }
+/**
+**__________________________________________
+*  Directory sids[0] remapping
+**__________________________________________
+*/
+/*
+** SIDS[0] remapping
+*/
+typedef union 
+{
+  uint8_t byte;
+  struct _internal {
+   uint8_t filler:3;       /**< for future usage */
+   uint8_t trash:2;       /**< when asserted it indicates that the directory has a trash            */
+   uint8_t root_trash:1;  /**< when asserted it indicates that the directory is a root for trash: make @rozofs-trash@ display in readdir */
+   uint8_t backup:2;      /**< when asserted it indicates that the directory is candidate for backup */  
+  } s;
+} rozofs_dir0_sids_t;
+
+#define ROZOFS_DIR_BACKUP_RECURSIVE 2      /**< when asserted it indicates that the backup state must be propagated to children */
+#define ROZOFS_DIR_TRASH_RECURSIVE 2      /**< when asserted it indicates that the trash state must be propagated to children */
+
+/*
+**__________________________________________________________________
+*/
+/**
+*  Check if directory has a trash
+
+   @param sids_p: pointer to the byte that contains the trash bit
+   
+   @retval 1: trash is active
+   @retval 0: no trash
+*/
+static inline int rozofs_has_trash(uint8_t *sids_p)
+{
+  rozofs_dir0_sids_t *p = (rozofs_dir0_sids_t*)sids_p;
+  if (p->s.trash) return 1;
+  else return 0;
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+*  set trash flag on directory
+
+   @param sids_p: pointer to the byte that contains the trash bit
+   
+   @retval none
+*/
+static inline void rozofs_set_trash_sid0(uint8_t *sids_p)
+{
+  rozofs_dir0_sids_t *p = (rozofs_dir0_sids_t*)sids_p;
+  p->s.trash = 1;
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+*  Check if directory has is a root trash
+
+   @param sids_p: pointer to the byte that contains the root  trash bit
+   
+   @retval 1: trash is active
+   @retval 0: no trash
+*/
+static inline int rozofs_has_root_trash(uint8_t *sids_p)
+{
+  rozofs_dir0_sids_t *p = (rozofs_dir0_sids_t*)sids_p;
+  if (p->s.root_trash) return 1;
+  else return 0;
+}
+/*
+** SIDS[1..34] are reserved for future usage
+*/
  
+/**
+*  inode Generic structure
+*/ 
  typedef struct mattr {
     fid_t fid;                      /**< unique file id */
     sid_t sids[ROZOFS_SAFE_MAX];    /**< sid of storage nodes target (regular file only)*/

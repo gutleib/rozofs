@@ -1059,7 +1059,8 @@ epgw_mattr_ret_t * ep_getattr_1_svc(epgw_mfile_arg_t * arg, struct svc_req * req
         goto error;
     if (export_getattr
             (exp, (unsigned char *) arg->arg_gw.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) != 0)
+            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
@@ -1104,7 +1105,8 @@ epgw_mattr_ret_t * ep_setattr_1_svc(epgw_setattr_arg_t * arg, struct svc_req * r
             (mattr_t *) & arg->arg_gw.attrs, arg->arg_gw.to_set) != 0)
         goto error;
     if (export_getattr(exp, (unsigned char *) arg->arg_gw.attrs.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) != 0)
+            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;

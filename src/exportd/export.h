@@ -361,10 +361,11 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t * attrs, mattr_t 
  * @param e: the export managing the file
  * @param fid: the id of the file
  * @param attrs: attributes to fill.
+ * @param pattrs: parent attributes to fill.
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_getattr(export_t *e, fid_t fid, mattr_t * attrs);
+int export_getattr(export_t *e, fid_t fid, mattr_t * attrs, mattr_t * pattrs);
 
 /** set attributes of a managed file
  *

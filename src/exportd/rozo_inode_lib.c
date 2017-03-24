@@ -1638,6 +1638,74 @@ char *_get_fname(export_t *e,char *bufout,rozofs_inode_fname_t *fname,fid_t pfid
    return bufout;
 }
 
+/*
+ *_______________________________________________________________________
+ */
+ /**
+*   That function is intended to return the relative path to an object:
+    @rozofs_uuid@<FID_parent>/<child_name>
+    example:
+    @rozofs_uuid@1b4e28ba-2fa1-11d2-883f-0016d3cca427
+    
+    @param exportd: pointer to exportd data structure
+    @param inode_p: pointer to the inode
+    @param buf : pointer to the output buffer
+    @param lenmax: max length of the output buffer
+*/
+char *rozolib_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax)
+{
+   char name[1024];
+   lv2_entry_t *plv2;  
+   char *pbuf = buf;
+   char buf_fid[64];
+   ext_mattr_t *inode_attr_p = inode_p;
+   rozofs_inode_t *inode_val_p;
+   
+   
+   export_t *e= exportd;
+   
+   inode_val_p = (rozofs_inode_t*)inode_attr_p->s.pfid;
+   if ((inode_val_p->fid[0]==0) && (inode_val_p->fid[1]==0))
+   {
+      pbuf += sprintf(pbuf,"./"); 
+   } 
+   else
+   {
+     uuid_unparse(inode_attr_p->s.pfid,buf_fid);
+     pbuf += sprintf(pbuf,"./@rozofs_uuid@%s/",buf_fid); 
+   } 
+   if (exp_metadata_inode_is_del_pending(inode_attr_p->s.attrs.fid))
+   {
+      /*
+      ** get the attributes of the parent
+      */
+      if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,&cache, inode_attr_p->s.pfid))) {
+	buf[0] = 0;
+	return buf;
+      } 
+      if (!exp_metadata_inode_is_del_pending(plv2->attributes.s.attrs.fid))
+      {
+        pbuf += sprintf(pbuf,"./%s/",ROZOFS_DIR_TRASH);      
+      }
+   } 
+   /*
+   ** get the object name
+   */
+   name[0] = 0;     
+   get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+   if (name[0]== 0)
+   {
+     uuid_unparse(inode_attr_p->s.attrs.fid,buf_fid);
+     pbuf += sprintf(pbuf,"@rozofs_uuid@%s",buf_fid);    
+   
+   }
+   else
+   {
+     pbuf += sprintf(pbuf,"%s",name);       
+   }
+   return buf;
+}
+
 char *get_fname(void *e,char *bufout,void *fname,fid_t pfid)
 {
   return _get_fname((export_t *)e,bufout,(rozofs_inode_fname_t*)fname,pfid);

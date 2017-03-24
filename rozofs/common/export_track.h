@@ -420,7 +420,7 @@ static inline void exp_metadata_inode_del_deassert(fid_t fid)
 static inline int exp_metadata_inode_is_del_pending(fid_t fid)
 {
    rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid;
-   if(fake_inode->s.del!=0) return 1;
+   if((fake_inode->s.del!=0) || (fake_inode->s.key == ROZOFS_TRASH)) return 1;
    return 0;
 }
 

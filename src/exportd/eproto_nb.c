@@ -1034,10 +1034,12 @@ void ep_getattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         goto error;
     if (export_getattr
             (exp, (unsigned char *) arg->arg_gw.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) != 0)
+            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
+    ret.parent_attr.status = EP_SUCCESS;
     ret.free_quota = exportd_get_free_quota(exp);
     ret.bsize = exp->bsize;
     ret.layout = exp->layout;
@@ -1081,10 +1083,12 @@ void ep_setattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
             (mattr_t *) & arg->arg_gw.attrs, arg->arg_gw.to_set) != 0)
         goto error;
     if (export_getattr(exp, (unsigned char *) arg->arg_gw.attrs.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) != 0)
+            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
+    ret.parent_attr.status = EP_SUCCESS;
     ret.free_quota = exportd_get_free_quota(exp);
     goto out;
 error:
