@@ -19,7 +19,7 @@
 cmake_minimum_required(VERSION 2.6)
 set(MAJOR "2")
 set(MINOR "2")
-set(REVISION "~alpha23")
+set(REVISION "~alpha24")
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
