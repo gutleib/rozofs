@@ -167,7 +167,7 @@ static char *show_attr_thread_usage(char *pChar)
 */  
 static inline int rozofs_export_eval_parent_delete_state(fid_t fid_interface,fid_t fid_inode)
 {
-    int parent_state;
+    int parent_state = 0;
     
     if (exp_metadata_inode_is_del_pending(fid_inode))parent_state = 1; /* bit 0: export */
     if (exp_metadata_inode_is_del_pending(fid_interface)) parent_state |=0x2;                       /* bit 1: VFS    */
