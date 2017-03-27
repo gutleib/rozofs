@@ -34,7 +34,7 @@ typedef enum {
 #define rozofs_init_db(db) memset(db,0,sizeof(dirbuf_t))
 
 void rozofs_free_db(dirbuf_t * db) { 
-  if (db->p) free(db->p);
+  if (db->p) xfree(db->p);
   rozofs_init_db(db);
 } 
 void rozofs_transfer_db (dirbuf_t * to, dirbuf_t * from) {

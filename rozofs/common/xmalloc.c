@@ -42,6 +42,7 @@ void show_xmalloc(char * argv[], uint32_t tcpRef, void *bufRef) {
     char *pChar = uma_dbg_get_buffer();
     int i;
     xmalloc_stats_t *p = xmalloc_size_table_p;
+    uint64_t         totalSize = 0;
 
     if (xmalloc_size_table_p == NULL) {
         pChar += rozofs_string_append(pChar, "xmalloc stats not available\n");
@@ -62,7 +63,10 @@ void show_xmalloc(char * argv[], uint32_t tcpRef, void *bufRef) {
 	                 p->size, 
 			 (long long unsigned int) p->count,
 	                 (long long unsigned int)(p->size * (long long unsigned int)p->count));
+        totalSize += (p->size * (long long unsigned int)p->count);            
     }    
+    pChar += sprintf(pChar, "Total size %8llu\n", (long long unsigned int)totalSize); 
+    
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;
     
