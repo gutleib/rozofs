@@ -671,6 +671,7 @@ void rozofs_ll_getxattr_cbk(void *this,void *param)
     value_size = ret.status_gw.ep_getxattr_ret_t_u.value.value_len;
     
     if (size == 0) {
+        xdr_free(decode_proc, (char *) &ret); 
         fuse_reply_xattr(req, value_size);
         goto out;
     }       
@@ -809,11 +810,13 @@ void rozofs_ll_getxattr_raw_cbk(void *this,void *param)
 
       if (!(ie = get_ientry_by_inode(ino))) {
           errno = ENOENT;
+          xdr_free(decode_proc, (char *) &ret);            
           goto error;
       }
       if (ie->ientry_long == 0)
       {
           errno = EINVAL;
+          xdr_free(decode_proc, (char *) &ret);            
           goto error;
       }
       /*
@@ -882,12 +885,14 @@ void rozofs_ll_getxattr_raw_cbk(void *this,void *param)
       else buffer = buf_export_attr;
     
       if ((value_size = rozofs_getxattr(&entry, name, buffer, size)) < 0) {
+          xdr_free(decode_proc, (char *) &ret);                  
           goto error;
       }
     }    
     if (size == 0) {
         fuse_reply_xattr(req, value_size);
 	errno = 0;
+        xdr_free(decode_proc, (char *) &ret);                    
         goto out;
     }       
     
