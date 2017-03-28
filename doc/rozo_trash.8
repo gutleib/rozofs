@@ -6,22 +6,13 @@
 rozo_trash \- RozoFS Trash Utility
 .SH SYNOPSIS
 .B rozo_trash 
-<enable|disable> [pathname]
+<enable|recursive|disable> [pathname]
+
+.B rozo_trash 
+root <enable|disable> [pathname]
 
 .B rozo_trash 
 status [pathname]
-
-.B rozo_trash 
-ls ["pathname"]
-
-.B rozo_trash 
-restore <src> <dest>
-
-.B rozo_trash 
-purge
-
-.B rozo_trash 
-rm <"pathname">
 
 .B rozo_trash 
 help
@@ -30,8 +21,24 @@ help
 .SH DESCRIPTION
 RozoFS provides the ability to associate a trash with each directory thanks rozo_trash utility.
 This should happen after the directory creation. The trash can be either added or removed at any time.
+
+The trash can be associated with a directory in a recursive mode or not. When the recursive mode is selected, every
+sub directory inherits the trash recursive mode from its parent at its creation time.
+When the mode is not recursive, only the target directory has a trash.
+
+
 The trash applies to regular file and directory only. Upon the deletion of either a file or directory,
-rather than definitively removing the object, it is moved to the trash of its parent directory.
+rather than definitively removing the object, it is moved to the trash of its parent directory. The directory trash is referenced thanks the following pseudo directory name
+.B @rozofs-trash@.
+
+By default, the name of that pseudo directory is never displayed thanks command such as 
+.B 'ls'
+
+RozoFS provides a way to make it appear while indexing within a directory by defining a root trash for a directory. Only the directory that are marked with the root trash capability
+makes the 
+.B @rozofs-trash@
+appears while indexing in the directory.
+
 
 
 When a file is moved to the trash, RozoFS appends the date and hour at which the deletion takes place.
@@ -39,6 +46,10 @@ For a given file, RozoFS keeps only one copy in the trash. The periodicity is
 .B one hour.
 RozoFS keeps in
 the trash the first file that has been deleted in the period. 
+
+Files/directories in the trashes are automatically  definitively removed from the storage thanks a RozoFS purge process (
+.B rozo_trashd
+)
 
 The format of a file that resides in the trash is the following:
 .B @YYYY-MM-DD-HH@@<filename>
@@ -57,52 +68,36 @@ by RozoFS.
 .RS
 Print help.
 .RE
-.IP "enable|disable"
+.IP "enable|recursive|disable"
 .RS
-Enable/disable trash on directory pathname (default is "
+Enable/disable trash on directory pathname. When recursive is selected, the trash is enabled in recursive mode (default pathname is "
 .B .
 ").
 .RE
-.IP "ls"
-.RS
-List the content of the local directory trash. A " 
-.I pathname 
-" can be provided optionally as a filter.
 
-.RE
-.IP "restore"
+.IP "root enable|disable"
 .RS
-Restore either a file or directory from the local trash. The command MUST be issued under the directory that owns the trash. 
-.I src 
-is the name of the object as displayed by
-.B rozo_trash ls
-and
-.I dest
-is the name of the restored object. If 
-.I dest
-already exists, the file/directory restore is aborted. When it is a directory restore, the utility restores also the files under that directory that have been trashed during the same date/hour.
-
-
+Enable/disable root trash on directory pathname. When the root trash is enable, the 
+.B @rozofs-trash@
+will be display while indexing the directory (default pathname is "
+.B .
+").
 .RE
-.IP "rm"
+
+.IP "status"
 .RS
-Remove file(s)/directory from the local trash. The command MUST be issued under the directory that owns the trash. A
-.I pathname
-can be optionally provided as a filter, the 
-.I pathname
-must be given with quotes to avoid unwanted expansion. User has to confirm the effective deletion for each element.
+Display the current trash status of a directory
+will be display while indexing the directory (default pathname is "
+.B .
+").
 .RE
-.RE
-.IP "purge"
-.RS
-Unconditional purge within local trash.The command MUST be issued under the directory that owns the trash. User is prompted for providing either a
-filename or a wildcard.
-
 .SH EXAMPLES
 
 .IP "-Searching for all the files that have been moved in the trash of dir3:"
 
-.B root@debian:/mnt1_1_g0/dir3# rozo_trash ls
+.B root@debian:/mnt1_1_g0/dir3# cd @rozofs-trash@
+
+.B root@debian:/mnt1_1_g0/dir3/@rozofs-trash@# ls -ls
 
 total 7
 
@@ -165,5 +160,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 .SH AUTHOR
 Rozo Systems <http://www.rozosystem.com>
 .SH "SEE ALSO"
-.BR rozofs (7)
+.BR rozofs (7),
+.BR rozo_trashd (8),
+.BR rozo_trashd.conf (5)
+
 

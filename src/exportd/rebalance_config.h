@@ -76,9 +76,7 @@ typedef struct _rebalance_config_t {
   // - abs: use full pathname mode
   // - fid: use i-node mode 
   char *      mode;
-  // That option indicates the access mode used by the storage balancer for moving the file:
-  // - rel: use relative mode (parent/child)
-  // - abs: use full pathname mode
+  // That option when asserted sets the process in verbose mode
   // See --verbose parameter of the CLI.
   int32_t     verbose;
 } rebalance_config_t;

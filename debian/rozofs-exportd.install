@@ -7,6 +7,7 @@
 /usr/bin/rozo_clusterstats
 /usr/bin/rozo_scan_by_criteria
 /usr/bin/rozo_rebalance
+/usr/bin/rozo_trashd
 /usr/bin/rozo_buildfid_list
 /usr/bin/rozo_rbsList
 /usr/bin/rozo_geoRepList
@@ -20,4 +21,6 @@
 /usr/share/man/man8/rozo_setquota.8
 /usr/share/man/man8/rozo_repquota.8
 /usr/share/man/man8/rozo_rebalance.8
+/usr/share/man/man8/rozo_trashd.8
+/usr/share/man/man5/rozo_trashd.conf.5
 contrib/heartbeat/* /usr/lib/ocf/resource.d/heartbeat/

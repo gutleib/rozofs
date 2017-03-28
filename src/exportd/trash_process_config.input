@@ -1,0 +1,55 @@
+#_______________________________________________________________________________________
+# 
+# Call ../../tools/trash_process_config.py to generate trash_process_config.h as well as trash_process_config.c
+#
+#_______________________________________________________________________________________
+# Syntax is as follow:
+# 
+# ......................................................
+# // one or more...
+# // ... comment lines
+# <type> <scope> <name> <default> {<option>]
+# ......................................................
+#
+# Where
+#   //          is the begining of a comment line for the following parameter
+#   <type>      is the parameter type within 
+#               - INT   : at least 32 bits signed integer
+#               - LONG  : 64 bits signed integer
+#               - STRING: character string
+#               - BOOL  ; boolean True or False
+#   <scope>     is any string you want to classify the different parameters in groups
+#   <name>      is any parameter name
+#   <default>   is the default parameter value. (STRING must be quoted).
+#   <option>    is an option of the parameter dependant on the <type>
+#               - INT and LONG option: 
+#                 min:max : minimum and maximum (included) of the integer
+#
+#_______________________________________________________________________________________
+
+
+// This option defines the scanning frequency in hours of the trash 
+// process.
+// See the --frequency parameter of the CLI.
+INT   global frequency          12 
+
+
+// Exclude files that are more recent than the specified delay. 
+// The delay is defined in days.
+// See the --older parameter of the CLI.
+LONG global older              7
+
+
+// That option defines the maximun rate in msg/s allocated for
+// files/directories deletion.
+// See the --rate parameter of the CLI.
+INT   global deletion_rate         10
+
+// That option defines the maximun rate in msg/s allocated for inode scanning
+// See the --scan parameter of the CLI.
+INT   global scan_rate         -1
+
+
+// That option when asserted sets the process in verbose mode
+// See --verbose parameter of the CLI.
+BOOL   global verbose           False

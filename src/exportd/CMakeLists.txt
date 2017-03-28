@@ -262,6 +262,20 @@ add_executable(rozo_rebalance
 )
 target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
+#________________________________________________________
+add_executable(rozo_trashd
+    rozo_trash_process.c  
+    rozo_trash_process.h  
+#    rozo_rtrash_nblock_init.c
+    econfig.c     
+    trash_process_config.c
+    trash_process_config.h
+    trash_process_config_read_show.h
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h   
+)
+target_link_libraries(rozo_trashd rozofs_inode rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+
 
 #________________________________________________________
 add_executable(rozo_buildfid_list
@@ -380,7 +394,14 @@ install(TARGETS rozo_rebalance
     ARCHIVE DESTINATION lib
     COMPONENT rozo_rebalance
 )
+
+install(TARGETS rozo_trashd
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_trashd
+)
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)
-install(PROGRAMS rozo_trash DESTINATION bin)
+

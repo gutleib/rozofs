@@ -521,7 +521,7 @@ int exportclt_lookup(exportclt_t * clt, fid_t parent, char *name,
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -563,7 +563,7 @@ int exportclt_getattr(exportclt_t * clt, fid_t fid, mattr_t * attrs) {
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -607,7 +607,7 @@ int exportclt_setattr(exportclt_t * clt, fid_t fid, mattr_t * attrs, int to_set)
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -649,7 +649,7 @@ int exportclt_readlink(exportclt_t * clt, fid_t fid, char *link) {
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -694,7 +694,7 @@ int exportclt_link(exportclt_t * clt, fid_t inode, fid_t newparent, char *newnam
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -742,7 +742,7 @@ int exportclt_mknod(exportclt_t * clt, fid_t parent, char *name, uint32_t uid,
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -790,7 +790,7 @@ int exportclt_mkdir(exportclt_t * clt, fid_t parent, char *name, uint32_t uid,
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -834,7 +834,7 @@ int exportclt_unlink(exportclt_t * clt, fid_t pfid, char *name, fid_t * fid) {
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -878,7 +878,7 @@ int exportclt_rmdir(exportclt_t * clt, fid_t pfid, char *name, fid_t * fid) {
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -924,7 +924,7 @@ int exportclt_symlink(exportclt_t * clt, char *link, fid_t parent, char *name,
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -970,7 +970,7 @@ int exportclt_rename(exportclt_t * clt, fid_t parent, char *name, fid_t newparen
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -1146,7 +1146,7 @@ int64_t exportclt_write_block(exportclt_t * clt, fid_t fid, bid_t bid, uint32_t 
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -1191,7 +1191,7 @@ int exportclt_readdir(exportclt_t * clt, fid_t fid, uint64_t * cookie, child_t *
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -1332,7 +1332,7 @@ int exportclt_setxattr(exportclt_t * clt, fid_t fid, char * name, void* value,
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -1377,7 +1377,7 @@ int exportclt_getxattr(exportclt_t * clt, fid_t fid, char * name, void * value,
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -1426,7 +1426,7 @@ int exportclt_removexattr(exportclt_t * clt, fid_t fid, char * name) {
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }
@@ -1470,7 +1470,7 @@ int exportclt_listxattr(exportclt_t * clt, fid_t fid, char * list,
 	
         if (rpcclt_initialize
                 (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
+                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, clt->listen_port, clt->timeout) != 0) {
             rpcclt_release(&clt->rpcclt);
             errno = EPROTO;
         }

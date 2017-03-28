@@ -3951,10 +3951,13 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
 	 update_children = 0;
 	 break;          
        /*
-       **  VFS delete/RozoFS delete --> designates the trash of a deleted directory --> not supported
+       **  VFS delete/RozoFS delete --> designates the trash of a deleted directory --> supported because of the trash process
        */
-       default:
        case 3:
+	 rename = 0;
+	 update_children = 0;
+	 break;   
+       default:
 	 errno = EPERM;
          goto out;
 	 break;       
@@ -4227,7 +4230,7 @@ duplicate_deleted_file:
       ** update the deleted count if the directory was either a deleted directory or the 
       ** pseudo trash of an active directory
       */
-      if ((parent_state==1) ||(parent_state==2))
+      if ((parent_state==1) ||(parent_state==2)||(parent_state==3))
       {
 	 plv2->attributes.s.hpc_reserved--;          
       }    
@@ -5087,10 +5090,14 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
 	 update_children = 0;
 	 break;          
        /*
-       **  VFS delete/RozoFS delete --> designates the trash of a deleted directory --> not supported
+       **  VFS delete/RozoFS delete --> designates the trash of a deleted directory -->  supported because of trash process
        */
-       default:
        case 3:
+	 rename = 0;
+	 update_children = 0;
+	 break;    
+
+       default:
 	 errno = EPERM;
          goto out;
 	 break;       
@@ -5210,7 +5217,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
       ** update the deleted count if the directory was either a deleted directory or the 
       ** pseudo trash of an active directory
       */
-      if ((parent_state==1) ||(parent_state==2))
+      if ((parent_state==1) ||(parent_state==2)||(parent_state==3))
       {
 	 plv2->attributes.s.hpc_reserved--;          
       }     
