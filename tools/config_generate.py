@@ -308,8 +308,8 @@ def go_build_macros(struct_name):
   print "}"  
   print ""  
 
-  print "static int  boolval;"  
   print "#define %s_READ_BOOL(val,def)  {\\"%(struct_name.upper())
+  print "  int  boolval;\\"  
   print "  if (strcmp(#def,\"True\")==0) {\\"
   print "    %s.val = 1;\\"%(struct_name)
   print "  } else {\\"
@@ -352,7 +352,7 @@ def go_build_macros(struct_name):
   print ""  
      
   print "#define %s_READ_LONG(val,def) {\\"%(struct_name.upper())
-  print "static long long         longval;\\"
+  print "  long long         longval;\\"
   print "  %s.val = def;\\"%(struct_name)
   print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
   print "    %s.val = longval;\\"%(struct_name)
@@ -361,7 +361,7 @@ def go_build_macros(struct_name):
   print ""  
   print ""  
   print "#define %s_READ_LONG_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
-  print "static long long         longval;\\"
+  print "  long long         longval;\\"
   print "  %s.val = def;\\"%(struct_name)
   print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
   print "    if (longval<mini) {\\"
@@ -377,8 +377,8 @@ def go_build_macros(struct_name):
   print "}"
   print ""  
 
-  print "static const char * charval;"
   print "#define %s_READ_STRING(val,def)  {\\"%(struct_name.upper())
+  print "  const char * charval;\\"
   print "  if (%s.val) free(%s.val);\\"%(struct_name,struct_name)
   print "  if (config_lookup_string(&cfg, #val, &charval)) {\\"
   print "    %s.val = strdup(charval);\\"%(struct_name)

@@ -111,8 +111,8 @@ static int isDefaultValue;
   REBALANCE_CONFIG_SHOW_END_OPT(opt)\
 }
 
-static int  boolval;
 #define REBALANCE_CONFIG_READ_BOOL(val,def)  {\
+  int  boolval;\
   if (strcmp(#def,"True")==0) {\
     rebalance_config.val = 1;\
   } else {\
@@ -153,7 +153,7 @@ static long int          intval;
 }
 
 #define REBALANCE_CONFIG_READ_LONG(val,def) {\
-static long long         longval;\
+  long long         longval;\
   rebalance_config.val = def;\
   if (config_lookup_int64(&cfg, #val, &longval)) { \
     rebalance_config.val = longval;\
@@ -162,7 +162,7 @@ static long long         longval;\
 
 
 #define REBALANCE_CONFIG_READ_LONG_MINMAX(val,def,mini,maxi)  {\
-static long long         longval;\
+  long long         longval;\
   rebalance_config.val = def;\
   if (config_lookup_int64(&cfg, #val, &longval)) { \
     if (longval<mini) {\
@@ -177,8 +177,8 @@ static long long         longval;\
   }\
 }
 
-static const char * charval;
 #define REBALANCE_CONFIG_READ_STRING(val,def)  {\
+  const char * charval;\
   if (rebalance_config.val) free(rebalance_config.val);\
   if (config_lookup_string(&cfg, #val, &charval)) {\
     rebalance_config.val = strdup(charval);\
