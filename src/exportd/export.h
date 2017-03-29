@@ -1018,9 +1018,9 @@ static inline int export_metadata_check_device(export_t *e) {
   pRes->inodes.free  = buf.f_ffree;
   pRes->inodes.total = buf.f_files;
   
-  pRes->sizeMB.free  = buf.f_bavail/1024;
-  pRes->sizeMB.total = buf.f_blocks/1024;  
-  
+  pRes->sizeMB.free  = (buf.f_bavail*buf.f_bsize)/(1024*1024);
+  pRes->sizeMB.total = (buf.f_blocks*buf.f_bsize)/(1024*1024);  
+    
   /*
   ** Which resource is the smaller now
   */
