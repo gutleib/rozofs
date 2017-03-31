@@ -148,7 +148,8 @@ set (librozofs_sources
     core/ruc_buffer_debug.h  
     core/rozofs_host_list.c
     core/rozofs_host_list.h          
-    core/rozofs_share_memory.h  
+    core/rozofs_share_memory.h
+    core/rozofs_fdset.h
     rpc/gwprotoclt.c
     rpc/gwproto.h
     rpc/gwprotosvc.c

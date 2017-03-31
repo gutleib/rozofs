@@ -21,14 +21,7 @@
 #include <sys/select.h>
 #include "ruc_common.h"
 #include "ruc_list.h"
-
-
-#define ROZO_FD_SETSIZE (1024*4)
-#define ROZO_FDSET_LONG  (ROZO_FD_SETSIZE/__NFDBITS)
-
-typedef struct _rozo_fd_set {
-  unsigned long fds_bits[ROZO_FDSET_LONG];
-} rozo_fd_set;
+#include "rozofs_fdset.h"
 
 /*
 **  max number of priority
