@@ -85,6 +85,7 @@ uint32_t        previous_delay=0;
 
 char            command[1024];
 char          * status_given_file_name = NULL;
+char          * status_given_file_path = NULL;
  
 
 static char rebuild_status[128];
@@ -369,44 +370,59 @@ void static inline rbs_status_file_name() {
 
   char * pChar = rbs_monitor_file_path;
   if (*pChar != 0) return;
-    
+
+  loc_time=time(NULL);
+  localtime_r(&loc_time,&date); 
+  ctime_r(&loc_time,initial_date);
+  int end =  strlen(initial_date);
+  initial_date[end-1]=0;
+      
+  /*
+  ** Get given absolute path
+  */    
+  if (status_given_file_path) {
+    pChar += rozofs_string_append(pChar,status_given_file_path);
+    return;
+  }  
+
+  /*
+  ** Start with root rebuild path
+  */
   pChar += rozofs_string_append(pChar,rbs_status_root);
   if (access(rbs_monitor_file_path,W_OK) == -1) {
     rozofs_mkpath(rbs_status_root, S_IRWXU | S_IROTH);
   }	
 
-  loc_time=time(NULL);
-  localtime_r(&loc_time,&date); 
-
+  /*
+  ** Add given relative name
+  */
   if (status_given_file_name != NULL) {
     pChar += rozofs_string_append(pChar, status_given_file_name);  
+    return;
+  }
+
+  /*
+  ** Build name from date
+  */
+  pChar += rozofs_u32_padded_append(pChar, 4, rozofs_right_alignment, date.tm_year+1900); 
+  *pChar++ =':'; 
+  pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_mon+1);  
+  *pChar++ =':';     
+  pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_mday);  
+  *pChar++ ='_';     
+  pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_hour);  
+  *pChar++ =':';     
+  pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_min);  
+  *pChar++ =':';     
+  pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_sec);  
+  *pChar++ ='_'; 
+
+  if (parameter.type == rbs_rebuild_type_fid) {
+    pChar += rozofs_fid_append(pChar,parameter.fid2rebuild); 
   }
   else {
-    pChar += rozofs_u32_padded_append(pChar, 4, rozofs_right_alignment, date.tm_year+1900); 
-    *pChar++ =':'; 
-    pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_mon+1);  
-    *pChar++ =':';     
-    pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_mday);  
-    *pChar++ ='_';     
-    pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_hour);  
-    *pChar++ =':';     
-    pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_min);  
-    *pChar++ =':';     
-    pChar += rozofs_u32_padded_append(pChar, 2, rozofs_zero, date.tm_sec);  
-    *pChar++ ='_'; 
-    
-    if (parameter.type == rbs_rebuild_type_fid) {
-      pChar += rozofs_fid_append(pChar,parameter.fid2rebuild); 
-    }
-    else {
-      pChar += rozofs_u32_append(pChar, parameter.rebuildRef);     
-    }   
-
-  }		   
-  ctime_r(&loc_time,initial_date);
-  int end =  strlen(initial_date);
-  initial_date[end-1]=0;
-    
+    pChar += rozofs_u32_append(pChar, parameter.rebuildRef);     
+  }   	       
 }
 /*________________________________________________
 *
@@ -501,6 +517,7 @@ void usage(char * fmt, ...) {
     printf("   -C, --clear               \tClear the status of the device after it has been set OOS\n");
     printf("   -K, --clearOnly           \tJust clear the status of the device, but do not rebuild it\n");
     printf("   -o, --output=<file>       \tTo give the name of the rebuild status file (under %s)\n",ROZOFS_RUNDIR_RBS_REBUILD);
+    printf("   -O, --OUTPUT=<filePath>   \tTo give the absolute file name of the rebuild status file\n");
     printf("   -id <id>                  \tIdentifier of a non completed rebuild.\n");
     printf("   -abort                    \tAbort a rebuild\n");
     printf("   -pause                    \tPause a rebuild\n");
@@ -720,6 +737,12 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
     if (IS_ARG(-o) || IS_ARG(--output)) { 
       GET_PARAM(--output)
       status_given_file_name = optarg;	  
+      continue;
+    } 	
+    
+    if (IS_ARG(-O) || IS_ARG(--OUTPUT)) { 
+      GET_PARAM(--OUTPUT)
+      status_given_file_path = optarg;	  
       continue;
     } 	
 	  
