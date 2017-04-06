@@ -548,7 +548,7 @@ void buf_file_write_nb(ientry_t * ie,
 	/*
 	** copy the buffer
 	*/
-	memcpy(p->buffer,buf,len);
+	rozofs_write_in_buffer(p,p->buffer,buf,len);
       }
       else
       {
@@ -614,7 +614,7 @@ void buf_file_write_nb(ientry_t * ie,
       ** copy the buffer
       */
       dest_p = p->buffer + (off_requested - p->read_from);
-      memcpy(dest_p,buf,len);
+      rozofs_write_in_buffer(p,dest_p,buf,len);
       /*
       ** fill the status section
       */
@@ -654,7 +654,7 @@ void buf_file_write_nb(ientry_t * ie,
         * forget previous buffer content, replace with new content
         */
         dest_p = p->buffer;
-        memcpy(dest_p,buf,len);
+        rozofs_write_in_buffer(p,dest_p,buf,len);
         /*
         ** update the offsets
         */
@@ -680,7 +680,7 @@ void buf_file_write_nb(ientry_t * ie,
         * forget previous buffer content, replace with new content
         */
         dest_p = p->buffer;
-        memcpy(dest_p,buf,len);
+        rozofs_write_in_buffer(p,dest_p,buf,len);
         /*
         ** update the offsets
         */
@@ -702,12 +702,12 @@ void buf_file_write_nb(ientry_t * ie,
       */ 
       dest_p = p->buffer;
       src_p = p->buffer + (off_requested - len_alignment -p->read_from);
-      memcpy(dest_p,src_p,len_alignment); 
+      rozofs_write_in_buffer(p,dest_p,src_p,len_alignment); 
       /*
       ** now copy the write buffer
       */
       dest_p = p->buffer+len_alignment;
-      memcpy(dest_p,buf,len);                 
+      rozofs_write_in_buffer(p,dest_p,buf,len);                 
       /*
       ** update the offsets
       */
@@ -799,7 +799,7 @@ void buf_file_write_nb(ientry_t * ie,
 	/*
 	** copy the buffer
 	*/
-	memcpy(p->buffer,buf,len);
+	rozofs_write_in_buffer(p,p->buffer,buf,len);
       }
       else
       {
@@ -870,7 +870,7 @@ void buf_file_write_nb(ientry_t * ie,
       ** partial copy of the buffer in the cache
       */
       buf_off = (uint32_t)(off_requested - p->read_from);
-      memcpy(p->buffer+buf_off,buf,(size_t)(off2end - off_requested));
+      rozofs_write_in_buffer(p,p->buffer+buf_off,buf,(size_t)(off2end - off_requested));
             
       p->write_pos  = off2end; 
       p->buf_write_wait = 1;
@@ -890,7 +890,7 @@ void buf_file_write_nb(ientry_t * ie,
       ** copy the buffer
       */
       buf_off = (uint32_t)(p->write_pos - off_requested);
-      memcpy(p->buffer,buf+buf_off,(len-buf_off));
+      rozofs_write_in_buffer(p,p->buffer,buf+buf_off,(len-buf_off));
 
       p->write_from = off2end; 
       p->write_pos  = pos_requested; 

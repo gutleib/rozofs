@@ -19,7 +19,7 @@
 cmake_minimum_required(VERSION 2.6)
 set(MAJOR "2")
 set(MINOR "2")
-set(REVISION "~alpha27")
+set(REVISION "~alpha28")
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
 # cmake_get.sh enables to populate some CMAKE variables
