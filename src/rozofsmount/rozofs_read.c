@@ -1252,7 +1252,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
         */
         src_p = payload+position;
         dst_p = (uint8_t*)file->buffer;
-        memcpy(dst_p,src_p,received_len);
+        rozofs_write_in_buffer(file,dst_p,src_p,received_len);
         file->buf_read_wait = 0;
         file->read_from = next_read_from;
         file->read_pos  = next_read_pos;	
@@ -1290,12 +1290,12 @@ void rozofs_ll_read_cbk(void *this,void *param)
         */
         src_p = payload+position;
         dst_p = (uint8_t*)file->buffer;
-        memcpy(dst_p,src_p,received_len);
+        rozofs_write_in_buffer(file,dst_p,src_p,received_len);
         file->buf_read_wait = 0;
         /**
         * merge the with the buf flush
         */
-        memcpy(file->buffer,local_buf_flush,len); 
+        rozofs_write_in_buffer(file,file->buffer,local_buf_flush,len); 
           
         file->read_from = next_read_from;
         file->read_pos  = next_read_pos;	             
@@ -1343,13 +1343,13 @@ void rozofs_ll_read_cbk(void *this,void *param)
         */
         src_p = payload+position;
         dst_p = (uint8_t*)file->buffer;
-        memcpy(dst_p,src_p,received_len);
+        rozofs_write_in_buffer(file,dst_p,src_p,received_len);
         file->buf_read_wait = 0;
         /**
         * merge the with the buf flush
         */
         dst_p = (uint8_t*)(file->buffer + (file->write_from - next_read_from));
-        memcpy(dst_p,local_buf_flush,len); 
+        rozofs_write_in_buffer(file,dst_p,local_buf_flush,len); 
           
         file->read_from = next_read_from;
         file->read_pos  = next_read_pos;	  
@@ -1391,13 +1391,13 @@ void rozofs_ll_read_cbk(void *this,void *param)
           */
           src_p = payload+position;
           dst_p = (uint8_t*)file->buffer;
-          memcpy(dst_p,src_p,received_len);
+          rozofs_write_in_buffer(file,dst_p,src_p,received_len);
           file->buf_read_wait = 0;
           /**
           * merge the with the buf flush
           */
           dst_p = (uint8_t*)(file->buffer + (file->write_from - next_read_from));
-          memcpy(dst_p,local_buf_flush,len); 
+          rozofs_write_in_buffer(file,dst_p,local_buf_flush,len); 
 
           file->read_from = next_read_from;
           file->read_pos  = file->write_pos;	  
@@ -1429,13 +1429,13 @@ void rozofs_ll_read_cbk(void *this,void *param)
         */
         src_p = payload+position;
         dst_p = (uint8_t*)file->buffer;
-        memcpy(dst_p,src_p,received_len);
+        rozofs_write_in_buffer(file,dst_p,src_p,received_len);
         file->buf_read_wait = 0;
         /**
         * merge the with the buf flush
         */
         dst_p = (uint8_t*)(file->buffer + (file->write_from - next_read_from));
-        memcpy(dst_p,local_buf_flush,len); 
+        rozofs_write_in_buffer(file,dst_p,local_buf_flush,len); 
 
         file->write_pos  = 0;
         file->write_from = 0;
@@ -1472,7 +1472,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
           */
           src_p = payload+position;
           dst_p = (uint8_t*)file->buffer;
-          memcpy(dst_p,src_p,received_len);
+          rozofs_write_in_buffer(file,dst_p,src_p,received_len);
           file->buf_read_wait = 0;
 
           file->write_pos  = 0;
@@ -1501,7 +1501,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
           */
           src_p = payload+position;
           dst_p = (uint8_t*)file->buffer;
-          memcpy(dst_p,src_p,received_len);
+          rozofs_write_in_buffer(file,dst_p,src_p,received_len);
           file->buf_read_wait = 0;
 
           file->write_pos  = 0;
@@ -1530,7 +1530,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
           */
           src_p = payload+position;
           dst_p = (uint8_t*)file->buffer;
-          memcpy(dst_p,src_p,received_len);
+          rozofs_write_in_buffer(file,dst_p,src_p,received_len);
           file->buf_read_wait = 0;
 
           file->write_pos  = 0;
@@ -1637,7 +1637,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
           ** the read_from and read_pos in the file structure, and just copy the data in the cache
           ** by this way we can avoid the extra memcpy at that time
           */   
-          memcpy(dst_p,src_p,received_len);
+          rozofs_write_in_buffer(file,dst_p,src_p,received_len);
 
           goto out;
         }
@@ -1765,7 +1765,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
 	   return;		
 	}
 #endif
-        memcpy(dst_p,src_p,length);
+        rozofs_write_in_buffer(file,dst_p,src_p,length);
         file->read_from = new_read_from;                
         goto out;        
       }
