@@ -183,6 +183,34 @@ static inline dir_t * rozofs_dir_working_var_init()
 
 }
 
+#define rozofs_write_in_buffer(f,to,from,len) _rozofs_write_in_buffer(__FILE__,__LINE__,f,to,from,len)
+static inline void * _rozofs_write_in_buffer(char * file, int line, file_t * f, char * to, const char * from, int len) {
+  uint64_t size;
+  char fidString[64];  
+  
+  /*
+  ** Check the writen size not to exceed the buffer
+  */
+  if (to < f->buffer) {
+    goto error;
+  }
+  
+  size = to - f->buffer;
+  size += len;
+  if (size > exportclt.bufsize) {
+    goto error;
+  }
+  
+  return memcpy(to, from, len);
+
+error:
+
+  rozofs_uuid_unparse(f->fid,fidString);
+  severe("%s:%d to %p from %p len %d @rozofs_uuid@%s", file, line, to, from, len,fidString);
+  severe("buffer %p read_pos %llx read_from %llx write_pos %llx write_from %llx", 
+         f->buffer, f->read_pos, f->read_from, f->write_pos, f->write_from);
+  return NULL;       
+} 
 /**
 *  release of the directory structure 
 
