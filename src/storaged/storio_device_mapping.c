@@ -534,7 +534,7 @@ uint32_t storio_device_mapping_allocate_device(storage_t * st) {
       /*
       ** Check that the device is usable
       */     
-      if (st->device_ctx[dev].status <= storage_device_status_degraded) return dev;
+      if (st->device_ctx[dev].status <= storage_device_status_is) return dev;
 
       /*
       ** Bad device. Get the next one

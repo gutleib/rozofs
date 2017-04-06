@@ -1212,7 +1212,7 @@ class rozofs_class:
     
     # Format it and mount it on the working directory
     if rozofs.fstype == "ext4" :
-      os.system("mkfs.ext4 -q %s"%(loop))
+      os.system("mkfs.ext4 -m 0 -q %s"%(loop))
       os.system("mount -t ext4 %s %s"%(loop,tmpdir))
     else:  
       os.system("mkfs.xfs -f -q %s"%(loop))
@@ -1255,7 +1255,7 @@ class rozofs_class:
     os.system(string)
     
     # Format it and mount it on the working directory
-    os.system("mkfs.ext4 -q %s"%(loop))
+    os.system("mkfs.ext4 -m 0 -q %s"%(loop))
     os.system("mount -t ext4 %s %s"%(loop,mount))
     syslog.syslog("Created %s -> %s -> %s"%(path,loop,mount))
     time.sleep(2)	  

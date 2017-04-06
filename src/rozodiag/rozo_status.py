@@ -21,6 +21,8 @@ symbol=int(0)
 diagnostic=False
 fulldiagnostic=False
 
+versionConsistency=False
+
 alarm_level = int(-1)
 
 time_limit_minutes=0
@@ -467,6 +469,7 @@ class rozofs_module:
     """    
     global ROZODIAG    
     global base
+    global versionConsistency
     
     if self.activeAddr != None:
       lines = self.rozodiag_one_addr(cmd,self.activeAddr)
@@ -488,10 +491,13 @@ class rozofs_module:
     """    
     global version
     if version == None: return True
+
+    # Do not chek version consistency against exportd when not requested for
+    if versionConsistency == False: return True
     
     res = self.rozodiag("version")
     if res == None: return None
-
+    
     for line in res:
       words = line.split()
       if len(words) < 3: continue
@@ -755,12 +761,14 @@ class storage(rozofs_module):
       dev=words[3].split()[0]		
       free= int(words[7]) 
       string="cid%s/sid%s"%(cid,sid)
-      if status != "IS" and status != "DEG":
+      if status == "REBUILD":
+	self.WARNING("Device %s of %s is in REBUILD"%(dev, string),"device")         	           
+      elif status != "IS" :
 	self.ERROR("Device %s of %s is %s"%(dev, string, status),"device") 
         self.failed = True 
         error_list.append(string)
 	if string not in device_error: device_error.append(string)
-      elif free <= int(20):
+      if free <= int(20):
 	self.WARNING("Device %s of %s has only %s%s free space"%(dev, string, free,'%'),"device")         	   
     # More than 1 error per CID/SID is critical
     for error in error_list:
@@ -1378,6 +1386,7 @@ parser.add_option("-d","--diagnostic", action="store_true",default=False, dest="
 parser.add_option("-f","--full", action="store_true",default=False, dest="full", help="Process to a full diagnostic of the system.")
 parser.add_option("-g","--debug", action="store_true",default=False, dest="debug", help="Debug trace.")
 parser.add_option("-n","--nocrm", action="store_true",default=False, dest="nocrm", help="Meta data redundancy is not mandatory.")
+parser.add_option("-v","--version", action="store_false",default=True, dest="versionConsistency", help="Version consistency is not checked.")
 
 (options, args) = parser.parse_args()
 
@@ -1386,6 +1395,9 @@ time_limit_minutes = 2
 # Is it a quiet or a verbose mode
 if options.diagnostic == True: quiet=False
 else:                          quiet=True
+
+if options.versionConsistency == False: versionConsistency=False
+else:                                   versionConsistency=True
 
 if options.full == True: 
   fulldiagnostic=True   

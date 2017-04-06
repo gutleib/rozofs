@@ -132,9 +132,9 @@ typedef enum _storage_device_status_e {
   storage_device_status_undeclared=0,
   storage_device_status_init,
   storage_device_status_is,
-  storage_device_status_degraded,
-  storage_device_status_relocating,
   storage_device_status_rebuilding,
+  
+  storage_device_status_relocating,
   storage_device_status_failed,
   storage_device_status_oos
 } storage_device_status_e;
@@ -143,15 +143,9 @@ static inline char * storage_device_status2string(storage_device_status_e status
   switch(status) {
     case storage_device_status_undeclared: return "NONE";
     case storage_device_status_init:       return "INIT";
-    
-    case storage_device_status_degraded:   
-#ifdef SHOW_DEGRADED_STATE    
-                                           return "DEG";
-#endif  
-    case storage_device_status_is:         return "IS";
-    
-    case storage_device_status_relocating: return "RELOC";
     case storage_device_status_rebuilding: return "REBUILD";
+    case storage_device_status_is:         return "IS";
+    case storage_device_status_relocating: return "RELOC";
     case storage_device_status_failed:     return "FAILED";
     case storage_device_status_oos:        return "OOS";
     default:                               return "???";
@@ -178,7 +172,7 @@ static inline char * storage_device_diagnostic2String(storage_device_diagnostic_
     case DEV_DIAG_INODE_DEPLETION: return "INODE DEPLETION";
     case DEV_DIAG_BLOCK_DEPLETION: return "BLOCK DEPLETION";
     case DEV_DIAG_INVERTED_DISK: return "INVERTED DISK";
-    case DEV_DIAG_REBUILD_REQUIRED: return "REBUILD REQUIRED";
+    case DEV_DIAG_REBUILD_REQUIRED: return "REBUILDING";
     default: return "??";
   }  
 }  

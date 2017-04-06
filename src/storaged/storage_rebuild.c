@@ -891,6 +891,113 @@ int is_command_resume(int argc, char *argv[]) {
   } 
   return localPar.rebuildRef;
 }
+
+/*__________________________________________________________________________
+*/
+#define RBS_MAX_REBUILD_MARK    512
+int    rbs_nb_rebuild_mark = 0;
+char * rbs_rebuild_mark[512];
+
+/*__________________________________________________________________________
+** Remove one rebuild mark file which name is stored at idx in 
+** table rbs_rebuild_mark
+*/
+static inline void rbs_remove_rebuild_mark(int idx) {
+  if (rbs_rebuild_mark[idx] != NULL) {
+    unlink(rbs_rebuild_mark[idx]);
+    xfree(rbs_rebuild_mark[idx]);
+    rbs_rebuild_mark[idx] = NULL;
+  }  
+}
+/*__________________________________________________________________________
+** Remove every rebuild mark stored in table rbs_rebuild_mark
+*/
+void rbs_remove_rebuild_marks() {
+  int idx;
+      
+  for (idx=0; idx<rbs_nb_rebuild_mark; idx++) {
+    rbs_remove_rebuild_mark(idx);
+  }
+} 
+/*__________________________________________________________________________
+** Write a rebuild mark on a device and store the name of the rebuild mark 
+** in table rbs_rebuild_mark
+*/
+void rbs_write_rebuild_mark(char * root, int dev) {
+  char          path[FILENAME_MAX];
+  char        * pChar = path;
+  int           fd;
+  int           idx;
+
+  pChar += rozofs_string_append(pChar, root);
+  pChar += rozofs_string_append(pChar, "/");
+  pChar += rozofs_u32_append(pChar, dev); 
+  pChar += rozofs_string_append(pChar, "/");
+  pChar += rozofs_string_append(pChar, STORAGE_DEVICE_REBUILD_REQUIRED_MARK);  
+    
+  /*
+  ** Check whether this rebuild mark already exist
+  */
+  for (idx=0; idx<rbs_nb_rebuild_mark; idx++) {
+    if (strcmp(path, rbs_rebuild_mark[idx])==0) {
+      /*
+      ** This device has already been marked
+      */
+      return;
+    }  
+  }
+  
+  /*
+  ** Store this mark name in the table
+  */
+  rbs_rebuild_mark[rbs_nb_rebuild_mark] = xstrdup(path);
+  rbs_nb_rebuild_mark++;
+    
+  /*
+  ** Write the mark on the device
+  */
+  fd = creat(path,0777);
+  if (fd<0) return;
+  close(fd);
+  return;
+}
+
+/*__________________________________________________________________________
+** Write a rebuild mark on every device that is beeing rebuilt
+*/
+void rbs_write_rebuild_marks() {
+  int idx;
+  int dev;
+
+  if (parameter.type == rbs_rebuild_type_fid) {
+    /*
+    ** Just one FID rebuild, no device rebuild => no rebuild mark
+    */
+    return;
+  }
+    
+  /* 
+  ** Only on disk to rebuild. Put the mark on the disk
+  */
+  if (parameter.type == rbs_rebuild_type_device) {
+    rbs_write_rebuild_mark(rbs_stor_configs[0].root, parameter.rbs_device_number);
+    return;
+  }
+  
+  /*
+  ** More to rebuild. Put a mark on each device targeted bu the rebuild
+  */
+  for (idx=0; idx<nb_rbs_entry; idx++) {
+    /*
+    ** For each CID/SID mark every device
+    */
+    for (dev=0; dev < rbs_stor_configs[idx].device.total; dev++) {
+      rbs_write_rebuild_mark(rbs_stor_configs[idx].root,dev);
+    }  
+  }
+  return;
+}
+
 /*____________________________________________________
    Rebuild monitoring
 */
@@ -3173,6 +3280,13 @@ static inline int rbs_rebuild_process() {
     ** Save pid
     */
     save_pid();
+
+    /*
+    ** Write marks on disk for the case of one disk rebuild.
+    ** In case of more than one disk rebuild, this call will have 
+    ** no effect
+    */
+    rbs_write_rebuild_marks();
     
     /*
     ** Build the array of cid/sid to rebuild in rbs_stor_configs[]
@@ -3182,6 +3296,12 @@ static inline int rbs_rebuild_process() {
       goto out;
     }  
 
+    /*
+    ** Write marks on disk for the case several disk to rebuild
+    ** since now the list of jobs has been done
+    */
+    rbs_write_rebuild_marks();
+    
     /*
     ** Process to the rebuild
     */    
@@ -3340,6 +3460,11 @@ static inline int rbs_rebuild_resume() {
     
   // Read previously elapsed delay 
   read_previous_delay();   
+
+  /*
+  ** Put a mark on the devices to rebuild
+  */
+  rbs_write_rebuild_marks();
 	
   /*
   ** Process to the rebuild
@@ -3382,42 +3507,7 @@ static void storaged_release() {
         free(s);
     }
 }
-/*__________________________________________________________________________
-*/
-int rbs_remove_rebuild_mark(char * root, int dev) {
-  char          path[FILENAME_MAX];
-  char        * pChar = path;
-
-  pChar += rozofs_string_append(pChar, root);
-  pChar += rozofs_string_append(pChar, "/");
-  pChar += rozofs_u32_append(pChar, dev); 
-  pChar += rozofs_string_append(pChar, "/");
-  pChar += rozofs_string_append(pChar, STORAGE_DEVICE_REBUILD_REQUIRED_MARK);  
-    
-  /*
-  ** Check that the device is writable
-  */
-  return unlink(path);
-}
-/*__________________________________________________________________________
-*/
-void rbs_remove_rebuild_marks() {
-  int idx;
-  int dev;
-    
-  // Only on disk to rebuild
-  if (parameter.type == rbs_rebuild_type_device) {
-    rbs_remove_rebuild_mark(rbs_stor_configs[0].root, parameter.rbs_device_number);
-    return;
-  }
-  
-  for (idx=0; idx<nb_rbs_entry; idx++) {
-    for (dev=0; dev < rbs_stor_configs[idx].device.total; dev++) {
-      rbs_remove_rebuild_mark(rbs_stor_configs[idx].root,dev);
-    }  
-  }
-  return;
-}     
+     
 /*-----------------------------------------------------------------------------
 **
 **  Stop handler
@@ -3705,19 +3795,25 @@ int main(int argc, char *argv[]) {
       status = rbs_rebuild_process();
     }
     
+    /*
+    ** Remove the rebuild marks from the devices
+    */
+    rbs_remove_rebuild_marks();
+
     on_stop(); 
      
     if (status == 0) {
-      /*
-      ** Remove the rebuild marks from the device on success
-      */
-      rbs_remove_rebuild_marks();
       exit(EXIT_SUCCESS);
     }
     
     exit(EXIT_FAILURE);
     
 error:
+    /*
+    ** Remove the rebuild marks from the devices
+    */
+    rbs_remove_rebuild_marks();
+
     REBUILD_MSG("Can't start storage_rebuild. See logs for more details.");
     exit(EXIT_FAILURE);
 }
