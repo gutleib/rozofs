@@ -183,7 +183,7 @@ static inline dir_t * rozofs_dir_working_var_init()
 
 }
 
-#define rozofs_write_in_buffer(f,to,from,len) _rozofs_write_in_buffer(__FILE__,__LINE__,f,to,from,len)
+#define rozofs_write_in_buffer(f,to,from,len) _rozofs_write_in_buffer(__FILE__,__LINE__,f,(char *)to,(const char*)from,len)
 static inline void * _rozofs_write_in_buffer(char * file, int line, file_t * f, char * to, const char * from, int len) {
   uint64_t size;
   char fidString[64];  
@@ -191,6 +191,12 @@ static inline void * _rozofs_write_in_buffer(char * file, int line, file_t * f, 
   /*
   ** Check the writen size not to exceed the buffer
   */
+  if (f->chekWord != FILE_CHECK_WORD) {
+    goto error;
+  }  
+  if (f->buffer == NULL) {
+    goto error;
+  }  
   if (to < f->buffer) {
     goto error;
   }
@@ -206,9 +212,13 @@ static inline void * _rozofs_write_in_buffer(char * file, int line, file_t * f, 
 error:
 
   rozofs_uuid_unparse(f->fid,fidString);
-  severe("%s:%d to %p from %p len %d @rozofs_uuid@%s", file, line, to, from, len,fidString);
+  severe("%s:%d to %p from %p len %d @rozofs_uuid@%s checkWord %x", file, line, to, from, len,fidString,f->chekWord);
   severe("buffer %p read_pos %llx read_from %llx write_pos %llx write_from %llx", 
-         f->buffer, f->read_pos, f->read_from, f->write_pos, f->write_from);
+         f->buffer,
+	 (long long unsigned int)f->read_pos, 
+	 (long long unsigned int)f->read_from, 
+	 (long long unsigned int)f->write_pos, 
+	 (long long unsigned int)f->write_from);
   return NULL;       
 } 
 /**
@@ -326,8 +336,17 @@ static inline void rozofs_geo_write_update(file_t *file,off_t off, size_t size)
  */
 extern void rozofs_clear_ientry_write_pending(file_t *f);
 static inline int file_close(file_t * f) {
+     char *buffer;
 
      if (f==NULL) return -1;
+     if (f->chekWord != FILE_CHECK_WORD)
+     {
+        /*
+	** attempt to release a file for which the context has already been released
+	*/
+	severe("attempt to release a file descriptor that is released: %p",f);
+	return 1;     
+     }
 
      f->closing = 1;
      /*
@@ -349,10 +368,15 @@ static inline int file_close(file_t * f) {
      rozofs_clear_ientry_write_pending(f);
 
      /*
-     ** Release all memory allocated
+     ** Release all memory allocated: clear the buffer pointer 
+     ** to avoid re-using it once the structure has been released
      */
-     xfree(f->buffer);
+     buffer = f->buffer;
+     f->buffer = 0;
+     xfree(buffer);
      f->chekWord = 0;
+     f->ie = 0;
+     f->fuse_req = NULL;
      xfree(f);
      rozofs_opened_file--;
     return 1;
