@@ -120,7 +120,6 @@ uint64_t rozofs_max_getattr_duplicate = 0;
         if (ie->attrs.mtime != 0) {
 	  mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	  stbuf.st_ino = ino; 
-	  if (rozofs_inode_is_trash(ie->attrs.fid) == 1)
           rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
 	  goto out;           
 	} 
