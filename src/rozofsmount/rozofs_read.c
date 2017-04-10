@@ -665,7 +665,8 @@ void rozofs_resize_cbk(void *this,void *param)
     
   //info("New size %llu old size %llu",(long long unsigned int)new_size,(long long unsigned int)old_size);
   
-  if (old_size < new_size) {
+  if (old_size <= new_size) {
+    //info("New size %d old size %d",old_size,new_size);
     ie->attrs.size = new_size;
     /*
     ** Update exportd
@@ -1217,9 +1218,88 @@ void rozofs_ll_read_cbk(void *this,void *param)
             (long long unsigned int)file->read_from,(long long unsigned int)file->read_pos);     
 #endif
     /*
-    ** Some data may not yet be saved on disk : flush it
+    ** check if the received length is greater than the max buffer size used for storing
+    ** data in the file_t structure
+    **
+    **  When returned size is greater than the max buffer size, rozofsmount does not store
+    **  it in the file_t structure.
+    **  The data are returned to the caller thanks the fuse_reply_threads.
+    **
+    **  If there are some write data pending, it is not an issue since the read request has
+    **  been sent before the write, so returning some "old" data in that situation is not 
+    **  an error
+    **  Since we proceed with a direct reply, the read_pos and read_from pointers MUST not
+    **  be changed since the data in the buffer will not reflect that data corresponding
+    **  to these read_from/read_pos offsets.
+    **
+    **  When the read request has been triggered by an internal readahead, the max read size
+    **  is equal to the max buffer size. In that case, we MUST not do a direct reply since
+    **  the buffer has to be install in the allocated buffer of the file_t structure.
+    **  That makes the data available for a next read.
     */
-    if (file->buf_write_wait)
+    if ((readahead == 0) && (received_len >= ROZOFS_MAX_FILE_BUF_SZ))
+    {   
+        /*
+	**______________________________________________
+	**  Big read case (>=256KB)
+	**______________________________________________
+	*/
+        uint8_t *src_p = payload+position;
+        length = 0;
+	/*
+	** use local read_from & read_pos to avoid modifying the one of the file_t structure
+	*/
+        uint64_t read_pos; 
+        uint64_t read_from; 
+        /*
+        ** preset the data
+        */
+        file->buf_read_wait = 0;
+        read_from =(off/bbytes)*bbytes;
+        read_pos  = read_from+(uint64_t)received_len;
+        buff =(char*)( src_p + (off - read_from));
+
+        /*
+        ** User has requested some data: give it back its requested data by avoiding
+        ** a copy in the fd's buffer.
+        */     
+        if (off < read_pos)
+        {
+          length = (size <=(read_pos - off)) ? size :(read_pos - off);
+        }
+       /*
+       ** process with a direct reply to the application within the fuse_reply threads
+       */
+       void *save_shared_buf_ref = shared_buf_ref;
+       if (shared_buf_ref!= NULL) 
+       {
+	 uint32_t *p32 = (uint32_t*)ruc_buf_getPayload(shared_buf_ref);    
+	 /*
+	 ** clear the timestamp
+	 */
+	 *p32 = 0;
+	 shared_buf_ref = NULL;
+	 SAVE_FUSE_PARAM(param,shared_buf_ref); 
+	 shared_buf_ref = save_shared_buf_ref; 
+       }
+      /*
+      ** do not update the shared buffer counter since it will be released just
+      ** after the reply read thread processing
+      */
+      update_pending_buffer_todo = 0;
+      rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0); 
+      /*
+      ** update the current position in the file
+      */
+      file->current_pos = (off+length);
+      goto out;            
+    }
+    /*
+    ** __________________________________________________
+    ** Some data may not yet be saved on disk : flush it
+    ** __________________________________________________
+    */
+    if (file->buf_write_wait) 
     { 
       while(1)
       {
@@ -1565,7 +1645,9 @@ void rozofs_ll_read_cbk(void *this,void *param)
     }
     else
     /**
+    ** __________________________________________________
     *  Normal case of the sequential read (no pending write)
+    ** __________________________________________________
     */
     {
       /*
@@ -1588,6 +1670,11 @@ void rozofs_ll_read_cbk(void *this,void *param)
             
         if (readahead == 1)
         {
+	  /*
+	  **___________________________________________
+	  ** Readahead case
+	  **___________________________________________
+	  */
           /*
           ** set the pointer to the beginning of the data array on the rpc buffer
           */
@@ -1598,40 +1685,6 @@ void rozofs_ll_read_cbk(void *this,void *param)
           {
             rozofs_mbcache_insert(file->fid,file->read_from,(uint32_t)received_len,(uint8_t*)src_p);
           } 
-#if 0
-	  /*
-	  ** Check there is a pending read
-	  */
-	  if (received_len == file->export->bufsize)
-          {
-	    void *buffer_p = fuse_ctx_read_pending_queue_check(file);
-	    if (buffer_p  != NULL)
-	    {
-	       int ret = rozofs_ll_read_defer_first(buffer_p,src_p,received_len,shared_buf_ref) ;
-	       if (ret >= 1)
-	       {
-	         /*
-		 ** release the current context
-		 */
-		 rozofs_trc_rsp(srv_rozofs_ll_read,(fuse_ino_t)file/*ino*/,file->fid,(errno==0)?0:1,trc_idx);
-		 /*
-		 ** if a readahead has been triggered the reference of the
-		 ** shared buffer must be removed since it has already been released
-		 */
-		 if (ret==2) 
-		 {
-		   shared_buf_ref = NULL;
-		   SAVE_FUSE_PARAM(param,shared_buf_ref);   
-		 }
-		 
-		 rozofs_fuse_release_saved_context(param);
-		 if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
-		 if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf); 	
-		 return;       	       
-	       }
-	    }
-	  }	  
-#endif
           /*
           ** when the cache is enable the memcpy is useless: may we must avoid updating
           ** the read_from and read_pos in the file structure, and just copy the data in the cache
@@ -1641,6 +1694,11 @@ void rozofs_ll_read_cbk(void *this,void *param)
 
           goto out;
         }
+	/*
+	**__________________________________________________
+	** Normal case where user has called for some data
+	**__________________________________________________
+        */	
         /*
         ** User has request some data: give it back its requested data by avoiding
         ** a copy in the fd's buffer, just the un-read part is filled in.
@@ -1681,12 +1739,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
 #endif
 	{
           char *buf_sharem = buff;
-#if 0 // fuse share memory by-pass: for future
-	  if (fuse_sharemem_enable)
-	  {
-	    buf_sharem +=1;
-	  }
-#endif
+
           fuse_reply_buf(req, (char *) buf_sharem, length);
 	}
         file->current_pos = (off+length);
@@ -1705,66 +1758,6 @@ void rozofs_ll_read_cbk(void *this,void *param)
         uint64_t new_read_from = (new_offset/bbytes)*bbytes;
         src_p += new_read_from - file->read_from;
         length = file->read_pos - new_read_from;
-
-#if 0
-	/*
-	** check for readahead
-	*/
-	if (length == 0)
-	{
-	   off_t off;
-	   int status;
-	   
-	   off = new_offset;
-	   size_t size = file->export->bufsize;
-	    
-	   if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
-	   if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);   
-           file->read_from = new_read_from;                
-	   rozofs_trc_rsp(srv_rozofs_ll_read,(fuse_ino_t)file/*ino*/,file->fid,(errno==0)?0:1,trc_idx);
-	   if (readahead == 0)
-	   {
-	      STOP_PROFILING_NB(param,rozofs_ll_read);
-	   }	
-
-	   if (rozofs_is_file_closing(file))
-	   {
-	      file_close(file);
-	      return;
-	   }
-           rozofs_fuse_read_write_stats_buf.readahead_cpt++;       
-           readahead = 1;
-           SAVE_FUSE_PARAM(param,readahead);
-	   SAVE_FUSE_PARAM(param,off);
-           SAVE_FUSE_PARAM(param,size);   
-	   if (shared_buf_ref!= NULL) 
-	   {
-	     uint32_t *p32 = (uint32_t*)ruc_buf_getPayload(shared_buf_ref);    
-	     /*
-	     ** clear the timestamp
-	     */
-	     *p32 = 0;
-	     ruc_buf_freeBuffer(shared_buf_ref);
-	     shared_buf_ref = NULL;
-	     SAVE_FUSE_PARAM(param,shared_buf_ref);   
-	   }
-           /*
-           ** attempt to read
-           */  
-           trc_idx = rozofs_trc_req_io(srv_rozofs_ll_read,0/*ino*/,file->fid,size,off);          
-           SAVE_FUSE_PARAM(param,trc_idx); 
-	   status = read_buf_nb(param,file,off, file->buffer, size);      
-           if (status < 0)
-           {
-              /*
-              ** read error --> release the context
-              */
-              rozofs_trc_rsp(srv_rozofs_ll_read,0/* ino */,file->fid,(errno==0)?0:1,trc_idx);
-              rozofs_fuse_release_saved_context(param);
-           }
-	   return;		
-	}
-#endif
         rozofs_write_in_buffer(file,dst_p,src_p,length);
         file->read_from = new_read_from;                
         goto out;        
@@ -1791,6 +1784,11 @@ error:
     {
       fuse_reply_err(req, errno);
     }
+    /*
+    **__________________________
+    ** Common exit
+    **__________________________
+    */
 out:
     if (update_pending_buffer_todo)
     {
