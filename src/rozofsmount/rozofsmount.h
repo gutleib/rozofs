@@ -121,6 +121,7 @@ rozofsmnt_conf_t conf;
 
 /** entry kept locally to map fuse_inode_t with rozofs fid_t */
 typedef struct ientry {
+    hash_entry_t he;
     fuse_ino_t inode; ///< value of the inode allocated by rozofs
     fid_t fid; ///< unique file identifier associated with the file or directory
     fid_t pfid; ///< unique file identifier associated with the parent
@@ -286,23 +287,15 @@ static inline unsigned int fid_hash(void *key) {
 }
 
 static inline void ientries_release() {
-    list_t *p, *q;
     return;
- 
-    htable_release(&htable_inode);
-    htable_release(&htable_fid);
-
-    list_for_each_forward_safe(p, q, &inode_entries) {
-        ientry_t *entry = list_entry(p, ientry_t, list);
-        list_remove(p);
-        free(entry);
-    }
 }
 
 static inline void put_ientry(ientry_t * ie) {
     DEBUG("put inode: %llx\n",(unsigned long long int)ie->inode);
     rozofs_ientries_count++;
-    htable_put(&htable_inode, &ie->inode, ie);
+    ie->he.key   = &ie->inode;
+    ie->he.value = ie;
+    htable_put_entry(&htable_inode, &ie->he);
 //    htable_put(&htable_fid, ie->fid, ie);
     list_push_front(&inode_entries, &ie->list);
 }
@@ -317,7 +310,7 @@ static inline void del_ientry(ientry_t * ie) {
     if (ie->nlookup != 0) return;
     
     rozofs_ientries_count--;
-    htable_del(&htable_inode, &ie->inode);
+    htable_del_entry(&htable_inode, &ie->he);
 //    htable_del(&htable_fid, ie->fid);
     list_remove(&ie->list);
     /*

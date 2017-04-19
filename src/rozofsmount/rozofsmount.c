@@ -46,8 +46,8 @@
 #include "rozofs_xattr_flt.h"
 
 #define hash_xor8(n)    (((n) ^ ((n)>>8) ^ ((n)>>16) ^ ((n)>>24)) & 0xff)
-#define INODE_HSIZE (8192*8)
-#define PATH_HSIZE  (8192*8)
+#define INODE_HSIZE (8192*32)
+//#define PATH_HSIZE  (8192*8)
 
 // Filesystem source (first field in /etc/mtab)
 #define FSNAME "rozofs"

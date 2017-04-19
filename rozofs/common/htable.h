@@ -33,6 +33,47 @@ typedef struct htable {
     list_t *buckets;
 } htable_t;
 
+typedef struct hash_entry {
+    void *key;
+    void *value;
+    list_t list;
+} hash_entry_t;
+
+/*
+**_____________________________________________________________
+** Put a hash entry in the hastable
+**
+** @param h     : pointer to the hash table
+** @param entry : The address of the hash entry
+*/
+static inline void htable_put_entry(htable_t * h, hash_entry_t * entry) {
+  list_t *bucket, *p;
+
+  bucket = h->buckets + (h->hash(entry->key) % h->size);
+
+  /*______________________________________________________
+  **
+  ** -- W A R N I N G -- W A R N I N G -- W A R N I N G --
+  **
+  **    THE EXISTENCE OF THE ENTRY SHOULD HAVE BEEN  
+  **       PREVIOUSLY TESTED THANKS TO A LOOKUP
+  **
+  ** -- W A R N I N G -- W A R N I N G -- W A R N I N G --
+  **______________________________________________________  
+  */
+  list_init(&entry->list);
+  list_push_front(bucket, &entry->list);
+}
+/*
+**_____________________________________________________________
+** Remove a hash entry from the hastable
+**
+** @param h     : pointer to the hash table
+** @param entry : The address of the hash entry
+*/
+static inline void htable_del_entry(htable_t * h, hash_entry_t * entry) {  
+  list_remove(&entry->list);
+}
 void htable_initialize(htable_t * h, uint32_t size, uint32_t(*hash) (void *),
                        int (*cmp) (void *, void *));
 
