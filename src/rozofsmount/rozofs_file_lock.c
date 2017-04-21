@@ -737,8 +737,10 @@ void rozofs_ll_flock_nb(fuse_req_t req,
         break;
       default:
 	lock_stat.einval++;      
-        if (lock_stat.einval%(8*1024)==1) {
-          severe("rozofs_ll_flock_nb op = 0x%x",(unsigned int)input_op);
+        if (lock_stat.einval%(128*1024)==1) {
+          severe("rozofs_ll_flock_nb op = 0x%x (count %llu)",
+                 (unsigned int)input_op,
+                 (unsigned long long)lock_stat.einval);
         }
         fuse_reply_err(req, EINVAL);
         return;
