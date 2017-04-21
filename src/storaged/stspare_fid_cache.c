@@ -100,6 +100,71 @@ char * stspare_fid_cache_display(char * pChar, stspare_fid_cache_t * fidCtx, tim
 /*
 **____________________________________________________
 **
+** Man
+**____________________________________________________
+*/
+void stspare_fid_cache_man(char * pChar) {
+  pChar += rozofs_string_append           (pChar,"Display information related to the FID cache\n");
+  pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tfid");     
+  pChar += rozofs_string_append           (pChar,"\t\tdisplay cache statistics\n");     
+  pChar += rozofs_string_append_bold      (pChar,"\tfid first");     
+  pChar += rozofs_string_append           (pChar,"\tdisplay a first list of FID in the cache\n");     
+  pChar += rozofs_string_append_bold      (pChar,"\tfid next");     
+  pChar += rozofs_string_append           (pChar,"\tdisplay the next list of FID in the cache\n");     
+  pChar += rozofs_string_append_underscore(pChar,"\nDisplay statistics:\n");
+  pChar += rozofs_string_append_bold      (pChar,"statistics\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tcount ");
+  pChar += rozofs_string_append           (pChar,"\t# of entries used in the cache\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\thit");
+  pChar += rozofs_string_append           (pChar,"\t# of cache hit\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tmiss");
+  pChar += rozofs_string_append           (pChar,"\t# of cache miss\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tbkts");
+  pChar += rozofs_string_append           (pChar,"\t# of allocated sub buckets\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tmxbkt");
+  pChar += rozofs_string_append           (pChar,"\tmaximum # of sub buckets in a row\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tmxcol");
+  pChar += rozofs_string_append           (pChar,"\tmaximum collision count encountered\n");  
+  pChar += rozofs_string_append_bold      (pChar,"usage\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tentries\t");
+  pChar += rozofs_string_append           (pChar,"\tmaximum # of entries of the cache\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tsize\t");
+  pChar += rozofs_string_append           (pChar,"\tsize of an entry in the cache\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\ttotal\t");
+  pChar += rozofs_string_append           (pChar,"\ttotal cache size\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfree\t");
+  pChar += rozofs_string_append           (pChar,"\t# of free entries\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tallocation");
+  pChar += rozofs_string_append           (pChar,"\t# of allocation processed\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\trelease\t");
+  pChar += rozofs_string_append           (pChar,"\t# of release processed\n");  
+  pChar += rozofs_string_append_underscore(pChar,"\nDisplay list of FID:\n");
+  pChar += rozofs_string_append           (pChar,"\nFor each entry of the cache\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tcid\t");
+  pChar += rozofs_string_append           (pChar,"\tcluster identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tsid\t");
+  pChar += rozofs_string_append           (pChar,"\tstorage identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfid\t");
+  pChar += rozofs_string_append           (pChar,"\tfile unic identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tmodified");
+  pChar += rozofs_string_append           (pChar,"\tdelay in seconds since last file modification\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tprojections\n");
+  pChar += rozofs_string_append_bold      (pChar,"\t\tpjrId");
+  pChar += rozofs_string_append           (pChar,"\tprojection identifier present in the file\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t\tsid");
+  pChar += rozofs_string_append           (pChar,"\tnominal storage identifier for this projection\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t\tstart");
+  pChar += rozofs_string_append           (pChar,"\t1rst block in the file of this projection\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t\tstop");
+  pChar += rozofs_string_append           (pChar,"\tlast block in the file of this projection\n");  
+  pChar += rozofs_string_append_bold      (pChar,"end\t");
+  pChar += rozofs_string_append           (pChar,"\t\twhether this list has a next list\n");  
+
+}
+/*
+**____________________________________________________
+**
 ** Debug 
 **____________________________________________________  
 */
@@ -114,7 +179,7 @@ void stspare_fid_cache_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   time_t now = time(NULL);
   
   if (argv[1] == NULL) {
-    pChar += rozofs_string_append(pChar,"{ ");
+    pChar += rozofs_string_append(pChar,"{ \n");
   
     pChar = display_cache_fid_stat(pChar);
 
@@ -283,6 +348,6 @@ uint32_t stspare_fid_cache_init(uint32_t nbCtx) {
   /*
   ** Add a debug topic
   */
-  uma_dbg_addTopic("fidCache", stspare_fid_cache_debug); 
+  uma_dbg_addTopicAndMan("fidCache", stspare_fid_cache_debug, stspare_fid_cache_man, 0); 
   return 0;
 }
