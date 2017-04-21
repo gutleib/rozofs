@@ -158,10 +158,10 @@ INT     export deletion_delay 	0
 // Spare file restoring : whether the service is active or not
 BOOL    storage spare_restore_enable                True	
 // Spare file restoring : how often the process runs  
-INT     storage spare_restore_loop_delay            120  
+INT     storage spare_restore_loop_delay            240  
 // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s
 // 0 means no limit
-INT     storage spare_restore_read_throughput       5
+INT     storage spare_restore_read_throughput       2
 // Storio number of FID context in 1K unit
 INT     storage storio_fidctx_ctx                128      
 // When that flag is asserted, the rozofsmount client can cache the extended attributes
