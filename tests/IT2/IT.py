@@ -48,24 +48,28 @@ verbose=False
 #___________________________________________________
 # Messages and logs
 #___________________________________________________
+resetLine="\r"
 def log(string): syslog.syslog(string)
 def console(string): print string
 def report(string): 
   console(string)
   log(string)  
 def addline(string):
+  global resetLine
   sys.stdout.write(bold+yellow)
   sys.stdout.write(string)
   sys.stdout.write(endeffect)
-  sys.stdout.flush()   
-def clearline():
-  sys.stdout.write(endeffect)
-  sys.stdout.write("\r                                                                                  ")
   sys.stdout.flush() 
+  resetLine = resetLine + (' ' * len(string)) 
+def clearline():
+  global resetLine
+  sys.stdout.write(endeffect)
+  sys.stdout.write(resetLine)
+  sys.stdout.flush() 
+  resetLine="\r"
 def backline(string):
   clearline()
   addline("\r%s"%(string))   
-
     
   
 #___________________________________________________
@@ -170,11 +174,16 @@ def reset_storcli_counter():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)         
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c profiler reset"%(instance,instance,instance,instance)         
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  
+  time.sleep(1)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  
+
 #___________________________________________________
-def check_storcli_crc():
+def check_storcli_crc(expect):
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
@@ -182,10 +191,16 @@ def check_storcli_crc():
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+  os.system("echo \"\" > /tmp/trace_crc")
+  result = False    
   for line in cmd.stdout:
+    os.system("echo \"%s\" >> /tmp/trace_crc"%(line))
     if "read_blk_crc" in line:
-      return True   
-  return False    
+      result = True
+      break; 
+  if expect != result:
+    os.system("cat /tmp/trace_crc")
+  return result  
    
 #___________________________________________________
 def export_count_sid_up ():
@@ -841,19 +856,17 @@ def reread():
 def crc32():
 #___________________________________________________
 
-  backline("Create file")
+  backline("Create file %s/crc32"%(exepath))
+
+  # Create a file
+  os.system("dd if=/dev/zero of=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
   
   # Clear error counter
   reset_storcli_counter()
   # Check CRC errors 
-  if check_storcli_crc():
+  if check_storcli_crc(False) == True:
     report("CRC errors after counter reset")
     return 1 
-
-  # Create a file
-  os.system("dd if=/dev/zero of=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
-
-  backline("Truncate mapper/header file")
     
   # Get its localization  
   os.system("./setup.py cou %s/crc32 > /tmp/crc32loc"%(exepath))
@@ -869,6 +882,19 @@ def crc32():
     report("Fail to find mapper file name in /tmp/crc32loc")
     return -1
     
+  # Find the 1rst bins file
+  bins = None
+  with open("/tmp/crc32loc","r") as f: 
+    for line in f.readlines():
+      if "/bins_0/" in line:
+        bins = line.split()[3]
+        break;
+  if bins == None:
+    report("Fail to find bins file name in /tmp/crc32loc")
+    return -1    
+    
+  backline("Truncate mapper/header file ")
+    
   # Truncate mapper file  
   with open(mapper,"w") as f: f.truncate(0)
   # Check file has been truncated
@@ -879,8 +905,8 @@ def crc32():
 
   # Reset storages
   os.system("./setup.py storage all reset")
-  time.sleep(12)
-    
+  wait_until_all_sid_up()
+      
   # Reread the file
   os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
            
@@ -889,8 +915,7 @@ def crc32():
   if statinfo.st_size == 0:
     report("%s has not been repaired"%(mapper))
     return -1             
-
-  backline("Corrupt mapper/header file")
+  backline("mapper/header has been repaired")
 
   # Corrupt mapper file 
   f = open(mapper, "w+")     
@@ -900,10 +925,12 @@ def crc32():
     f.write('a')
     size=size-1
   f.close()
+
+  backline("Corrupt mapper/header file ")
       
   # Reset storage
   os.system("./setup.py storage all reset")
-  time.sleep(12)
+  wait_until_all_sid_up()
      
   # Reread the file
   os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))           
@@ -914,25 +941,20 @@ def crc32():
   if char == 'a':
     report("%s has not been rewritten"%(mapper))
     return -1      
+  backline("mapper/header has been repaired")
 
-  backline("Corrupt bins file")
 
-  # Find the 1rst bins file
-  bins = None
-  with open("/tmp/crc32loc","r") as f: 
-    for line in f.readlines():
-      if "/bins_0/" in line:
-        bins = line.split()[3]
-        break;
-  if bins == None:
-    report("Fail to find bins file name in /tmp/crc32loc")
-    return -1
-
-  # Truncate the bins file
+  # Corrupt the bins file
   f = open(bins, 'r+b')     
   f.seek(876) 
-  f.write('D')    
+  char = f.read(1)
+  f.write("DDT")    
   f.close()
+  backline("Corrupt bins file")
+
+  # Reset storages
+  os.system("./setup.py storage all reset")
+  wait_until_all_sid_up()
  
   # Clear error counter
   reset_storcli_counter()
@@ -941,7 +963,8 @@ def crc32():
   os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))           
  
   # Checl for CRC32 errors
-  if check_storcli_crc():
+  if check_storcli_crc(True) == True:
+    backline("Bins file has been repaired")
     return 0
     
   report("No CRC errors after file reread")
@@ -1517,6 +1540,7 @@ def rebuild_1dev() :
     if int(mapper_modulo) > 1:
       dev=(dev+1)%int(mapper_modulo)
       os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
+      backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
       ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev))
       if ret != 0:
 	return ret
@@ -1689,6 +1713,7 @@ def rebuild_all_dev() :
     clean_rebuild_dir()
 
     os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
+    backline("rebuild cid %s sid %s"%(cid,sid))
     ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -o all_cid%s_sid%s "%(cid,sid,cid,sid))
     if ret != 0:
       return ret
@@ -1726,7 +1751,7 @@ def rebuild_1node() :
       os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
 
     clean_rebuild_dir()
-    
+    backline("rebuild node %s"%(hid))
     string="./setup.py storage %s rebuild -fg -o node_%s"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -1765,11 +1790,13 @@ def rebuild_1node_parts() :
 
     clean_rebuild_dir()
     
+    backline("rebuild node %s nominal"%(hid))    
     string="./setup.py storage %s rebuild -fg -o node_nominal_%s --nominal"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
       return ret
     
+    backline("rebuild node %s spare"%(hid))    
     string="./setup.py storage %s rebuild -fg -o node_spare_%s --spare"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -1846,6 +1873,8 @@ def rebuild_fid() :
 	  continue;  
 
       clean_rebuild_dir()
+      
+      backline("rebuild cid %s sid %s FID %s"%(cid,sid,fid))
 	    	
       string="./setup.py sid %s %s rebuild --nolog -fg -f %s -o fid%s_cid%s_sid%s"%(cid,sid,fid,fid,cid,sid)
       ret = cmd_returncode(string)
@@ -1977,7 +2006,7 @@ def do_run_list(list):
   dis.end_separator()   
   dis.new_line()  
   dis.set_column(1,'%s'%(success+failed))
-  dis.set_column(2,exepath)
+  dis.set_column(2,"All tests")
   if failed == 0:
     dis.set_column(3,'OK',green)
   else:
