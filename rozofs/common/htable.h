@@ -47,7 +47,7 @@ typedef struct hash_entry {
 ** @param entry : The address of the hash entry
 */
 static inline void htable_put_entry(htable_t * h, hash_entry_t * entry) {
-  list_t *bucket, *p;
+  list_t *bucket;
 
   bucket = h->buckets + (h->hash(entry->key) % h->size);
 

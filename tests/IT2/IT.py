@@ -48,33 +48,74 @@ verbose=False
 #___________________________________________________
 # Messages and logs
 #___________________________________________________
+
+
 resetLine="\r"
-def log(string): syslog.syslog(string)
-def console(string): print string
+#___________________________________________________
+# output a message in syslog
+def log(string): 
+#___________________________________________________
+  syslog.syslog(string)
+#___________________________________________________
+# output a message on the console
+def console(string): 
+#___________________________________________________
+  # Reset current line
+  clearline()  
+  # Add carriage return to the message
+  string="\r"+string+"\n"
+  # write the message in the buffer
+  sys.stdout.write(string)
+  # force ouput
+  sys.stdout.flush()
+#___________________________________________________
+# output a message on the console as well as in syslog
 def report(string): 
+#___________________________________________________
   console(string)
   log(string)  
+#___________________________________________________
+# Add temporary text to the current line 
 def addline(string):
+#___________________________________________________
   global resetLine
+  # Set bold and yellow effects
   sys.stdout.write(bold+yellow)
+  # Add the string in the buffer
   sys.stdout.write(string)
+  # End of effects
   sys.stdout.write(endeffect)
+  # force ouput
   sys.stdout.flush() 
+  # Prepare the reset line that should overwrite 
+  # current line with ' '
   resetLine = resetLine + (' ' * len(string)) 
+#___________________________________________________
+# Clear the temporary text of the current line 
 def clearline():
+#___________________________________________________
   global resetLine
+  # End of effects
   sys.stdout.write(endeffect)
+  # Write the reset line that should overwrite 
+  # current line text with ' '
   sys.stdout.write(resetLine)
-  sys.stdout.flush() 
+  # force ouput  
+  sys.stdout.flush()
+  # Restart reset line  
   resetLine="\r"
+#___________________________________________________
+# Clear current line and restart a new temporary line
 def backline(string):
+#___________________________________________________
   clearline()
   addline("\r%s"%(string))   
     
-  
+    
 #___________________________________________________
-def clean_cache(val=1): os.system("echo %s > /proc/sys/vm/drop_caches"%val)
+def clean_cache(val=3): 
 #___________________________________________________
+  os.system("echo %s > /proc/sys/vm/drop_caches"%val)
 
 #___________________________________________________
 def clean_rebuild_dir():
@@ -1306,7 +1347,6 @@ def compil_openmpi():
   
   for val in found: 
    if val == False:
-     print found
      report("Mising lines in hello.res"%(i))
      os.system("cat %s/tst_openmpi/hello.res"%(exepath))
      return 1
@@ -1363,7 +1403,7 @@ def resize():
   os.system("dd if=/dev/zero of=%s/resize bs=1M count=1 > /dev/null 2>&1"%(exepath))  
   size = read_size("%s/resize"%(exepath))
   if size != int(1024*1024):
-    print "%s/resize size is %s instead of %d after dd "%(exepath,size,int(1024*1024))
+    report("%s/resize size is %s instead of %d after dd "%(exepath,size,int(1024*1024)))
     return 1
     
     
@@ -1375,7 +1415,7 @@ def resize():
     os.system("attr -s rozofs -V \" size = %d\" %s/resize 1> /dev/null"%(sz,exepath))
     size = read_size("%s/resize"%(exepath))
     if size != sz:
-      print "%s/resize size is %s instead of %s after attr -s "%(exepath,size,sz)
+      report("%s/resize size is %s instead of %s after attr -s "%(exepath,size,sz))
       return 1
 
     # Request for resizing  
@@ -1383,7 +1423,7 @@ def resize():
     
     size = read_size("%s/resize"%(exepath))
     if size != int(1024*1024):
-      print "%s/resize size is %s instead of %d after resize "%(exepath,size,int(1024*1024))
+      report( "%s/resize size is %s instead of %d after resize "%(exepath,size,int(1024*1024)))
       return 1
 
   return 0  
@@ -1946,7 +1986,7 @@ def do_run_list(list):
     
     log("%10s ........ %s"%("START TEST",tst))
     
-    sys.stdout.write( "\r___%4d/%d : %-40s \n"%(tst_num,total_tst,tst))
+    console( "___%4d/%d : %-40s "%(tst_num,total_tst,tst))
 
     dis.new_line()  
     dis.set_column(1,'%s'%(tst_num))
@@ -2015,7 +2055,7 @@ def do_run_list(list):
   delay=time.time()-time_start    
   dis.set_column(4,'%s'%(my_duration(delay)))
   
-  print ""
+  console("")
   dis.display()        
   
      

@@ -1047,7 +1047,6 @@ static void do_monitor_slave() {
  */
 static void *monitoring_thread_slave(void *v) {
   int ts = 0;
-  list_t *p;
 
   uma_dbg_thread_add_self("Monitor");
 
