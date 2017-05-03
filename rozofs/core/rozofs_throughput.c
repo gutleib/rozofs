@@ -31,6 +31,7 @@ static int      AVERAGE=0;
 typedef uint64_t     colaverage_t[6];
 colaverage_t         elementaverage[30];
 
+ 
 
 /*
 *_______________________________________________________________________
@@ -50,14 +51,30 @@ void rozofs_thr_set_column(int columns) {
   if ((columns>0)&&(columns<=6)) COLS = columns;
 }
 /*_______________________________________________________________________
+* Make a string from a unit
+*
+* @param unit     Unit value
+*
+* @retval unit string
+*/
+char * rozofs_thr_unit2string(rozofs_thr_unit_e unit) {
+  switch(unit) {
+    case rozofs_thr_unit_second: return "second";
+    case rozofs_thr_unit_minute: return "minute";
+    case rozofs_thr_unit_hour:   return "hour";
+    default: return "?";
+  }
+  return "??";
+}    
+/*_______________________________________________________________________
 * Display throughput counters
 *
 * @param pChar    Where to format the ouput
 * @param pChar    The counters
-* @param pChar    The counters
+* @param nb       The number of counters
+* @param unit     The unit to display
 */
-
-char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb) {
+char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int nb, rozofs_thr_unit_e unit) {
   uint32_t t;
   struct timeval tv;
   int    rank;
@@ -65,6 +82,8 @@ char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb) 
   rozofs_thr_1_cnt_t *p;
   uint32_t LINES;
   int      value;
+  uint64_t count;
+  char    * unitDisplay;
 
   if (AVERAGE) {
     memset(elementaverage,0, nb*sizeof(colaverage_t));
@@ -81,11 +100,47 @@ char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb) 
     }
   }
      
+  if (unit == rozofs_thr_unit_all) {
+    pChar = rozofs_thr_display_unit(pChar, counters, nb, rozofs_thr_unit_hour);
+    pChar = rozofs_thr_display_unit(pChar, counters, nb, rozofs_thr_unit_minute);
+    pChar = rozofs_thr_display_unit(pChar, counters, nb, rozofs_thr_unit_second);
+    return pChar;
+  }   
+     
   LINES=60/COLS;
 
     
   gettimeofday(&tv,(struct timezone *)0);
-  t = tv.tv_sec-1;
+
+  pChar += rozofs_string_append(pChar,"___ AVERAGE THROUGHPUT PER SECOND HISTORY WITH A 1 ");  
+  switch(unit) {
+  
+    case rozofs_thr_unit_second: 
+      pChar += rozofs_string_append_bold(pChar,"SECOND ");
+      unitDisplay = "| SEC |";
+      t = tv.tv_sec-1;
+      break; 
+
+    case rozofs_thr_unit_minute: 
+      pChar += rozofs_string_append_bold(pChar,"MINUTE ");
+      unitDisplay = "| MIN |";
+      t = (tv.tv_sec/60)-1;
+      break; 
+
+    case rozofs_thr_unit_hour: 
+      pChar += rozofs_string_append_bold(pChar,"HOUR ");
+      unitDisplay = "| HR  |";
+      t = (tv.tv_sec/3600)-1;
+      break;
+    
+    default:
+      pChar += rozofs_string_append(pChar,"No such unit ");
+      pChar += rozofs_u32_append(pChar,unit);
+      pChar += rozofs_string_append(pChar," !!!\n");
+      return pChar;         
+  } 
+  pChar += rozofs_string_append(pChar,"STEP ___\n");  
+   
   rank = t % ROZOFS_THR_CNTS_NB;  
 
   for (col=0; col<COLS; col++) {
@@ -97,7 +152,7 @@ char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb) 
   pChar += rozofs_eol(pChar);
  
   for (col=0; col<COLS; col++) {  
-    pChar += rozofs_string_append(pChar,"| T.S |");
+    pChar += rozofs_string_append(pChar,unitDisplay);
     for (value=0; value< nb; value++) {  
       pChar += rozofs_string_append(pChar," ");    
       pChar += rozofs_string_padded_append(pChar, 8, rozofs_left_alignment, counters[value]->name);
@@ -109,7 +164,7 @@ char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb) 
   for (col=0; col<COLS; col++) {  
     pChar += rozofs_string_append(pChar,"|_____|");
     for (value=0; value< nb; value++) {  
-      pChar += rozofs_string_append(pChar,"_________|");   
+      pChar += rozofs_string_append(pChar,"_________|");  
     }  
   }  
   pChar += rozofs_eol(pChar);
@@ -126,11 +181,33 @@ char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb) 
       pChar += rozofs_string_append(pChar," |");
 
       for (value=0; value< nb; value++) {  
-	p = &(counters[value]->counters[idx]);
-	if (p->ts != (t-line-(col*LINES))) p->count = 0;	
+        switch(unit) {
+          case rozofs_thr_unit_second: 
+            p = &(counters[value]->second[idx]);
+	    if (p->ts != (t-line-(col*LINES))) p->count = 0;
+            count = p->count;	
+            break; 
+          case rozofs_thr_unit_minute: 
+            p = &(counters[value]->minute[idx]);
+            if (p->ts != (t-line-(col*LINES))) p->count = 0;	
+            count = p->count/60;	
+            break; 
+
+          case rozofs_thr_unit_hour: 
+            p = &(counters[value]->hour[idx]);
+            if (p->ts != (t-line-(col*LINES))) p->count = 0;
+            count = p->count/3600;	
+            break;    
+             
+          default:
+            pChar += rozofs_string_append(pChar,"No such unit ");
+            pChar += rozofs_u32_append(pChar,unit);
+            pChar += rozofs_string_append(pChar," !!!\n");
+            return pChar;               
+        }  
 	pChar += rozofs_string_append(pChar," ");	
-	pChar += rozofs_bytes_padded_append(pChar,7, p->count);
-	if (AVERAGE) elementaverage[value][col] += p->count;
+	pChar += rozofs_bytes_padded_append(pChar,7, count);
+	if (AVERAGE) elementaverage[value][col] += count;
 	pChar += rozofs_string_append(pChar," |");
       }    
     }
@@ -165,4 +242,3 @@ char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb) 
   pChar += rozofs_eol(pChar);  
   return pChar;    
 }
-

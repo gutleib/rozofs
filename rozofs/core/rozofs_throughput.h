@@ -31,12 +31,22 @@ typedef struct _rozofs_thr_1_cnt_t {
   uint64_t     count;
 } rozofs_thr_1_cnt_t;
 
-
+   
 typedef struct _rozofs_thr_cnts_t {
   char                   * name;
-  rozofs_thr_1_cnt_t       counters[ROZOFS_THR_CNTS_NB];
+  rozofs_thr_1_cnt_t       second[ROZOFS_THR_CNTS_NB];
+  rozofs_thr_1_cnt_t       minute[ROZOFS_THR_CNTS_NB];
+  rozofs_thr_1_cnt_t       hour[ROZOFS_THR_CNTS_NB];  
 } rozofs_thr_cnts_t;
 
+
+typedef enum _rozofs_thr_unit_e {
+  rozofs_thr_unit_all,
+  rozofs_thr_unit_second,
+  rozofs_thr_unit_minute,
+  rozofs_thr_unit_hour
+} rozofs_thr_unit_e; 
+ 
 
 /*_______________________________________________________________________
 * Update throughput counter
@@ -49,15 +59,47 @@ static inline void rozofs_thr_cnt_update_with_time(rozofs_thr_cnts_t * counters,
   int    rank;
   if (counters == NULL) return;
   
+  /*
+  ** Update counters per second
+  */
   rank = t % ROZOFS_THR_CNTS_NB;
   
-  if (counters->counters[rank].ts == t) {
-    counters->counters[rank].count += count;
+  if (counters->second[rank].ts == t) {
+    counters->second[rank].count += count;
   }
   else {
-    counters->counters[rank].ts    = t;
-    counters->counters[rank].count = count;
+    counters->second[rank].ts    = t;
+    counters->second[rank].count = count;
   }
+  
+  /*
+  ** Update counter per minute
+  */
+  t = t/60;
+  rank = t % ROZOFS_THR_CNTS_NB;
+  
+  if (counters->minute[rank].ts == t) {
+    counters->minute[rank].count += count;
+  }
+  else {
+    counters->minute[rank].ts    = t;
+    counters->minute[rank].count = count;
+  }
+
+  /*
+  ** Update counter per hour
+  */
+  t = t/60;
+  rank = t % ROZOFS_THR_CNTS_NB;
+  
+  if (counters->hour[rank].ts == t) {
+    counters->hour[rank].count += count;
+  }
+  else {
+    counters->hour[rank].ts    = t;
+    counters->hour[rank].count = count;
+  }
+    
 }  
 /*_______________________________________________________________________
 * Update throughput counter
@@ -88,10 +130,21 @@ static inline void rozofs_thr_cnt_update(rozofs_thr_cnts_t * counters, uint64_t 
 * Display throughput counters
 *
 * @param pChar    Where to format the ouput
-* @param counters array of the counters
-* @param nb       number of entries in the array
+* @param pChar    The counters
+* @param nb       The number of counters
+* @param unit     The unit to display
 */
-char * rozofs_thr_display(char * pChar, rozofs_thr_cnts_t * counters[], int nb);
+char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int nb, rozofs_thr_unit_e unit);
+
+/*_______________________________________________________________________
+* Reset counters
+*
+* @param counters  The structure countaining counters
+*/
+static inline void rozofs_thr_cnts_reset(rozofs_thr_cnts_t * counters) {
+  memset(counters->second,0,sizeof(rozofs_thr_1_cnt_t)*ROZOFS_THR_CNTS_NB);
+  memset(counters->minute,0,sizeof(rozofs_thr_1_cnt_t)*ROZOFS_THR_CNTS_NB);
+}
 /*_______________________________________________________________________
 * Initialize a thoughput measurement structure
 *
@@ -112,7 +165,8 @@ static inline rozofs_thr_cnts_t * rozofs_thr_cnts_allocate(rozofs_thr_cnts_t * c
   /*
   ** Reset counters
   */
-  memset(counters->counters,0,sizeof(rozofs_thr_1_cnt_t)*ROZOFS_THR_CNTS_NB);
+  rozofs_thr_cnts_reset(counters);
+
   return counters;
 }
 /*_______________________________________________________________________
