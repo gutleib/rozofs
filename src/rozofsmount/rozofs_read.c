@@ -1237,7 +1237,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
     **  the buffer has to be install in the allocated buffer of the file_t structure.
     **  That makes the data available for a next read.
     */
-    if ((readahead == 0) && (received_len >= ROZOFS_MAX_FILE_BUF_SZ))
+    if ((readahead == 0) && (received_len > ROZOFS_MAX_FILE_BUF_SZ))
     {   
         /*
 	**______________________________________________
