@@ -91,6 +91,42 @@ void rozofs_storcli_write_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
 **_________________________________________________________________________
 */
 
+
+/*
+**__________________________________________________________________________
+* 
+  Check that the transaction number received from rozofsmount in the write request
+  message is equal to the transaction number saved in the share buffer. When the
+  values differ, this means that the the tansaction has timed out in the rozofsmount
+  and so the shared buffer may be reused for an other transaction.
+  
+  @param working_ctx_p : the STORCLI working context
+  
+  @retval 1 The transaction number are equal
+  @retval 0 The transaction number differ
+  
+*/
+static inline int rozofs_storcli_check_rozofsmount_tmo(rozofs_storcli_ctx_t *working_ctx_p) {
+  int32_t *xid_p;
+
+  if (working_ctx_p->shared_mem_p == NULL) {
+    /* 
+    ** No share memory pointer ?
+    */
+    return 0;
+  }
+ 
+  /*
+  ** Retrieve transaction identifier from the shared buffer
+  */
+  xid_p = (uint32_t*)working_ctx_p->shared_mem_p;
+  if (*xid_p !=  working_ctx_p->src_transaction_id)
+  {
+     return 1;   
+  } 
+  return 0;
+}    
+
 /**
 * Check if all the forward transform are done and if the system can proceed with the sending
   of the projections towards the storages
@@ -773,6 +809,17 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
        ** data after the Mojette transform took place
        */
        working_ctx_p->shared_mem_p = pbuffer;
+       /*
+       ** Check that the rozofsmount transaction is not aborted 
+       */
+       if (rozofs_storcli_check_rozofsmount_tmo(working_ctx_p)) {
+         /*
+         ** decoding error
+         */
+         errcode = EPROTO;
+         warning("rozofsmount tx timount");
+         goto failure;         
+       }
    }
    else
    {

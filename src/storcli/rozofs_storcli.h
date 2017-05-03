@@ -86,7 +86,11 @@ extern uint64_t rozofs_storcli_ctx_wrap_count_err;
 #define STORCLI_NORTH_MOD_INTERNAL_READ_BUF_CNT   STORCLI_CTX_CNT  /**< rozofs_storcli_north_small_buf_count  */
 #define STORCLI_NORTH_MOD_INTERNAL_READ_BUF_SZ   1024  /**< rozofs_storcli_north_small_buf_sz  */
 
-#define STORCLI_NORTH_MOD_XMIT_BUF_CNT   (STORCLI_CTX_CNT)  /**< rozofs_storcli_north_large_buf_count  */
+/*
+** Get more NORTH large buffer (to respond to rozofsmount) than the number of request that the rozosmount is able 
+** to send toward to all STORCLI. This way we can not have any buffer depletion.
+*/
+#define STORCLI_NORTH_MOD_XMIT_BUF_CNT   (STORCLI_CTX_CNT*2)  /**< rozofs_storcli_north_large_buf_count  */
 #define STORCLI_NORTH_MOD_XMIT_BUF_SZ    (1024*8)             /**< rozofs_storcli_north_large_buf_sz  */
 
 #define STORCLI_SOUTH_TX_XMIT_SMALL_BUF_SZ    (1024*4)                           /**< rozofs_storcli_south_small_buf_sz  */
