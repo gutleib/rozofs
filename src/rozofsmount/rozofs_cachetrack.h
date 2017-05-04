@@ -43,6 +43,7 @@ typedef struct _rzcachetrack_conf_t
 
 typedef struct _rozofs_file_cachetrack_t
 {
+    hash_entry_t he;   /**< hash context to avoid a malloc of the hash_entry */
     fid_t fid;          /**< unique file identifier of the directory  */
     uint64_t maxfilesize;  /**< max file size : used to compute the amount of 4K blocks that can be cached   */
     uint32_t children;  /**< number of children under the directory   */

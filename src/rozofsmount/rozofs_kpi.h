@@ -36,6 +36,7 @@ typedef enum _rzkpi_ope_e
 
 typedef struct _rozofs_file_kpi_t
 {
+    hash_entry_t he;/**< hash context to avoid a malloc of the hash_entry */
     fid_t fid; ///< unique file identifier associated with the file or directory
     uint64_t read_bytes_cpt;
     uint64_t write_bytes_cpt;

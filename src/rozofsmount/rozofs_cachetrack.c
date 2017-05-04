@@ -301,6 +301,11 @@ void rzcachetrack_lv2_cache_put(rzcachetrack_lv2_cache_t *cache, fid_t fid)
     list_init(&entry->list);
     memcpy(&entry->fid,fid,sizeof(fid_t));
     /*
+    ** init of the hash_entry
+    */
+    entry->he.key = entry->fid;
+    entry->he.value = entry;
+    /*
     ** Try to remove older entries
     */
     count = 0;
@@ -308,7 +313,7 @@ void rzcachetrack_lv2_cache_put(rzcachetrack_lv2_cache_t *cache, fid_t fid)
       rozofs_file_cachetrack_t *lru;
 		
 	  lru = list_entry(cache->lru.prev, rozofs_file_cachetrack_t, list);             
-	  htable_del(&cache->htable, lru->fid);
+	  htable_del_entry(&cache->htable, &lru->he);
 	  rzcachetrack_lv2_cache_unlink(cache,lru);
 	  cache->lru_del++;
 
@@ -319,7 +324,7 @@ void rzcachetrack_lv2_cache_put(rzcachetrack_lv2_cache_t *cache, fid_t fid)
     ** Insert the new entry
     */
     rzcachetrack_lv2_cache_update_lru(cache,entry);
-    htable_put(&cache->htable, fid, entry);
+    htable_put_entry(&cache->htable,&entry->he);
     cache->size++;    
 }
 
