@@ -939,8 +939,9 @@ void rozo_trash_read_configuration_file(void) {
   /*
   ** No configuration file
   */  
-  if (rozo_trash_ctx.trashConfigFile == NULL) return;
+  
 
+  if (rozo_trash_ctx.trashConfigFile == NULL) return;
   /*
   ** Read mtime and check if file has been modified
   */
@@ -1041,7 +1042,7 @@ int main(int argc, char *argv[]) {
     rozo_trash_ctx.continue_on_trash_state = 0;
     rozo_trash_ctx.deletion_rate          = TRASH_MAX_SCANNED;
     rozo_trash_ctx.state                  = ROZOFS_TRASH_STOPPED;
-           
+    rozo_trash_ctx.trashConfigFile        = TRASHD_DEFAULT_CONFIG;
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"path", required_argument, 0, 'p'},
@@ -1155,13 +1156,6 @@ int main(int argc, char *argv[]) {
               break;
       }
   }
-
-  if (rozo_trash_ctx.export_id == -1)
-  {
-       severe("Volume identifier is missing\n");
-       usage();
-       exit(EXIT_FAILURE);  
-  }     
   
   /*
   ** Case of the permanent mode with a configuration file.
@@ -1169,7 +1163,13 @@ int main(int argc, char *argv[]) {
   ** 
   */ 
   rozo_trash_read_configuration_file();
-  
+  if (rozo_trash_ctx.export_id == -1)
+  {
+     printf("export identifier is missing\n");
+       usage();
+       exit(EXIT_FAILURE);  
+  }     
+
   
   sprintf(path,"%sresult_trash_%d",TRASH_PATH,rozo_trash_ctx.export_id);
   printf("Result will be found in: %s\n",path);
