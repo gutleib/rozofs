@@ -170,7 +170,7 @@ for cs in options.cidsid.split(','):
 # By default use /tmp on export
 if options.expDirectory == None: options.expDirectory = "/tmp"
 
-cmd="rozo_rbsList -p %d -r %d -E %s -i %s"%( parallel, rebuildRef, options.expDirectory, options.cidsid)	
+cmd="sudo rozo_rbsList -p %d -r %d -E %s -i %s"%( parallel, rebuildRef, options.expDirectory, options.cidsid)	
 if options.simu != None: cmd=cmd+" -c %s"%(options.simu)
 if options.nominal == True: cmd=cmd+" --nominal"
 else:

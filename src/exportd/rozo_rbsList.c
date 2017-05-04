@@ -23,6 +23,7 @@
 #include "rozofs/common/log.h"
 #include "rozofs/rozofs_srv.h"
 
+#define ALLRIGHTS 0777
 static rbs_file_type_e   file_type = rbs_file_type_all;
 
 int rozofs_no_site_file;
@@ -418,13 +419,13 @@ int parse_cidsid_list(char *line,int rebuildRef, int parallel)
 
       if (file_type != rbs_file_type_spare) {
 	sprintf(fName,"%scid%d_sid%d_%d",pDir,cid+1,sid+1,rbs_file_type_nominal);
-	if (mkdir(fName,766)<0) {
+	if (mkdir(fName,ALLRIGHTS)<0) {
           severe("mkdir(%s) %s\n",fName,strerror(errno));
 	}  
 
 	for (i=0; i< parallel; i++) {
 	  sprintf(fName,"%scid%d_sid%d_%d/job%d",pDir,cid+1,sid+1,rbs_file_type_nominal,i);
-	  pSid->nominal.job[i].fd = open(fName, O_CREAT | O_TRUNC | O_APPEND | O_WRONLY,0755);
+	  pSid->nominal.job[i].fd = open(fName, O_CREAT | O_TRUNC | O_APPEND | O_WRONLY,ALLRIGHTS);
 	  if (pSid->nominal.job[i].fd == -1) {
 	    severe("open(%s) %s\n",fName,strerror(errno));
 	  }
@@ -434,13 +435,13 @@ int parse_cidsid_list(char *line,int rebuildRef, int parallel)
 
       if (file_type != rbs_file_type_nominal) {      	 
 	sprintf(fName,"%scid%d_sid%d_%d",pDir,cid+1,sid+1,rbs_file_type_spare);
-	if (mkdir(fName,766)<0) {
+	if (mkdir(fName,ALLRIGHTS)<0) {
           severe("mkdir(%s) %s\n",fName,strerror(errno));
 	}  
 
 	for (i=0; i< parallel; i++) {
 	  sprintf(fName,"%scid%d_sid%d_%d/job%d",pDir,cid+1,sid+1,rbs_file_type_spare,i);
-	  pSid->spare.job[i].fd = open(fName, O_CREAT | O_TRUNC | O_APPEND | O_WRONLY,0755);
+	  pSid->spare.job[i].fd = open(fName, O_CREAT | O_TRUNC | O_APPEND | O_WRONLY,ALLRIGHTS);
 	  if (pSid->spare.job[i].fd == -1) {
 	    severe("open(%s) %s\n",fName,strerror(errno));
 	  }
@@ -497,7 +498,7 @@ void close_all() {
 
       if (file_type != rbs_file_type_spare) {
 	sprintf(fname,"%s/cid%d_sid%d_%d/count",pDir,cid+1,sid+1,rbs_file_type_nominal);
-	fd = open(fname, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC,0755);
+	fd = open(fname, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC,ALLRIGHTS);
 	if (fd<0) {
           severe("open(%s) %s\n",fname,strerror(errno));
 	  continue;
@@ -517,7 +518,7 @@ void close_all() {
 
       if (file_type != rbs_file_type_nominal) {    
 	sprintf(fname,"%s/cid%d_sid%d_%d/count",pDir,cid+1,sid+1,rbs_file_type_spare);
-	fd = open(fname, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC,0755);
+	fd = open(fname, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC,ALLRIGHTS);
 	if (fd<0) {
           severe("open(%s) %s\n",fname,strerror(errno));
 	  continue;
@@ -718,7 +719,7 @@ int main(int argc, char *argv[]) {
     pDir = working_dir;
   }
   clean_dir(pDir);
-  if (mkdir(pDir,766)<0) {
+  if (mkdir(pDir,ALLRIGHTS)<0) {
     usage("mkdir(%s) %s\n",pDir,strerror(errno));
   }  
   
