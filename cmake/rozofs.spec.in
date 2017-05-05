@@ -164,6 +164,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_clusterstats
 %{_bindir}/rozo_scan_by_criteria
 %{_bindir}/rozo_rebalance
+%{_bindir}/rozo_rcmd_server
 %{_bindir}/rozo_buildfid_list
 %{_bindir}/rozo_rbsList
 %{_bindir}/rozo_trashd
@@ -185,6 +186,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_mandir}/man8/rozo_setquota.8.gz
 %{_mandir}/man8/rozo_repquota.8.gz
 %{_mandir}/man8/rozo_rebalance.8.gz
+%{_mandir}/man8/rozo_rcmd_server.8.gz
 %{_mandir}/man8/rozo_trashd.8.gz
 %{_mandir}/man5/rozo_trashd.conf.5.gz
 
@@ -196,7 +198,6 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/storage_rebuild
 %{_bindir}/storage_list_rebuilder
 %{_bindir}/rozodump
-%{_bindir}/rozo_make_rebuild_lists
 %config(noreplace) %{_sysconfdir}/rozofs/storage.conf
 %{_sysconfdir}/rozofs/storage.conf.sample
 %if 0%{?rhel} >= 7

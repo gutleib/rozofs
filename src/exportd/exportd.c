@@ -332,6 +332,29 @@ void export_rebalancer(int start) {
  *_______________________________________________________________________
  */
 /**
+*   start a remove server for storage node to execute some commands
+  
+   @retval none
+*/
+void export_rcmd_server(void) {
+  char   pidfile[128];
+  int    ret = -1;
+
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_rcmd_server.pid");
+  
+  // Launch exportd slave
+  ret = rozo_launcher_start(pidfile, "rozo_rcmd_server");
+  if (ret !=0) {
+    severe("rozo_launcher_start(%s,%s) %s",pidfile, "rozo_rcmd_server", strerror(errno));
+    return;
+  }
+
+  info("start rcmd server");
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
 *   start of a slave exportd process
 
   @param instance: instance id of the exportd process
@@ -1770,6 +1793,12 @@ static void on_start() {
       ** Start rebalancer when in automatic mode
       */
       export_rebalancer(1);
+      
+      /*
+      ** Start remote command server that enables storage node to 
+      ** remotly access the meta-data
+      */
+      export_rcmd_server();      
 
       info("running.");
       svc_run();

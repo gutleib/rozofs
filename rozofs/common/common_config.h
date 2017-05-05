@@ -166,12 +166,6 @@ typedef struct _common_config_t {
   // Directory to use on the storage node to build temporary files.
   // Used for instance by the rebuild process.
   char *      storage_temporary_dir;
-  // Port to be used for ssh or scp 
-  int32_t     ssh_port;
-  // User name to be used for ssh or scp 
-  char *      ssh_user;
-  // Other ssh/scp parameter (such as key location) 
-  char *      ssh_param;
   // self healing : Paralellism factor for device self healing feature
   // i.e the number of process to run rebuild in //
   int32_t     device_self_healing_process;

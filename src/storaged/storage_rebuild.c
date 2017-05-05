@@ -59,6 +59,7 @@
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/rozofs_timer_conf.h>
 #include <rozofs/core/rozofs_string.h>
+#include <rozofs/core/rozofs_rcmd.h>
 #include <stdarg.h>
  
 #include "config.h"
@@ -1705,33 +1706,43 @@ int rbs_storio_reinit(cid_t cid, sid_t sid, uint8_t dev, uint8_t reinit) {
     } 
     return status;
 }
-/** 
-** Build storage list from export
+/*__________________________________________________________________________
+** Build list of FID to rebuild from export
 **
-** python script rozo_make_rebuild_lists will request export to build the
-** list of FID supported by a list of ci:sid
-** At the end of the script directory /tmp/rbs.<rebuildRef> should contain
-** the job lists.
- */
+** Use export remote command server to 
+** - rozofs_rcmd_rebuild_list() 
+**   build the list of file to rebuild on export node calling 
+**   rozo_rbsList utility remotly,
+** - rozofs_rcmd_getfile() 
+**   transfer back the generated lists
+** - rozofs_rcmd_rebuild_list_clear() 
+**   cleanup local directory on export node
+**
+** @retval 0 on success. -1 on error
+**==========================================================================*/
 int rbs_build_job_list_from_export() {
+  int       socketId = -1;
+  char      command[512];
+  char      local[256];
+  char      remote[256];
   int       idx;
-  char      cmd[255];
-  char    * pChar = cmd;
-  int       first=1;
-  uint16_t  vid;
+  int       res;
+  int       para;
+  char    * pChar;
 
-  uint8_t   vlayout;
   int delay = time(NULL);
-  
-  *pChar = 0;
-
-    
+      
   // Initialize the list of cluster(s)
   list_init(&cluster_entries);
-
   
+  /*
+  ** All local directories have already been created previously;
+  ** Write storage.conf that will be used by rebuilders in it.
+  */
   for (idx=0; idx<nb_rbs_entry; idx++) {
-
+    uint8_t   vlayout;
+    uint16_t  vid;
+    
     // Get the list of storages for this cluster ID
     pExport_host = rbs_get_cluster2_list(&rpcclt_export, parameter.rbs_export_hostname, 
                                          parameter.storaged_geosite, 
@@ -1742,7 +1753,8 @@ int rbs_build_job_list_from_export() {
     if (pExport_host == NULL) {					
       severe("rbs_get_cluster2_list failed exportd %s cid %d %s", 
 		      parameter.rbs_export_hostname, rbs_stor_configs[idx].cid, strerror(errno));
-      continue;
+      REBUILD_FAILED("Can not connect to export.");  
+      return -1;
     }  
 
     // Initialize the storage to rebuild
@@ -1752,9 +1764,10 @@ int rbs_build_job_list_from_export() {
 		       rbs_stor_configs[idx].device.total, 
 		       rbs_stor_configs[idx].device.mapper, 
 		       rbs_stor_configs[idx].device.redundancy) != 0) {
-        severe("can't init. storage to rebuild (cid:%u;sid:%u;path:%s)",
+      severe("can't init. storage to rebuild (cid:%u;sid:%u;path:%s)",
                 rbs_stor_configs[idx].cid, rbs_stor_configs[idx].sid, rbs_stor_configs[idx].root);
-        continue;
+      REBUILD_FAILED("Bad cid/sid config %d/%d.",rbs_stor_configs[idx].cid,rbs_stor_configs[idx].sid);  
+      return -1;
     }
 	
     strcpy(storage_config.export_hostname,parameter.rbs_export_hostname);
@@ -1765,69 +1778,167 @@ int rbs_build_job_list_from_export() {
     storage_config.cid    = rbs_stor_configs[idx].cid;
     storage_config.sid    = rbs_stor_configs[idx].sid;    
     rbs_stor_configs[idx].status = RBS_STATUS_PROCESSING_LIST;
+    
+    /*
+    ** Write storage configuration file 
+    */
     rbs_write_storage_config_file(parameter.rebuildRef, &storage_config);
-	
-    if (first) {	
-      pChar += sprintf(pChar,"rozo_make_rebuild_lists -d -e %s -p %d -r %d -E %s -S %s -u %s ",
-                       pExport_host, 
-		       (int) parameter.parallel, 
-		       (int) parameter.rebuildRef,
-		       common_config.export_temporary_dir,
-		       common_config.storage_temporary_dir,
-		       common_config.ssh_user);
-      if (common_config.ssh_port) {
-	pChar += sprintf(pChar,"-P %d ",common_config.ssh_port);
-      }		   
-      if (strcmp(common_config.ssh_param,"")!=0) {
-	pChar += sprintf(pChar,"-o \"%s\" ",common_config.ssh_param);
-      }	
-      
-      if (parameter.filetype == rbs_file_type_spare) {
-        pChar += sprintf(pChar,"--spare ");
-      }
-      if (parameter.filetype == rbs_file_type_nominal) {
-        pChar += sprintf(pChar,"--nominal ");
-      }      
-
-      pChar += sprintf(pChar,"-c %d:%d", 
-                       (int) rbs_stor_configs[idx].cid, 
-		       (int) rbs_stor_configs[idx].sid);
-      first = 0;
-    }			
-    else {
-      if (parameter.filetype != rbs_file_type_all) {
-        pChar += sprintf(pChar, ",%d:%d",rbs_stor_configs[idx].cid, rbs_stor_configs[idx].sid);
-      }
-      else if (storage_config.ftype == rbs_file_type_nominal){
-        pChar += sprintf(pChar, ",%d:%d",rbs_stor_configs[idx].cid, rbs_stor_configs[idx].sid);        
-      }	
-    }
-
-
+    
     // Free cluster(s) list
     rbs_release_cluster_list(&cluster_entries);
-
   }
   
-  if (first) {
-    severe("No CID/SID to rebuild");
+  
+  /*
+  ** Connect to the remote command server on exportd node
+  */
+  socketId = rozofs_rcmd_connect_to_server(pExport_host);
+  if (socketId == -1) {
+    REBUILD_FAILED("Can not connect to export %s.",pExport_host);  
     return -1;
   }
 
-  if (parameter.simu != NULL) {
-    pChar += sprintf(pChar, " -s %s -d",parameter.simu);
+  /*
+  ** Prepare parameters for rozo_rbsList command
+  */
+  pChar = command;
+  pChar += sprintf(pChar, 
+                   "-p %d -r %d -E %s ",
+                   parameter.parallel, 
+                   parameter.rebuildRef, 
+                   common_config.export_temporary_dir);
+                   
+  /*
+  ** Rebuild limited to spare
+  */                 
+  if (parameter.filetype == rbs_file_type_spare) {
+    pChar += sprintf(pChar,"--spare ");
   }
+  /*
+  ** Rebuild limited to nominal
+  */                 
+  else if (parameter.filetype == rbs_file_type_nominal) {
+    pChar += sprintf(pChar,"--nominal ");
+  }      
+                   
+  /* 
+  ** In case of local test simulation, provide export.conf full path
+  */
+  if (parameter.simu != NULL) {
+    pChar += sprintf(pChar, "-c %s ",parameter.simu);
+  }
+  
+  /*
+  ** Add list of cid:sid
+  */
+  pChar += sprintf(pChar,"-i %d:%d", 
+                   (int) rbs_stor_configs[0].cid, 
+		   (int) rbs_stor_configs[0].sid);
+    
+  for (idx=1; idx<nb_rbs_entry; idx++) {
+    /*
+    ** Only nominal or only spare. One entry per cid:sid => push every entry
+    */
+    if (parameter.filetype != rbs_file_type_all) {
+      pChar += sprintf(pChar, ",%d:%d",rbs_stor_configs[idx].cid, rbs_stor_configs[idx].sid);
+      continue;
+    }
+    /*
+    ** rebuild nominal as well as spare files. 2 entries per cid:sid so push only 
+    ** the cid:sid when encountering nominal entries
+    */
+    if (rbs_stor_configs[idx].ftype == rbs_file_type_nominal){
+      pChar += sprintf(pChar, ",%d:%d",rbs_stor_configs[idx].cid, rbs_stor_configs[idx].sid);        
+    }	
+  }
+  
+  /*
+  ** Run the remote command
+  */
+  res = rozofs_rcmd_rebuild_list(socketId,command);
+  if (res != rozofs_rcmd_status_success) {
+    REBUILD_FAILED("Can not make rebuild job list %s", rozofs_rcmd_status2String(res));  
+    goto out;
+  }    
+  
+  /*
+  ** Get result files
+  */
+  for (idx=0; idx<nb_rbs_entry; idx++) {
 
-  if (system(cmd)==0) {}
-  delay = time(NULL) - delay;
+    /*
+    ** count file
+    */
+    sprintf(local,"%s/rbs.%d/cid%d_sid%d_%d/count",
+            common_config.storage_temporary_dir,
+            parameter.rebuildRef, 
+            rbs_stor_configs[idx].cid, 
+            rbs_stor_configs[idx].sid, 
+            rbs_stor_configs[idx].ftype);
+
+    sprintf(remote,"%s/rebuild.%d/cid%d_sid%d_%d/count",
+            common_config.export_temporary_dir,
+            parameter.rebuildRef, 
+            rbs_stor_configs[idx].cid, 
+            rbs_stor_configs[idx].sid, 
+            rbs_stor_configs[idx].ftype);
+    
+    res = rozofs_rcmd_getfile(socketId, remote, local);
+    if (res != rozofs_rcmd_status_success) {
+      REBUILD_FAILED("Can not retrieve file %s -> %s. %s", remote, local, rozofs_rcmd_status2String(res));  
+      goto out;
+    }        
+      
+    /*
+    ** Get jobs
+    */  
+    for (para=0; para<parameter.parallel; para++) {
+    
+      sprintf(local,"%s/rbs.%d/cid%d_sid%d_%d/job%d",
+              common_config.storage_temporary_dir,
+              parameter.rebuildRef, 
+              rbs_stor_configs[idx].cid, 
+              rbs_stor_configs[idx].sid, 
+              rbs_stor_configs[idx].ftype,
+              para);
+
+      sprintf(remote,"%s/rebuild.%d/cid%d_sid%d_%d/job%d",
+              common_config.export_temporary_dir,
+              parameter.rebuildRef, 
+              rbs_stor_configs[idx].cid, 
+              rbs_stor_configs[idx].sid, 
+              rbs_stor_configs[idx].ftype,
+              para);
+
+      res = rozofs_rcmd_getfile(socketId,remote, local);
+      if (res != rozofs_rcmd_status_success) {
+        REBUILD_FAILED("Can not retrieve file %s -> %s. %s", remote, local, rozofs_rcmd_status2String(res));  
+        goto out;
+      }        
+    }
+  }  
+
+out:
+  /*
+  ** Cleanup temporary directory under export node
+  */
+  rozofs_rcmd_rebuild_list_clear(socketId,common_config.export_temporary_dir, parameter.rebuildRef);  
 
   /*
-  ** Do not log in the case of FID rebuild
+  ** Disconnect from server
   */
-  if (!nolog) {
-    info("(%d s) %s",delay, cmd);
-  }
-    
+  rozofs_rcmd_disconnect_from_server(socketId);  
+
+  /*
+  ** Get deuration
+  */
+  delay = time(NULL) - delay;
+  
+  
+  if (res != rozofs_rcmd_status_success) {
+    return -1;
+  }  
+      
   for (idx=0; idx<nb_rbs_entry; idx++) {
   
     rbs_monitor[idx].list_building_sec = delay/nb_rbs_entry;  
@@ -2375,7 +2486,7 @@ int rbs_build_job_list_local(int idx) {
     
     // No file to rebuild
     if (rb_fid_table_count==0) {
-      REBUILD_MSG("No file to rebuild. (Check ssh connection toward exportd host)");
+      REBUILD_MSG("No file to rebuild.");
       rbs_empty_dir (get_rebuild_sid_directory_name(parameter.rebuildRef,cid,sid,rbs_file_type_all));
       unlink(get_rebuild_sid_directory_name(parameter.rebuildRef,cid,sid,rbs_file_type_all));
     }
@@ -2790,8 +2901,8 @@ static inline int rebuild_storage_thread(rbs_stor_config_t *stor_confs) {
           rbs_monitor_update("running","running");
 
 	  if (rbs_monitor[rbs_index].nb_files == 0) {
-            REBUILD_MSG("cid %d sid %d %s.  No file to rebuild. Check ssh connection toward exportd host.", cid, sid, rbs_file_type2string(ftype));
-            rbs_monitor_update("running","No file to rebuild (Check ssh cnx with export).");
+            REBUILD_MSG("cid %d sid %d %s.  No file to rebuild.", cid, sid, rbs_file_type2string(ftype));
+            rbs_monitor_update("running","No file to rebuild.");
             stor_confs[rbs_index].status = RBS_STATUS_SUCCESS;
             /*
             ** Remove cid/sid directory 
@@ -3112,8 +3223,9 @@ static int prepare_list_of_storage_to_rebuild() {
     dir = get_rebuild_sid_directory_name(parameter.rebuildRef,parameter.cid,parameter.sid,ftype);
     ret = mkdir(dir,ROZOFS_ST_BINS_FILE_MODE);
     if ((ret != 0)&&(errno!=EEXIST)) {
-	  severe("mkdir(%s) %s", dir, strerror(errno));
-	  return -1;
+      severe("mkdir(%s) %s", dir, strerror(errno));
+      REBUILD_FAILED("Can not reate directory %s %s.",dir,strerror(errno));  
+      return -1;
     }
     
     rbs_build_job_lists_one_fid(&rbs_stor_configs[0]);
@@ -3188,6 +3300,7 @@ static int prepare_list_of_storage_to_rebuild() {
     ret = mkdir(dir,ROZOFS_ST_BINS_FILE_MODE);
     if ((ret != 0)&&(errno!=EEXIST)) {
       severe("mkdir(%s) %s", dir, strerror(errno));
+      REBUILD_FAILED("Can not reate directory %s %s.",dir,strerror(errno));  
       return -1;
     }  
   }
@@ -3224,7 +3337,8 @@ static int prepare_list_of_storage_to_rebuild() {
       ret = mkdir(dir,ROZOFS_ST_BINS_FILE_MODE);
       if ((ret != 0)&&(errno!=EEXIST)) {
 	severe("mkdir(%s) %s", dir, strerror(errno));
-	return -1;
+        REBUILD_FAILED("Can not reate directory %s %s.",dir,strerror(errno));  
+        return -1;  
       }
     }         
   }
@@ -3238,15 +3352,14 @@ static int prepare_list_of_storage_to_rebuild() {
   if (parameter.type == rbs_rebuild_type_device) {
     for (idx=0; idx< nb_rbs_entry; idx++) {
       rbs_build_job_list_local(idx); 
-    }    
+    } 
+    return 0;   
   }
-  else {
-    /*
-    ** Ask the export for the list of jobs
-    */
-    rbs_build_job_list_from_export(); 
-  }          		
-  return 0;
+  
+  /*
+  ** Ask the export for the list of jobs
+  */
+  return rbs_build_job_list_from_export(); 
 }
 
 /*________________________________________________________________

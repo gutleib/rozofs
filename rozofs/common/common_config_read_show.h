@@ -408,24 +408,6 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_STRING(storage_temporary_dir,"/tmp");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(ssh_port,0);
-  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// Port to be used for ssh or scp \n");
-  COMMON_CONFIG_SHOW_INT(ssh_port,0);
-  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
-
-  COMMON_CONFIG_IS_DEFAULT_STRING(ssh_user,"root");
-  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// User name to be used for ssh or scp \n");
-  COMMON_CONFIG_SHOW_STRING(ssh_user,"root");
-  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
-
-  COMMON_CONFIG_IS_DEFAULT_STRING(ssh_param,"");
-  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// Other ssh/scp parameter (such as key location) \n");
-  COMMON_CONFIG_SHOW_STRING(ssh_param,"");
-  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
-
   COMMON_CONFIG_IS_DEFAULT_INT(device_self_healing_process,8);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// self healing : Paralellism factor for device self healing feature\n");
@@ -703,12 +685,6 @@ static inline void common_config_generated_read(char * fname) {
   // Directory to use on the storage node to build temporary files. 
   // Used for instance by the rebuild process. 
   COMMON_CONFIG_READ_STRING(storage_temporary_dir,"/tmp");
-  // Port to be used for ssh or scp  
-  COMMON_CONFIG_READ_INT(ssh_port,0);
-  // User name to be used for ssh or scp  
-  COMMON_CONFIG_READ_STRING(ssh_user,"root");
-  // Other ssh/scp parameter (such as key location)  
-  COMMON_CONFIG_READ_STRING(ssh_param,"");
   // self healing : Paralellism factor for device self healing feature 
   // i.e the number of process to run rebuild in // 
   COMMON_CONFIG_READ_INT_MINMAX(device_self_healing_process,8,1,64);

@@ -4,7 +4,6 @@
 /usr/bin/storage_rebuild
 /usr/bin/storage_list_rebuilder
 /usr/bin/rozodump
-/usr/bin/rozo_make_rebuild_lists
 /etc/rozofs/storage.conf
 /usr/share/man/man5/storage.conf.5
 /usr/share/man/man8/storaged.8

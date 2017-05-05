@@ -261,6 +261,12 @@ add_executable(rozo_rebalance
     rebalance_config_read_show.h
 )
 target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+#________________________________________________________
+add_executable(rozo_rcmd_server
+    rozofs_rcmd_server.c 
+    ../../rozofs/core/rozofs_rcmd.h     
+)
+target_link_libraries(rozo_rcmd_server rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
 
 #________________________________________________________
 add_executable(rozo_trashd
@@ -393,6 +399,13 @@ install(TARGETS rozo_rebalance
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     COMPONENT rozo_rebalance
+)
+
+install(TARGETS rozo_rcmd_server
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_rcmd_server
 )
 
 install(TARGETS rozo_trashd
