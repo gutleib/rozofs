@@ -421,8 +421,20 @@ void export_kill_all_export_slave() {
 
 void export_start_export_slave() {
 	int i;
+        
+    /*
+    ** Kill every rozolauncher of slave export just in case
+    */    
+    if (system("for pid in `ps -ef | grep \"exportd -i\" | grep rozolauncher | grep -v grep | awk '{print $2}'`; do kill $pid; done")){};
 
-    for (i = 1; i <= EXPORT_SLICE_PROCESS_NB; i++) {
+    usleep(10000);
+    
+    /*
+    ** Kill every exportd slave just in case
+    */
+    if (system("for pid in `ps -ef | grep \"exportd -i\" | grep -v rozolauncher | grep -v grep | awk '{print $2}'`; do kill $pid; done")){};
+
+    for (i = 1; i <= EXPORT_SLICE_PROCESS_NB; i++) { 
       export_start_one_export_slave(i);
     }
 }
