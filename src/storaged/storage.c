@@ -1211,6 +1211,41 @@ static inline storage_dev_map_distribution_write_ret_e
 }
 /*
 ** 
+** Create RozoFS a storage subdirecty along with its slices
+**
+** @param pDir   The directory name (whith an ending '/')
+**  
+*/
+void rozofs_storage_device_one_subdir_create(char * pDir) {
+  char          * pChar;
+  int             slice;
+
+  /*
+  ** Create directory when needed
+  */
+  if (access(pDir, F_OK) != 0) {
+    if (storage_create_dir(pDir) < 0) {
+      severe("%s creation %s",pDir, strerror(errno));
+    }
+  }
+  
+  /*
+  ** Create slice directories when needed
+  */
+  pChar = pDir;
+  pChar += strlen(pDir);
+  rozofs_u32_append(pChar,common_config.storio_slice_number);
+  if (access(pDir, F_OK) != 0) {  
+    for (slice = 0; slice < (common_config.storio_slice_number); slice++) {
+      rozofs_u32_append(pChar,slice);
+      if (storage_create_dir(pDir) < 0) {
+	severe("%s creation %s",pDir, strerror(errno));
+      }	    
+    }
+  }
+}    
+/*
+** 
 ** Create RozoFS storage subdirectories on a device
 **
 ** @param root   storage root path
@@ -1218,8 +1253,8 @@ static inline storage_dev_map_distribution_write_ret_e
 **  
 */
 void rozofs_storage_device_subdir_create(char * root, int dev) {
-  char path[FILENAME_MAX];
-  char * pChar, * pChar2;
+  char   path[FILENAME_MAX];
+  char * pChar;
 
   pChar = path;
   pChar += rozofs_string_append(pChar,root);
@@ -1229,65 +1264,17 @@ void rozofs_storage_device_subdir_create(char * root, int dev) {
   /*
   ** Build 2nd level directories
   */
-  pChar2 = pChar;
-  pChar2 += rozofs_string_append(pChar2,"/hdr_0/");
-  if (access(path, F_OK) != 0) {
-    if (storage_create_dir(path) < 0) {
-      severe("%s creation %s",path, strerror(errno));
-    }
-    int slice;
-    for (slice = 0; slice < (common_config.storio_slice_number); slice++) {
-      rozofs_u32_append(pChar2,slice);
-      if (storage_create_dir(path) < 0) {
-	severe("%s creation %s",path, strerror(errno));
-      }	    
-    }
-  }  
+  rozofs_string_append(pChar,"/hdr_0/");
+  rozofs_storage_device_one_subdir_create(path);
 
-  pChar2 = pChar;
-  pChar2 += rozofs_string_append(pChar2,"/hdr_1/");
-  if (access(path, F_OK) != 0) {
-    if (storage_create_dir(path) < 0) {
-      severe("%s creation %s",path, strerror(errno));
-    }	
-    int slice;
-    for (slice = 0; slice < (common_config.storio_slice_number); slice++) {
-      rozofs_u32_append(pChar2,slice);	  
-      if (storage_create_dir(path) < 0) {
-	severe("%s creation %s",path, strerror(errno));
-      }	    
-    }
-  } 
+  rozofs_string_append(pChar,"/hdr_1/");
+  rozofs_storage_device_one_subdir_create(path);
 
-  pChar2 = pChar;	
-  pChar2 += rozofs_string_append(pChar2,"/bins_0/");
-  if (access(path, F_OK) != 0) {
-    if (storage_create_dir(path) < 0) {
-      severe("%s creation %s",path, strerror(errno));
-    }	
-    int slice;
-    for (slice = 0; slice < (common_config.storio_slice_number); slice++) {
-      rozofs_u32_append(pChar2,slice);	 
-      if (storage_create_dir(path) < 0) {
-	severe("%s creation %s",path, strerror(errno));
-      }	    
-    }
-  } 
+  rozofs_string_append(pChar,"/bins_0/");
+  rozofs_storage_device_one_subdir_create(path);
 
-  pChar2 = pChar;		
-  pChar2 += rozofs_string_append(pChar2,"/bins_1/");
-  if (access(path, F_OK) != 0) {
-    if (storage_create_dir(path) < 0) {
-      severe("%s creation %s",path, strerror(errno));
-    }	
-    int slice;
-    for (slice = 0; slice < (common_config.storio_slice_number); slice++) {
-      rozofs_u32_append(pChar2,slice);	 
-      if (storage_create_dir(path) < 0) {
-	severe("%s creation %s",path, strerror(errno));
-      }	    
-    } 
-  } 	
+  rozofs_string_append(pChar,"/bins_1/");
+  rozofs_storage_device_one_subdir_create(path);	
 }
 
 /*
