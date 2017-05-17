@@ -1481,10 +1481,20 @@ def cores():
   os.system("./setup.py core remove all")  
 
   # Storio
-  backline("Crash storio:1 of localhost2 and check core file")
-  process="-i localhost2 -T storio:1"
-  if crash_process(process,"Main") != True: return 1
-  if check_core_process(process,1) != True: return 1
+  string="%s/setup.py mount %s info"%(os.getcwd(),instance)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    words = line.split()
+    if len(words)<3: continue
+    if words[0] == "sids": 
+      node=words[2].split('-')[0]
+      cid=words[2].split('-')[1]
+      sid=words[2].split('-')[2]
+      backline("Crash storio:%s of localhost%s and check core file"%(cid,node))
+      process="-i localhost%s -T storio:%s"%(node,cid)
+      if crash_process(process,"Main") != True: return 1
+      if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
 
   # Stspare
