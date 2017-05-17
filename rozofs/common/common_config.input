@@ -148,7 +148,7 @@ STRING  storage device_selfhealing_mode        "spareOnly"
 // Required for spare file restoring to its nominal location.
 STRING  storage export_hosts                   ""
 // Minimum delay between the deletion request and the effective projections deletion
-INT     export deletion_delay 	20           
+INT     export deletion_delay 	30           
 // Spare file restoring : whether the service is active or not
 BOOL    storage spare_restore_enable                True	
 // Spare file restoring : how often the process runs  
