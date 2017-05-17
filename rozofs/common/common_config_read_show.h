@@ -114,7 +114,7 @@ char * show_module_export(char * pChar) {
   pChar += rozofs_string_append(pChar,"// To disable synchronous write of attributes when set to True\n");
   COMMON_CONFIG_SHOW_BOOL(disable_sync_attributes,False);
   pChar += rozofs_string_append(pChar,"// Minimum delay between the deletion request and the effective projections deletion\n");
-  COMMON_CONFIG_SHOW_INT(deletion_delay,0);
+  COMMON_CONFIG_SHOW_INT(deletion_delay,30);
   pChar += rozofs_string_append(pChar,"// Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation\n");
   COMMON_CONFIG_SHOW_INT(min_metadata_inodes,262144);
   pChar += rozofs_string_append(pChar,"// Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation\n");
@@ -368,7 +368,7 @@ static inline void common_config_generated_read(char * fname) {
   // To disable synchronous write of attributes when set to True 
   COMMON_CONFIG_READ_BOOL(disable_sync_attributes,False);
   // Minimum delay between the deletion request and the effective projections deletion 
-  COMMON_CONFIG_READ_INT(deletion_delay,0);
+  COMMON_CONFIG_READ_INT(deletion_delay,30);
   // Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation 
   COMMON_CONFIG_READ_INT(min_metadata_inodes,262144);
   // Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation 
