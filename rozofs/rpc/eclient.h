@@ -55,7 +55,7 @@ typedef struct mstorage {
     sid_t sids[STORAGES_MAX_BY_STORAGE_NODE];
     cid_t cids[STORAGES_MAX_BY_STORAGE_NODE];
     uint8_t sclients_nb;
-    int     lbg_id[STORAGES_MAX_BY_STORAGE_NODE];/**< load balancing group reference */
+    int     lbg_id[ROZOFS_CLUSTERS_MAX];/**< load balancing group reference */
     int     single_storio;
     int     thread_started;   /**< asserted to 1 when the connect_storage is started */
     sid_t sids_nb;

@@ -818,13 +818,14 @@ void storaged_rebuild_compact_list(char * fid_list, int fd) {
 ** Check the existence of a FID from the export
 ** Just in case it has been deleted
 **
-** @param fid     The fid to check
+** @param fid                  The fid to check
+** @param pExport_hostname     The export name to connect to
 **
 ** @retval 1 when the file has been deleted / 0 when the file  still exist
 **
 **----------------------------------------------------------------------------
 */
-int check_fid_deleted_from_export(fid_t fid) {
+int check_fid_deleted_from_export(fid_t fid, char * pExport_hostname) {
   uint32_t   bsize;
   uint8_t    layout; 
   ep_mattr_t attr;
@@ -832,7 +833,7 @@ int check_fid_deleted_from_export(fid_t fid) {
 
   // Resolve this FID thanks to the exportd
   errno = 0;
-  ret = rbs_get_fid_attr(&rpcclt_export, storage_config.export_hostname, fid, &attr, &bsize, &layout);
+  ret = rbs_get_fid_attr(&rpcclt_export, pExport_hostname, fid, &attr, &bsize, &layout);
  
   if ((ret != 0)&&(errno == ENOENT)) {
     return 1;
@@ -1054,7 +1055,7 @@ int storaged_rebuild_list(char * fid_list, char * statFilename) {
       ** the FID still exists
       */
       if (ret == RBS_EXE_FAILED) {
-        if (check_fid_deleted_from_export(file_entry.fid)) {   
+        if (check_fid_deleted_from_export(file_entry.fid, pExport_hostname)) {   
 	  //char fidString[64];
 	  //rozofs_fid2string(re.fid,fidString);
 	  //warning("@rozofs_uuid@%s does no more exist",fidString); 	
