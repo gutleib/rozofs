@@ -400,6 +400,12 @@ class sid_class:
 #____________________________________
 # Class cid
 #____________________________________
+def get_cid(cid):
+  global cids 
+  for c in cids:
+    if c.cid == cid: return c
+  return None  
+
 class cid_class:
 
   def __init__(self, volume, dev_total, dev_mapper, dev_red, dev_size):
@@ -454,7 +460,8 @@ class cid_class:
     for s in self.sid: s.delete_path()     
 
   def nb_sid(self): return len(self.sid)
-       
+  
+
 
 
 #____________________________________
@@ -465,6 +472,7 @@ class mount_point_class:
   def __init__(self, eid, layout, site=0):
     global mount_points
     instance = len(mount_points)
+    self.numanode=instance+1
     # When more than 2 storcli, use one rozofsmount instance upon 2
     if rozofs.nb_storcli > 2 : instance = 2 * instance       
     self.instance = instance
@@ -553,6 +561,7 @@ class mount_point_class:
     options += " -o rozofssparestoragems=%s"%(self.spare_tmr_ms)
     options += " -o auto_unmount"
     options += " -o suid"
+    options += " -o numanode=%s"%(self.numanode)
     options += " -o site=%s"%(self.site)
     if self.instance != 0: options += " -o instance=%s"%(self.instance)
     if rozofs.read_mojette_threads == True: options += " -o mojThreadRead=1"
@@ -821,7 +830,7 @@ class exportd_class:
     self.display_config()
     sys.stdout.close()
     sys.stdout = save_stdout
-    for v in volumes: v.create_rebalance_config()
+#    for v in volumes: v.create_rebalance_config()
        
   def pid(self):
     string="ps -fC exportd"
@@ -875,7 +884,7 @@ class exportd_class:
       print "    vid = %s;"%(v.vid)
       print "    layout = %s;"%(v.layout)
       print "    georep = %s;"%(v.georep())
-      print "    rebalance = \"%s\";"%(v.get_rebalance_config_name())
+#      print "    rebalance = \"%s\";"%(v.get_rebalance_config_name())
       print "    cids = "
       print "    ("
       nextc=" "
@@ -1491,7 +1500,7 @@ class rozofs_class:
 
     SID_LIST=dist.split('-')
     
-    c = cids[int(cid)-1]
+    c = get_cid(int(cid))
     
     for site in range(0,2):
     
@@ -1889,8 +1898,7 @@ def test_parse(command, argv):
        except:  syntax("get_cid_sid requires an integer for cluster id","sid") 
        if cid == 0: syntax("No such cluster id","sid")  
        if (len(cids)) < int(cid): syntax("No such cluster id","sid")
-       cid-=1            
-       c = cids[cid]
+       c = get_cid(int(cid))
 
        try:     sid = int(argv[3])
        except:  syntax("get_cid_sid requires an integer for storage id","sid") 
@@ -1959,8 +1967,7 @@ def test_parse(command, argv):
        except:  syntax("get_cluster_sid requires an integer for cluster number") 
        if idx == 0: syntax("No such cluster number")  
        if (len(cids)) < int(idx): syntax("No such cluster number")
-       idx-=1            
-       c = cids[idx]
+       c = get_cid(idx)
        console("%s"%(c.nb_sid()))
 
   else                                 : syntax("Unexpected command \"%s\n"%(command))
@@ -1972,7 +1979,7 @@ def test_init():
   global geomgr
   
   rozofs  = rozofs_class()
-  exportd = exportd_class()
+  exportd = exportd_class("zanzibar/localhost")
   geomgr  = geomgr_class()
   
 

@@ -114,7 +114,8 @@ typedef struct rozofsmnt_conf {
     unsigned localPreference;    
     unsigned noReadFaultTolerant;   
     unsigned xattrcache;   /**< assert to 1 for extended attributes caching                        */      
-    unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */      
+    unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */
+    unsigned numanode;      
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 

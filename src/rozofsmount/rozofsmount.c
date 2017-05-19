@@ -227,7 +227,7 @@ static void usage() {
     fprintf(stderr, "    -o asyncsetattr\t\t\toperates asynchronous mode for setattr operations)\n");
     fprintf(stderr, "    -o rozofssparestoragems=N\tdefine timeout for switching to a spare storaged for read/write requests (default: %d ms)\n",
                             rozofs_tmr_get(TMR_PRJ_READ_SPARE));
-
+    fprintf(stderr, "    -o numanode=<#node>\tpin rozofsmount as well as its STORCLI on numa node <node#>\n");
 
 }
 
@@ -265,7 +265,8 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("rozofsentrytimeoutms=%u", entry_timeout_ms, 0),
     MYFS_OPT("rozofsentrydirtimeoutms=%u", entry_dir_timeout_ms, 0),
     MYFS_OPT("rozofsenoenttimeout=%u", enoent_timeout_ms, 0),
-   
+    
+    MYFS_OPT("numanode=%u", numanode, 0),   
     MYFS_OPT("debug_port=%u", dbg_port, 0),
     MYFS_OPT("instance=%u", instance, 0),
     MYFS_OPT("rozofscachemode=%u", cache_mode, 0),
@@ -425,6 +426,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(entry_timeout_ms);
   DISPLAY_UINT32_CONFIG(symlink_timeout);
   DISPLAY_UINT32_CONFIG(enoent_timeout_ms);
+  DISPLAY_UINT32_CONFIG(numanode);
 
   DISPLAY_UINT32_CONFIG(shaper);  
   DISPLAY_UINT32_CONFIG(rotate);  
@@ -1546,6 +1548,10 @@ void rozofs_start_one_storcli(int instance) {
     cmd_p += sprintf(cmd_p, "-M %s ", rozofs_mountpoint);
     cmd_p += sprintf(cmd_p, "-g %d ", rozofs_site_number);
     
+    if (conf.numanode != -1) {
+      cmd_p += sprintf(cmd_p, "-n %d ", conf.numanode);      
+    }
+    
     /* Try to get debug port from /etc/services */
     debug_port_value = conf.dbg_port + instance;
     sprintf(debug_port_name,"rozo_storcli%d_%d_dbg",conf.instance,instance);
@@ -2171,6 +2177,7 @@ int main(int argc, char *argv[]) {
     conf.attr_timeout = -1;
     conf.entry_dir_timeout_ms= -1;
     conf.enoent_timeout_ms = -1;
+    conf.numanode = -1;
     conf.attr_dir_timeout_ms= -1;
     conf.attr_timeout_ms = -1;
     conf.entry_timeout = -1;
@@ -2206,7 +2213,12 @@ int main(int argc, char *argv[]) {
     /*
     **  set the numa node for rozofsmount and its storcli
     */
-    rozofs_numa_allocate_node(conf.instance,"instance");
+    if (conf.numanode==-1) {
+      rozofs_numa_allocate_node(conf.instance,"instance");
+    }
+    else {
+      rozofs_numa_allocate_node(conf.numanode,"parameter numanode");
+    }  
     /*
     ** init of the site number for that rozofs client
     */

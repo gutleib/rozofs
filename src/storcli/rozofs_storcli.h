@@ -476,6 +476,7 @@ typedef struct storcli_conf {
     unsigned mojThreadThreshold; 
     unsigned localPreference;
     unsigned noReadFaultTolerant;
+    unsigned numanode;
 } storcli_conf;
 
 extern storcli_conf conf;

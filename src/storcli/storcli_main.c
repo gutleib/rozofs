@@ -147,7 +147,8 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(mojThreadThreshold);   
   DISPLAY_UINT32_CONFIG(site);
   DISPLAY_UINT32_CONFIG(localPreference);  
-  DISPLAY_UINT32_CONFIG(noReadFaultTolerant);    
+  DISPLAY_UINT32_CONFIG(noReadFaultTolerant); 
+  DISPLAY_UINT32_CONFIG(numanode);
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }    
 
@@ -1495,6 +1496,7 @@ void usage() {
     printf("\t-B,--bsize <0|1|2>\t\tfile system block size (0:4K/1:8K/2:16K\n");
     printf("\t-f,--localPreference\t\tfavor local storage on read to save network bandwith in case of poor network connection\n");
     printf("\t-F,--noReadFaultTolerant\t\tReturn EIO on block corruption detection.\n");
+    printf("\t-n,--numanode <#node>\t\tNode to pin the STORCLI on.\n");
 
 }
 
@@ -1534,6 +1536,7 @@ int main(int argc, char *argv[]) {
         { "owner", required_argument, 0, 'o'},
         { "localPreference", required_argument, 0, 'f'},
         { "noReadFaultTolerant", required_argument, 0, 'F'},
+        { "numanode", required_argument, 0, 'n'},
         { 0, 0, 0, 0}
     };
 
@@ -1591,6 +1594,7 @@ int main(int argc, char *argv[]) {
     conf.shaper = 1; // Default value for traffic shaping 
     conf.site = 0;
     conf.owner=NULL;
+    conf.numanode = -1;
 
     conf.mojThreadWrite      = -1;
     conf.mojThreadRead       = -1;    
@@ -1601,7 +1605,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hH:E:P:i:D:M:R:s:t:k:c:l:S:g:o:r:w:m:L:B:Ff", long_options, &option_index);
+        c = getopt_long(argc, argv, "hH:E:P:i:D:M:R:s:t:k:c:l:S:g:o:r:w:m:L:B:n:Ff", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -1813,6 +1817,17 @@ int main(int argc, char *argv[]) {
 		conf.mojThreadThreshold = val;
                 rozofs_stcmoj_thread_set_threshold(val);
                 break;
+                
+            case 'n':
+                errno = 0;
+                val = (int) strtol(optarg, (char **) NULL, 10);
+                if (errno != 0) {
+                    strerror(errno);
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+		conf.numanode = val;
+                break;                
 					
             case '?':
                 usage();
@@ -1872,8 +1887,12 @@ int main(int argc, char *argv[]) {
     /*
     **  set the numa node for rozofsmount and its storcli
     */
-    rozofs_numa_allocate_node(conf.rozofsmount_instance,"instance");
-    
+    if (conf.numanode==-1) {
+      rozofs_numa_allocate_node(conf.rozofsmount_instance,"instance");
+    }
+    else {
+      rozofs_numa_allocate_node(conf.numanode,"parameter -n");
+    }      
 
     rozofs_signals_declare("storcli",common_config.nb_core_file);
     rozofs_attach_crash_cbk(storlci_handle_signal);
