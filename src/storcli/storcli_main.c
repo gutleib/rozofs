@@ -438,26 +438,51 @@ void show_corrupted(char * argv[], uint32_t tcpRef, void *bufRef) {
 **
 */
 void man_rwerror(char * pChar) {
-  pChar += rozofs_string_append(pChar,"rwerror          : display r/w error buffer.\n");
-  pChar += rozofs_string_append(pChar,"rwerror reset    : reset r/w error buffer.\n");
-  
-  pChar += rozofs_string_append(pChar,"\nThe error buffer contains a list of error records.\n");
-  pChar += rozofs_string_append(pChar,"Each error record contains the following information:\n");
-  pChar += rozofs_string_append(pChar," time  : the date when the error occured.\n");
-  pChar += rozofs_string_append(pChar," error : the errno associated to the error.\n");
-  pChar += rozofs_string_append(pChar," ope   : the operation in error (READ/WRITE/TRUNCATE)\n");
-  pChar += rozofs_string_append(pChar," line  : the line in the source code where the error was detected.\n");
-  pChar += rozofs_string_append(pChar," FID   : an identifier of the file on which the error occured.\n");
-  pChar += rozofs_string_append(pChar," bid   : the block number of the request.\n");
-  pChar += rozofs_string_append(pChar," size  : the size in block of the request.\n");
-  pChar += rozofs_string_append(pChar," lbg   : the status of the LBG toward the file distribution;\n");
-  pChar += rozofs_string_append(pChar,"         One character per sid giving the LBG status.\n");
-  pChar += rozofs_string_append(pChar,"         'S'=Selectable 'u'=Up 'D'=Down 'x'=Shutting down '-'=Dependandcy\n");
-  pChar += rozofs_string_append(pChar," prj   : the projection context. Each projection is displayed on 2 characters.\n");
-  pChar += rozofs_string_append(pChar,"         1rst: storage index in the lbg status field.\n");
-  pChar += rozofs_string_append(pChar,"         2nd : 'D'=Done 'N'=No file 'P'=in progress 'E'=Error 'I'=Idle.\n");
+  pChar += rozofs_string_append_bold(pChar,"rwerror");
+  pChar += rozofs_string_append     (pChar,"          displays r/w error buffer.\n");
+  pChar += rozofs_string_append_bold(pChar,"rwerror reset");
+  pChar += rozofs_string_append     (pChar,"    resets r/w error buffer.\n");
+  pChar += rozofs_string_append     (pChar,"\nThe error buffer contains a list of error records.\n");
+  pChar += rozofs_string_append     (pChar,"Each error record contains the following information:\n");
+  pChar += rozofs_string_append_bold(pChar," time  ");
+  pChar += rozofs_string_append     (pChar," the date when the error occured.\n");
+  pChar += rozofs_string_append_bold(pChar," error "); 
+  pChar += rozofs_string_append     (pChar," the errno associated to the error.\n");
+  pChar += rozofs_string_append_bold(pChar," ope   "); 
+  pChar += rozofs_string_append     (pChar," the operation in error (READ/WRITE/TRUNCATE).\n");
+  pChar += rozofs_string_append_bold(pChar," line  ");
+  pChar += rozofs_string_append     (pChar," the line in the source code where the error was detected.\n");
+  pChar += rozofs_string_append_bold(pChar," FID   ");
+  pChar += rozofs_string_append     (pChar," an identifier of the file on which the error occured.\n");
+  pChar += rozofs_string_append_bold(pChar," bid   ");
+  pChar += rozofs_string_append     (pChar," the block number of the request.\n");
+  pChar += rozofs_string_append_bold(pChar," size  ");
+  pChar += rozofs_string_append     (pChar," the size in blocks of the request.\n");
+  pChar += rozofs_string_append_bold(pChar," lbg   ");
+  pChar += rozofs_string_append     (pChar," the status of the LBGs toward the storages of the file.\n");
+  pChar += rozofs_string_append     (pChar,"        One character per sid giving the LBG status.\n");
+  pChar += rozofs_string_append_bold(pChar,"         S ");
+  pChar += rozofs_string_append     (pChar,"Selectable,\n");
+  pChar += rozofs_string_append_bold(pChar,"         u");
+  pChar += rozofs_string_append     (pChar," Up,\n");
+  pChar += rozofs_string_append_bold(pChar,"         D");
+  pChar += rozofs_string_append     (pChar," Down,\n");
+  pChar += rozofs_string_append_bold(pChar,"         x");
+  pChar += rozofs_string_append     (pChar," Shutting down,\n");
+  pChar += rozofs_string_append_bold(pChar,"         -");
+  pChar += rozofs_string_append     (pChar," Dependandcy.\n");
+  pChar += rozofs_string_append_bold(pChar," prj   ");
+  pChar += rozofs_string_append     (pChar," this is a projections history in time order. Each record in this\n");
+  pChar += rozofs_string_append     (pChar,"        array traces an event:\n");
+  pChar += rozofs_string_append_bold(pChar,"         prj   ");
+  pChar += rozofs_string_append     (pChar," tells which index in the projection context this event is related to,\n");
+  pChar += rozofs_string_append_bold(pChar,"         type  ");
+  pChar += rozofs_string_append     (pChar," tells whether the event is a request or a response,\n");
+  pChar += rozofs_string_append_bold(pChar,"         sid   "); 
+  pChar += rozofs_string_append     (pChar," tells the targeted SID in case of a request,\n");
+  pChar += rozofs_string_append_bold(pChar,"         status");
+  pChar += rozofs_string_append     (pChar," gives an execution code for a response.\n");
 }
-
 char * storcli_ope2string(int ope) {       
   switch(ope) {
     case  STORCLI_READ:     return "READ";
@@ -477,7 +502,9 @@ char * display_rwerror(char * pChar) {
   int        first=1;
   storcli_rw_error_record_t * pCtx;
   struct tm  ts;
-
+  int        i;
+  rozofs_storcli_trc_t     * trc;
+   
   pChar += rozofs_string_append(pChar, "{\"rw errors\" : [\n");
   
   /*
@@ -500,6 +527,17 @@ char * display_rwerror(char * pChar) {
     pChar += rozofs_string_append(pChar, "\",\n      \"FID\" : \"@rozofs_uuid@");
     rozofs_uuid_unparse((uint8_t*)fid, pChar);
     pChar += 36;
+    pChar += rozofs_string_append(pChar, "\",\n      \"distribution\" : \"");
+    pChar += rozofs_u32_append(pChar, pCtx->cid);
+    pChar += rozofs_string_append(pChar, "/");
+    i=0;
+    while (pCtx->dist_set[i]!=0) {
+      if (i!=0) pChar += rozofs_string_append(pChar, "-");
+      pChar += rozofs_u32_append(pChar, pCtx->dist_set[i]);
+      i++;
+    }
+    pChar += rozofs_string_append(pChar, "\", \"lbg\" : \"");  
+    pChar += rozofs_string_append(pChar, pCtx->lbg);  
     
     pChar += rozofs_string_append(pChar, "\",\n      \"ope\" : \"");
     pChar += rozofs_string_append(pChar, storcli_ope2string(pCtx->opcode)); 
@@ -509,13 +547,30 @@ char * display_rwerror(char * pChar) {
     pChar += rozofs_u64_append(pChar, pCtx->offset);
     pChar += rozofs_string_append(pChar, ", \"size\" : ");  
     pChar += rozofs_i32_append(pChar, pCtx->size);
-    pChar += rozofs_string_append(pChar, ",\n      \"prj\" : \"");  
-    pChar += rozofs_string_append(pChar, pCtx->prj);  
-    pChar += rozofs_string_append(pChar, "\", \"lbg\" : \"");  
-    pChar += rozofs_string_append(pChar, pCtx->lbg);  
-    pChar += rozofs_string_append(pChar, "\"\n   }");  
+    pChar += rozofs_string_append(pChar, ",\n      \"prj\" : [\n"); 
+
+    for (i=0; i< pCtx->traceSize; i++) {
+      trc = &pCtx->traceBuffer[i];
+      pChar += rozofs_string_append(pChar, "          { \"prj\" : "); 
+      pChar += rozofs_i32_append(pChar, trc->prj);
+      pChar += rozofs_string_append(pChar, ", \"type\" : \"");       
+      if (trc->req) {
+        rozofs_storcli_trc_req_t * req = (rozofs_storcli_trc_req_t *) trc;
+        pChar += rozofs_string_append(pChar, "REQ\", \"sid\" : ");
+        pChar += rozofs_i32_append(pChar, req->sid);
+      }     
+      else {
+        rozofs_storcli_trc_rsp_t * rsp = (rozofs_storcli_trc_rsp_t *) trc;
+        pChar += rozofs_string_append(pChar, "RSP\", \"status\" : \"");       
+        pChar += rozofs_string_append(pChar, strerror(rsp->result));
+        pChar += rozofs_string_append(pChar, "\"");   
+      }
+      if (i==(pCtx->traceSize-1)) pChar += rozofs_string_append(pChar, "}\n");                   
+      else                        pChar += rozofs_string_append(pChar, "},\n");
+    } 
+    pChar += rozofs_string_append(pChar, "      ]\n   }");    
   }
-  pChar += rozofs_string_append(pChar, "\n   ]\n}\n");
+  pChar += rozofs_string_append(pChar, "\n ]\n}\n");
 
   return pChar;
 }

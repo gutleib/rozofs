@@ -1248,6 +1248,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
          STORCLI_ERR_PROF(read_prj_err);
        }       
        same_storage_retry_acceptable = 1;
+       rozofs_storcli_trace_response(working_ctx_p, projection_id,  errno);                  
        goto retry_attempt; 
     }
     storcli_lbg_cnx_sup_clear_tmo(lbg_id);
@@ -1378,6 +1379,9 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     */
     if (error)
     {
+
+       rozofs_storcli_trace_response(working_ctx_p, projection_id,  errno);                  
+
        /*
        ** there was an error on the remote storage while attempt to read the file
        ** try to read the projection on another storaged
@@ -1406,6 +1410,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
        goto retry_attempt;    	 
     }
 
+    rozofs_storcli_trace_response(working_ctx_p, projection_id,  0);                  
 
     /*
     ** set the pointer to the read context associated with the projection for which a response has
