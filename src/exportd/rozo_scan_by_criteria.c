@@ -762,6 +762,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   {
     pChar = rozo_get_full_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
   } 
+
   if (pChar) {
     printf("%s\n",pChar);
   }  
@@ -772,7 +773,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
  *_______________________________________________________________________
  */
 static void usage() {
-    printf("\nRozoFS utility to scan for files or directories matching some criteria.\n");
+    printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
+    printf("This RozoFS utility enables to scan for files or directories in a RozoFS file system\naccording to one or several criteria.\n");
     printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan_by_criteria <MANDATORY> [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
     printf("\n\033[1mMANDATORY:\033[0m\n");
     printf("\t\033[1m-p,--path <export_root_path>\033[0m\t\texportd root path.\n");
@@ -925,6 +927,17 @@ static inline uint64_t rozofs_scan_u64(char * str) {
 **
 **  M A I N
 */
+
+#define NEW_CRITERIA(criteria){\
+              if (expect_comparator) {\
+                printf("Expecting --lt, --le, --gt, --ge or --ne. Got --%s\n", long_options[option_index].name);\
+                exit(EXIT_FAILURE);\
+              }\
+              expect_comparator = 1; \
+              scan_criteria = criteria;\
+              crit = c;\
+}
+
 int main(int argc, char *argv[]) {
     int   c;
     void *rozofs_export_p;
@@ -932,6 +945,7 @@ int main(int argc, char *argv[]) {
     int   verbose = 0;
     char  crit=0;
     char *comp;
+    int   expect_comparator = 0;
     
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -961,6 +975,33 @@ int main(int argc, char *argv[]) {
         {0, 0, 0, 0}
     };
     
+
+    for (c=0; c<argc; c++) {
+      if (strcmp(argv[c],"-ge")==0) {
+        printf("Argument %d is %s. Don't you mean --ge ?\n",c,argv[c]);
+        exit(EXIT_FAILURE);
+      }
+      if (strcmp(argv[c],"-le")==0) {
+        printf("Argument %d is %s. Don't you mean --le ?\n",c,argv[c]);
+        exit(EXIT_FAILURE);
+      }
+      if (strcmp(argv[c],"-gt")==0) {
+        printf("Argument %d is %s. Don't you mean --gt ?\n",c,argv[c]);
+        exit(EXIT_FAILURE);
+      }
+      if (strcmp(argv[c],"-lt")==0) {
+        printf("Argument %d is %s. Don't you mean --lt ?\n",c,argv[c]);
+        exit(EXIT_FAILURE);
+      }
+      if (strcmp(argv[c],"-eq")==0) {
+        printf("Argument %d is %s. Don't you mean --eq ?\n",c,argv[c]);
+        exit(EXIT_FAILURE);
+      }
+      if (strcmp(argv[c],"-ne")==0) {
+        printf("Argument %d is %s. Don't you mean --ne ?\n",c,argv[c]);
+        exit(EXIT_FAILURE);
+      }
+    } 
   
     while (1) {
 
@@ -983,44 +1024,34 @@ int main(int argc, char *argv[]) {
               verbose = 1;
               break;
           case 'c':
-              scan_criteria = SCAN_CRITERIA_CR8;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_CR8);
               break;
           case 'm':
-              scan_criteria = SCAN_CRITERIA_MOD;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_MOD);
               break;
           case 's':
-              scan_criteria = SCAN_CRITERIA_SIZE;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_SIZE);
               break;
           case 'g':
-              scan_criteria = SCAN_CRITERIA_GID;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_GID);
               break;
           case 'u':
-              scan_criteria = SCAN_CRITERIA_UID;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_UID);
               break;                  
           case 'C':
-              scan_criteria = SCAN_CRITERIA_CID;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_CID);
               break;                  
           case 'l':
-              scan_criteria = SCAN_CRITERIA_NLINK;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_NLINK);
               break;                
           case 'e':
-              scan_criteria = SCAN_CRITERIA_CHILDREN;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_CHILDREN);
               break;                
           case 'f':
-              scan_criteria = SCAN_CRITERIA_PFID;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_PFID);
               break;                
           case 'n':
-              scan_criteria = SCAN_CRITERIA_FNAME;
-              crit = c;
+              NEW_CRITERIA(SCAN_CRITERIA_FNAME);
               break;                
           case 'x':   
               has_xattr = 1;
@@ -1038,6 +1069,7 @@ int main(int argc, char *argv[]) {
           ** Lower or equal
           */              
           case '-':
+              expect_comparator = 0;
               comp = "--le";
               switch (scan_criteria) {
               
@@ -1106,6 +1138,7 @@ int main(int argc, char *argv[]) {
           ** Lower strictly
           */              
           case '<':
+              expect_comparator = 0;
               comp = "--lt";
               switch (scan_criteria) {
               
@@ -1194,6 +1227,7 @@ int main(int argc, char *argv[]) {
           ** Greater or equal
           */  
           case '+':
+              expect_comparator = 0;          
               comp = "--ge";         
               switch (scan_criteria) {
               
@@ -1265,6 +1299,7 @@ int main(int argc, char *argv[]) {
           ** Greater strictly
           */                 
           case '>':
+              expect_comparator = 0;          
               comp = "--gt";         
               switch (scan_criteria) {
               
@@ -1338,6 +1373,7 @@ int main(int argc, char *argv[]) {
           ** Equality
           */    
           case '=':
+              expect_comparator = 0;          
               comp = "--eq";        
               switch (scan_criteria) {
               
@@ -1436,6 +1472,7 @@ int main(int argc, char *argv[]) {
           ** Different
           */    
           case '!':
+              expect_comparator = 0;          
               comp = "--ne";        
               switch (scan_criteria) {
               
@@ -1536,6 +1573,12 @@ int main(int argc, char *argv[]) {
               break;
       }
   }
+  
+  if (expect_comparator) {
+    printf("Expecting --lt, --le, --gt, --ge or --ne.\n");
+    exit(EXIT_FAILURE);
+  }                     
+
   if (root_path == NULL) 
   {
        usage();

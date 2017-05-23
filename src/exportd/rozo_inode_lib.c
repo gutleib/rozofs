@@ -1978,6 +1978,12 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
 	      rozo_lib_current_inode_idx = i+1;
 
 	      if (tracking_buffer.inode_idx_table[i] == 0xffff) continue;
+              if (tracking_buffer.inode_idx_table[i] > i) {
+		printf("error in tracking file slice %d trck_%d for index %d : %d\n",
+                        (int)inode.s.usr_id, (int)inode.s.file_id, (int)inode.s.idx,
+                        (int)tracking_buffer.inode_idx_table[i]);
+                continue;        
+              }
 	      ret = exp_trck_read_attributes_from_buffer((char*)metadata_buf_p,tracking_buffer.inode_idx_table[i],&ext_attr,sizeof(ext_attr));
 	      if (ret < 0)
 	      {
