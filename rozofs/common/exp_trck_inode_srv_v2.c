@@ -576,6 +576,15 @@ int exp_trck_get_relative_inode_idx(int fd,char *root_path ,rozofs_inode_t *inod
      errno = ENOENT;
      return -1;
   }
+  /*
+  ** Check the read index is not corrupted
+  */
+  if (val16 > inode->s.idx) {
+    severe("error in tracking file %s slice %d trck_%d for index %d : %d",
+           root_path, (int)inode->s.usr_id, (int)inode->s.file_id, (int)inode->s.idx, val16);  
+    errno = ENOENT;
+    return -1;       
+  }
   fake_idx.s.idx = val16;
   return fake_idx.s.idx;
 }

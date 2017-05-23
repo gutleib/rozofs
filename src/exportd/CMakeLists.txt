@@ -243,6 +243,11 @@ add_executable(rozo_clusterstats
 )
 target_link_libraries(rozo_clusterstats rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 #________________________________________________________
+add_executable(rozo_scan_by_criteria
+    rozo_scan_by_criteria.c  
+)
+target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+#________________________________________________________
 add_executable(rozo_rebalance
     rozo_rebalance.c  
     rozo_rebalance_nblock_init.c
@@ -338,6 +343,12 @@ install(TARGETS rozo_clusterstats
     COMPONENT rozo_clusterstats
 )
 
+install(TARGETS rozo_scan_by_criteria
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_scan_by_criteria
+)
 install(TARGETS rozo_buildfid_list
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
