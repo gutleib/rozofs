@@ -162,6 +162,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_repquota
 %{_bindir}/rozo_fid2pathname
 %{_bindir}/rozo_clusterstats
+%{_bindir}/rozo_scan_by_criteria
 %{_bindir}/rozo_rebalance
 %{_bindir}/rozo_buildfid_list
 %{_bindir}/rozo_rbsList

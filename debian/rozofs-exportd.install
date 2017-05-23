@@ -5,6 +5,7 @@
 /usr/bin/rozo_repquota
 /usr/bin/rozo_fid2pathname
 /usr/bin/rozo_clusterstats
+/usr/bin/rozo_scan_by_criteria
 /usr/bin/rozo_rebalance
 /usr/bin/rozo_buildfid_list
 /usr/bin/rozo_rbsList
