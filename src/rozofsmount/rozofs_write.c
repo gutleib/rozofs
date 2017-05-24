@@ -1552,8 +1552,6 @@ void rozofs_ll_flush_nb(fuse_req_t req, fuse_ino_t ino,
       errno = f->wr_error;
       goto error;    
     }
-
-
     /*
     ** check if there some pendinag data to write in the buffer
     */
@@ -2222,7 +2220,7 @@ void rozofs_ll_release_cbk(void *this,void *param)
    {
      severe("buf_write_pending mismatch, %d",file->buf_write_pending);
      file->buf_write_pending = 0;     
-   }
+   }   
     /*
     ** get the pointer to the transaction context:
     ** it is required to get the information related to the receive buffer
@@ -2293,6 +2291,29 @@ void rozofs_ll_release_cbk(void *this,void *param)
     ** no error, so get the length of the data part
     */
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);
+    /*
+    ** It might be possible that the write triggered on the close is not the last one since
+    ** write are performed in parallel by the storcli.
+    ** We should defer the close response, since if we do it, the VFS can issue a forget that will
+    ** remove the ientry. The consequence of that, is memory access during the processing of the other
+    ** write responses while the ientry memory has been released.
+    */
+    if (file->buf_write_pending > 0)
+    {
+      /*
+      ** install the call for the flush response deferred until receiving the last write response
+      */ 
+      SAVE_FUSE_CALLBACK(param,rozofs_ll_release_defer); 
+      fuse_ctx_write_pending_queue_insert(file,param);
+      /*
+      ** the response is deferred until the last write transaction is responding 
+      */
+      rozofs_trc_rsp(srv_rozofs_ll_release,(fuse_ino_t)file,(file==NULL)?NULL:file->fid,status,trc_idx);    
+      rozofs_tx_free_from_ptr(rozofs_tx_ctx_p); 
+      ruc_buf_freeBuffer(recv_buf); 
+      return;    
+    
+    }
     fuse_reply_err(req, 0);
 
     /*

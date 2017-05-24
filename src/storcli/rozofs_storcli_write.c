@@ -107,7 +107,7 @@ void rozofs_storcli_write_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
   
 */
 static inline int rozofs_storcli_check_rozofsmount_tmo(rozofs_storcli_ctx_t *working_ctx_p) {
-  int32_t *xid_p;
+  uint32_t *xid_p;
 
   if (working_ctx_p->shared_mem_p == NULL) {
     /* 
