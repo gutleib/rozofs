@@ -812,7 +812,7 @@ static inline void  *fuse_ctx_write_pending_queue_get(file_t *f)
   @param buffer : pointer to the head of the save array context
   @param : callback-> callback function
 */
-#define SAVE_FUSE_CALLBACK(buffer,callback) \
+#define SAVE_FUSE_CALLBACK(buffer_p,callback) \
 { \
   rozofs_fuse_save_ctx_t *fuse_save_ctx_p = (rozofs_fuse_save_ctx_t*)ruc_buf_getPayload(buffer_p); \
   fuse_save_ctx_p->proc_end_tx_cbk= (fuse_end_tx_recv_pf_t)callback; \
