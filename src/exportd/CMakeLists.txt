@@ -245,6 +245,9 @@ target_link_libraries(rozo_clusterstats rozofs_inode rozofs ${PTHREAD_LIBRARY} $
 #________________________________________________________
 add_executable(rozo_scan_by_criteria
     rozo_scan_by_criteria.c  
+    econfig.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h 
 )
 target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 #________________________________________________________

@@ -16,7 +16,9 @@
 #include "exp_cache.h"
 #include "mdirent.h"
 
-
+int rozofs_no_site_file = 0;
+econfig_t exportd_config;
+char * configFileName = EXPORTD_DEFAULT_CONFIG;
 lv2_cache_t            cache;
 mdirents_name_entry_t  bufferName;
 
@@ -778,6 +780,7 @@ static void usage() {
     printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan_by_criteria <MANDATORY> [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
     printf("\n\033[1mMANDATORY:\033[0m\n");
     printf("\t\033[1m-p,--path <export_root_path>\033[0m\t\texportd root path.\n");
+    printf("or\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier.\n");
     printf("\n\033[1mOPTIONS:\033[0m\n");
     printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
     printf("\t\033[1m-h,--help\033[0m\t\tprint this message and exit.\n");
@@ -795,7 +798,7 @@ static void usage() {
     printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
     printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (1).\n"); 
     printf("\t\033[1m-l,--link\033[0m\t\tnumber of link.\n"); 
-    printf("\t\033[1m-e,--children\033[0m\t\tnumber of children.\n"); 
+    printf("\t\033[1m-b,--children\033[0m\t\tnumber of children.\n"); 
     printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
     printf("\t\033[1m-n,--name\033[0m\t\tfile name (3).\n");
     printf("(1) only --eq or --ne conditions are supported.\n");
@@ -813,19 +816,19 @@ static void usage() {
     printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --xattr --size --ge 76000 --le 76100\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --xattr --size --ge 76000 --le 76100\033[0m\n");
     printf("Searching files with a modification date in february 2017 but created before 2017.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
     printf("Searching files created by user 4501 on 2015 January the 10th in the afternoon.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
     printf("Searching files owned by group 4321 in directory 00000000-0000-4000-1800-000000000018.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
     printf("Searching files whoes name constains captainNemo.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --name --ge captainNemo\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --name --ge captainNemo\033[0m\n");
     printf("Searching directories with more than 100K entries.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --dir --children --ge 100000\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --dir --children --ge 100000\033[0m\n");
     printf("Searching all symbolic links.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --slink --noreg\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --slink --noreg\033[0m\n");
      
 };
 /*
@@ -924,6 +927,26 @@ static inline uint64_t rozofs_scan_u64(char * str) {
 }
 /*
 **_______________________________________________________________________
+*/
+/** Find out the export root path from its eid reading the configuration file
+*   
+    @param  eid : eport identifier
+    
+    @retval -the root path or null when no such eid
+*/
+char * get_export_root_path(uint8_t eid) {
+  list_t          * e;
+  export_config_t * econfig;
+
+  list_for_each_forward(e, &exportd_config.exports) {
+
+    econfig = list_entry(e, export_config_t, list);
+    if (econfig->eid == eid) return econfig->root;   
+  }
+  return NULL;
+}
+/*
+**_______________________________________________________________________
 **
 **  M A I N
 */
@@ -942,6 +965,7 @@ int main(int argc, char *argv[]) {
     int   c;
     void *rozofs_export_p;
     char *root_path=NULL;
+    int   eid = -1;
     int   verbose = 0;
     char  crit=0;
     char *comp;
@@ -950,6 +974,8 @@ int main(int argc, char *argv[]) {
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"path", required_argument, 0, 'p'},
+        {"eid", required_argument, 0, 'e'},
+        {"config", required_argument, 0, 'k'},
         {"verbose", no_argument, 0, 'v'},
         {"cr8", no_argument, 0, 'c'},
         {"mod", no_argument, 0, 'm'},
@@ -958,7 +984,7 @@ int main(int argc, char *argv[]) {
         {"gid", no_argument, 0, 'g'},        
         {"cid", no_argument, 0, 'C'},        
         {"link", no_argument, 0, 'l'},        
-        {"children", no_argument, 0, 'e'},        
+        {"children", no_argument, 0, 'b'},        
         {"pfid", no_argument, 0, 'f'},        
         {"name", no_argument, 0, 'n'},        
         {"xattr", no_argument, 0, 'x'}, 
@@ -1006,7 +1032,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:hvcmsguClxXdefnSR", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSR", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1020,6 +1046,17 @@ int main(int argc, char *argv[]) {
           case 'p':
               root_path = optarg;
               break;
+          case 'k':
+              configFileName = optarg;
+              break;			  	                        
+          case 'e':
+              eid = rozofs_scan_u64(optarg);
+              if (eid==-1) {
+                printf("\nBad format for --eid \"%s\"\n",optarg);     
+                usage();
+                exit(EXIT_FAILURE);
+              }
+              break;    
           case 'v':
               verbose = 1;
               break;
@@ -1044,7 +1081,7 @@ int main(int argc, char *argv[]) {
           case 'l':
               NEW_CRITERIA(SCAN_CRITERIA_NLINK);
               break;                
-          case 'e':
+          case 'b':
               NEW_CRITERIA(SCAN_CRITERIA_CHILDREN);
               break;                
           case 'f':
@@ -1578,6 +1615,32 @@ int main(int argc, char *argv[]) {
     printf("Expecting --lt, --le, --gt, --ge or --ne.\n");
     exit(EXIT_FAILURE);
   }                     
+
+  /*
+  ** Search for the given eid in configuration file
+  ** in case one is given as input
+  */
+  if (eid!=-1) {
+    /*
+    ** Read configuration file
+    */
+    if (econfig_initialize(&exportd_config) != 0) {
+      printf("can't initialize exportd config %s.\n",strerror(errno));
+      exit(EXIT_FAILURE);  
+    }    
+    if (econfig_read(&exportd_config, configFileName) != 0) {
+      printf("failed to parse configuration file %s %s.\n",configFileName,strerror(errno));
+      exit(EXIT_FAILURE);  
+    }              	 
+    /*
+    ** Find the export root path
+    */
+    root_path = get_export_root_path(eid);
+    if (root_path==NULL) {
+      printf("eid %d is not configured\n",eid);       
+      exit(EXIT_FAILURE);
+    }
+  }
 
   if (root_path == NULL) 
   {
