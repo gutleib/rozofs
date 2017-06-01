@@ -70,7 +70,25 @@
 #define RM_FILE_SIZE_TRESHOLD 0x40000000LL
 #define TRACKING_PTHREAD_FREQUENCY_SEC 60  /**< default polling period of tracking thread */
 
+/*
+** Maximum numer of rmbins thread
+*/
+#define ROZO_NB_RMBINS_THREAD    8
 
+/*
+** rmbins thread context
+*/
+typedef struct _rmbins_thread_t {
+  int           idx;        /**< Thread index */
+  pthread_t     thId;       /**< Thread id    */
+  uint64_t      nb_run;     /**< Nb of run processes */
+  uint64_t      last_count; /**< Last run deletion count */
+  uint64_t      last_usec;  /**< Last run duration */
+  uint64_t      total_count;/**< Total deletion count */
+  uint64_t      total_usec; /**< Total run duration */
+
+} rmbins_thread_t;
+extern rmbins_thread_t rmbins_thread[];
 
 /** stat of an export
  * these values are independent of volume
@@ -212,7 +230,7 @@ typedef struct export {
 extern uint32_t export_configuration_file_hash;  /**< hash value of the configuration file */
 extern int export_local_site_number; 
 extern int rozofs_no_site_file; 
-extern uint64_t export_rm_bins_pending_count; /**< trash thread statistics  */
+extern uint64_t export_rm_bins_trashed_count; /**< trash thread statistics  */
 extern uint64_t export_rm_bins_done_count ;  /**< trash thread statistics  */
 extern int export_limit_rm_files;
 
@@ -223,6 +241,7 @@ extern int export_limit_rm_files;
    @param buf : pointer to the buffer that will contains the statistics
 */
 char *export_rm_bins_stats(char *pChar);
+char *export_rm_bins_stats_json(char *pChar);
 /**
 *  Reload in memory the files that have not yet been deleted
 *  return the current sitde number of the exportd
@@ -257,10 +276,11 @@ static inline int export_get_local_site_number()
  *
  * @param export: pointer to the export
  * @param first_bucket_idx: pointer for the first index bucket to remove
+ * @param thCtx: pointer for the rmbins thread context
  *
- * @return: 0 on success -1 otherwise (errno is set)
+ * @return: Number of deleted files
  */
-int export_rm_bins(export_t * e, uint16_t * first_bucket_idx);
+uint64_t export_rm_bins(export_t * e, uint16_t * first_bucket_idx, rmbins_thread_t * thCtx);
 
 
 /** check if export directory is valid

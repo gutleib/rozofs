@@ -1,20 +1,31 @@
 #_______________________________________________________________________________________
 # 
-# Call ../../tools/common_config.py to generate common_config.h as well as common_config_read_show.h
+# Call ../../tools/common_config.py to generate common_config.h as well as common_config.c
 #
 #_______________________________________________________________________________________
-# Syntax is 
-# // one ir more...
-# // ... comment lines
-# <type> <scope> <name> <default value> {options]
 #
-# <type>    is within INT, STRING, BOOL
-# <scope>   is any thing but should be choosen within global,export,storage,client
-# <name>    is any name
-# <default> is the default value. (STRING must be quoted).
-# [option] is an optionnal parameter dependant on the <type>
-#   . INT : 
-#     min:max : minimum and maximum (included) of the integer
+# Syntax is as follow:
+# 
+# ......................................................
+# // one or more...
+# // ... comment lines
+# <type> <scope> <name> <default> {<option>]
+# ......................................................
+#
+# Where
+#   //          is the begining of a comment line for the following parameter
+#   <type>      is the parameter type within 
+#               - INT   : at least 32 bits signed integer
+#               - LONG  : 64 bits signed integer
+#               - STRING: character string
+#               - BOOL  ; boolean True or False
+#   <scope>     is any string you want to classify the different parameters in groups
+#   <name>      is any parameter name
+#   <default>   is the default parameter value. (STRING must be quoted).
+#   <option>    is an option of the parameter dependant on the <type>
+#               - INT and LONG option: 
+#                 min:max : minimum and maximum (included) of the integer
+#
 #_______________________________________________________________________________________
 
 // Number of core files that each module is allowed to keep.
@@ -161,3 +172,5 @@ INT     client statfs_period 	10
 INT     export min_metadata_inodes             262144
 // Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation
 INT     export min_metadata_MB                   2048
+// Number of trash threads that work in parallel
+INT     export nb_trash_thread                   2    1:8
