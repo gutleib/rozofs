@@ -177,7 +177,7 @@ clients_nb = 1
 setLayout(1)
 
 # Define volume 1 on some hosts
-vol = setVolumeHosts(8)
+vol = setVolumeHosts(4)
 # Create an export on this volume with layout 1
 addExport(vol,1)
 # Add an other export on this volume with layout 1

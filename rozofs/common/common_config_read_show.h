@@ -219,10 +219,10 @@ char * show_common_config_module_export(char * pChar) {
   COMMON_CONFIG_SHOW_INT(min_metadata_MB,2048);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(nb_trash_thread,1);
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_trash_thread,2);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of trash threads that work in parallel\n");
-  COMMON_CONFIG_SHOW_INT_OPT(nb_trash_thread,1,"1:8");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_trash_thread,2,"1:8");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -623,7 +623,7 @@ static inline void common_config_generated_read(char * fname) {
   // Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation 
   COMMON_CONFIG_READ_INT(min_metadata_MB,2048);
   // Number of trash threads that work in parallel 
-  COMMON_CONFIG_READ_INT_MINMAX(nb_trash_thread,1,1,8);
+  COMMON_CONFIG_READ_INT_MINMAX(nb_trash_thread,2,1,8);
   /*
   ** client scope configuration parameters
   */
