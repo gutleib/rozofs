@@ -155,12 +155,12 @@ rozofs.set_nb_storcli(4)
 #rozofs.set_client_fast_reconnect()
 
 #-------------- NB devices per sid
-devices    = 3
-mapper     = 3
+devices    = 2
+mapper     = 2
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 2
+nbclusters = 1
 
 # default is to have one mount point per site and export
 clients_nb = 1
@@ -169,11 +169,11 @@ clients_nb = 1
 setLayout(1)
 
 # Define volume 1 on some hosts
-vol = setVolumeHosts(8)
+vol = setVolumeHosts(4)
 # Create an export on this volume with layout 1
 addExport(vol,1)
 # Add an other export on this volume with layout 1
-addExport(vol,1)
+#addExport(vol,1)
 
 
 # An other volume on the same hosts

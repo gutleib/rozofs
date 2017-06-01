@@ -79,6 +79,13 @@ static inline char * rozofs_file_distribution_rule2sting(rozofs_file_distributio
 
 
 
+#ifndef GETMICROLONG
+#define GETMICROLONG(usec) {\
+  struct timeval tv;\
+  gettimeofday(&tv,(struct timezone *)0);\
+  usec = MICROLONG(tv);\
+}    
+#endif
 
 
 

@@ -418,6 +418,13 @@ void show_trash(char * argv[], uint32_t tcpRef, void *bufRef) {
       return;
     }
 
+    
+    if (strcmp(argv[1],"json")==0) {
+      export_rm_bins_stats_json(pChar);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	  
+      return;  
+    }
+    
     if (strcmp(argv[1],"rate")==0) {
 
       if (argv[2] == NULL) {

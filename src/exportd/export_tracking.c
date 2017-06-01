@@ -68,15 +68,23 @@ int rozofs_acl_access_check(const char *name, const char *value, size_t size,mod
 #define EXPORT_DEFAULT_ROOT_MODE S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
 
 extern epp_profiler_t  gprofiler;
+/*
+** Trash counters
+*/
+uint64_t export_rm_bins_trashed_count = 0; /**< Nb files put in trash from startup  */
+uint64_t export_rm_bins_done_count    = 0; /**< Nb files actually deleted from startup  */
+uint64_t export_rm_bins_reload_count  = 0; /**< Nb files dicovered in trash at startup  */
+uint64_t export_rm_bins_in_ram        = 0; /**< Nb files in RAM to be deleted */
+uint64_t export_rm_bins_in_flash      = 0; /**< Nb files in flash but not in RAM to be deleted */
 
-uint64_t export_rm_bins_reload_count = 0; /**< trash thread statistics  */
-uint64_t export_rm_bins_pending_count = 0; /**< trash thread statistics  */
 uint64_t export_recycle_pending_count = 0; /**< recycle thread statistics  */
 uint64_t export_recycle_done_count = 0; /**< recycle thread statistics  */
 uint64_t export_rm_bins_threshold_high = 10; /**< trash threshold  where FID recycling starts */
-uint64_t export_rm_bins_done_count = 0;  /**< trash thread statistics  */
 uint64_t export_last_ticks = 0;
-uint64_t export_last_count = 0; 
+uint64_t export_last_us = 0;
+uint64_t export_last_count = 0;
+uint64_t export_last_count_json = 0; 
+uint64_t export_last_trashed_json = 0; 
 uint64_t export_fid_recycle_reload_count = 0; /**< number of recycle fid reloaded */
 int export_fid_recycle_ready = 0; /**< assert to 1 when fid recycle have been reloaded */
 int export_limit_rm_files;
@@ -90,7 +98,6 @@ typedef struct cnxentry {
 
 
 int export_lv2_resolve_path(export_t *export, fid_t fid, char *path);
-static int          processed_files  = 0;
 /**
 * internal structure used for bitmap root_idx: only for directory
 */
@@ -3085,7 +3092,7 @@ int exp_delete_file(export_t * e, lv2_entry_t *lvl2)
  */
 rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry) {
   rmfentry_t *rmfe = xmalloc(sizeof (rmfentry_t));
-  export_rm_bins_pending_count++;
+  export_rm_bins_trashed_count++;
   memcpy(rmfe->fid, trash_entry->fid, sizeof (fid_t));
   rmfe->cid = trash_entry->cid;
   memcpy(rmfe->initial_dist_set, trash_entry->initial_dist_set,
@@ -3349,7 +3356,7 @@ int export_fid_recycle_attempt(export_t * e,lv2_entry_t *lv2)
    /*
    ** check the number of pending fid in trash
    */
-   count = (export_rm_bins_reload_count+export_rm_bins_pending_count)-export_rm_bins_done_count;
+   count = (export_rm_bins_reload_count+export_rm_bins_trashed_count)-export_rm_bins_done_count;
    if (count < export_rm_bins_threshold_high)
    {
      return 0;
@@ -4278,6 +4285,129 @@ int export_recycle_remove_from_tracking_file(export_t * e,recycle_mem_t *entry)
 
    @param buf : pointer to the buffer that will contains the statistics
 */
+char *export_rm_bins_stats_json(char *pChar)
+{
+   uint64_t new_us;
+   uint64_t new_count;
+   uint64_t new_trashed;
+   int      idx; 
+   int      first=1;
+   
+   pChar += rozofs_string_append(pChar, "{ \"trash\" : {\n");    
+   pChar += rozofs_string_append(pChar, "    \"nb threads\"    : ");
+   pChar += rozofs_u32_append(pChar, common_config.nb_trash_thread);
+   pChar += rozofs_string_append(pChar, ",\n    \"thread period\" : ");
+   pChar += rozofs_u32_append(pChar,RM_BINS_PTHREAD_FREQUENCY_SEC*common_config.nb_trash_thread);
+   pChar += rozofs_string_append(pChar, ",\n    \"max per run\"   : ");  
+   pChar += rozofs_u32_append(pChar, export_limit_rm_files);  
+   
+   pChar += rozofs_string_append(pChar, ",\n    \"threads\": [\n");   
+   for (idx=0; idx < ROZO_NB_RMBINS_THREAD; idx++) {
+
+     /*
+     ** Only diplay threads that have worked
+     */
+     if (rmbins_thread[idx].total_usec == 0) continue;
+     
+     if (first) {
+       first = 0;
+     }  
+     else {
+       pChar += rozofs_string_append(pChar, ",\n"); 
+     }
+       
+     pChar += rozofs_string_append(pChar, "       {\"idx\": ");   
+     pChar += rozofs_u32_append(pChar, idx);   
+     pChar += rozofs_string_append(pChar, ", \"nb run\": ");   
+     pChar += rozofs_u64_append(pChar, rmbins_thread[idx].nb_run);   
+     pChar += rozofs_string_append(pChar, ", \"last count\": ");   
+     pChar += rozofs_u64_append(pChar, rmbins_thread[idx].last_count);   
+     pChar += rozofs_string_append(pChar, ", \"last usec\": ");   
+     pChar += rozofs_u64_append(pChar, rmbins_thread[idx].last_usec);   
+     pChar += rozofs_string_append(pChar, ", \"total count\": ");   
+     pChar += rozofs_u64_append(pChar, rmbins_thread[idx].total_count);   
+     pChar += rozofs_string_append(pChar, ", \"total usec\": ");   
+     pChar += rozofs_u64_append(pChar, rmbins_thread[idx].total_usec);   
+     pChar += rozofs_string_append(pChar, "}"); 
+   }
+   pChar += rozofs_string_append(pChar, "\n    ],\n");
+      
+   GETMICROLONG(new_us);
+
+   pChar += rozofs_string_append(pChar, "    \"delete delay\"  : ");   
+   pChar += rozofs_u64_append(pChar, (unsigned long long int)common_config.deletion_delay);   
+   
+   pChar += rozofs_string_append(pChar, ",\n    \"reloaded count\": "); 
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) export_rm_bins_reload_count);
+
+   /*
+   ** Trashed
+   */
+
+   pChar += rozofs_string_append(pChar, ",\n    \"trashed count\" : "); 
+   new_trashed = export_rm_bins_trashed_count;
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) new_trashed);
+   
+
+   pChar += rozofs_string_append(pChar, ",\t    \"trashed/min\"   : ");      
+   if ((export_last_us!=0) &&(new_us>export_last_us)) {
+     pChar += rozofs_u64_append(pChar, (unsigned long long int) (new_trashed-export_last_trashed_json)*(60000000)/(new_us-export_last_us));
+   }
+   else {
+     pChar += rozofs_string_append(pChar, "0"); 
+   }  
+   export_last_trashed_json = new_trashed;
+   /*
+
+   ** Actually deleted
+   */
+   
+   pChar += rozofs_string_append(pChar, ",\n    \"deleted count\" : "); 
+   new_count   = export_rm_bins_done_count;
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) new_count);
+   
+   
+   pChar += rozofs_string_append(pChar, ",\t    \"deleted/min\"   : ");   
+   if ((export_last_us!=0) &&(new_us>export_last_us)) {
+     pChar += rozofs_u64_append(pChar, (unsigned long long int) (new_count-export_last_count_json)*(60000000)/(new_us-export_last_us));
+   }
+   else {
+     pChar += rozofs_string_append(pChar, "0"); 
+   }  
+   export_last_count_json = new_count;
+   
+     
+   /*
+   ** Still pending
+   */   
+   
+   pChar += rozofs_string_append(pChar, ",\n    \"pending\"       : ");   
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_trashed_count)-export_rm_bins_done_count);
+
+   /*
+   ** Recyclinging
+   */   
+
+   if (common_config.fid_recycle) {
+     pChar += rozofs_string_append(pChar, ",\n    \"recycling\" : {\n");
+     pChar += rozofs_string_append(pChar, "       \"threshold\" : ");   
+     pChar += rozofs_u64_append(pChar, (unsigned long long int)export_rm_bins_threshold_high);   
+     
+     pChar += rozofs_string_append(pChar, ",\n       \"reloaded\"  : "); 
+     pChar += rozofs_u64_append(pChar, (unsigned long long int) export_fid_recycle_reload_count);
+     pChar += rozofs_string_append(pChar, ",\n       \"recycled\"  : "); 
+     pChar += rozofs_u64_append(pChar, (unsigned long long int) export_recycle_pending_count);
+     pChar += rozofs_string_append(pChar, ",\n       \"done\"      : "); 
+     pChar += rozofs_u64_append(pChar, (unsigned long long int) export_recycle_done_count);
+     pChar += rozofs_string_append(pChar, ",\n       \"pending\"   : ");   
+     pChar += rozofs_u64_append(pChar, (unsigned long long int) (export_fid_recycle_reload_count+export_recycle_pending_count)-export_recycle_done_count);
+     pChar += rozofs_string_append(pChar, "\n    }");
+   }
+   pChar += rozofs_string_append(pChar, "\n  }\n}\n");
+
+   export_last_us = new_us;
+   return pChar;
+}
 char *export_rm_bins_stats(char *pChar)
 {
    uint64_t new_ticks;
@@ -4300,10 +4430,10 @@ char *export_rm_bins_stats(char *pChar)
      
    pChar += sprintf(pChar,"trash stats:\n");
    pChar += sprintf(pChar,"  - reloaded = %llu\n", (unsigned long long int) export_rm_bins_reload_count);
-   pChar += sprintf(pChar,"  - trashed  = %llu\n", (unsigned long long int) export_rm_bins_pending_count);
+   pChar += sprintf(pChar,"  - trashed  = %llu\n", (unsigned long long int) export_rm_bins_trashed_count);
    pChar += sprintf(pChar,"  - done     = %llu\n", (unsigned long long int) export_rm_bins_done_count);
    pChar += sprintf(pChar,"  - pending  = %llu\n", 
-        (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_pending_count)-export_rm_bins_done_count);
+        (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_trashed_count)-export_rm_bins_done_count);
 
    if (common_config.fid_recycle) {
      pChar += sprintf(pChar,"recycle stats:\n");
@@ -4322,7 +4452,7 @@ char *export_rm_bins_stats(char *pChar)
 **_______________________________________________________________________________
 */
 
-static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket_idx, uint8_t safe, uint8_t forward) {
+static inline int export_rm_bucket(export_t * e, uint8_t * cnx_init, list_t * connexions, int bucket_idx, uint8_t safe, uint8_t forward, int * processed_files) {
   int          sid_count = 0;
   int          i = 0;
   list_t       todo;
@@ -4370,6 +4500,19 @@ static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket
       */
       list_push_back(&failed, &entry->list);
       continue;
+    }
+    
+    /*
+    ** This entry needs to be processed
+    ** setup connections if not yet done
+    */
+    if (*cnx_init == 0) {
+      // Init list of connexions
+      list_init(connexions);
+      *cnx_init = 1;
+      if (init_storages_cnx(e->volume, connexions) != 0) {
+        goto out;
+      }
     }
     
     // For each storage associated with this file
@@ -4431,13 +4574,13 @@ static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket
     }
 
     // Update the nb. of files that have been tested to be deleted.
-    processed_files++; 
+    (*processed_files)++; 
 
     if (sid_count == safe) {
       /*
       ** remove the entry from the trash file
       */
-      export_rm_bins_done_count++;
+      __atomic_fetch_add(&export_rm_bins_done_count, 1, __ATOMIC_SEQ_CST);
       export_rmbins_remove_from_tracking_file(e,entry); 
       xfree(entry);
     }
@@ -4451,7 +4594,7 @@ static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket
     /*
     ** Limit of processed file reached
     */
-    if (processed_files >= export_limit_rm_files) goto out;
+    if (*processed_files >= export_limit_rm_files) goto out;
   }  
   
 out:
@@ -4480,14 +4623,13 @@ out:
 **_______________________________________________________________________________
 */
 
-int export_rm_bins(export_t * e, uint16_t * first_bucket_idx) {
-    int status = -1;
+uint64_t export_rm_bins(export_t * e, uint16_t * first_bucket_idx, rmbins_thread_t * thCtx) {
     uint16_t     bucket_idx = 0;
     uint8_t      cnx_init = 0;
     list_t       connexions;
     uint16_t     idx = 0;
 
-    processed_files = 0;
+    int          processed_files = 0;
     
     // Get the nb. of safe storages for this layout
     uint16_t rozofs_safe    = rozofs_get_rozofs_safe(e->layout);
@@ -4508,17 +4650,8 @@ int export_rm_bins(export_t * e, uint16_t * first_bucket_idx) {
 	  continue;
 	}  
 
-        // If the connexions are not initialized
-        if (cnx_init == 0) {
-            // Init list of connexions
-            list_init(&connexions);
-            cnx_init = 1;
-            if (init_storages_cnx(e->volume, &connexions) != 0) {
-                goto out;
-            }
-        }
 	
-	export_rm_bucket(e, &connexions, bucket_idx, rozofs_safe, rozofs_forward);
+	export_rm_bucket(e, &cnx_init, &connexions, bucket_idx, rozofs_safe, rozofs_forward, &processed_files);
         /*
 	** Check whether the allowed count of trashed files has benn already done
 	*/
@@ -4534,13 +4667,12 @@ int export_rm_bins(export_t * e, uint16_t * first_bucket_idx) {
     } else {
         *first_bucket_idx = bucket_idx;
     }
-    status = 0;
-out:
+
     if (cnx_init == 1) {
         // Release storage connexions
         release_storages_cnx(&connexions);
     }
-    return status;
+    return processed_files;
 }
 
 
