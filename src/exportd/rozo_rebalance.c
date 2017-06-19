@@ -1120,6 +1120,7 @@ char bufall[1024];
 char *bufout;
 char rzofs_path_bid[]="rozofs";
 int rozofs_fwd = -1;
+uint8_t rozofs_layout=0;
 int divider;
 int blocksize= 4096;
 int scanned_current_count = 0;
@@ -1135,7 +1136,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
    ext_mattr_t *inode_p = inode_attr_p;
    rz_cids_stats_t  *cid_p;
    rz_sids_stats_t  *sid_p;
-
+   
    
    /*
    ** Do not process symlink
@@ -1159,14 +1160,17 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       switch (rozofs_fwd)
       {
          case 4:
+           rozofs_layout = 0;
 	   rozofs_fwd -=1;
 	   divider = 2;
 	   break;
 	 case 8:
+           rozofs_layout = 1;
 	   rozofs_fwd -=2;
 	   divider = 4;
 	   break;
 	 case 16:
+           rozofs_layout = 2;         
 	   rozofs_fwd -=4;
 	   divider = 8;
 	   break;
@@ -1286,7 +1290,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     rozofs_mover_job_t * job;
     job = malloc(sizeof(rozofs_mover_job_t));
     memset(job,0,sizeof(rozofs_mover_job_t));
-    int retval = do_cluster_distribute_size_balancing(0,0,job->sid,0,inode_p->s.attrs.size,&job->cid);
+    int retval = do_cluster_distribute_size_balancing(rozofs_layout,0,job->sid,0,inode_p->s.attrs.size,&job->cid);
     if (retval < 0)
     {
       scanned_current_count--;
