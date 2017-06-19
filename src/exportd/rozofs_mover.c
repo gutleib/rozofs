@@ -222,7 +222,7 @@ int rozofs_get_free_rozofsmount_intance(void) {
   /*
   ** Find a free instance starting at instance 10
   */
-  for (instance=10; instance<64; instance++) {
+  for (instance=6; instance<64; instance=instance+2) {
     if ((mask & (1ULL<<instance))==0) return instance;
   }
   /*
