@@ -1265,6 +1265,13 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
        }
   }
   /*
+  ** Check the file size is over the minimum required
+  */
+  if (inode_p->s.attrs.size < rozo_balancing_ctx.filesize_config) {
+    return 0;
+  }
+  
+  /*
   ** Check if the mtime matches
   */
   if (rozo_bal_check_mtime(inode_p->s.attrs.mtime) < 0)
@@ -1672,7 +1679,7 @@ static void usage() {
     printf("\t--movecnt <count> \t\tfile count threshold before triggering file move (default:%d)\n",REBALANCE_MAX_SCANNED);
     printf("\t--movesz <value>[k|K|m|M|g|G] \tcumulated file size threshold before triggering file move (default:%s)\n",
           display_size_not_aligned(REBALANCE_MAX_MOVE_SIZE,bufall));
-    printf("\t--throughtput <value> \t\tfile move througput in MBytes/s (default:%d MB/s)\n",REBALANCE_DEFAULT_THROUGPUT);
+    printf("\t--throughput <value> \t\tfile move througput in MBytes/s (default:%d MB/s)\n",REBALANCE_DEFAULT_THROUGPUT);
     printf("\n");
 };
 
