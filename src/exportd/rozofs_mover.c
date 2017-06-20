@@ -442,7 +442,7 @@ int rozofs_do_move_one_file(rozofs_mover_job_t * job, int throughput) {
   struct  stat statbuf2;
   char       * pChar;
   int          i;
-  int          offset=0;
+  off_t        offset=0;
   uint64_t     loop_delay_us = 0;
   uint64_t     total_delay_us=0;
   int64_t      sleep_time_us;
@@ -802,7 +802,7 @@ int rozofs_do_move_one_export(char * exportd_hosts, char * export_path, int thro
 int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   char       * pChar;
   int          i;
-  int          offset=0;
+  off_t        offset=0;
   uint64_t     loop_delay_us = 0;
   uint64_t     total_delay_us=0;
   int64_t      sleep_time_us;
