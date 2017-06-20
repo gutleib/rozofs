@@ -1674,7 +1674,12 @@ static void usage() {
     printf("\t--newerm <minutes>\t\texclude files that are older than delay specified\n");
     printf("\t--newer <days>\t\t\texclude files that are older than delay specified\n");
     printf("\t--cont \t\t\t\tcontinue after reaching the balanced state\n");
+#if 0
+    /*
+    ** Up to now only FID mode is supported
+    */
     printf("\t--mode <rel|abs|fid>  \t\t\t\tuse relative, full path or fid while moving file (default is relative path)\n");
+#endif
     printf("\t--verbose \t\t\tset the rebalancing in verbose mode\n");
     printf("\t--movecnt <count> \t\tfile count threshold before triggering file move (default:%d)\n",REBALANCE_MAX_SCANNED);
     printf("\t--movesz <value>[k|K|m|M|g|G] \tcumulated file size threshold before triggering file move (default:%s)\n",
@@ -1750,7 +1755,7 @@ int main(int argc, char *argv[]) {
     rozo_balancing_ctx.older_time_sec_config   = -1;  
     rozo_balancing_ctx.continue_on_balanced_state = 0;
     rozo_balancing_ctx.throughput = REBALANCE_DEFAULT_THROUGPUT;
-    rozo_balancing_ctx.file_mode = REBALANCE_MODE_REL;
+    rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
            
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -1850,6 +1855,11 @@ int main(int argc, char *argv[]) {
         	}  
 		break;
 	      case 9:
+                /*
+                ** Up to now only FID mode is supported
+                */
+                break;
+#if 0
 	        if (strcmp(optarg,"rel")== 0)
 		{
 		  rozo_balancing_ctx.file_mode = REBALANCE_MODE_REL;
@@ -1869,6 +1879,7 @@ int main(int argc, char *argv[]) {
         	usage();
         	exit(EXIT_FAILURE);	
 		break;
+#endif                
 	      default:
 	      break;	   
 	   }
