@@ -122,13 +122,13 @@ char * show_rebalance_config_module_global(char * pChar) {
   REBALANCE_CONFIG_SHOW_INT(throughput,10);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  REBALANCE_CONFIG_IS_DEFAULT_STRING(mode,"rel");
+  REBALANCE_CONFIG_IS_DEFAULT_STRING(mode,"fid");
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// That option indicates the access mode used by the storage balancer for moving the file:\n");
   pChar += rozofs_string_append(pChar,"// - rel: use relative mode (parent/child)\n");
   pChar += rozofs_string_append(pChar,"// - abs: use full pathname mode\n");
   pChar += rozofs_string_append(pChar,"// - fid: use i-node mode \n");
-  REBALANCE_CONFIG_SHOW_STRING(mode,"rel");
+  REBALANCE_CONFIG_SHOW_STRING(mode,"fid");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   REBALANCE_CONFIG_IS_DEFAULT_BOOL(verbose,False);
@@ -249,7 +249,7 @@ static inline void rebalance_config_generated_read(char * fname) {
   // - rel: use relative mode (parent/child) 
   // - abs: use full pathname mode 
   // - fid: use i-node mode  
-  REBALANCE_CONFIG_READ_STRING(mode,"rel");
+  REBALANCE_CONFIG_READ_STRING(mode,"fid");
   // That option when asserted sets the process in verbose mode 
   // See --verbose parameter of the CLI. 
   REBALANCE_CONFIG_READ_BOOL(verbose,False);

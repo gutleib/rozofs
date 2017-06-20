@@ -83,7 +83,7 @@ INT   global throughput         10
 // - rel: use relative mode (parent/child)
 // - abs: use full pathname mode
 // - fid: use i-node mode 
-STRING global mode             "rel"
+STRING global mode             "fid"
 
 
 // That option when asserted sets the process in verbose mode
