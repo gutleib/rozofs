@@ -8,7 +8,7 @@
 #include <rozofs/common/export_track.h>
 
 #define BUFFER_HEAD_MAX 16
-int fake_buffer_idx = 0;
+unsigned int fake_buffer_idx = 0;
 struct buffer_head   fake_buffer_head[BUFFER_HEAD_MAX];
 
 /*
