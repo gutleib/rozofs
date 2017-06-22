@@ -27,7 +27,7 @@
 */
 ruc_obj_desc_t stclbg_hash_table[STCLBG_HASH_SIZE];
 
-int stclbg_next_idx = 0; /**< index of the next storcli to use */
+int unsigned stclbg_next_idx = 0; /**< index of the next storcli to use */
 int stclbg_init_done = 0;
 //int stclbg_storcli_count = STORCLI_PER_FSMOUNT;
 // Only 1 storcli is used

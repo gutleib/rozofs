@@ -39,7 +39,7 @@
 #define LV2_BUKETS (1024*64)
 
 lv2_entry_t  exp_fake_lv2_entry[EXP_MAX_FAKE_LVL2_ENTRIES];
-int exp_fake_lv2_entry_idx = 0;
+unsigned int exp_fake_lv2_entry_idx = 0;
 int rozofs_export_host_id = 0;   /**< reference between 0..7: default 0  */
 
 /**
