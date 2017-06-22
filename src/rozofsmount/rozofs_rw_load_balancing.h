@@ -28,7 +28,7 @@
 */
 extern ruc_obj_desc_t stclbg_hash_table[];
 
-extern int stclbg_next_idx; /**< index of the next storcli to use */
+extern unsigned int stclbg_next_idx; /**< index of the next storcli to use */
 
 
 void show_stclbg(char * argv[], uint32_t tcpRef, void *bufRef);
