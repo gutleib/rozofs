@@ -198,6 +198,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/storage_rebuild
 %{_bindir}/storage_list_rebuilder
 %{_bindir}/rozodump
+%{_bindir}/rozo_storage_fid2pathname
 %config(noreplace) %{_sysconfdir}/rozofs/storage.conf
 %{_sysconfdir}/rozofs/storage.conf.sample
 %if 0%{?rhel} >= 7

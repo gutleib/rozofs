@@ -217,6 +217,46 @@ void show_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
     memset(&rozofs_rcmd_stats,0, sizeof(rozofs_rcmd_stats));
     memset(rozofs_rcmd_error,0, sizeof(rozofs_rcmd_error));    
   }  
+}   
+/*__________________________________________________________________________
+** 
+** Active threads
+**
+**==========================================================================*/
+void show_threads(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char *pChar = uma_dbg_get_buffer();
+  int   i;
+  int   next=0;
+  rozofs_rcmd_thread_ctx_t *pThread;
+  
+
+  pChar += rozofs_string_append(pChar, "\n{ \"threads\" : [\n");
+
+  pThread = rozofs_rcmd_thread_ctx_tbl;
+  for (i=0; i<ROZFS_RCMD_MAX_SUB_THREADS; i++,pThread++) {
+  
+    if (pThread->status == rozofs_rcmd_thread_status_free)
+      continue;
+
+    if (next) {
+      pChar += rozofs_string_append(pChar, ",\n");
+    }
+    else {
+      next = 1;
+    } 
+    pChar += rozofs_string_append(pChar, "      { \"idx\" : ");
+    pChar += rozofs_u32_padded_append(pChar, 2, rozofs_right_alignment, pThread->idx);
+    pChar += rozofs_string_append(pChar, ", \"socket\" : ");           
+    pChar += rozofs_u32_padded_append(pChar, 4, rozofs_right_alignment, pThread->socket);
+    pChar += rozofs_string_append(pChar, ", \"ip@\" : \"");
+    pChar += rozofs_ipv4_append(pChar, pThread->ip);
+    pChar += rozofs_string_append(pChar, "\", \"port\" : ");
+    pChar += rozofs_u64_append(pChar, pThread->port);
+    pChar += rozofs_string_append(pChar, "}");
+  }
+  pChar += rozofs_string_append(pChar, "\n  ]\n}\n");
+  
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	   
 }    
 /*__________________________________________________________________________
 ** Find a free thread context
@@ -267,12 +307,15 @@ void rozofs_rcmd_init_thread_tbl(){
 **
 **==========================================================================*/
 void rozofs_rcmd_release_thread_ctx(rozofs_rcmd_thread_ctx_t * p){
-  p->status   = rozofs_rcmd_thread_status_free;
   p->threadId = 0;
   if (p->socket != -1) {
     rozofs_rcmd_disconnect_from_server(p->socket);
     p->socket = -1;
   }   
+  /*
+  ** Set the context free, now that all related resources are released
+  */
+  p->status   = rozofs_rcmd_thread_status_free;
 }
 /*__________________________________________________________________________
 ** Set REUSE_ADDR to the socket
@@ -366,18 +409,22 @@ int rozofs_rcmd_blocking_send(rozofs_rcmd_thread_ctx_t * p, char * pBuf, int siz
 **==========================================================================*/
 rozofs_rcmd_status_e rozofs_rcmd_blocking_read(rozofs_rcmd_thread_ctx_t * p, char * pBuf, int size) {
   int nbread;
+  int total_read = 0;
   
-  nbread = read(p->socket, pBuf, size);
-  if (nbread < 0) {
-    RCMD_LOG(severe,"read %s", strerror(errno));
-    return rozofs_rcmd_status_server_error;
-  }
+  while (total_read < size) {
+    nbread = read(p->socket, &pBuf[total_read], size-total_read);
+    if (nbread < 0) {
+      RCMD_LOG(severe,"read(%d) %s ", p->socket, strerror(errno));
+      return rozofs_rcmd_status_remote_disconnection;
+    }
     
-  if (nbread == 0) {
-    RCMD_LOG(info,"remote disconnection");
-    return rozofs_rcmd_status_remote_disconnection;
-  }
-
+    if (nbread == 0) {
+      //RCMD_LOG(info,"remote disconnection");
+      return rozofs_rcmd_status_remote_disconnection;
+    }
+  
+    total_read += nbread;
+  }  
   return rozofs_rcmd_status_success;      
 }
 /*__________________________________________________________________________
@@ -386,13 +433,15 @@ rozofs_rcmd_status_e rozofs_rcmd_blocking_read(rozofs_rcmd_thread_ctx_t * p, cha
 ** @param p       the thread context
 ** @param hdr     header structure of the request
 ** @param fname   Local name of the file
+** @param remove  Whether file should be removed
 **
 ** @retval status of the request (rozofs_rcmd_status_e)
 **==========================================================================*/
 rozofs_rcmd_status_e rozofs_rcmd_process_getfile(
                                      rozofs_rcmd_thread_ctx_t * p, 
                                      rozofs_rcmd_hdr_t        * hdr, 
-                                     char                     * fname) {
+                                     char                     * fname,
+                                     int                        remove) {
   rozofs_rcmd_hdr_t   rsp;
   int                 fd = -1;
   char              * data = NULL;
@@ -414,7 +463,7 @@ rozofs_rcmd_status_e rozofs_rcmd_process_getfile(
   /*
   ** Log the request
   */ 
-  RCMD_LOG(info,"getfile %s",fname);
+  //RCMD_LOG(info,"getfile %s",fname);
   
   /*
   ** Check the file exists
@@ -466,7 +515,7 @@ rozofs_rcmd_status_e rozofs_rcmd_process_getfile(
       rsp.more   = 0;
       rsp.size   = 0;            
       rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));
-      break;
+      goto out;
     }
 
     rsp.status = rozofs_rcmd_status_success;
@@ -491,7 +540,11 @@ rozofs_rcmd_status_e rozofs_rcmd_process_getfile(
     */
     if (!rsp.more) break;               
   }   
-   
+  
+  if (remove) {
+    unlink (fname);  
+  }
+    
 out:
  
   /*
@@ -509,6 +562,217 @@ out:
     xfree(data);
     data = NULL;
   } 
+  return rsp.status;
+}
+/*__________________________________________________________________________
+** Process a puttmpfile service. ie transfer the file content under /tmp
+**
+** @param p       the thread context
+** @param hdr     header structure of the request
+** @param param   Local name of the file
+**
+** @retval status of the request (rozofs_rcmd_status_e)
+**==========================================================================*/
+rozofs_rcmd_status_e rozofs_rcmd_process_puttmpfile(
+                                     rozofs_rcmd_thread_ctx_t * p, 
+                                     rozofs_rcmd_hdr_t        * hdr, 
+                                     char                     * param) {
+  rozofs_rcmd_hdr_t   rsp;
+  int                 fd = -1;
+  char              * data = NULL;
+  char                fname[ROZOFS_RCMD_MAX_PARAM_SIZE];
+  uint32_t            size; 
+  
+  fname[0] = 0; 
+  
+  /*
+  ** Initialize a response structure for the received command
+  */
+  rozofs_rcmd_init_response(&rsp, hdr->ope);
+  
+  /*
+  ** A file name must be present in the extra data
+  */
+  if (hdr->size<=1) {
+    rsp.status = rozofs_rcmd_status_missing_param;
+    rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
+    goto out;
+  } 
+   
+  /*
+  ** Build file name
+  */ 
+  sprintf(fname,"/tmp/%s",param);
+
+  /*
+  ** Open local destination file
+  */  
+  fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC,0777);
+  if (fd < 0) {
+    rsp.status = rozofs_rcmd_status_local_error;
+    rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
+    goto out;
+  }
+
+  data = xmalloc(ROZOFS_RCMD_MAX_PARAM_SIZE);
+  if (data == NULL) {
+    rsp.status = rozofs_rcmd_status_out_of_memory;
+    rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
+    goto out;
+  }   
+  
+  rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
+
+ 
+  while (1) {
+  
+    /*
+    ** Read a request from the connection
+    */    
+    rsp.status = rozofs_rcmd_blocking_read(p, (char *)hdr, sizeof(rozofs_rcmd_hdr_t));
+    if (rsp.status != rozofs_rcmd_status_success) {
+      goto out;
+    }
+
+    /*
+    ** Prepare the response
+    */
+    rozofs_rcmd_init_response(&rsp, hdr->ope);
+
+    /*
+    ** Check some values
+    */
+
+    if (hdr->ope != rozofs_rcmd_ope_puttmpfile) {
+      rsp.status = rozofs_rcmd_status_protocol_error;
+      break;
+    }
+
+    if (hdr->magic != ROZOFS_RCMD_MAGIC_NB) {
+      rsp.status = rozofs_rcmd_status_protocol_error;
+      break;
+    }
+
+    if (hdr->status !=  rozofs_rcmd_status_cmd) {
+      rsp.status = hdr->status;
+      break;
+    }  
+
+    if (hdr->size > ROZOFS_RCMD_MAX_PARAM_SIZE) {
+      rsp.status = rozofs_rcmd_status_message_too_big;
+      break;
+    }
+
+    /*
+    ** Read command parameters if any
+    */ 
+    if (hdr->size) {
+      rsp.status = rozofs_rcmd_blocking_read(p, data, hdr->size);
+      if (rsp.status != rozofs_rcmd_status_success) {
+        break;
+      }
+        
+      size = write(fd, data, hdr->size);
+      if (size != hdr->size) {
+        rsp.status = rozofs_rcmd_status_local_error;
+        break;
+      }
+             
+      if (hdr->more == 0) break;
+
+      /*
+      ** Reloop
+      */
+      rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
+    }
+
+  }
+  rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));
+
+out:
+ 
+  /*
+  ** Release file descriptor
+  */
+  if (fd != -1) {
+    close(fd);
+    fd = -1;
+  } 
+   
+  /*
+  ** Release buffer
+  */
+  if (data != NULL) {
+    xfree(data);
+    data = NULL;
+  } 
+  if (rsp.status != rozofs_rcmd_status_success) {
+    if(fname[0] != 0) {
+      unlink(fname);
+    }  
+  }   
+  return rsp.status;
+}
+/*__________________________________________________________________________
+** Resolve a list of file to a list of file names
+**
+** @param p       the thread context
+** @param hdr     header structure of the request
+** @param param   command parameters
+**
+** @retval status of the request (rozofs_rcmd_status_e)
+**==========================================================================*/
+rozofs_rcmd_status_e rozofs_rcmd_process_fid2path(
+                                     rozofs_rcmd_thread_ctx_t * p, 
+                                     rozofs_rcmd_hdr_t        * hdr, 
+                                     char                     * param) {
+  rozofs_rcmd_hdr_t   rsp;
+  char                cmd[512];
+  char                inputfile[512];
+  int                 res;
+  
+  /*
+  ** Initialize a response structure for the received command
+  */
+  rozofs_rcmd_init_response(&rsp, hdr->ope);
+  
+  /*
+  ** A file name must be present in the extra data
+  */
+  if (hdr->size<=1) {
+    rsp.status = rozofs_rcmd_status_missing_param;
+    rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
+    goto out;
+  } 
+   
+  
+  /*
+  ** Build the command line using space left at the beginning of the buffer
+  */
+  sprintf(cmd,"rozo_fid2pathname %s", param);
+
+  /*
+  ** Execute the command
+  */
+  res = system(cmd);
+  if (res==0) { 
+    rsp.status = rozofs_rcmd_status_success;  
+  }
+  else {
+    rsp.status = rozofs_rcmd_status_failed;  
+  }
+
+  if (sscanf(param,"-i %s ", inputfile)== 1) {
+    unlink(inputfile);
+  }
+    
+  /*
+  ** Send response
+  */
+  rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));
+
+out: 
+
   return rsp.status;
 }
 /*__________________________________________________________________________
@@ -549,7 +813,7 @@ rozofs_rcmd_status_e rozofs_rcmd_process_rebuild_list(
   pChar = parameters - cmdLen - 1;
   strcpy(pChar,"rozo_rbsList");
   pChar[cmdLen] = ' ';
-  RCMD_LOG(info,"%s",pChar);
+  //RCMD_LOG(info,"%s",pChar);
 
   /*
   ** Execute the command
@@ -636,7 +900,7 @@ rozofs_rcmd_status_e rozofs_rcmd_process_rebuild_list_clear(
   pChar -= (cmdLen + 1);
   strcpy(pChar,"rm -rf");
   pChar[cmdLen] = ' ';
-  RCMD_LOG(info,"%s",pChar);
+  //RCMD_LOG(info,"%s",pChar);
 
     
   /*
@@ -712,7 +976,7 @@ void * run_rcmd_sub_process(rozofs_rcmd_thread_ctx_t * p) {
     ** Read command parameters if any
     */ 
     if (hdr.size) {
-      data = malloc(hdr.size+ROZOFS_RCMD_RESERVE+1);
+      data = xmalloc(hdr.size+ROZOFS_RCMD_RESERVE+1);
       if (data==NULL) {
         rsp.status = rozofs_rcmd_status_out_of_memory;
         rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
@@ -756,8 +1020,33 @@ void * run_rcmd_sub_process(rozofs_rcmd_thread_ctx_t * p) {
       */
       case rozofs_rcmd_ope_getfile :
         rozofs_rcmd_profiler[ope].count++;      
-        res = rozofs_rcmd_process_getfile(p, &hdr, &data[ROZOFS_RCMD_RESERVE]);      
+        res = rozofs_rcmd_process_getfile(p, &hdr, &data[ROZOFS_RCMD_RESERVE], 0);      
         break;
+
+      /*
+      ** Transfer a file from server to client
+      */
+      case rozofs_rcmd_ope_getrmfile :
+        rozofs_rcmd_profiler[ope].count++;      
+        res = rozofs_rcmd_process_getfile(p, &hdr, &data[ROZOFS_RCMD_RESERVE], 1);      
+        break;
+
+      /*
+      ** Transfer a file from client to /tmp of local server
+      */
+      case rozofs_rcmd_ope_puttmpfile :
+        rozofs_rcmd_profiler[ope].count++;      
+        res = rozofs_rcmd_process_puttmpfile(p, &hdr, &data[ROZOFS_RCMD_RESERVE]);      
+        break;
+
+      /*
+      ** Resolve a list of fid to pathnames
+      */
+      case rozofs_rcmd_ope_fid2path:
+        rozofs_rcmd_profiler[ope].count++;      
+        res = rozofs_rcmd_process_fid2path(p, &hdr, &data[ROZOFS_RCMD_RESERVE]);      
+        break;
+
 
       /*
       ** Unexpected command
@@ -774,7 +1063,7 @@ void * run_rcmd_sub_process(rozofs_rcmd_thread_ctx_t * p) {
     ** Free extra parameters 
     */
     if (data) {
-      free(data);
+      xfree(data);
       data = NULL;
     } 
          
@@ -797,7 +1086,7 @@ out:
   rozofs_rcmd_error[rsp.status]++;
       
   if (data) {
-    free(data);
+    xfree(data);
     data = NULL;
   }  
   return NULL;
@@ -838,6 +1127,7 @@ uint32_t tune_client_socket(rozofs_rcmd_thread_ctx_t * p) {
   setsockopt (p->socket,IPPROTO_TCP,TCP_KEEPIDLE,&IDLE,sizeof(int));
   setsockopt (p->socket,IPPROTO_TCP,TCP_KEEPINTVL,&INTVL,sizeof(int));
   setsockopt (p->socket,IPPROTO_TCP,TCP_KEEPCNT,&COUNT,sizeof(int));
+  setsockopt (p->socket,IPPROTO_TCP,TCP_NODELAY,&YES,sizeof(int));
 
   rozofs_rcmd_reuseaddr(p->socket);
   
@@ -901,7 +1191,6 @@ void * rozofs_rcmd_server(void * unused) {
   ** Tune socket
   */
   rozofs_rcmd_reuseaddr(listenSocket);  
-  
 
   /* 
   ** bind the socket to the port 
@@ -961,7 +1250,7 @@ void * rozofs_rcmd_server(void * unused) {
     ** Tune socket
     */
     tune_client_socket(pThread);      
-    
+
     /*
     ** Start a sub thread
     */
@@ -1079,6 +1368,7 @@ uint32_t ruc_init() {
   memset(rozofs_rcmd_error,0, sizeof(rozofs_rcmd_error));
   memset(&rozofs_rcmd_stats,0, sizeof(rozofs_rcmd_stats));
   uma_dbg_addTopic_option("statistics", show_statistics,UMA_DBG_OPTION_RESET);
+  uma_dbg_addTopic_option("threads", show_threads,0);
 
 
   return ret;

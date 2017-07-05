@@ -18,7 +18,7 @@
 
 #ifndef _ROZOFS_RCMD_H
 #define _ROZOFS_RCMD_H
-
+#include <rozofs/common/xmalloc.h>
 #include <rozofs/common/log.h>
 #include <rozofs/core/rozofs_fdset.h>
 #include <rozofs/core/rozofs_ip_utilities.h>
@@ -84,7 +84,7 @@ static inline char *  rozofs_rcmd_status2String(rozofs_rcmd_status_e status) {
     case rozofs_rcmd_status_read_failure: return "read failure";
     case rozofs_rcmd_status_max: return "status max";
   }
-  return "??";  
+  return "Bad code";  
 }
 
 /*
@@ -101,6 +101,12 @@ typedef enum _rozofs_rcmd_ope_e {
   rozofs_rcmd_ope_rebuild_list_clear,
   // Get a remote file content
   rozofs_rcmd_ope_getfile, 
+  // Put a file to remote server under /tmp 
+  rozofs_rcmd_ope_puttmpfile, 
+  // fid2path 
+  rozofs_rcmd_ope_fid2path, 
+  // Get a remote file content and remove it
+  rozofs_rcmd_ope_getrmfile, 
   
   rozofs_rcmd_ope_max
 } rozofs_rcmd_ope_e;
@@ -118,6 +124,9 @@ static inline char *  rozofs_rcmd_ope2String(rozofs_rcmd_ope_e ope) {
     case rozofs_rcmd_ope_rebuild_list: return "rebuild list";
     case rozofs_rcmd_ope_rebuild_list_clear: return "rebuild list clear";
     case rozofs_rcmd_ope_getfile : return "getfile";
+    case rozofs_rcmd_ope_puttmpfile : return "puttmpfile";
+    case rozofs_rcmd_ope_fid2path : return "fid2path";
+    case rozofs_rcmd_ope_getrmfile : return "getrmfile";
     case rozofs_rcmd_ope_max: return "ope max";
   }
   return "??";  
@@ -171,16 +180,16 @@ static inline int rozofs_rcmd_send_command(int                   socketId,
   sent = send(socketId, command, sizeof(rozofs_rcmd_hdr_t), 0);
   if (sent != sizeof(rozofs_rcmd_hdr_t)) {
     warning("send hdr (%d/%ld) %s",sent, sizeof(rozofs_rcmd_hdr_t), strerror(errno));
-    return rozofs_rcmd_status_no_connection;
+    return rozofs_rcmd_status_remote_disconnection;
   }
   /*
   ** Send the extra data 
   */
-  if (command->size) {
+  if ((command->size)&&(data)) {
     sent = send(socketId, data, command->size, 0);
     if (sent != command->size) {
       warning("send data (%d/%d) %s",sent, command->size, strerror(errno));
-      return rozofs_rcmd_status_no_connection;
+      return rozofs_rcmd_status_remote_disconnection;
     }
   }  
   return rozofs_rcmd_status_success;
@@ -209,7 +218,7 @@ static inline int rozofs_rcmd_server_read(int    socketId,
   ROZO_FD_ZERO(&fdset);
   ROZO_FD_SET(socketId, &fdset);
 
-  while(toread) {
+  while(toread>0) {
   
     /*
     ** When timeout is given, do a select
@@ -270,8 +279,8 @@ static inline rozofs_rcmd_status_e rozofs_rcmd_read_response(
   /*
   ** Read the response header
   */     
-  if (rozofs_rcmd_server_read(socketId, (char*)response, sizeof(rozofs_rcmd_hdr_t), tmo) < -1) {
-    return rozofs_rcmd_status_no_connection;
+  if (rozofs_rcmd_server_read(socketId, (char*)response, sizeof(rozofs_rcmd_hdr_t), tmo) < 0) {
+    return rozofs_rcmd_status_remote_disconnection;
   } 
   /*
   ** Check some fields consistency
@@ -305,7 +314,7 @@ static inline rozofs_rcmd_status_e rozofs_rcmd_read_response(
   ** Need to allocate a buffer for data
   */      
   if (*data == NULL) {  
-    *data = malloc(response->size); 
+    *data = xmalloc(response->size); 
     if (*data == NULL) {
       return rozofs_rcmd_status_out_of_memory;
     }
@@ -314,31 +323,37 @@ static inline rozofs_rcmd_status_e rozofs_rcmd_read_response(
   /*
   ** Read extra data
   */       
-  if (rozofs_rcmd_server_read(socketId, *data, response->size, tmo) < -1) {
-    return rozofs_rcmd_status_no_connection;  
+  if (rozofs_rcmd_server_read(socketId, *data, response->size, tmo) < 0) {
+    return rozofs_rcmd_status_remote_disconnection;  
   } 
   return response->status;
 }
+
 /*__________________________________________________________________________
-** Get a file from remote server
+** Get a file from remote server and eventually ask to remove it
 **
 ** @param   socketId   TCP socket
 ** @param   from       remote file name
 ** @param   to         local file name
+** @param   remove     whether file should be removed from remote server
 **
 **==========================================================================*/
-int rozofs_rcmd_getfile(int socketId, char * from, char * to) {
+int rozofs_rcmd_getrmfile(int socketId, char * from, char * to, int remove) {
   uint32_t            size; 
   rozofs_rcmd_hdr_t   command;
   int                 fd=1;
   int                 res;
   char              * data = NULL;
   uint64_t            fsize=0;
+  int                 ope;
+  
+  if (remove) ope = rozofs_rcmd_ope_getrmfile;
+  else        ope = rozofs_rcmd_ope_getfile;
      
   /*
   ** Initialize the command header
   */ 
-  rozofs_rcmd_init_command(&command,rozofs_rcmd_ope_getfile);
+  rozofs_rcmd_init_command(&command,ope);
   command.size = strlen(from)+1;
   
   res = rozofs_rcmd_send_command(socketId, &command, from);
@@ -349,7 +364,7 @@ int rozofs_rcmd_getfile(int socketId, char * from, char * to) {
   /*
   ** Wait for the first response
   */
-  res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_getfile, &command, &data, 30);
+  res = rozofs_rcmd_read_response(socketId, ope, &command, &data, 30);
   if (res != rozofs_rcmd_status_success) {
     goto failure;
   }
@@ -382,7 +397,7 @@ int rozofs_rcmd_getfile(int socketId, char * from, char * to) {
     */
     if (!command.more) {
       if (data != NULL) {
-        free(data);
+        xfree(data);
         data = NULL;
       }      
       close(fd);
@@ -392,7 +407,7 @@ int rozofs_rcmd_getfile(int socketId, char * from, char * to) {
     /*
     ** More data
     */   
-    res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_getfile, &command, &data, 30);
+    res = rozofs_rcmd_read_response(socketId, ope, &command, &data, 30);
     if (res != rozofs_rcmd_status_success) {
       goto failure;
     }
@@ -400,7 +415,7 @@ int rozofs_rcmd_getfile(int socketId, char * from, char * to) {
   
 failure:
   if (data != NULL) {
-    free(data);
+    xfree(data);
     data = NULL;
   }
       
@@ -410,6 +425,194 @@ failure:
   }
     
   unlink(to);
+  return res;
+}
+/*__________________________________________________________________________
+** Get a file from remote server without deleting it
+**
+** @param   socketId   TCP socket
+** @param   from       remote file name
+** @param   to         local file name
+**
+**==========================================================================*/
+static inline int rozofs_rcmd_getfile(int socketId, char * from, char * to) {
+  return rozofs_rcmd_getrmfile(socketId, from, to, 0);
+}
+/*__________________________________________________________________________
+** Put a file under /tmp on remote server
+**
+** @param   socketId   TCP socket
+** @param   from       local file name
+** @param   to         remote file name
+**
+**==========================================================================*/
+int rozofs_rcmd_puttmpfile(int socketId, char * from, char * to) {
+  rozofs_rcmd_hdr_t   command;
+  rozofs_rcmd_hdr_t   rsp;
+  int                 fd=1;
+  int                 res;
+  char              * data = NULL;
+
+  /*
+  ** Check the file exists
+  */
+  if (access(from,R_OK)!=0) {
+    res = rozofs_rcmd_status_no_such_file;
+    goto out;
+  }   
+
+  /*
+  ** Open the file for reading
+  */
+  fd = open(from,O_RDONLY);
+  if (fd < 0) {
+    res = rozofs_rcmd_status_open_failure;
+    goto out;
+  }   
+
+
+  /*
+  ** Allocate a buffer for data transfer
+  */
+  data = xmalloc(ROZOFS_RCMD_MAX_PARAM_SIZE);
+  if (data == NULL) {
+    res = rozofs_rcmd_status_out_of_memory;
+    goto out;
+  }   
+     
+  /*
+  ** Initialize the command header
+  */ 
+  rozofs_rcmd_init_command(&command,rozofs_rcmd_ope_puttmpfile);
+  command.size = strlen(to)+1;
+  
+  /*
+  ** Send the command
+  */
+  res = rozofs_rcmd_send_command(socketId, &command, to);
+  if (res != rozofs_rcmd_status_success) {
+    goto out;
+  }
+  
+  /*
+  ** Wait for the first response
+  */
+  res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_puttmpfile, &command, &data, 30);
+  if (res != rozofs_rcmd_status_success) {
+    goto out;
+  }
+
+
+  /*
+  ** Read and send the data
+  */
+  while (1) {
+
+    /*
+    ** Initialize the command
+    */
+    rozofs_rcmd_init_command(&command,rozofs_rcmd_ope_puttmpfile);
+
+    /*
+    ** Read the file context sequentialy
+    */
+    command.size = read(fd, data, ROZOFS_RCMD_MAX_PARAM_SIZE);
+    if (command.size<0) {
+      /*
+      ** Read failed
+      */
+      res = rozofs_rcmd_status_read_failure;
+      goto abort;
+    }
+
+    if (command.size==ROZOFS_RCMD_MAX_PARAM_SIZE) {
+      command.more = 1; // more data are to come
+    }
+     
+    /*
+    ** Send the data
+    */ 
+    res = rozofs_rcmd_send_command(socketId, &command, data);
+    if (res != rozofs_rcmd_status_success) {
+      goto abort;
+    }
+
+    /*
+    ** read the response
+    */   
+    res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_puttmpfile, &rsp, &data, 10);
+    if (res != rozofs_rcmd_status_success) {
+      goto abort;
+    }
+    
+    /*
+    ** no more to give. exit
+    */
+    if (!command.more) break;               
+  }   
+
+out:
+  if (data) {
+    xfree(data);
+    data = NULL;
+  }
+  
+  if (fd!=-1) {
+    close(fd);
+    fd = -1;
+  }      
+  return res;
+  
+abort:
+  /*
+  ** Send indication that the transfer is failed
+  */
+  rozofs_rcmd_init_command(&command,rozofs_rcmd_ope_puttmpfile);
+  command.status = rozofs_rcmd_status_failed;
+  rozofs_rcmd_send_command(socketId, &command, NULL);
+  goto out;
+}
+/*__________________________________________________________________________
+** Run rozo_fid2pathname utility on remote command server
+**
+** @param   socketId   TCP socket
+** @param   param      rozo_fid2pathname parameters
+**
+**==========================================================================*/
+int rozofs_rcmd_fid2path(int socketId, char * param) {
+  rozofs_rcmd_hdr_t   command;
+  int                 res;
+  char              * data = NULL;
+     
+  /*
+  ** Initialize the command header
+  */ 
+  rozofs_rcmd_init_command(&command,rozofs_rcmd_ope_fid2path);
+  command.size = strlen(param)+1;
+  
+  /*
+  ** Send the command as well as the parameters
+  */
+  res = rozofs_rcmd_send_command(socketId, &command, param);
+  if (res != rozofs_rcmd_status_success) {
+    goto out;
+  }
+  
+  /*
+  ** Wait for the response
+  */
+  res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_fid2path, &command, &data, 30);
+  if (res != rozofs_rcmd_status_success) {
+    goto out;
+  }
+
+
+out:
+  if (data) {
+    xfree(data);
+    data = NULL;
+  }
+
   return res;
 }
 /*__________________________________________________________________________
@@ -430,7 +633,7 @@ int rozofs_rcmd_rebuild_list(int socketId, char * parameters) {
 
   res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_rebuild_list, &command, &data, 0);
   if (data != NULL) {
-    free(data);
+    xfree(data);
     data = NULL;
   }  
   return res;
@@ -457,7 +660,7 @@ int rozofs_rcmd_rebuild_list_clear(int socketId, char * dirExport, int rebuildRe
   pData = NULL;
   res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_rebuild_list_clear, &command, &pData, 20);
   if (pData != NULL) {
-    free(pData);
+    xfree(pData);
     pData = NULL;
   }  
   return res;
@@ -475,6 +678,7 @@ static inline int rozofs_rcmd_connect_to_server(char * host) {
   struct  sockaddr_in vSckAddr = {0};
   int                 sockSndSize  = 32*ROZOFS_RCMD_MAX_PARAM_SIZE;
   int                 sockRcvdSize = 32*ROZOFS_RCMD_MAX_PARAM_SIZE;
+  int                 YES=1;
   uint16_t            serverPort;
 
 
@@ -506,22 +710,25 @@ static inline int rozofs_rcmd_connect_to_server(char * host) {
   */
   if (setsockopt (socketId,SOL_SOCKET,SO_SNDBUF,(char*)&sockSndSize,sizeof(int)) == -1)  {
     severe("setsockopt SO_SNDBUF %s",strerror(errno));
-    close(socketId);
-    return -1;
   }
   /* 
   ** change sizeof the buffer of socket for receiving
   */  
   if (setsockopt (socketId,SOL_SOCKET,SO_RCVBUF,(char*)&sockRcvdSize,sizeof(int)) == -1)  {
     severe("setsockopt SO_RCVBUF %s",strerror(errno));
-    close(socketId);
-    return -1;
+  }
+  /* 
+  ** Set No delay on TCP
+  */  
+  if (setsockopt (socketId,IPPROTO_TCP,TCP_NODELAY,&YES,sizeof(int)) == -1)  {
+    severe("setsockopt SO_RCVBUF %s",strerror(errno));
   }
   
 
   /* Connect */
   if (connect(socketId,(struct sockaddr *)&vSckAddr,sizeof(struct sockaddr_in)) == -1) {
     severe("connect %s", strerror(errno));
+    close(socketId);
     return -1;
   }
   return socketId;
