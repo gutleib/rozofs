@@ -321,6 +321,15 @@ add_executable(rozo_geoRepList
 target_link_libraries(rozo_geoRepList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 
+add_executable(rozo_du
+    rozo_du_scan.c
+    econfig.c      
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h   
+    rozofs_du.c  
+)
+target_link_libraries(rozo_du rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT export)
 
