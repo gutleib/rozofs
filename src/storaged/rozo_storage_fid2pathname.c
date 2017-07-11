@@ -128,14 +128,15 @@ void usage(char * fmt, ...) {
   /*
   ** Display usage
   */
-  printf("\nUsage: rozo_storage_fid2pathname -i <input_filename -o output_filename [-c export_cfg_file]\n\n");
+  printf("\nUsage: rozo_storage_fid2pathname -i <input_filename -o output_filename [-c export_cfg_file] [-m <metadata@>]\n\n");
   printf("Options:\n");
   printf("\t-h,--help:     print this message.\n");
   printf("\t-i,--input:    fid of the objet or input filename \n");
   printf("\t               that contains a list of one fid per line\n");
   printf("\t-o,--output:   output filename for full path translation (optional) \n\n");
-  printf("\t-c,--config:   exportd configuration file name (when different from %s)\n\n",EXPORTD_DEFAULT_CONFIG);
-  
+  printf("\t-c,--config:   exportd configuration file name (when different from %s)\n\n",EXPORTD_DEFAULT_CONFIG);  
+  printf("\t-m,--meta:     meta data server address (optional)\n\n");
+
   finish(EXIT_FAILURE); 
 }
 
@@ -147,6 +148,7 @@ int main(int argc, char *argv[]) {
   char * input_path     = NULL;
   char * output_path    = NULL;
   char * configFileName = NULL;
+  char * pMetaAddr      = NULL;
   
   FILE *fd_in = NULL;
   int  socketId = -1;
@@ -162,6 +164,7 @@ int main(int argc, char *argv[]) {
       {"input", required_argument, 0, 'i'},
       {"output", required_argument, 0, 'o'},
       {"config", required_argument, 0, 'c'},	
+      {"meta", required_argument, 0, 'm'},	
       {0, 0, 0, 0}
   };
 
@@ -176,7 +179,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = 0;
-    c = getopt_long(argc, argv, "hlrc:i:o:c:r", long_options, &option_index);
+    c = getopt_long(argc, argv, "hlrc:i:o:c:m:r", long_options, &option_index);
 
     if (c == -1)
         break;
@@ -194,7 +197,10 @@ int main(int argc, char *argv[]) {
         break;
       case 'c':
         configFileName = optarg;
-        break;			  	      
+        break;	
+      case 'm':
+        pMetaAddr = optarg;
+        break;  		  	      
       case '?':
         usage(NULL);
         break;
@@ -249,25 +255,38 @@ int main(int argc, char *argv[]) {
     output_path = tmp_output_file;
   }
 
+
+  uma_dbg_record_syslog_name("StFid2Path");
+
   rozofs_layout_initialize();
 
   /*
-  ** read common config file
+  ** Get export address from config
   */
-  common_config_read(NULL);         
+  if (pMetaAddr == NULL) {
 
-  uma_dbg_record_syslog_name("StFid2Path");
+    /*
+    ** read common config file
+    */
+    common_config_read(NULL);         
+
+    /*
+    ** Parse host list
+    */
+    pMetaAddr = common_config.export_hosts;
+  }  
+    
+  /*
+  ** Parse export host list 
+  */  
+  if (rozofs_host_list_parse(pMetaAddr,'/') == 0) {
+    fatal_exit(rozofs_rcmd_status_no_connection, "Bad export host address %s",pMetaAddr);   
+  }  
+
 
   // Init of the timer configuration
   rozofs_tmr_init_configuration();
 
-  /*
-  ** Parse host list
-  */
-  if (rozofs_host_list_parse(common_config.export_hosts,'/') == 0) {
-    fatal_exit(rozofs_rcmd_status_no_connection, "export_hosts missing in %s",ROZOFS_CONFIG_DIR"/rozofs.conf");
-  }   
-  
   /*
   ** Loop on configured exportd and connect to the remote command server
   */
