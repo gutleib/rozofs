@@ -1129,6 +1129,15 @@ uint32_t tune_client_socket(rozofs_rcmd_thread_ctx_t * p) {
   setsockopt (p->socket,IPPROTO_TCP,TCP_KEEPCNT,&COUNT,sizeof(int));
   setsockopt (p->socket,IPPROTO_TCP,TCP_NODELAY,&YES,sizeof(int));
 
+  /*
+  ** Set export DSCP on that socket
+  */
+  {
+    uint8_t dscp = common_config.export_dscp;
+    dscp = dscp << 2;
+    setsockopt (p->socket, IPPROTO_IP, IP_TOS,&dscp,sizeof(dscp));
+  }
+
   rozofs_rcmd_reuseaddr(p->socket);
   
   return 0;

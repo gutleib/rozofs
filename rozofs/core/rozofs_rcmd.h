@@ -723,7 +723,15 @@ static inline int rozofs_rcmd_connect_to_server(char * host) {
   if (setsockopt (socketId,IPPROTO_TCP,TCP_NODELAY,&YES,sizeof(int)) == -1)  {
     severe("setsockopt SO_RCVBUF %s",strerror(errno));
   }
-  
+
+  /*
+  ** Set export DSCP on that socket
+  */
+  {
+    uint8_t dscp = common_config.export_dscp;
+    dscp = dscp << 2;
+    setsockopt (socketId, IPPROTO_IP, IP_TOS,&dscp,sizeof(dscp));
+  }
 
   /* Connect */
   if (connect(socketId,(struct sockaddr *)&vSckAddr,sizeof(struct sockaddr_in)) == -1) {
