@@ -956,6 +956,7 @@ def do_execute():
   #test_client(2)  
   with open("/etc/fstab") as f:
     for line in f:
+      if line[0] == "#": continue
       if len(line.split()) < 3: continue
       if line.split()[2] == "rozofs":
 	instance="0"

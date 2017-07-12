@@ -27,6 +27,9 @@
 #include <rozofs/common/log.h>
 #include <rozofs/core/rozofs_ip_utilities.h>
 #include "rpcclt.h"
+#include "eproto.h"
+#include "mproto.h"
+#include "sproto.h"
 
 int rpcclt_initialize(rpcclt_t * client, const char *host, unsigned long prog,
         unsigned long vers, unsigned int sendsz,
@@ -100,6 +103,20 @@ int rpcclt_initialize(rpcclt_t * client, const char *host, unsigned long prog,
             (client->sock, SOL_TCP, TCP_NODELAY, (char *) &one,
             sizeof (int)) < 0) {
         goto out;
+    }
+
+    /*
+    ** Set DSCP
+    */
+    if (prog == EXPORT_PROGRAM) {
+      uint8_t dscp = common_config.export_dscp;
+      dscp = dscp << 2;
+      setsockopt (client->sock, IPPROTO_IP, IP_TOS,&dscp,sizeof(dscp));
+    }
+    else if ((prog == MONITOR_PROGRAM)||(prog == STORAGE_PROGRAM)) {
+      uint8_t dscp = common_config.storio_dscp;
+      dscp = dscp << 2;
+      setsockopt (client->sock, IPPROTO_IP, IP_TOS,&dscp,sizeof(dscp));
     }
 
     if ((client->sock < 0) ||
