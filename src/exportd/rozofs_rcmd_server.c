@@ -410,10 +410,21 @@ int rozofs_rcmd_blocking_send(rozofs_rcmd_thread_ctx_t * p, char * pBuf, int siz
 rozofs_rcmd_status_e rozofs_rcmd_blocking_read(rozofs_rcmd_thread_ctx_t * p, char * pBuf, int size) {
   int nbread;
   int total_read = 0;
+  int eintr_count = 0;
   
   while (total_read < size) {
     nbread = read(p->socket, &pBuf[total_read], size-total_read);
     if (nbread < 0) {
+      /*
+      ** Ignore EINTR as long as it is not repeated again and again
+      */
+      if (errno == EINTR) {
+        eintr_count++;
+        if (eintr_count<8) continue;
+      }
+      /*
+      ** Other errors : disconnect
+      */
       RCMD_LOG(severe,"read(%d) %s ", p->socket, strerror(errno));
       return rozofs_rcmd_status_remote_disconnection;
     }
@@ -1251,6 +1262,7 @@ void * rozofs_rcmd_server(void * unused) {
       /*
       ** Release the socket
       */
+      shutdown(clientSocket,SHUT_RDWR);
       close(clientSocket);
       continue;
     }
