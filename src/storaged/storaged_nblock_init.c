@@ -392,7 +392,7 @@ static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void
     char                  majmin[64];
     
     
-    pChar += sprintf(pChar, "{ \"devices\" : [\n");
+    pChar += sprintf(pChar, "{ \"devices\" : [  \n");
     
     while((st = storaged_next(st)) != NULL) {
       /* 
