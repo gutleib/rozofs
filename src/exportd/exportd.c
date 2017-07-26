@@ -643,14 +643,14 @@ static void *balance_volume_thread(void *v) {
         nanosleep(&ts, NULL);
 		
         /* In round robin mode less frequent polling is needed */    
-        if (common_config.file_distribution_rule != rozofs_file_distribution_size_balancing) {
+        if (common_config.file_distribution_rule == rozofs_file_distribution_size_balancing) {
           if (ts.tv_sec < 6) ts.tv_sec++;
-		}  
+        }  
         else if (common_config.file_distribution_rule == rozofs_file_distribution_weigthed_round_robin) {
     	  if (ts.tv_sec < 10) ts.tv_sec++;
-		}  
+        }  
         else {
-          if (ts.tv_sec < 15) ts.tv_sec++;
+          if (ts.tv_sec < 12) ts.tv_sec++;
         }
     }
     return 0;

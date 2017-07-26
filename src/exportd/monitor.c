@@ -357,15 +357,7 @@ int monitor_volume(volume_t *volume) {
     
 
     // Free the clone volume
-    p = NULL;
-    q = NULL;
-
-    list_for_each_forward_safe(p, q, &clone.clusters) {
-        cluster_t *entry = list_entry(p, cluster_t, list);
-        list_remove(p);
-        cluster_release(entry);
-        free(entry);
-    }
+    volume_release(&clone);
 
     status = 0;
 out:
@@ -434,15 +426,8 @@ int monitor_volume_slave(volume_t *volume) {
     
 
     // Free the clone volume
-    p = NULL;
-    q = NULL;
-
-    list_for_each_forward_safe(p, q, &clone.clusters) {
-        cluster_t *entry = list_entry(p, cluster_t, list);
-        list_remove(p);
-        cluster_release(entry);
-        free(entry);
-    }
+    // Free the clone volume
+    volume_release(&clone);
 
     status = 0;
 out:

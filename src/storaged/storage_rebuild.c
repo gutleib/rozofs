@@ -2911,12 +2911,14 @@ static inline int rebuild_storage_thread(rbs_stor_config_t *stor_confs) {
             /*
             ** Clear errors
             */
-            if (parameter.type == rbs_rebuild_type_device) {
-              rbs_storio_reinit(cid, sid, parameter.rbs_device_number, 0);
-            }   
-            else {
-	      rbs_storio_reinit(cid, sid, 0xFF, 0); 
-	    }   
+            if (parameter.type != rbs_rebuild_type_fid) {
+              if (parameter.type == rbs_rebuild_type_device) {
+                rbs_storio_reinit(cid, sid, parameter.rbs_device_number, 0);
+              }   
+              else {
+	        rbs_storio_reinit(cid, sid, 0xFF, 0); 
+	      }  
+            } 
 	    continue;
 	  }		  
 	  stor_confs[rbs_index].status = RBS_STATUS_PROCESSING_LIST;	      	    
@@ -2943,12 +2945,14 @@ static inline int rebuild_storage_thread(rbs_stor_config_t *stor_confs) {
 	    /*
 	    ** Clear errors
 	    */
-	    if (parameter.type == rbs_rebuild_type_device) {
-	      rbs_storio_reinit(cid, sid, parameter.rbs_device_number, 0);
-	    }   
-	    else {
-	      rbs_storio_reinit(cid, sid, 0xFF, 0); 
-	    }   
+            if (parameter.type != rbs_rebuild_type_fid) {            
+	      if (parameter.type == rbs_rebuild_type_device) {
+	        rbs_storio_reinit(cid, sid, parameter.rbs_device_number, 0);
+	      }   
+	      else {
+	        rbs_storio_reinit(cid, sid, 0xFF, 0); 
+	      } 
+            }  
 	    continue;
 	  }
 	  

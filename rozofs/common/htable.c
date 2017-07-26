@@ -48,10 +48,10 @@ inline void htable_release(htable_t * h) {
         list_for_each_forward_safe(p, q, it) {
             hash_entry_t *he = list_entry(p, hash_entry_t, list);
             list_remove(p);
-            free(he);
+            xfree(he);
         }
     }
-    free(h->buckets);
+    xfree(h->buckets);
     h->buckets = 0;
     h->hash = 0;
     h->cmp = 0;
@@ -209,7 +209,7 @@ void *htable_del_th(htable_t * h, void *key,uint32_t hash) {
         if (h->cmp(he->key, key) == 0) {
             value = he->value;
             list_remove(p);
-            free(he);
+            xfree(he);
             break;
         }
     }
