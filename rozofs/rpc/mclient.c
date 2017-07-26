@@ -60,92 +60,6 @@ int mclient_connect(mclient_t *clt, struct timeval timeout) {
   return -1;
 }
 
-void mclient_release(mclient_t * clt) {
-    DEBUG_FUNCTION;
-    if (clt && clt->rpcclt.client)
-        rpcclt_release(&clt->rpcclt);
-}
-
-int mclient_stat(mclient_t * clt, sstat_t * st) {
-    int status = -1;
-    mp_stat_ret_t *ret = 0;
-    mp_stat_arg_t args;
-    DEBUG_FUNCTION;
-
-    args.cid = clt->cid;
-    args.sid = clt->sid;
-
-    if (!(clt->rpcclt.client) || !(ret = mp_stat_1(&args, clt->rpcclt.client))) {
-        errno = EPROTO;
-        goto out;
-    }
-    if (ret->status != 0) {
-        errno = ret->mp_stat_ret_t_u.error;
-        warning("mclient_stat cid:%d sid:%d RozoFS error %s", 
-	         args.cid, args.sid,  
-		 strerror(errno));	
-	memset(st,0, sizeof(sstat_t));
-        goto out;
-    }
-    memcpy(st, &ret->mp_stat_ret_t_u.sstat, sizeof (sstat_t));
-
-    status = 0;
-out:
-    if (ret)
-        xdr_free((xdrproc_t) xdr_mp_stat_ret_t, (char *) ret);
-    return status;
-}
-#if 0
-int mclient_remove(mclient_t * clt, fid_t fid) {
-    int status = -1;
-    mp_status_ret_t *ret = 0;
-    mp_remove_arg_t args;
-    DEBUG_FUNCTION;
-
-    args.cid = clt->cid;
-    args.sid = clt->sid;
-    memcpy(args.fid, fid, sizeof (fid_t));
-
-    if (!(clt->rpcclt.client) || !(ret = mp_remove_1(&args, clt->rpcclt.client))) {
-        errno = EPROTO;
-        goto out;
-    }
-    if (ret->status != 0) {
-        errno = ret->mp_status_ret_t_u.error;
-        goto out;
-    }
-    status = 0;
-out:
-    if (ret)
-        xdr_free((xdrproc_t) xdr_mp_status_ret_t, (char *) ret);
-    return status;
-}
-#endif
-int mclient_remove2(mclient_t * clt, fid_t fid,uint8_t spare) {
-    int status = -1;
-    mp_status_ret_t *ret = 0;
-    mp_remove2_arg_t args;
-    DEBUG_FUNCTION;
-
-    args.cid   = clt->cid;
-    args.sid   = clt->sid;
-    args.spare = spare;
-    memcpy(args.fid, fid, sizeof (fid_t));
-
-    if (!(clt->rpcclt.client) || !(ret = mp_remove2_1(&args, clt->rpcclt.client))) {
-        errno = EPROTO;
-        goto out;
-    }
-    if (ret->status != 0) {
-        errno = ret->mp_status_ret_t_u.error;
-        goto out;
-    }
-    status = 0;
-out:
-    if (ret)
-        xdr_free((xdrproc_t) xdr_mp_status_ret_t, (char *) ret);
-    return status;
-}
 int mclient_ports(mclient_t * mclt, int * single, mp_io_address_t * io_address_p) {
     int status = -1;
     mp_ports_ret_t *ret = 0;
@@ -171,4 +85,96 @@ out:
     if (ret)
         xdr_free((xdrproc_t) xdr_mp_ports_ret_t, (char *) ret);
     return status;
+}
+
+
+
+
+
+
+
+/*
+** Services used by exportd in order to process to the file removal
+** and to the storage device availability request
+*/
+
+
+
+
+
+
+/*_________________________________________________________________
+** Ask to a logical storage to remove a file 
+** 
+** @param  clt     The client toward the storaged
+** @param  cid     The cluster identifier
+** @param  sid     The storage identifier within the cluster
+** @param  fid     The FID of the file to remove
+**
+** @retval         The total number of names found in host (at least 1)
+*/
+int mstoraged_client_remove2(mstorage_client_t * clt, cid_t cid, sid_t sid, fid_t fid,uint8_t spare) {
+  int               status = -1;
+  mp_status_ret_t * ret    = 0;
+  mp_remove2_arg_t  args;
+
+  args.cid   = cid;
+  args.sid   = sid;
+  args.spare = spare;
+  memcpy(args.fid, fid, sizeof (fid_t));
+
+  if (!(clt->rpcclt.client) || !(ret = mp_remove2_1(&args, clt->rpcclt.client))) {
+    errno = EPROTO;
+    goto out;
+  }
+  
+  if (ret->status != 0) {
+    errno = ret->mp_status_ret_t_u.error;
+    goto out;
+  }
+  status = 0;
+out:
+  if (ret) {
+    xdr_free((xdrproc_t) xdr_mp_status_ret_t, (char *) ret);
+  }  
+  return status;
+}
+/*_________________________________________________________________
+** Ask to a logical storage its devices statistics
+** 
+** @param  clt     The client toward the storaged
+** @param  cid     The cluster identifier
+** @param  sid     The storage identifier within the cluster
+** @param  st      The returned stats
+**
+** @retval         0 on success / -1 on failure
+*/
+int mstoraged_client_stat(mstorage_client_t * clt,  cid_t cid, sid_t sid, sstat_t * st) {
+  int             status = -1;
+  mp_stat_ret_t * ret = 0;
+  mp_stat_arg_t   args;
+
+  args.cid = cid;
+  args.sid = sid;
+
+  if (!(clt->rpcclt.client) || !(ret = mp_stat_1(&args, clt->rpcclt.client))) {
+    errno = EPROTO;
+    goto out;
+  }
+  
+  if (ret->status != 0) {
+    errno = ret->mp_stat_ret_t_u.error;
+    warning("mclient_stat cid:%d sid:%d RozoFS error %s", cid, sid, strerror(errno));	
+    memset(st,0, sizeof(sstat_t));
+    goto out;
+  }
+  
+  memcpy(st, &ret->mp_stat_ret_t_u.sstat, sizeof (sstat_t));
+
+  status = 0;
+out:
+  if (ret) {
+    xdr_free((xdrproc_t) xdr_mp_stat_ret_t, (char *) ret);
+  }  
+  return status;
 }

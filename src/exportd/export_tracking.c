@@ -4020,100 +4020,53 @@ out:
     return status;
 }
 /*
-**______________________________________________________________________________
+**____________________________________________________________________________
+**
+** Build the list of mstorage clients to reach every storaged required on this volume
+**
+** @param volume       The volume we are to process
+** @param cnx          The head of the list of mstorage clients to build
+**
+** @retval 0 on success / -1 on error
 */
-static int init_storages_cnx(volume_t *volume, list_t *list) {
-    list_t *p, *q;
-    int status = 0;
-    DEBUG_FUNCTION;
-    int i;
-    
-    if ((errno = pthread_rwlock_rdlock(&volume->lock)) != 0) {
-        severe("pthread_rwlock_rdlock failed (vid: %d): %s", volume->vid,
-                strerror(errno));
-        return -1;
+int mstoraged_setup_cnx(volume_t *volume, list_t * cnx) {
+  list_t *p, *q;
+  int     status = 0;
+  int     i;
+  mstorage_client_t * mclt;
+
+  list_init(cnx);
+
+  if ((errno = pthread_rwlock_rdlock(&volume->lock)) != 0) {
+    severe("pthread_rwlock_rdlock failed (vid: %d): %s", volume->vid, strerror(errno));
+    return -1;
+  }
+
+  list_for_each_forward(p, &volume->clusters) {
+
+    cluster_t *cluster = list_entry(p, cluster_t, list);
+
+    for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) {
+      list_for_each_forward(q, (&cluster->storages[i])) {
+
+        volume_storage_t *vs = list_entry(q, volume_storage_t, list);
+
+        mclt = mstorage_client_get(cnx, vs->host, cluster->cid, vs->sid);
+	if (mclt == NULL) {
+	  severe("out of memory");
+          status = -1;
+	  goto out;		
+        }
+      }
     }
-
-    list_for_each_forward(p, &volume->clusters) {
-
-        cluster_t *cluster = list_entry(p, cluster_t, list);
-        for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) {
-          list_for_each_forward(q, (&cluster->storages[i])) {
-
-              volume_storage_t *vs = list_entry(q, volume_storage_t, list);
-
-              mclient_t * mclt = mclient_allocate(vs->host, cluster->cid, vs->sid);
-	      if (mclt == NULL) {
-	        severe("out of memory");
-                status = -1;
-		goto out;		
-	      }
-
-              struct timeval timeo;
-              timeo.tv_sec = common_config.mproto_timeout;
-              timeo.tv_usec = 0;
-
-              if (mclient_connect(mclt, timeo) != 0) {
-                  warning("failed to join: %s,  %s", vs->host, strerror(errno));
-              }
-
-              cnxentry_t *cnx_entry = (cnxentry_t *) xmalloc(sizeof (cnxentry_t));
-              cnx_entry->cnx = mclt;
-
-              // Add to the list
-              list_push_back(list, &cnx_entry->list);
-
-          }
-	}
-    }
+  }
 
 out:
-    if ((errno = pthread_rwlock_unlock(&volume->lock)) != 0) {
-        severe("pthread_rwlock_unlock failed (vid: %d): %s", volume->vid,
-                strerror(errno));
-    }
+  if ((errno = pthread_rwlock_unlock(&volume->lock)) != 0) {
+    severe("pthread_rwlock_unlock failed (vid: %d): %s", volume->vid, strerror(errno));
+  }
 
-    return status;
-}
-/*
-**______________________________________________________________________________
-*/
-static mclient_t * lookup_cnx(list_t *list, cid_t cid, sid_t sid) {
-
-    list_t *p;
-    DEBUG_FUNCTION;
-
-    list_for_each_forward(p, list) {
-        cnxentry_t *cnx_entry = list_entry(p, cnxentry_t, list);
-
-        if ((sid == cnx_entry->cnx->sid) && (cid == cnx_entry->cnx->cid)) {
-            return cnx_entry->cnx;
-            break;
-        }
-    }
-
-    errno = EINVAL;
-
-    return NULL;
-}
-/*
-**______________________________________________________________________________
-*/
-static void release_storages_cnx(list_t *list) {
-
-    list_t *p, *q;
-    DEBUG_FUNCTION;
-
-    list_for_each_forward_safe(p, q, list) {
-
-        cnxentry_t *cnx_entry = list_entry(p, cnxentry_t, list);
-        mclient_release(cnx_entry->cnx);
-        if (cnx_entry->cnx != NULL)
-            free(cnx_entry->cnx);
-        list_remove(p);
-        if (cnx_entry != NULL)
-            free(cnx_entry);
-    }
+  return status;
 }
 
 /*
@@ -4507,10 +4460,8 @@ static inline int export_rm_bucket(export_t * e, uint8_t * cnx_init, list_t * co
     ** setup connections if not yet done
     */
     if (*cnx_init == 0) {
-      // Init list of connexions
-      list_init(connexions);
       *cnx_init = 1;
-      if (init_storages_cnx(e->volume, connexions) != 0) {
+      if (mstoraged_setup_cnx(e->volume, connexions) != 0) {
         goto out;
       }
     }
@@ -4518,14 +4469,14 @@ static inline int export_rm_bucket(export_t * e, uint8_t * cnx_init, list_t * co
     // For each storage associated with this file
     for (i = 0; i < safe; i++) {
 
-      mclient_t* stor = NULL;
+      mstorage_client_t * stor = NULL;
 
       if (0 == entry->current_dist_set[i]) {
         sid_count++;
         continue; // The bins file has already been deleted for this server
       }
 
-      if ((stor = lookup_cnx(connexions, entry->cid, entry->current_dist_set[i])) == NULL) {
+      if ((stor = mstoraged_lookup_cnx(connexions, entry->cid, entry->current_dist_set[i])) == NULL) {
         char   text[512];
 	char * p = text;
 
@@ -4555,10 +4506,11 @@ static inline int export_rm_bucket(export_t * e, uint8_t * cnx_init, list_t * co
       // Send remove request
       int spare;
       if (i<forward) spare = 0;
-      else                  spare = 1;
-      if (mclient_remove2(stor, entry->fid,spare) != 0) {
+      else           spare = 1;
+      
+      if (mstoraged_client_remove2(stor, entry->cid, entry->current_dist_set[i], entry->fid, spare) != 0) {
         warning("mclient_remove failed (cid: %u; sid: %u): %s",
-                stor->cid, stor->sid, strerror(errno));
+                entry->cid, entry->current_dist_set[i], strerror(errno));
 	/*
 	** Say this storage is down not to use it again 
 	** during this run; this would fill up the log file.
@@ -4631,6 +4583,8 @@ uint64_t export_rm_bins(export_t * e, uint16_t * first_bucket_idx, rmbins_thread
 
     int          processed_files = 0;
     
+    list_init(&connexions);
+    
     // Get the nb. of safe storages for this layout
     uint16_t rozofs_safe    = rozofs_get_rozofs_safe(e->layout);
     uint16_t rozofs_forward = rozofs_get_rozofs_forward(e->layout);
@@ -4668,10 +4622,9 @@ uint64_t export_rm_bins(export_t * e, uint16_t * first_bucket_idx, rmbins_thread
         *first_bucket_idx = bucket_idx;
     }
 
-    if (cnx_init == 1) {
-        // Release storage connexions
-        release_storages_cnx(&connexions);
-    }
+    // Release storage connexions
+    mstoraged_release_cnx(&connexions);
+    
     return processed_files;
 }
 
