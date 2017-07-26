@@ -149,6 +149,7 @@ void rpcclt_release(rpcclt_t *client) {
             clnt_destroy(client->client);
         }
         if (client->sock > 0) {
+            shutdown(client->sock,SHUT_RDWR); 
             close(client->sock);
         }
 	init_rpcctl_ctx(client);

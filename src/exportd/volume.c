@@ -101,7 +101,7 @@ void cluster_release(cluster_t *cluster) {
           volume_storage_t *entry = list_entry(p, volume_storage_t, list);
           list_remove(p);
           volume_storage_release(entry);
-          free(entry);
+          xfree(entry);
       }
     }
 }
@@ -136,19 +136,19 @@ void volume_release(volume_t *volume) {
         cluster_t *entry = list_entry(p, cluster_t, list);
         list_remove(p);
         cluster_release(entry);
-        free(entry);
+        xfree(entry);
     }
     list_for_each_forward_safe(p, q, &volume->cluster_distribute[0]) {
         cluster_t *entry = list_entry(p, cluster_t, list);
         list_remove(p);
         cluster_release(entry);
-        free(entry);
+        xfree(entry);
     } 
     list_for_each_forward_safe(p, q, &volume->cluster_distribute[1]) {
         cluster_t *entry = list_entry(p, cluster_t, list);
         list_remove(p);
         cluster_release(entry);
-        free(entry);
+        xfree(entry);
     }        
     if ((errno = pthread_rwlock_destroy(&volume->lock)) != 0) {
         severe("can't release volume lock: %s", strerror(errno));
@@ -172,7 +172,7 @@ int volume_safe_copy(volume_t *to, volume_t *from) {
         cluster_t *entry = list_entry(p, cluster_t, list);
         list_remove(p);
         cluster_release(entry);
-        free(entry);
+        xfree(entry);
     }
 
     to->vid = from->vid;
@@ -234,7 +234,7 @@ int volume_safe_from_list_copy(volume_t *to, list_t *from) {
         cluster_t *entry = list_entry(p, cluster_t, list);
         list_remove(p);
         cluster_release(entry);
-        free(entry);
+        xfree(entry);
     }
 
     list_for_each_forward(p, from) {
@@ -286,7 +286,7 @@ int volume_safe_to_list_copy(volume_t *from, list_t *to) {
         cluster_t *entry = list_entry(p, cluster_t, list);
         list_remove(p);
         cluster_release(entry);
-        free(entry);
+        xfree(entry);
     }
 
     list_for_each_forward(p, &from->clusters) {
@@ -330,9 +330,12 @@ uint8_t export_rotate_sid[ROZOFS_CLUSTERS_MAX] = {0};
 void volume_balance(volume_t *volume) {
     list_t *p, *q;
     list_t   * pList;
-    DEBUG_FUNCTION;
-    START_PROFILING_0(volume_balance);
+    list_t     cnx;
+    int        new;
     
+    START_PROFILING_0(volume_balance);
+
+    list_init(&cnx);    
     int local_site = export_get_local_site_number();
     
     /*
@@ -356,27 +359,23 @@ void volume_balance(volume_t *volume) {
         list_for_each_forward(q, (&cluster->storages[local_site])) {
             volume_storage_t *vs = list_entry(q, volume_storage_t, list);
 	    
-            mclient_t mclt;
+            mstorage_client_t * mclt;
 	    
-	    mclient_new(&mclt, vs->host, cluster->cid, vs->sid);
-	    
-
-            struct timeval timeo;
-            timeo.tv_sec  = common_config.mproto_timeout;
-            timeo.tv_usec = 0;
-	    int new       = 0;
+	    mclt = mstorage_client_get(&cnx, vs->host, cluster->cid, vs->sid);
             
-            if ((mclient_connect(&mclt, timeo) == 0)
-            &&  (mclient_stat(&mclt, &vs->stat) == 0)) {
-              new = 1;
+            new = 0;
+            
+            if (mclt) {
+              if (mstoraged_client_stat(mclt, cluster->cid, vs->sid, &vs->stat) == 0) {
+                new = 1;
+              }  
             }		    
 	    
 	    // Status has changed
 	    if (vs->status != new) {
 	      vs->status = new;
 	      if (new == 0) {
-                warning("storage host '%s' unreachable: %s", vs->host,
-                         strerror(errno));	        
+                warning("storage host '%s' unreachable: %s", vs->host, strerror(errno));	        
 	      }
 	      else {
                 info("storage host '%s' is now reachable", vs->host);	         
@@ -388,10 +387,12 @@ void volume_balance(volume_t *volume) {
               cluster->free += vs->stat.free;
               cluster->size += vs->stat.size;
             }
-            mclient_release(&mclt);
         }
 
     }
+    mstoraged_release_cnx(&cnx);
+    
+    
     /*
     ** case of the geo-replication
     */
@@ -402,43 +403,32 @@ void volume_balance(volume_t *volume) {
 
           list_for_each_forward(q, (&cluster->storages[1-local_site])) {
               volume_storage_t *vs = list_entry(q, volume_storage_t, list);
-              mclient_t mclt;
-	      
-	      mclient_new(&mclt, vs->host, cluster->cid, vs->sid);
 
-              struct timeval timeo;
-              timeo.tv_sec = common_config.mproto_timeout;
-              timeo.tv_usec = 0;
-
-              if (mclient_connect(&mclt, timeo) != 0) {
-
-                  // Log if only the storage host was reachable before
-                  if (1 == vs->status)
-                      warning("storage host '%s' unreachable: %s", vs->host,
-                              strerror(errno));
-
-                  // Change status
-                  vs->status = 0;
-
-              } else {
-
-                  // Log if only the storage host was not reachable before
-                  if (0 == vs->status)
-                      info("remote site storage host '%s' is now reachable", vs->host);
-
-                  if (mclient_stat(&mclt, &vs->stat) != 0) {
-                      warning("failed to stat remote site storage (cid: %u, sid: %u)"
-                              " for host: %s", cluster->cid, vs->sid, vs->host);
-                      vs->status = 0;
-                  } else {
-                      // Change status
-                      vs->status = 1;
-                  }
-              }
-              mclient_release(&mclt);
+              mstorage_client_t * mclt;
+	    
+	      mclt = mstorage_client_get(&cnx, vs->host, cluster->cid, vs->sid);
+            
+              new = 0;
+             
+              if (mclt) {
+                if (mstoraged_client_stat(mclt, cluster->cid, vs->sid, &vs->stat) == 0) {
+                  new = 1;
+                }  
+              }		    
+	      // Status has changed
+	      if (vs->status != new) {
+	        vs->status = new;
+	        if (new == 0) {
+                  warning("remote site storage host '%s' unreachable: %s", vs->host, strerror(errno));	        
+	        }
+	        else {
+                  info("remote site storage host '%s' is now reachable", vs->host);	         
+	        }
+              }  
           }
 
       }
+      mstoraged_release_cnx(&cnx);
     }  
     
       
