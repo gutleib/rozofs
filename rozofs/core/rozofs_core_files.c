@@ -100,8 +100,25 @@ void rozofs_attach_hgup_cbk(rozofs_attach_crash_cbk_t entryPoint) {
   - sig : the signal number to be ignored
   RETURN: none
   ==========================================================================*/
+void rozofs_set_handler_signal_ignore(int sig);
 void rozofs_signal_ignore(int sig){
-  signal(sig, rozofs_signal_ignore);
+  rozofs_set_handler_signal_ignore(sig);
+}
+/*__________________________________________________________________________
+  Set signal handler for ignoring signal
+  ==========================================================================
+  PARAMETERS: 
+  - sig     : the signal received 
+  RETURN: none
+  ==========================================================================*/
+void rozofs_set_handler_signal_ignore(int sig){
+  struct sigaction action;
+
+  /* Set up the structure to specify the action. */
+  action.sa_handler = rozofs_signal_ignore;
+  sigemptyset (&action.sa_mask);
+  action.sa_flags = SA_RESTART;
+  sigaction (sig, &action, NULL); 
 }
 /*__________________________________________________________________________
   This function translate a LINUX signal into a readable string
@@ -271,7 +288,7 @@ void rozofs_catch_error(int sig){
   /*
   ** Just ignore SIGTERM from now
   */
-  rozofs_signal_ignore(SIGTERM);
+  rozofs_set_handler_signal_ignore(SIGTERM);
 
   /* Log SIGTERM */
   if (sig == SIGTERM) {
@@ -321,12 +338,29 @@ void rozofs_catch_error(int sig){
   raise (sig);
 }
 /*__________________________________________________________________________
+  Set signal handler for fatal errors
+  ==========================================================================
+  PARAMETERS: 
+  - sig     : the signal received 
+  RETURN: none
+  ==========================================================================*/
+void rozofs_set_handler_catch_error(int sig){
+  struct sigaction action;
+
+  /* Set up the structure to specify the action. */
+  action.sa_handler = rozofs_catch_error;
+  sigemptyset (&action.sa_mask);
+  action.sa_flags = SA_RESTART;
+  sigaction (sig, &action, NULL); 
+}
+/*__________________________________________________________________________
   generic handler for hangup signal
   ==========================================================================
   PARAMETERS: 
   - sig : the signal received 
   RETURN: none
   ==========================================================================*/
+void rozofs_set_handler_hangup(int sig);
 void rozofs_catch_hangup(int sig){
   int idx;
  
@@ -338,10 +372,27 @@ void rozofs_catch_hangup(int sig){
     rozofs_hgup_cbk[idx](sig);
   }  
   
-  signal (sig, rozofs_catch_hangup);
+  rozofs_set_handler_hangup (sig);
 }
 /*__________________________________________________________________________
-  Declare a list of signals and the handler to process them
+  Set signal handler for hangup signal
+  ==========================================================================
+  PARAMETERS: 
+  - sig     : the signal received 
+  RETURN: none
+  ==========================================================================*/
+void rozofs_set_handler_hangup(int sig){
+  struct sigaction action;
+
+  /* Set up the structure to specify the action. */
+  action.sa_handler = rozofs_catch_hangup;
+  sigemptyset (&action.sa_mask);
+  action.sa_flags = SA_RESTART;
+  sigaction (sig, &action, NULL); 
+}
+
+/*__________________________________________________________________________
+  Declare a list of signals and their handler
   ==========================================================================
   @param application       the application name. This will be the directory
                            name where its core files will e saved
@@ -382,37 +433,37 @@ void rozofs_signals_declare(char * application, int max_core_files) {
   
   /* Declare the fatal errors handler */
  
-  signal (SIGQUIT, rozofs_catch_error);
-  signal (SIGILL,  rozofs_catch_error);
-  signal (SIGBUS,  rozofs_catch_error);
-  signal (SIGSEGV, rozofs_catch_error);
-  signal (SIGFPE,  rozofs_catch_error);
-  signal (SIGSYS,  rozofs_catch_error);
-  signal (SIGXCPU, rozofs_catch_error);  
-  signal (SIGXFSZ, rozofs_catch_error);
-  signal (SIGABRT, rozofs_catch_error);
-  signal (SIGINT,  rozofs_catch_error);
-  signal (SIGTERM, rozofs_catch_error);
+  rozofs_set_handler_catch_error (SIGQUIT);
+  rozofs_set_handler_catch_error (SIGILL);
+  rozofs_set_handler_catch_error (SIGBUS);
+  rozofs_set_handler_catch_error (SIGSEGV);
+  rozofs_set_handler_catch_error (SIGFPE);
+  rozofs_set_handler_catch_error (SIGSYS);
+  rozofs_set_handler_catch_error (SIGXCPU);  
+  rozofs_set_handler_catch_error (SIGXFSZ);
+  rozofs_set_handler_catch_error (SIGABRT);
+  rozofs_set_handler_catch_error (SIGINT);
+  rozofs_set_handler_catch_error (SIGTERM);
   
   /* Declare the reload handler */
   
-  signal (SIGHUP, rozofs_catch_hangup);
+  rozofs_set_handler_hangup (SIGHUP);
 
   /* Ignored signals */
   
-  signal(SIGTSTP, SIG_IGN);
-  signal(SIGTTOU, SIG_IGN);
-  signal(SIGTTIN, SIG_IGN);
-  signal(SIGWINCH, SIG_IGN);
+  rozofs_set_handler_signal_ignore(SIGTSTP);
+  rozofs_set_handler_signal_ignore(SIGTTOU);
+  rozofs_set_handler_signal_ignore(SIGTTIN);
+  rozofs_set_handler_signal_ignore(SIGWINCH);
 
   /* 
    * redirect SIGPIPE signal to avoid the end of the 
    * process when a TCP connexion is down
    */   
-  rozofs_signal_ignore(SIGPIPE);
+  rozofs_set_handler_signal_ignore(SIGPIPE);
   
   /*
   ** SIG child
   */
-  rozofs_signal_ignore(SIGCHLD);
+  rozofs_set_handler_signal_ignore(SIGCHLD);
 }
