@@ -144,7 +144,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
       pChar += rozofs_string_append(pChar, ",\n");
     }
     pChar += rozofs_string_append(pChar, "      { \"ope\" : \"");
-    pChar += rozofs_string_padded_append(pChar, 18, rozofs_left_alignment, rozofs_rcmd_ope2String(ope));
+    pChar += rozofs_string_padded_append(pChar, 18, rozofs_left_alignment, rozofs_rcmd_ope_e2String(ope));
     pChar += rozofs_string_append(pChar, "\", \"count\" : ");
     pChar += rozofs_u64_append(pChar, rozofs_rcmd_profiler[ope].count);
     pChar += rozofs_string_append(pChar, "\t, \"errors\" : ");    
@@ -202,7 +202,7 @@ void show_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
       pChar += rozofs_string_append(pChar, ",\n");
     }
     pChar += rozofs_string_append(pChar, "      { \"status\" : \"");
-    pChar += rozofs_string_padded_append(pChar, 28, rozofs_left_alignment, rozofs_rcmd_status2String(status));
+    pChar += rozofs_string_padded_append(pChar, 28, rozofs_left_alignment, rozofs_rcmd_status_e2String(status));
     pChar += rozofs_string_append(pChar, "\", \"count\" : ");
     pChar += rozofs_u64_append(pChar, rozofs_rcmd_error[status]);
     pChar += rozofs_string_append(pChar, "}");    
@@ -1083,8 +1083,8 @@ void * run_rcmd_sub_process(rozofs_rcmd_thread_ctx_t * p) {
     */ 
     if (res != rozofs_rcmd_status_success) {
       RCMD_LOG(info,"%s : %s",
-               rozofs_rcmd_ope2String(ope),
-               rozofs_rcmd_status2String(res));
+               rozofs_rcmd_ope_e2String(ope),
+               rozofs_rcmd_status_e2String(res));
       rozofs_rcmd_profiler[ope].error++; 
       if (res > rozofs_rcmd_status_max) {
         res = rozofs_rcmd_status_max;

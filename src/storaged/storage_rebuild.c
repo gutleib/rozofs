@@ -1857,7 +1857,7 @@ int rbs_build_job_list_from_export() {
   */
   res = rozofs_rcmd_rebuild_list(socketId,command);
   if (res != rozofs_rcmd_status_success) {
-    REBUILD_FAILED("Can not make rebuild job list %s", rozofs_rcmd_status2String(res));  
+    REBUILD_FAILED("Can not make rebuild job list %s", rozofs_rcmd_status_e2String(res));  
     goto out;
   }    
   
@@ -1885,7 +1885,7 @@ int rbs_build_job_list_from_export() {
     
     res = rozofs_rcmd_getfile(socketId, remote, local);
     if (res != rozofs_rcmd_status_success) {
-      REBUILD_FAILED("Can not retrieve file %s -> %s. %s", remote, local, rozofs_rcmd_status2String(res));  
+      REBUILD_FAILED("Can not retrieve file %s -> %s. %s", remote, local, rozofs_rcmd_status_e2String(res));  
       goto out;
     }        
       
@@ -1912,7 +1912,7 @@ int rbs_build_job_list_from_export() {
 
       res = rozofs_rcmd_getfile(socketId,remote, local);
       if (res != rozofs_rcmd_status_success) {
-        REBUILD_FAILED("Can not retrieve file %s -> %s. %s", remote, local, rozofs_rcmd_status2String(res));  
+        REBUILD_FAILED("Can not retrieve file %s -> %s. %s", remote, local, rozofs_rcmd_status_e2String(res));  
         goto out;
       }        
     }

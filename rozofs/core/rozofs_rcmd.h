@@ -57,35 +57,7 @@ typedef enum _rozofs_rcmd_status_e {
   rozofs_rcmd_status_max
 } rozofs_rcmd_status_e;
 
-/*__________________________________________________________________________
-** Return a string from a status value
-**
-** @param   status   a status value
-**
-** @retval  a string of the status field
-**
-**==========================================================================*/
-static inline char *  rozofs_rcmd_status2String(rozofs_rcmd_status_e status) {
-  switch(status) {
-    case rozofs_rcmd_status_cmd: return "cmd";
-    case rozofs_rcmd_status_success: return "success";
-    case rozofs_rcmd_status_failed : return "failed";
-    case rozofs_rcmd_status_unexpected_command: return "unexpected command";
-    case rozofs_rcmd_status_no_connection: return "no connection";
-    case rozofs_rcmd_status_remote_disconnection: return "remote disconnection";
-    case rozofs_rcmd_status_protocol_error: return "protocol error";
-    case rozofs_rcmd_status_missing_param: return "missing parameter";
-    case rozofs_rcmd_status_message_too_big: return "message too big";
-    case rozofs_rcmd_status_out_of_memory: return "out of memory";
-    case rozofs_rcmd_status_server_error: return "server error";
-    case rozofs_rcmd_status_local_error: return "local error";
-    case rozofs_rcmd_status_no_such_file: return"no such file";
-    case rozofs_rcmd_status_open_failure: return "open failure";
-    case rozofs_rcmd_status_read_failure: return "read failure";
-    case rozofs_rcmd_status_max: return "status max";
-  }
-  return "Bad code";  
-}
+#include "rozofs_rcmd_status_e2String.h"
 
 /*
 ** List of operations
@@ -110,27 +82,9 @@ typedef enum _rozofs_rcmd_ope_e {
   
   rozofs_rcmd_ope_max
 } rozofs_rcmd_ope_e;
-/*__________________________________________________________________________
-** Return a string from an operation value
-**
-** @param   ope   an operation value
-**
-** @retval  a string of the operation field
-**
-**==========================================================================*/
-static inline char *  rozofs_rcmd_ope2String(rozofs_rcmd_ope_e ope) {
-  switch(ope) {
-    case rozofs_rcmd_ope_unknown: return "unknown";
-    case rozofs_rcmd_ope_rebuild_list: return "rebuild list";
-    case rozofs_rcmd_ope_rebuild_list_clear: return "rebuild list clear";
-    case rozofs_rcmd_ope_getfile : return "getfile";
-    case rozofs_rcmd_ope_puttmpfile : return "puttmpfile";
-    case rozofs_rcmd_ope_fid2path : return "fid2path";
-    case rozofs_rcmd_ope_getrmfile : return "getrmfile";
-    case rozofs_rcmd_ope_max: return "ope max";
-  }
-  return "??";  
-}
+
+#include "rozofs_rcmd_ope_e2String.h"
+
 
 /*
 ** Remote commande/response header

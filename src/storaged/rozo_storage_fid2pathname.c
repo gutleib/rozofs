@@ -312,7 +312,7 @@ int main(int argc, char *argv[]) {
   sprintf(remote_fname,"%s.%d",FNAME,getpid());
   res = rozofs_rcmd_puttmpfile(socketId,input_path, remote_fname);
   if (res != rozofs_rcmd_status_success) {
-    fatal_exit(res,"Error rozofs_rcmd_puttmpfile %s",rozofs_rcmd_status2String(res));
+    fatal_exit(res,"Error rozofs_rcmd_puttmpfile %s",rozofs_rcmd_status_e2String(res));
   } 
 
   
@@ -327,14 +327,14 @@ int main(int argc, char *argv[]) {
   }  
   res = rozofs_rcmd_fid2path(socketId, param);
   if (res != rozofs_rcmd_status_success) {
-    fatal_exit(res,"Error rozofs_rcmd_fid2path %s", rozofs_rcmd_status2String(res));
+    fatal_exit(res,"Error rozofs_rcmd_fid2path %s", rozofs_rcmd_status_e2String(res));
   } 
   
   sprintf(remote_fname,"/tmp/%s.%d.out",FNAME,getpid());
   
   res = rozofs_rcmd_getrmfile(socketId, remote_fname, output_path, 1);
   if (res != rozofs_rcmd_status_success) {
-    fatal_exit(res,"Error rozofs_rcmd_getrmfile %s", rozofs_rcmd_status2String(res));
+    fatal_exit(res,"Error rozofs_rcmd_getrmfile %s", rozofs_rcmd_status_e2String(res));
   }   
     
   rozofs_rcmd_disconnect_from_server(socketId);
