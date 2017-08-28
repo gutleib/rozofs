@@ -229,32 +229,19 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
 
    
    uint8_t   rozofs_safe = rozofs_get_rozofs_safe(storcli_truncate_rq_p->layout);
-   int lbg_in_distribution = 0;
    for (i = 0; i  <rozofs_safe ; i ++)
    {
     /*
     ** Get the load balancing group associated with the sid
     */
     int lbg_id = rozofs_storcli_get_lbg_for_sid(storcli_truncate_rq_p->cid,storcli_truncate_rq_p->dist_set[i]);
-    if (lbg_id < 0)
-    {
-      /*
-      ** there is no associated between the sid and the lbg. It is typically the case
-      ** when a new cluster has been added to the configuration and the client does not
-      ** know yet the configuration change
-      */
-      //severe("sid is unknown !! %d\n",storcli_truncate_rq_p->dist_set[i]);
-      continue;    
-    }
-     rozofs_storcli_lbg_prj_insert_lbg_and_sid(working_ctx_p->lbg_assoc_tb,lbg_in_distribution,
+     rozofs_storcli_lbg_prj_insert_lbg_and_sid(working_ctx_p->lbg_assoc_tb,i,
                                                 lbg_id,
                                                 storcli_truncate_rq_p->dist_set[i]);  
 
      rozofs_storcli_lbg_prj_insert_lbg_state(working_ctx_p->lbg_assoc_tb,
-                                             lbg_in_distribution,
-                                             NORTH_LBG_GET_STATE(working_ctx_p->lbg_assoc_tb[lbg_in_distribution].lbg_id));    
-     lbg_in_distribution++;
-     if (lbg_in_distribution == rozofs_safe) break;
+                                             i,
+                                             NORTH_LBG_GET_STATE(working_ctx_p->lbg_assoc_tb[i].lbg_id));    
 
    }
    /*
@@ -326,7 +313,7 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
        nb_blocks--;
        int ret;
        ret = stc_rng_insert((void*)working_ctx_p,
-               STORCLI_READ,working_ctx_p->fid_key,
+               STORCLI_TRUNCATE,working_ctx_p->fid_key,
                0,nb_blocks,
                &working_ctx_p->sched_idx);
        if (ret == 0)

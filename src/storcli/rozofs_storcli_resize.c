@@ -327,22 +327,17 @@ void rozofs_storcli_resize_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
     ** Get the load balancing group associated with the sid
     */
     int lbg_id = rozofs_storcli_get_lbg_for_sid(storcli_read_rq_p->cid,used_dist_set[i]);
-    if (lbg_id < 0)
-    {
-      /*
-      ** there is no associated between the sid and the lbg. It is typically the case
-      ** when a new cluster has been added to the configuration and the client does not
-      ** know yet the configuration change
-      */
-      continue;    
+    if (lbg_id >= 0) {
+      lbg_in_distribution++;
     }
-    rozofs_storcli_lbg_prj_insert_lbg_and_sid(working_ctx_p->lbg_assoc_tb,lbg_in_distribution,
+      
+    rozofs_storcli_lbg_prj_insert_lbg_and_sid(working_ctx_p->lbg_assoc_tb,i,
                                               lbg_id,
                                               used_dist_set[i]);   
     rozofs_storcli_lbg_prj_insert_lbg_state(lbg_assoc_p,
-                                            lbg_in_distribution,
-                                            NORTH_LBG_GET_STATE(lbg_assoc_p[lbg_in_distribution].lbg_id));    
-    lbg_in_distribution++;
+                                            i,
+                                            NORTH_LBG_GET_STATE(lbg_assoc_p[i].lbg_id));    
+    
 
   }
   if (lbg_in_distribution < rozofs_inverse)

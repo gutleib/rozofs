@@ -260,7 +260,7 @@ north_lbg_ctx_t *north_lbg_getObjCtx_p(uint32_t north_lbg_ctx_id) {
         /*
          ** the MS index is out of range
          */
-        severe( "north_lbg_getObjCtx_p(%d): index is out of range, index max is %d", index, north_lbg_context_count);
+        //severe( "north_lbg_getObjCtx_p(%d): index is out of range, index max is %d", index, north_lbg_context_count);
         return (north_lbg_ctx_t*) NULL;
     }
     p = (north_lbg_ctx_t*) ruc_objGetRefFromIdx((ruc_obj_desc_t*) north_lbg_context_freeListHead,

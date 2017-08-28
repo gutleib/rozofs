@@ -915,7 +915,7 @@ int north_lbg_get_state(int lbg_idx)
   lbg_p = north_lbg_getObjCtx_p(lbg_idx);
   if (lbg_p == NULL) 
   {
-    warning("north_lbg_get_state: no such instance %d ",lbg_idx);
+    //warning("north_lbg_get_state: no such instance %d ",lbg_idx);
     return NORTH_LBG_DEPENDENCY;
   }
   return lbg_p->state;
@@ -940,7 +940,7 @@ int north_lbg_is_available(int lbg_idx)
   lbg_p = north_lbg_getObjCtx_p(lbg_idx);
   if (lbg_p == NULL) 
   {
-    warning("north_lbg_is_available: no such instance %d ",lbg_idx);
+    //warning("north_lbg_is_available: no such instance %d ",lbg_idx);
     return 0;
   }
   if (lbg_p->state != NORTH_LBG_UP) return 0;
