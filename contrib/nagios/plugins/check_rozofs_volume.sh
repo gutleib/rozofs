@@ -162,7 +162,96 @@ scan_value () {
   fi
   value=$2
 }
+do_ping() {
+  
+  ping $1 -c 1 -w 1 >> /dev/null
+  if [ $? == 0 ]
+  then
+    return 0
+  fi  
 
+  ping $1 -c 1 -w 1 >> /dev/null
+  if [ $? == 0 ]
+  then
+    return 0
+  fi  
+  return 
+}
+# Run rozodiag vfstat_vol to check a given volume
+#
+do_vfstat_vol() {
+ 
+  attempt=1
+  cmd="vfstat_vol"
+
+  while [ 1 ]
+  do
+  
+    # Rozodiag command
+    $ROZDBG -c $cmd >  $VFSTAT
+        
+    # No answer
+    res=`grep $cmd $VFSTAT`
+    case $res in
+      "") return 1;;
+    esac
+    
+    # Check the given volume is there
+    STRING="Volume: $volume"
+    res=`grep "$STRING" $VFSTAT`
+    case $res in
+      "");;
+      *) return 0;;  
+    esac
+    
+    # No such volume. Re attempt if max not exceeded
+    case $attempt in
+      "3") return 2;;
+    esac  
+    attempt=$((attempt+1))
+    sleep 1
+  done
+  
+  return 1
+}
+
+# Run rozodiag do_vfstat_stor to check a given volume
+#
+do_vfstat_stor() {
+ 
+  attempt=1
+  cmd="vfstat_stor"
+
+  while [ 1 ]
+  do
+  
+    # Rozodiag command
+    $ROZDBG -c $cmd >  $VFSTAT
+        
+    # No answer
+    res=`grep $cmd $VFSTAT`
+    case $res in
+      "") return 1;;
+    esac
+    
+    # Check the given volume is there
+    STRING="Volume: $volume"
+    res=`awk '{if ($1==volume) printf("0K");}' volume=$volume $VFSTAT`
+    case $res in
+      "");;
+      *) return 0;;  
+    esac
+    
+    # No such volume. Re attempt if max not exceeded
+    case $attempt in
+      "3") return 2;;
+    esac  
+    attempt=$((attempt+1))
+    sleep 1
+  done
+  
+  return 1
+}
 
 date > /var/tmp/rozo
 echo "call $0 $1 $2 $3 $4 $5 $6 $7 $8 $9" >> /var/tmp/rozo
@@ -281,14 +370,23 @@ fi
 host=`echo $host | sed 's/\// /' `
 ok=0
 hosts=""
+initial_hosts="$host"
 for h in $host
 do
-  ping $h -c 1 -w 2 >> /dev/null
+  
+  do_ping $h
   if [ $? == 0 ]
   then
     hosts[$ok]=$h
+    if [ -z $pinged_hosts ]
+    then
+      pinged_hosts="$h"
+    else
+      pinged_hosts="$pinged_hosts $h"     
+    fi  
     ok=$((ok+1))
   fi  
+    
 done  
 case $ok in
   "0") display_output $STATE_CRITICAL "$host do not respond to ping"
@@ -301,6 +399,7 @@ esac
 
 
 ok=0
+errors=""
 for i in $(seq ${#hosts[@]} )
 do
 
@@ -308,15 +407,15 @@ do
 
   # Run vfstat_vol debug command on export to get volume statistics
 
-  $ROZDBG -c vfstat_vol >  $VFSTAT
-  res=`grep "Volume:" $VFSTAT`
+  do_vfstat_vol
+  res=$?
   case $res in
-    "");;
-    *) ok=1; break;;  
-  esac
+    "0") ok=1; break;;
+    *) errors="$errors $res"
+  esac  
 done
 case $ok in
-  "0") display_output $STATE_CRITICAL "$host:$port do not respond to rozodiag vfstat_vol";;
+  "0") display_output $STATE_CRITICAL "CFG[$initial_hosts] PING[$pinged_hosts] ERRORS[$errors] do not respond to rozodiag vfstat_vol";;
 esac
 host=${hosts[$((i-1))]}
 
@@ -365,10 +464,11 @@ percent=`echo $res | awk '{print $2}'`
 
 # Run vfstat_stor debug command on export to check storage status
 
-$ROZDBG -c vfstat_stor >  $VFSTAT
-res=`grep "Vid" $VFSTAT`
+do_vfstat_stor
+res=$?
 case $res in
-  "") {
+  "0");;
+  *) {
     display_output $STATE_CRITICAL "$host do not respond to rozodiag vfstat_stor"
   };;  
 esac
