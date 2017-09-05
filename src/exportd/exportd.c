@@ -821,117 +821,127 @@ static void *export_tracking_thread(void *v) {
 
 /*
  *_______________________________________________________________________
+ ** Do one monitoring attempt on master exportd
+ ** It updates gprofiler structure used for rozodiag 
+ ** and writes volume information under /var/run/exportd/volume_<idx>
+ */
+static void do_monitor_master() {
+  list_t *p;
+  uint32_t nb_volumes = 0;
+
+  if ((errno = pthread_rwlock_tryrdlock(&volumes_lock)) != 0) {
+    warning("can't lock volumes, monitoring_thread deferred.");
+    return;
+  }
+
+  list_for_each_forward(p, &volumes) {
+    if (monitor_volume(&list_entry(p, volume_entry_t, list)->volume, nb_volumes) != 0) {
+      severe("monitor thread failed: %s", strerror(errno));
+    }
+    nb_volumes++;
+  }
+
+  if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
+    severe("can't unlock volumes, potential dead lock.");
+  }
+  gprofiler->nb_volumes = nb_volumes;
+}
+/*
+ *_______________________________________________________________________
  */
 static void *monitoring_thread(void *v) {
-    struct timespec ts = {30, 0};
-    list_t *p;
+  int ts = 1;
 
-    uma_dbg_thread_add_self("Monitor");
+  uma_dbg_thread_add_self("Monitor");
 
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+  pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
-    for (;;) {
-        if ((errno = pthread_rwlock_tryrdlock(&volumes_lock)) != 0) {
-            warning("can't lock volumes, monitoring_thread deferred.");
-            nanosleep(&ts, NULL);
-            continue;
-        }
+  for (;;) {
 
-        gprofiler->nb_volumes = 0;
-
-        list_for_each_forward(p, &volumes) {
-            if (monitor_volume(&list_entry(p, volume_entry_t, list)->volume) != 0) {
-                severe("monitor thread failed: %s", strerror(errno));
-            }
-            gprofiler->nb_volumes++;
-        }
-
-        if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
-            severe("can't unlock volumes, potential dead lock.");
-            continue;
-        }
-
-#if 0
-        if ((errno = pthread_rwlock_tryrdlock(&exports_lock)) != 0) {
-            warning("can't lock exports, monitoring_thread deferred.");
-            nanosleep(&ts, NULL);
-            continue;
-        }
-
-        gprofiler->nb_exports = 0;
-
-        list_for_each_forward(p, &exports) {
-            if (monitor_export(&list_entry(p, export_entry_t, list)->export) != 0) {
-                severe("monitor thread failed: %s", strerror(errno));
-            }
-            gprofiler->nb_exports++;
-        }
-
-        if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
-            severe("can't unlock exports, potential dead lock.");
-            continue;
-        }
-#endif
-        nanosleep(&ts, NULL);
+    /*
+    ** Sleep and increase delay up to 32 seconds
+    */    
+    sleep(ts);
+    if (ts<32) {
+      ts *= 2;
     }
-    return 0;
+    
+    do_monitor_master();
+  }
+  return 0;
 }
 
 /*
  *_______________________________________________________________________
+ ** Do one monitoring attempt on slave exportd
+ ** It updates gprofiler structure used for rozodiag 
+ ** and writes export information under /var/run/exportd/export_<idx>
+ */
+/*
+ *_______________________________________________________________________
+ */
+static void do_monitor_slave() {
+  list_t *p;
+  uint32_t nb_volumes = 0;
+  
+  if ((errno = pthread_rwlock_tryrdlock(&volumes_lock)) != 0) {
+    warning("can't lock volumes, monitoring_thread deferred.");
+    return;
+  }
+
+  list_for_each_forward(p, &volumes) {
+    if (monitor_volume_slave(&list_entry(p, volume_entry_t, list)->volume, nb_volumes) != 0) {
+      severe("monitor thread failed: %s", strerror(errno));
+    }
+    nb_volumes++;
+  }
+
+  if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
+    severe("can't unlock volumes, potential dead lock.");
+  }
+
+  if ((errno = pthread_rwlock_tryrdlock(&exports_lock)) != 0) {
+    warning("can't lock exports, monitoring_thread deferred.");
+    return;
+  }
+  gprofiler->nb_volumes = nb_volumes;
+
+  gprofiler->nb_exports = 0;
+
+  list_for_each_forward(p, &exports) {
+    if (monitor_export(&list_entry(p, export_entry_t, list)->export) != 0) {
+      severe("monitor thread failed: %s", strerror(errno));
+    }
+    gprofiler->nb_exports++;
+  }
+
+  if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
+    severe("can't unlock exports, potential dead lock.");
+  }
+}
+/*
+ *_______________________________________________________________________
  */
 static void *monitoring_thread_slave(void *v) {
-    struct timespec ts = {10, 0};
-    list_t *p;
+  int ts = 0;
 
-    uma_dbg_thread_add_self("Monitor");
+  uma_dbg_thread_add_self("Monitor");
 
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+  pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
-    for (;;) {
-        if ((errno = pthread_rwlock_tryrdlock(&volumes_lock)) != 0) {
-            warning("can't lock volumes, monitoring_thread deferred.");
-            nanosleep(&ts, NULL);
-            continue;
-        }
+  for (;;) {
 
-        gprofiler->nb_volumes = 0;
-
-        list_for_each_forward(p, &volumes) {
-            if (monitor_volume_slave(&list_entry(p, volume_entry_t, list)->volume) != 0) {
-                severe("monitor thread failed: %s", strerror(errno));
-            }
-            gprofiler->nb_volumes++;
-        }
-
-        if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
-            severe("can't unlock volumes, potential dead lock.");
-            continue;
-        }
-
-        if ((errno = pthread_rwlock_tryrdlock(&exports_lock)) != 0) {
-            warning("can't lock exports, monitoring_thread deferred.");
-            nanosleep(&ts, NULL);
-            continue;
-        }
-
-        gprofiler->nb_exports = 0;
-
-        list_for_each_forward(p, &exports) {
-            if (monitor_export(&list_entry(p, export_entry_t, list)->export) != 0) {
-                severe("monitor thread failed: %s", strerror(errno));
-            }
-            gprofiler->nb_exports++;
-        }
-
-        if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
-            severe("can't unlock exports, potential dead lock.");
-            continue;
-        }
-
-        nanosleep(&ts, NULL);
+    /*
+    ** Sleep and ijncrease delay up to 10 seconds
+    */
+    sleep(ts);
+    if (ts<10) {
+      ts++;
     }
-    return 0;
+    
+    do_monitor_slave();      
+  }
+  return 0;
 }
 /*
 **____________________________________________________________________________
