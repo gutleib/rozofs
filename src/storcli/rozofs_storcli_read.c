@@ -502,12 +502,9 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
   uint8_t   projection_id;
   int       error;
   int i;
-  int       rotate=0;
   rozofs_storcli_lbg_prj_assoc_t  *lbg_assoc_p = working_ctx_p->lbg_assoc_tb;
   rozofs_storcli_projection_ctx_t *prj_cxt_p   = working_ctx_p->prj_ctx;   
   uint8_t used_dist_set[ROZOFS_SAFE_MAX_STORCLI];
-  uint8_t rotate_modulo;
-  uint8_t local_storage_idx;
   int     j;
 
      
@@ -537,11 +534,8 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
     goto end ;
   }  
   
-  /*
-  ** Rotate the distribution set for using all the first forward storages
-  */ 
+ 
 #if 1
-  rotate = storcli_read_rq_p->sid; 
   i = 0;
   j = 0;
   
@@ -576,12 +570,11 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
       /*
       ** Check whether one storage is local in the 1rst foward storages of the distribution
       */
-      local_storage_idx = 0xFF;
       for (i = 0; i  <rozofs_forward ; i ++)
       {
 		int lbg_id = rozofs_storcli_get_lbg_for_sid(storcli_read_rq_p->cid,storcli_read_rq_p->dist_set[i]);
 		if (north_lbg_is_local(lbg_id)) {
-		  used_dist_set[j] = storcli_read_rq_p->cid,storcli_read_rq_p->dist_set[i];    
+		  used_dist_set[j] = storcli_read_rq_p->dist_set[i];    
                   j++;
 		}
       }  
@@ -589,7 +582,7 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
       {
 		int lbg_id = rozofs_storcli_get_lbg_for_sid(storcli_read_rq_p->cid,storcli_read_rq_p->dist_set[i]);
 		if (!north_lbg_is_local(lbg_id)) {
-		  used_dist_set[j] = storcli_read_rq_p->cid,storcli_read_rq_p->dist_set[i];    
+		  used_dist_set[j] = storcli_read_rq_p->dist_set[i];    
                   j++;
 		}
       }        
