@@ -1,0 +1,13 @@
+[Unit]
+Description=RozoFS filesystem (storage daemon)
+Documentation=man:rozofs(8) man:storaged(8) man:storage.conf(5)
+Documentation=http://rozofs.github.io/rozofs/
+After=network.target rpcbind.service
+
+[Service]
+Type=forking
+ExecStart=/bin/sh -c '/usr/bin/rozolauncher start /var/run/launcher_storaged.pid storaged & '
+PIDFile=/var/run/launcher_storaged.pid
+
+[Install]
+WantedBy=multi-user.target

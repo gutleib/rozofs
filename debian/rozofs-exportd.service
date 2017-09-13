@@ -1,0 +1,15 @@
+[Unit]
+Description=RozoFS filesystem (export daemon)
+Documentation=man:rozofs(8) man:exportd(8) man:export.conf(5)
+Documentation=http://rozofs.github.io/rozofs/
+After=network.target rpcbind.service
+Requires=rpcbind.service
+
+[Service]
+Type=forking
+PIDFile=/var/run/exportd.pid
+ExecStart=/usr/bin/exportd
+ExecReload=/usr/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
