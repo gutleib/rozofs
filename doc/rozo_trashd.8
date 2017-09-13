@@ -40,7 +40,9 @@ During the deletion process, the rozo_trashd process periodically provides stati
 .RE
 
 These statistics are found in the following files:
-.I /var/run/rozo_trashd/result_trash_<eid> (/var/run/rozo_trashd/result_trash_<eid>.json)
+.I /var/run/rozo_trashd/result_trash_<eid>
+or
+.I /var/run/rozo_trashd/result_trash_<eid>.json
 where 
 .I <eid> 
 designates the export for which 
@@ -116,11 +118,15 @@ When that option is provided, the frequency , deletion rate, scanning rate and v
 operates automatically in continous mode  (default: none).
 .RE
 .SH FILES
-.I /var/run/rozo_trashd/result_trash_<eid> (/var/run/rozo_trashd/result_trash_<eid>.json)
+.I /var/run/rozo_trashd/result_trash_<eid>
+,
+.I /var/run/rozo_trashd/result_trash_<eid>.json
 .RS
 The current result files associated with  exportd <eid>. 
 .RE
-.I /etc/rozofs/export.conf (/usr/local/etc/rozofs/export.conf)
+.I /etc/rozofs/export.conf
+or
+.I /usr/local/etc/rozofs/export.conf
 .RS
 The system wide configuration file. See
 .BR export.conf (5)
@@ -160,4 +166,3 @@ Rozo Systems <http://www.rozofs.com>
 .BR export.conf (5),
 .BR rozo_trashd.conf (5),
 .BR exportd (8)
-
