@@ -278,7 +278,19 @@ for ins in ${instance_list}; do
   res=`grep "LBG Name" $TMPFILE`
   case $res in
     "") {
-      display_output $STATE_CRITICAL "$host:mount:$ins do not respond to rozodiag"
+      # Try to get the mountpoint from fstab
+      mountpoint=$(grep instance=${ins} /etc/fstab  | cut -f2 -d" ")
+
+      if [ ${host} = "localhost" ] && [ ! -z ${mountpoint} ]
+      then
+        message="mountpoint: ${mountpoint} do not respond to rozodiag"
+      elif [ ! -z ${mountpoint} ]
+      then
+        message="on host ${host}, mountpoint: ${mountpoint} do not respond to rozodiag"
+      else
+        message="$host:mount:$ins $mountpoint do not respond to rozodiag"
+      fi
+      display_output $STATE_CRITICAL "${message}"
     };;  
   esac
 
