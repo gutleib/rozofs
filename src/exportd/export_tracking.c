@@ -6615,7 +6615,7 @@ out:
   *p++ = ' ';\
 }
 
-#define DISPLAY_ATTR_LONG(name,val) {\
+#define DISPLAY_ATTR_ULONG(name,val) {\
   DISPLAY_ATTR_TITLE(name); \
   p += rozofs_u64_append(p,val); \
   p += rozofs_eol(p);\
@@ -6627,6 +6627,11 @@ out:
   p += rozofs_eol(p);\
 }
 
+#define DISPLAY_ATTR_UINT(name,val) {\
+  DISPLAY_ATTR_TITLE(name); \
+  p += rozofs_u32_append(p,val); \
+  p += rozofs_eol(p);\
+}
 #define DISPLAY_ATTR_2INT(name,val1,val2) {\
   DISPLAY_ATTR_TITLE(name); \
   p += rozofs_i32_append(p,val1); \
@@ -6634,7 +6639,13 @@ out:
   p += rozofs_i32_append(p,val2); \
   p += rozofs_eol(p);\
 }  
-  
+#define DISPLAY_ATTR_2UINT(name,val1,val2) {\
+  DISPLAY_ATTR_TITLE(name); \
+  p += rozofs_u32_append(p,val1); \
+  *p++='/'; \
+  p += rozofs_u32_append(p,val2); \
+  p += rozofs_eol(p);\
+}   
 #define DISPLAY_ATTR_HASH(name,val1,val2,val3) {\
   DISPLAY_ATTR_TITLE(name); \
   p += rozofs_x32_append(p,val1); \
@@ -6687,10 +6698,10 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   uint8_t   rozofs_safe = rozofs_get_rozofs_safe(e->layout);
   rozofs_inode_t inode; 
   
-  DISPLAY_ATTR_INT("EID", e->eid);
-  DISPLAY_ATTR_INT("VID", e->volume->vid);
-  DISPLAY_ATTR_INT("LAYOUT", e->layout);  
-  DISPLAY_ATTR_INT("BSIZE", e->bsize);  
+  DISPLAY_ATTR_UINT("EID", e->eid);
+  DISPLAY_ATTR_UINT("VID", e->volume->vid);
+  DISPLAY_ATTR_UINT("LAYOUT", e->layout);  
+  DISPLAY_ATTR_UINT("BSIZE", e->bsize);  
   if (print_inode_name(&lv2->attributes,bufall) != 0)
   {
     DISPLAY_ATTR_TXT("NAME",bufall);
@@ -6754,7 +6765,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     
   uint32_t bucket_idx = ((lv2->attributes.s.hash2 >> 16) ^ (lv2->attributes.s.hash2 & 0xffff))&((1<<8)-1);
   DISPLAY_ATTR_HASH("HASH1/2",lv2->attributes.s.hash1,lv2->attributes.s.hash2,bucket_idx);
-  DISPLAY_ATTR_2INT("UID/GID",lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid);
+  DISPLAY_ATTR_2UINT("UID/GID",lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid);
   bufall[0] = 0;
   ctime_r((const time_t *)&lv2->attributes.s.cr8time,bufall);
   DISPLAY_ATTR_TXT_NOCR("CREATE", bufall);
@@ -6790,6 +6801,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
          DISPLAY_ATTR_TXT("BACKUP", "DIR-RECURSIVE");
 	 break;     
     }  
+
 //    if (lv2->attributes.s.attrs.cid != 0)
     {
        DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.attrs.cid);    
@@ -6819,10 +6831,10 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     {
       DISPLAY_ATTR_TXT("R_TRASH", "NO");    
     }
-    DISPLAY_ATTR_INT("CHILDREN",lv2->attributes.s.attrs.children);
-    DISPLAY_ATTR_INT("NLINK",lv2->attributes.s.attrs.nlink);
-    DISPLAY_ATTR_LONG("SIZE",lv2->attributes.s.attrs.size);
-    DISPLAY_ATTR_LONG("DELETED",lv2->attributes.s.hpc_reserved);
+    DISPLAY_ATTR_UINT("CHILDREN",lv2->attributes.s.attrs.children);
+    DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
+    DISPLAY_ATTR_ULONG("SIZE",lv2->attributes.s.attrs.size);
+    DISPLAY_ATTR_ULONG("DELETED",lv2->attributes.s.hpc_reserved);
    return (p-value);  
   }
 
@@ -6837,7 +6849,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   /*
   ** File only
   */
-  DISPLAY_ATTR_INT("CLUSTER",lv2->attributes.s.attrs.cid);
+  DISPLAY_ATTR_UINT("CLUSTER",lv2->attributes.s.attrs.cid);
   DISPLAY_ATTR_TITLE("STORAGE");
   p += rozofs_u32_padded_append(p,3, rozofs_zero,lv2->attributes.s.attrs.sids[0]); 
   for (idx = 1; idx < rozofs_safe; idx++) {
@@ -6853,7 +6865,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   dist_mv_p = (rozofs_mover_sids_t*)&lv2->attributes.s.attrs.sids;
   if (dist_mv_p->dist_t.mover_cid != 0)
   {  
-    DISPLAY_ATTR_INT("CLUSTERM",dist_mv_p->dist_t.mover_cid);
+    DISPLAY_ATTR_UINT("CLUSTERM",dist_mv_p->dist_t.mover_cid);
     DISPLAY_ATTR_TITLE("STORAGEM");
     p += rozofs_u32_padded_append(p,3,rozofs_zero, dist_mv_p->dist_t.mover_sids[0]); 
     for (idx = 1; idx < rozofs_safe; idx++) {
@@ -6902,11 +6914,11 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   p += 36;
   *p++ = '\n';
 
-  DISPLAY_ATTR_INT("NLINK",lv2->attributes.s.attrs.nlink);
-  DISPLAY_ATTR_LONG("SIZE",lv2->attributes.s.attrs.size);
+  DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
+  DISPLAY_ATTR_ULONG("SIZE",lv2->attributes.s.attrs.size);
 
 
-  DISPLAY_ATTR_INT("LOCK",lv2->nb_locks);  
+  DISPLAY_ATTR_UINT("LOCK",lv2->nb_locks);  
   if (lv2->nb_locks != 0) {
     rozofs_file_lock_t *lock_elt;
     list_t             * pl;
@@ -7143,7 +7155,7 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   int          new_cid;
   int          new_sids[ROZOFS_SAFE_MAX]; 
   uint8_t      rozofs_safe;
-  int          valint=-1;
+  uint64_t     valu64;
   char * value=buf_xattr;
   
   p=value;
@@ -7152,9 +7164,9 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
   */  
-  if (sscanf(p," share = %d", &valint) == 1) 
+  if (sscanf(p," share = %llu", (long long unsigned int *)&valu64) == 1) 
   {
-    if ((valint < 0) || (valint > ((1024*64)-1)))
+    if (valu64 > ((1024*64)-1))
     {
       errno = ERANGE;
       return -1;        
@@ -7172,29 +7184,30 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     /*
     ** Save new distribution on disk
     */
-    lv2->attributes.s.attrs.cid=(cid_t)valint;
+    lv2->attributes.s.attrs.cid=(cid_t)valu64;
     return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
   }
   /*
   ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
   */  
-  if (sscanf(p," backup = %d", &valint) == 1) 
+
+  if (sscanf(p," backup = %llu", (long long unsigned int *)&valu64) == 1) 
   {
-    if ((valint < 0) || (valint > 2))
+    if (valu64 > 2)
     {
-      errno = ENOTDIR;
+      errno = ERANGE;
       return -1;        
     }
     if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
       errno = ENOTDIR;
       return -1;
     }
-    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.backup!= valint)
+    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.backup!= valu64)
     {
       /*
       ** Save new distribution on disk
       */
-      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.backup= valint;
+      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.backup= valu64;
       return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
     }
     return 0;
@@ -7202,23 +7215,23 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** case of the trash
   */
-  if (sscanf(p," trash = %d", &valint) == 1) 
+  if (sscanf(p," trash = %llu", (long long unsigned int *)&valu64) == 1) 
   {
-    if ((valint < 0) || (valint > 2))
+    if (valu64 > 2)
     {
-      errno = ENOTDIR;
+      errno = ERANGE;
       return -1;        
     }
     if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
       errno = ENOTDIR;
       return -1;
     }
-    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.trash!= (sid_t)valint)
+    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.trash!= (sid_t)valu64)
     {
       /*
       ** Save new distribution on disk
       */
-      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.trash=(sid_t)valint;
+      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.trash=(sid_t)valu64;
       return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
     }
     return 0;
@@ -7227,23 +7240,23 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** case of the root trash
   */
-  if (sscanf(p," root-trash = %d", &valint) == 1) 
+  if (sscanf(p," root-trash = %llu", (long long unsigned int *)&valu64) == 1) 
   {
-    if ((valint < 0) || (valint > 1))
+    if (valu64 > 1)
     {
-      errno = ENOTDIR;
+      errno = ERANGE;
       return -1;        
     }
     if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
       errno = ENOTDIR;
       return -1;
     }
-    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.root_trash!= (sid_t)valint)
+    if (((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.root_trash!= (sid_t)valu64)
     {
       /*
       ** Save new distribution on disk
       */
-      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.root_trash=(sid_t)valint;
+      ((rozofs_dir0_sids_t*)&lv2->attributes.s.attrs.sids[0])->s.root_trash=(sid_t)valu64;
       return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
     }
     return 0;
@@ -7251,9 +7264,13 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** Is this an uid change 
   */  
-  if (sscanf(p," uid = %d", &valint) == 1) {
-    if (lv2->attributes.s.attrs.uid != valint) {
-      lv2->attributes.s.attrs.uid = valint;
+  if (sscanf(p," uid = %llu", (long long unsigned int *) &valu64) == 1) {
+    if (valu64 > 0xFFFFFFFF) {
+      errno = ERANGE;
+      return -1;            
+    }
+    if (lv2->attributes.s.attrs.uid != valu64) {
+      lv2->attributes.s.attrs.uid = valu64;
       /*
       ** Save new distribution on disk
       */
@@ -7266,9 +7283,13 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** Is this an gid change 
   */  
-  if (sscanf(p," gid = %d", &valint) == 1) {
-    if (lv2->attributes.s.attrs.gid != valint) {
-      lv2->attributes.s.attrs.gid = valint;
+  if (sscanf(p," gid = %llu", (long long unsigned int *) &valu64) == 1) {
+    if (valu64 > 0xFFFFFFFF) {
+      errno = ERANGE;
+      return -1;            
+    }
+    if (lv2->attributes.s.attrs.gid != valu64) {
+      lv2->attributes.s.attrs.gid = valu64;
       /*
       ** Save new distribution on disk
       */
@@ -7281,9 +7302,13 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** Is this an children change 
   */  
-  if (sscanf(p," children = %d", &valint) == 1) {
-    if (lv2->attributes.s.attrs.children != valint) {
-      lv2->attributes.s.attrs.children = valint;
+  if (sscanf(p," children = %llu", (long long unsigned int *) &valu64) == 1) {
+    if (valu64 > 0xFFFFFFFF) {
+      errno = ERANGE;
+      return -1;            
+    }
+    if (lv2->attributes.s.attrs.children != valu64) {
+      lv2->attributes.s.attrs.children = valu64;
       /*
       ** Save new distribution on disk
       */
@@ -7296,9 +7321,13 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** Is this a nlink change 
   */  
-  if (sscanf(p," nlink = %d", &valint) == 1) {
-    if (lv2->attributes.s.attrs.nlink != valint) {
-      lv2->attributes.s.attrs.nlink = valint;
+  if (sscanf(p," nlink = %llu", (long long unsigned int *) &valu64) == 1) {
+    if (valu64 > 0xFFFF) {
+      errno = ERANGE;
+      return -1;            
+    }
+    if (lv2->attributes.s.attrs.nlink != valu64) {
+      lv2->attributes.s.attrs.nlink = valu64;
       /*
       ** Save new distribution on disk
       */
@@ -7307,9 +7336,13 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     }
     return 0;
   }
-  if (sscanf(p," size = %d", &valint) == 1) {
-    if (lv2->attributes.s.attrs.size != valint) {
-      lv2->attributes.s.attrs.size = valint;
+  if (sscanf(p," size = %llu", (long long unsigned int *) &valu64) == 1) {
+    if (valu64 >= ROZOFS_FILESIZE_MAX) {
+      errno = EFBIG;
+      return -1;            
+    }
+    if (lv2->attributes.s.attrs.size != valu64) {
+      lv2->attributes.s.attrs.size = valu64;
       /*
       ** Save new distribution on disk
       */
@@ -7336,9 +7369,9 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
      return (rozofs_mover_allocate_scan(value,p,length,e,lv2,new_cid));  
   }
 
-  if (sscanf(p," mover_validate = %d", &valint) == 1)
+  if (sscanf(p," mover_validate = %llu", (long long unsigned int *)&valu64) == 1)
   {
-     return (rozofs_mover_valid_scan(e,lv2,valint));  
+     return (rozofs_mover_valid_scan(e,lv2,valu64));  
   }
 
   /*

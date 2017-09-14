@@ -115,7 +115,7 @@ int rozofs_mover_allocate_scan(char *value,char *p,int length,export_t *e,lv2_en
     @retval 0 on success
     @retval -1 on error (see errno for details)
 */
-int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,int guard_time);
+int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,uint64_t guard_time);
 
 /*
 **__________________________________________________________________

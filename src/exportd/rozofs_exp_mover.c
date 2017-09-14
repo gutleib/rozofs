@@ -477,14 +477,14 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
     @retval 0 on success
     @retval -1 on error (see errno for details)
 */
-int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,int guard_time)
+int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,uint64_t guard_time)
 {
   int ret;
   int xerrno;
   rozofs_mv_idx_dist_t trash_mv;
 
   errno = 0;
-  ret = rozofs_mover_file_validate (lv2,&trash_mv,(uint64_t)guard_time,1);
+  ret = rozofs_mover_file_validate (lv2,&trash_mv,guard_time,1);
   if (ret < 0) 
   {
     if (errno != EACCES) return ret;
