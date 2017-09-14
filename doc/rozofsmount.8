@@ -8,7 +8,7 @@ rozofsmount \- RozoFS fuse mount
 .B rozofsmount
 [\fB\-f\fP]
 [\fB\-H\fP \fIEXPORT_HOST\fP]
-[\fB\-E\fP \fIEXPORT_PATH\fP]
+[\fB\-E\fP \fIEXPORT_NAME\fP]
 [\fB\-P\fP \fIEXPORT_PASSWD\fP]
 [\fB\-o\fP \fIopt\fP[,\fIopt\fP]...]
 \fImountpoint\fP
@@ -47,8 +47,8 @@ Foreground operation.
 \fB\-H\fP \fIEXPORT_HOST\fP, \fB\-o exporthost=\fP\fIEXPORT_HOST\fP
 List of '/' separated addresses (or dns names) where exportd daemon is running (default is rozofsexport). When securing the exportd thanks to a virtual IP address only the virtual IP address is declared (i.e "192.168.10.1"). When no virtual IP address is used the list of "physical" IP addresses of each host securing the exportd must be given (i.e "192.168.10.1/192.168.20.1"). 
 .TP
-\fB\-E\fP \fIEXPORT_PATH\fP, \fB-o exportpath=\fP\fIEXPORT_PATH\fP
-Root path of an export see
+\fB\-E\fP \fIEXPORT_NAME\fP, \fB-o exportpath=\fP\fIEXPORT_NAME\fP
+Name (or root path) of an export see
 .BR exportd (8)
 for further details. (default is /srv/rozofs/exports/export).
 .TP

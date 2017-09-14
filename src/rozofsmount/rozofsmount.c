@@ -175,7 +175,7 @@ extern void rozofsmount_profile_program_1(struct svc_req *rqstp, SVCXPRT *ctl_sv
 static void usage() {
     fprintf(stderr, "ROZOFS options:\n");
     fprintf(stderr, "    -H EXPORT_HOST\t\tlist of \'/\' separated addresses (or dns names) where exportd daemon is running (default: rozofsexport) equivalent to '-o exporthost=EXPORT_HOST'\n");
-    fprintf(stderr, "    -E EXPORT_PATH\t\tdefine path of an export see exportd (default: /srv/rozofs/exports/export) equivalent to '-o exportpath=EXPORT_PATH'\n");
+    fprintf(stderr, "    -E EXPORT_NAME\t\tdefine name (or root path) of an export see exportd. Equivalent to '-o exportpath=EXPORT_NAME'\n");
     fprintf(stderr, "    -P EXPORT_PASSWD\t\tdefine passwd used for an export see exportd (default: none) equivalent to '-o exportpasswd=EXPORT_PASSWD'\n");
     fprintf(stderr, "    -o rozofsbufsize=N\t\tdefine size of I/O buffer in KiB (default: 256)\n");
     fprintf(stderr, "    -o rozofsminreadsize=N\tdefine minimum read size on disk in KiB (default: %u)\n", ROZOFS_BSIZE_BYTES(ROZOFS_BSIZE_MIN)/1024);
@@ -1599,7 +1599,7 @@ void rozofs_start_one_storcli(int instance) {
     sprintf(pid_file,"/var/run/launcher_rozofsmount_%d_storcli_%d.pid", conf.instance, instance);
     rozo_launcher_start(pid_file,cmd);
     
-    info("start storcli (instance: %d, export host: %s, export path: %s, mountpoint: %s,"
+    info("start storcli (instance: %d, export host: %s, export name: %s, mountpoint: %s,"
             " profile port: %d, rozofs instance: %d, storage timeout: %d).",
             instance, conf.host, conf.export, rozofs_mountpoint,
             debug_port_value, conf.instance,
@@ -2252,7 +2252,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (conf.export == NULL) {
-        conf.export = strdup("/srv/rozofs/exports/export");
+        fprintf(stderr, "Missing -E option. Export name (or root path) is mandatory.\n");
+        return 1;                
     }
 
     if (conf.passwd == NULL) {

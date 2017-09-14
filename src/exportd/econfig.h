@@ -62,6 +62,7 @@ typedef struct export_config {
     uint8_t layout;
     ROZOFS_BSIZE_E  bsize;
     char root[FILENAME_MAX];
+    char name[FILENAME_MAX];
     char md5[MD5_LEN];
     uint64_t squota;
     uint64_t hquota;

@@ -770,6 +770,40 @@ void show_vfstat_eid(char * argv[], uint32_t tcpRef, void *bufRef) {
  *_______________________________________________________________________
  */
 /**
+*   EID statistics
+
+  @param argv : standard argv[] params of debug callback
+  @param tcpRef : reference of the TCP debug connection
+  @param bufRef : reference of an output buffer 
+  
+  @retval none
+*/
+void show_vfstat_json_eid(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char *pChar = uma_dbg_get_buffer();
+  int j;
+
+  pChar += sprintf(pChar, "{ \"exports\" : [  \n");    
+                
+  for (j = 0; j < gprofiler->nb_exports; j++) {
+
+    pChar += sprintf(pChar, "    { \"eid\" : %d, \"vid\" : %d, \"bsize\" : %d,\n",
+                     gprofiler->estats[j].eid,gprofiler->estats[j].vid,gprofiler->estats[j].bsize);    
+    pChar += sprintf(pChar, "      \"blocks\" : %"PRIu64", \"bfree\" : %"PRIu64", \"files\" : %"PRIu64", \"ffree\" : %"PRIu64",\n",
+                     gprofiler->estats[j].blocks, gprofiler->estats[j].bfree,
+                     gprofiler->estats[j].files,  gprofiler->estats[j].ffree);
+    pChar += sprintf(pChar, "      \"name\" : \"%s\", \"path\" : \"%s\"\n",
+                     gprofiler->estats[j].name, gprofiler->estats[j].path);
+    pChar += sprintf(pChar, "    },\n");
+  }
+  pChar -= 2,
+  pChar += sprintf(pChar, "\n  ]\n}\n");
+
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
 *   LV2 cache statistics
 
   @param argv : standard argv[] params of debug callback
@@ -1187,6 +1221,7 @@ int expgwc_start_nb_blocking_th(void *args) {
 
       uma_dbg_addTopic("vstor",show_vstor);
       uma_dbg_addTopic("vfstat_exp",show_vfstat_eid);
+      uma_dbg_addTopic("stat_exp", show_vfstat_json_eid);
 
     uma_dbg_addTopic("lv2_cache",show_lv2_attribute_cache);
     uma_dbg_addTopic("flock",    show_flock);  

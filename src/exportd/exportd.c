@@ -1209,16 +1209,23 @@ static void *georep_poll_thread(void *v) {
     }
     return 0;
 }
+
 /*
  *_______________________________________________________________________
  */
 eid_t *exports_lookup_id(ep_path_t path) {
     list_t *iterator;
     char export_path[PATH_MAX];
-    DEBUG_FUNCTION;
+    int is_path = 0;
+   
 
-    if (!realpath(path, export_path)) {
-        return NULL;
+    /*
+    ** Lookup export by name
+    */
+
+    if (realpath(path, export_path)) {
+        /* This is a pathname that counld be compared to the root path */
+        is_path = 1; 
     }
 
     if ((errno = pthread_rwlock_rdlock(&exports_lock)) != 0) {
@@ -1228,6 +1235,26 @@ eid_t *exports_lookup_id(ep_path_t path) {
 
     list_for_each_forward(iterator, &exports) {
         export_entry_t *entry = list_entry(iterator, export_entry_t, list);
+
+        /*
+        ** Check name
+        */
+        if (strcmp(entry->export.name, path) == 0) {
+            if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
+                severe("can unlock exports, potential dead lock.");
+                return NULL;
+            }
+            return &entry->export.eid;
+        }
+        
+        /*
+        ** Compare to the path name when this is one
+        */
+        if (is_path == 0) continue;
+
+        /*
+        ** Check path
+        */
         if (strcmp(entry->export.root, export_path) == 0) {
             if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
                 severe("can unlock exports, potential dead lock.");
@@ -1467,11 +1494,11 @@ static int load_exports_conf() {
                 goto out;
             }
         }
-	info("initializing export %d path %s",econfig->eid,econfig->root);
+	info("initializing export %d name %s path %s",econfig->eid,econfig->name,econfig->root);
 
         // Initialize export
         if (export_initialize(&entry->export, volume, econfig->layout, econfig->bsize,
-                &cache, econfig->eid, econfig->root, econfig->md5,
+                &cache, econfig->eid, econfig->root, econfig->name, econfig->md5,
                 econfig->squota, econfig->hquota, econfig->filter_name) != 0) {
             severe("can't initialize export with path %s: %s\n",
                     econfig->root, strerror(errno));

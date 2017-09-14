@@ -276,6 +276,12 @@ typedef enum _ROZOFS_BSIZE_E {
 #define EXPORT_SLICE_PROCESS_NB 8 /**< number of processes for the slices */
 
 
+/*
+** Exports default path
+*/
+#define EXPORTS_ROOT  "/srv/rozofs/exports"
+
+
 /* Value max for an Exportd Gateway */
 #define GWID_MAX 32
 /* Value min for a Exportd Gateway */

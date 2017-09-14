@@ -46,6 +46,7 @@
 #define EEXPORTS    "exports"
 #define EEID        "eid"
 #define EROOT       "root"
+#define ENAME       "name"
 #define EMD5        "md5"
 #define ESQUOTA     "squota"
 #define EHQUOTA     "hquota"
@@ -208,7 +209,7 @@ void expgw_config_release(expgw_config_t *c) {
 
 
 int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t layout, uint32_t bsize,
-        const char *root, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name) {
+        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name) {
     DEBUG_FUNCTION;
 
     e->eid = eid;
@@ -216,6 +217,7 @@ int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t l
     e->layout = layout;
     e->bsize = bsize;
     strncpy(e->root, root, FILENAME_MAX);
+    strncpy(e->name, name, FILENAME_MAX);
     strncpy(e->md5, md5, MD5_LEN);
     e->squota = squota;
     e->hquota = hquota;
@@ -949,6 +951,7 @@ out:
 static int load_exports_conf(econfig_t *ec, struct config_t *config) {
     int status = -1, i;
     struct config_setting_t *export_set = NULL;
+    char   dafault_root_path[FILENAME_MAX];
 
     /*
     ** Prior to read the export configuration, we need
@@ -973,6 +976,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
     for (i = 0; i < config_setting_length(export_set); i++) {
         struct config_setting_t *mfs_setting = NULL;
         const char *root;
+        const char *name;
         const char *md5;
         // Check version of libconfig
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
@@ -1036,19 +1040,44 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         }
 
 	
-        if (config_setting_lookup_string(mfs_setting, EROOT, &root) == CONFIG_FALSE) {
-            errno = ENOKEY;
-            severe("can't look up root path for export idx: %d", i);
-            goto out;
+        /*
+        ** Search for root path
+        */
+        if (config_setting_lookup_string(mfs_setting, EROOT, &root) != CONFIG_FALSE) {
+          // Check root path length
+          if (strlen(root) >= FILENAME_MAX) {
+              errno = ENAMETOOLONG;
+              severe("root path length for export idx: %d must be lower than %d.",
+                      i, FILENAME_MAX);
+              goto out;
+          }
         }
+        /* 
+        ** Use default root path name
+        */
+        else {
+          sprintf(dafault_root_path,"%s/export_%d", EXPORTS_ROOT, eid);
+          root = dafault_root_path;
+        }        
 
-        // Check root path length
-        if (strlen(root) > FILENAME_MAX) {
-            errno = ENAMETOOLONG;
-            severe("root path length for export idx: %d must be lower than %d.",
-                    i, FILENAME_MAX);
-            goto out;
+        /*
+        ** Search for a name
+        */        
+        if (config_setting_lookup_string(mfs_setting, ENAME, &name) != CONFIG_FALSE) {
+          // Check root path length
+          if (strlen(name) >= FILENAME_MAX) {
+              errno = ENAMETOOLONG;
+              severe("export name length for export idx: %d must be lower than %d.",
+                      i, FILENAME_MAX);
+              goto out;
+          }
         }
+        /*
+        ** Use oot path as default path name, which is the initial RozoFS behavior
+        */        
+        else {
+          name = root;
+        }          
 
         md5 = "";
         if (config_setting_lookup_string(mfs_setting, EMD5, &md5) != CONFIG_FALSE) {
@@ -1111,7 +1140,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         }
 	
         econfig = xmalloc(sizeof (export_config_t));
-        if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root,
+        if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
                 md5, squota, hquota, filter_name) != 0) {
             severe("can't initialize export config.");
         }
@@ -1515,6 +1544,11 @@ static int econfig_validate_exports(econfig_t *config) {
                 errno = EINVAL;
                 goto out;
             }
+            if (strcmp(e1->name, e2->name) == 0) {
+                severe("duplicated name: %s", e1->name);
+                errno = EINVAL;
+                goto out;
+            }            
         }
         found = 0;
 

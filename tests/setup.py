@@ -568,7 +568,7 @@ class mount_point_class:
     if rozofs.write_mojette_threads == False: options += " -o mojThreadWrite=0"
     if rozofs.mojette_threads_threshold != None: options += " -o mojThreadThreshold=%s"%(rozofs.mojette_threads_threshold)
 
-    os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_root_path(),self.get_mount_path(),options))
+    os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_name(),self.get_mount_path(),options))
     os.system("chmod 0777 %s"%(self.get_mount_path()))
           
   def stop(self):
@@ -703,6 +703,9 @@ class export_class:
 
   def get_root_path(self):
     return "%s/export/export_%s"%(rozofs.get_config_path(),self.eid)  
+
+  def get_name(self):
+    return "eid%s"%(self.eid)  
      
   def add_mount(self,site=0):
     m = mount_point_class(self,self.layout,site)
@@ -939,7 +942,7 @@ class exportd_class:
         else             : squota="squota=\"%s\";"%(e.squota)
         if e.hquota == "": hquota=""
         else             : hquota="hquota=\"%s\";"%(e.hquota)
-	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; filter=\"flt_%d\"; %s%s vid=%s; layout=%s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout))
+	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout))
 	nexte=","	
     print ");"
 

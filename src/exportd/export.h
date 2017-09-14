@@ -203,6 +203,7 @@ typedef struct export {
     volume_t *volume; ///< the volume export relies on
     uint32_t bsize; ///< the block size from enum ROZOFS_BSIZE_E
     char root[PATH_MAX]; ///< absolute path of the storage root
+    char name[PATH_MAX]; ///< Export name
     uint8_t layout; ///< layout
     /*
     ** To check metadat device resources
@@ -315,6 +316,7 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  * @param lv2_cache: pointer to the cache to use
  * @param eid: id of this export
  * @param root: path to root directory
+ * @param name:export name
  * @param md5: password
  * @param squota: soft quotas
  * @param: hard quotas
@@ -322,7 +324,7 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  * @return 0 on success -1 otherwise (errno is set)
  */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
-        lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *md5,
+        lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *name, const char *md5,
         uint64_t squota, uint64_t hquota, char * filter_name);
 
 /** initialize an export.

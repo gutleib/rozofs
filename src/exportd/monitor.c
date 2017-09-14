@@ -454,6 +454,7 @@ int monitor_export(export_t *export) {
 
     gprofiler->estats[gprofiler->nb_exports].eid = export->eid;
     strcpy(gprofiler->estats[gprofiler->nb_exports].path, export->root);
+    strcpy(gprofiler->estats[gprofiler->nb_exports].name, export->name);
     gprofiler->estats[gprofiler->nb_exports].vid = export->volume->vid;
     gprofiler->estats[gprofiler->nb_exports].bsize = estat.bsize;
     gprofiler->estats[gprofiler->nb_exports].blocks = estat.blocks;
@@ -465,6 +466,7 @@ int monitor_export(export_t *export) {
     dprintf(fd, "export: %"PRIu32"\n", export->eid);
     dprintf(fd, "volume: %u\n", export->volume->vid);
     dprintf(fd, "root: %s\n", export->root);
+    dprintf(fd, "name: %s\n", export->name);
     dprintf(fd, "squota: %"PRIu64"\n", export->squota);
     dprintf(fd, "hquota: %"PRIu64"\n", export->hquota);
     dprintf(fd, "bsize: %u\n", estat.bsize);

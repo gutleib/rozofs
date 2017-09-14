@@ -1300,7 +1300,7 @@ static void *load_trash_dir_thread(void *v) {
 }
 
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
-        lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *md5,
+        lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *name, const char *md5,
         uint64_t squota, uint64_t hquota, char * filter_name) {
 
     char fstat_path[PATH_MAX];
@@ -1324,6 +1324,9 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
         severe("realpath failure for %s : %s",root,strerror(errno));
         return -1;
     }
+    
+    strcpy(e->name, name);
+    
     /*
     ** set the eid and the root path in the associated global varoiables
     */
