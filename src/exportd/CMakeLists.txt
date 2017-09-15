@@ -138,6 +138,15 @@ target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG
 #target_link_libraries(expgateway rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 
+add_executable(zoro_compute_hashes
+    zoro_compute_hashes.c       
+)
+target_link_libraries(zoro_compute_hashes rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+
+add_executable(zoro_read_dirent_file
+    zoro_read_dirent_file.c       
+)
+target_link_libraries(zoro_read_dirent_file rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 add_executable(rozo_repquota
     rozofs_quota.h

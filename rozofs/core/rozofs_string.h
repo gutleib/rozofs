@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <uuid/uuid.h>
+#include <sys/stat.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -1282,6 +1283,50 @@ out:
   }
   return size;  
   
+}
+
+
+
+/*
+** ===================== FS MODE ==================================
+*/
+
+
+#define rozofs_add_mode_right(right, letter)\
+  if ((mode & right) == right) *pChar = letter;\
+  else                         *pChar = '-';\
+  pChar++;
+  
+static inline int rozofs_mode2String(char * buffer, int mode) {
+  char * pChar = buffer;
+  
+  // Put octal value
+  pChar += sprintf(pChar, "0%o ",mode); 
+  
+  // Translate type to string
+  if (S_ISLNK(mode))  pChar += rozofs_string_append(pChar,"LINK ");
+  if (S_ISREG(mode))  pChar += rozofs_string_append(pChar,"REG ");
+  if (S_ISDIR(mode))  pChar += rozofs_string_append(pChar,"DIR ");
+  if (S_ISCHR(mode))  pChar += rozofs_string_append(pChar,"CHR ");
+  if (S_ISBLK(mode))  pChar += rozofs_string_append(pChar,"BLK ");
+  if (S_ISFIFO(mode)) pChar += rozofs_string_append(pChar,"FIFO ");
+  if (S_ISSOCK(mode)) pChar += rozofs_string_append(pChar,"SOCK ");
+
+  // Display rigths
+  
+  rozofs_add_mode_right(S_IRUSR,'r');
+  rozofs_add_mode_right(S_IWUSR,'w');
+  rozofs_add_mode_right(S_IXUSR,'x');
+
+  rozofs_add_mode_right(S_IRGRP,'r');
+  rozofs_add_mode_right(S_IRGRP,'w');
+  rozofs_add_mode_right(S_IXGRP,'x');
+
+  rozofs_add_mode_right(S_IROTH,'r');
+  rozofs_add_mode_right(S_IWOTH,'w');
+  rozofs_add_mode_right(S_IXOTH,'x');
+  
+  return (pChar-buffer);
 }
 #ifdef __cplusplus
 }
