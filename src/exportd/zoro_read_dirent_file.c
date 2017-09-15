@@ -212,7 +212,7 @@ void print_chunk(int fd, int offset,mdirents_hash_entry_t *hash_entry_p) {
   pChar += rozofs_string_append(pChar," mode ");
   pChar += rozofs_mode2String(pChar,name_entry->type);
   *pChar++ = '\n';
-  printf(out_buff);
+  printf("%s",out_buff);
   return;
 }  
 /*
