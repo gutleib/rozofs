@@ -72,6 +72,23 @@ void rozofs_ll_statfs_nb(fuse_req_t req, fuse_ino_t ino) {
     /*
     ** now initiates the transaction towards the remote end
     */
+    
+
+    /*
+    ** In case the EXPORT LBG is down let's respond to
+    ** the requester with the current available information
+    */
+    {
+      expgw_tx_routing_ctx_t routing_ctx; 
+      
+      if (expgw_get_export_routing_lbg_info(exportclt.eid,NULL,&routing_ctx) != 0) {
+         goto async_statfs;
+      }
+      if (north_lbg_get_state(routing_ctx.lbg_id[0]) != NORTH_LBG_UP) {
+	goto async_statfs;           
+      }      
+    } 
+        
 #if 1
     ret = rozofs_expgateway_send_routing_common(exportclt.eid,(unsigned char*)NULL,EXPORT_PROGRAM, EXPORT_VERSION,
                               EP_STATFS,(xdrproc_t) xdr_uint32_t,(void *)&exportclt.eid,
@@ -81,8 +98,9 @@ void rozofs_ll_statfs_nb(fuse_req_t req, fuse_ino_t ino) {
                               EP_STATFS,(xdrproc_t) xdr_uint32_t,(void *)&exportclt.eid,
                               rozofs_ll_statfs_cbk,buffer_p); 
 #endif
-    if (ret < 0) goto error;
-    
+    if (ret < 0) {
+      goto async_statfs;
+    }
     /*
     ** no error just waiting for the answer
     */
@@ -163,6 +181,18 @@ async_statfs:
        ** something wrong happened
        */
        errno = rozofs_tx_get_errno(this);  
+       if (errno == ETIME) {
+          memset(&st, 0, sizeof(struct statvfs));
+          st.f_blocks = rozofs_cache_estat.blocks; // + estat.bfree;
+          st.f_bavail = st.f_bfree = rozofs_cache_estat.bfree;
+          st.f_frsize = st.f_bsize = rozofs_cache_estat.bsize;
+          st.f_favail = st.f_ffree = rozofs_cache_estat.ffree;
+          st.f_files = rozofs_cache_estat.files + rozofs_cache_estat.ffree;
+          st.f_namemax = rozofs_cache_estat.namemax;
+
+          fuse_reply_statfs(req, &st);
+          goto out;          
+       }
        goto error; 
     }
     /*
