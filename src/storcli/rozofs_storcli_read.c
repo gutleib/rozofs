@@ -882,6 +882,15 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
     rozofs_safe    = rozofs_get_rozofs_safe(layout);
     rozofs_forward = rozofs_get_rozofs_forward(layout);
     rozofs_inverse = rozofs_get_rozofs_inverse(layout);
+
+    /* 
+    ** When more than invers SID tell ENOENT let's say the file does not exist
+    */
+    if (working_ctx_p->enoent_count > rozofs_inverse) {
+      error = ENOENT;
+      goto reject;	              
+    }
+    
     /*
     ** Now update the state of each load balancing group since it might be possible
     ** that some experience a state change
@@ -1365,7 +1374,9 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
        ** try to read the projection on another storaged
        */
        if (errno == ENOENT) {
-         working_ctx_p->prj_ctx[projection_id].prj_state = ROZOFS_PRJ_READ_ENOENT;     
+         working_ctx_p->prj_ctx[projection_id].prj_state = ROZOFS_PRJ_READ_ENOENT; 
+          /* One more SID that doess not know about this file */
+          working_ctx_p->enoent_count++;
        }
        else {
          working_ctx_p->prj_ctx[projection_id].prj_state = ROZOFS_PRJ_READ_ERROR; 

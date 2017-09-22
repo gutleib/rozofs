@@ -532,6 +532,7 @@ void  rozofs_storcli_ctxInit(rozofs_storcli_ctx_t *p,uint8_t creation)
   p->reply_done     = 0;
   p->write_ctx_lock = 0;
   p->read_ctx_lock  = 0;
+  p->enoent_count   = 0;
   memset(p->fid_key,0, sizeof (sp_uuid_t));
   /*
    ** clear the scheduler idx: -1 indicates that the entry is not present

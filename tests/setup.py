@@ -480,9 +480,25 @@ class mount_point_class:
     self.site= site    
     self.layout = layout
     self.nfs_path="/mnt/nfs-%s"%(self.instance) 
-    self.spare_tmr_ms=6000
+    # Timers
+    if rozofs.client_fast_reconnect != 0:
+      self.set_spare_tmr_ms(rozofs.client_fast_reconnect*1000/2)
+      self.rozofsexporttimeout  = rozofs.client_fast_reconnect
+      self.rozofsstoragetimeout = rozofs.client_fast_reconnect
+      self.rozofsstorclitimeout = rozofs.client_fast_reconnect
+    else:
+      self.set_spare_tmr_ms(6000)
+      self.rozofsexporttimeout  = None
+      self.rozofsstoragetimeout = None
+      self.rozofsstorclitimeout = None
+      self.spare_tmr_ms         = 6000
     mount_points.append(self)
 
+  def set_fast_reconnect(self):  
+
+        
+    rozofs.set_client_fast_reconnect()
+    
   def set_spare_tmr_ms(self,tmr): self.spare_tmr_ms=tmr
 
   def info(self):
@@ -559,6 +575,12 @@ class mount_point_class:
     options=""
     options += " -o rozofsnbstorcli=%s"%(rozofs.nb_storcli)
     options += " -o rozofssparestoragems=%s"%(self.spare_tmr_ms)
+    if self.rozofsexporttimeout != None: 
+      options += " -o rozofsexporttimeout=%s"%(self.rozofsexporttimeout)
+    if self.rozofsstoragetimeout != None: 
+      options += " -o rozofsstoragetimeout=%s"%(self.rozofsstoragetimeout)
+    if self.rozofsstorclitimeout != None: 
+      options += " -o rozofsstorclitimeout=%s"%(self.rozofsstorclitimeout)      
     options += " -o auto_unmount"
     options += " -o suid"
     options += " -o numanode=%s"%(self.numanode)
@@ -1087,7 +1109,7 @@ class rozofs_class:
     self.storaged_start_script = None
     self.device_automount = False
     self.site_number = 1
-    self.client_fast_reconnect = False
+    self.client_fast_reconnect = 0
     self.deletion_delay = None
     self.trashed_file_per_run = 100
     self.spare_restore_loop_delay = 15
@@ -1130,7 +1152,9 @@ class rozofs_class:
     with open("/proc/sys/kernel/shmmax") as f: val=f.readlines()
     if int(val[0]) < int(new): os.system("echo %s > /proc/sys/kernel/shmmax"%(new))  
   def set_file_distribution(self,val): self.file_distribution = val
-  def set_client_fast_reconnect(self): self.client_fast_reconnect = True
+  def set_client_fast_reconnect(self,val=2): 
+    self.client_fast_reconnect = val
+    
   def set_xfs(self,mb,allocsize=None):
     self.fstype       = "xfs"
     self.disk_size_mb = mb
@@ -1334,7 +1358,7 @@ class rozofs_class:
     display_config_bool("async_setattr",True)
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
-    if self.client_fast_reconnect == True: display_config_bool("client_fast_reconnect",True)
+    if self.client_fast_reconnect != 0: display_config_bool("client_fast_reconnect",True)
     display_config_int("storio_buf_cnt",32)
     display_config_int("export_buf_cnt",32)
     display_config_int("spare_restore_spare_ctx",1)
