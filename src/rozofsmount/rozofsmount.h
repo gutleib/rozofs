@@ -367,6 +367,10 @@ static inline int rozofs_is_directory_inode(fuse_ino_t ino)
 static inline ientry_t *get_ientry_by_inode(fuse_ino_t ino) {
     rozofs_inode_t fake_id;
 
+    if (ino == 0x2800000000000001) {
+      fuse_ino_t ino_root = 1;
+      return htable_get(&htable_inode, &ino_root);
+    }
     fake_id.fid[1]=ino;
     /*
     ** check if the fid designate a directory referenced by its FID (relative path) or if is the trash associated with the
