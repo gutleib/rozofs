@@ -27,6 +27,7 @@ DECLARE_PROFILING(mpp_profiler_t);
 */
 ep_statfs_t rozofs_cache_estat;
 uint64_t  rozofs_cache_estat_time = 0; 
+uint32_t  rozofs_cache_stat_null = 0; 
 
 /**
 * Get file system statistics
@@ -132,7 +133,7 @@ async_statfs:
     */
     STOP_PROFILING_NB(buffer_p,rozofs_ll_statfs);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
-    rozofs_trc_rsp_attr(srv_rozofs_ll_statfs,ino,NULL,1,-1,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_statfs,ino,NULL,1,st.f_bavail*st.f_frsize/1024,trc_idx);
 
 }
 
@@ -249,13 +250,36 @@ async_statfs:
     /*
     ** end of decoding section
     */
-	memset(&st, 0, sizeof(struct statvfs));
-	st.f_blocks = estat.blocks; // + estat.bfree;
-	st.f_bavail = st.f_bfree = estat.bfree;
-	st.f_frsize = st.f_bsize = estat.bsize;
-	st.f_favail = st.f_ffree = estat.ffree;
-	st.f_files = estat.files + estat.ffree;
-	st.f_namemax = estat.namemax;
+    
+    /*
+    ** Suddenly there is no block available. This might be due to
+    ** an exportd switchover. The new exportd has not yet been able
+    ** to poll every storaged.
+    */
+    if ((estat.blocks == 0) && (rozofs_cache_stat_null < 2)) {
+      rozofs_cache_stat_null++;      
+      memset(&st, 0, sizeof(struct statvfs));
+      st.f_blocks = rozofs_cache_estat.blocks; // + estat.bfree;
+      st.f_bavail = st.f_bfree = rozofs_cache_estat.bfree;
+      st.f_frsize = st.f_bsize = rozofs_cache_estat.bsize;
+      st.f_favail = st.f_ffree = rozofs_cache_estat.ffree;
+      st.f_files = rozofs_cache_estat.files + rozofs_cache_estat.ffree;
+      st.f_namemax = rozofs_cache_estat.namemax;
+      errno = EAGAIN;
+      status = -1;
+    }
+    else {
+      rozofs_cache_stat_null = 0;
+      memset(&st, 0, sizeof(struct statvfs));
+      st.f_blocks = estat.blocks; // + estat.bfree;
+      st.f_bavail = st.f_bfree = estat.bfree;
+      st.f_frsize = st.f_bsize = estat.bsize;
+      st.f_favail = st.f_ffree = estat.ffree;
+      st.f_files = estat.files + estat.ffree;
+      st.f_namemax = estat.namemax;
+      errno = 0;
+      status = 0; 
+    }   
    /*
    ** cache the last statfs
    */
@@ -263,8 +287,6 @@ async_statfs:
    memcpy(&rozofs_cache_estat,&estat,sizeof (ep_statfs_t));
 
     fuse_reply_statfs(req, &st);
-    errno = 0;
-    status = 0;
     /*
     ** check if some more write blocks are pending
     */
