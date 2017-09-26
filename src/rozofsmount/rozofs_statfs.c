@@ -256,7 +256,7 @@ async_statfs:
     ** an exportd switchover. The new exportd has not yet been able
     ** to poll every storaged.
     */
-    if ((estat.blocks == 0) && (rozofs_cache_stat_null < 2)) {
+    if ((estat.blocks == 0) && (rozofs_cache_stat_null < 3)) {
       rozofs_cache_stat_null++;      
       memset(&st, 0, sizeof(struct statvfs));
       st.f_blocks = rozofs_cache_estat.blocks; // + estat.bfree;
