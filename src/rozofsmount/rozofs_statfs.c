@@ -279,12 +279,12 @@ async_statfs:
       st.f_namemax = estat.namemax;
       errno = 0;
       status = 0; 
+      memcpy(&rozofs_cache_estat,&estat,sizeof (ep_statfs_t));
     }   
    /*
    ** cache the last statfs
    */
    rozofs_cache_estat_time = rozofs_get_ticker_us();
-   memcpy(&rozofs_cache_estat,&estat,sizeof (ep_statfs_t));
 
     fuse_reply_statfs(req, &st);
     /*
