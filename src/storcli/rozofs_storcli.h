@@ -220,6 +220,8 @@ typedef struct _rozofs_storcli_ctx_t
   uint32_t   read_seqnum;         /**< read sequence number that must be found in the reply to correlate with ctx */
   uint16_t   reply_done;         /**< assert to one when reply has been sent to rozofsmount */
   uint16_t   rsvd_ctx_count;         /**< number of pre-reserved storcli context for processing the current request */
+  uint8_t    enoent_count;       /* To count the number of ENOENT response received from servers */
+  /* 3 bytes paddig */
   rozofs_storcli_projection_ctx_t  prj_ctx[ROZOFS_SAFE_MAX_STORCLI];
   rozofs_storcli_lbg_prj_assoc_t lbg_assoc_tb[ROZOFS_SAFE_MAX_STORCLI]; /**< association table between lbg and projection */
   rozofs_storcli_inverse_block_t block_ctx_table[ROZOFS_MAX_BLOCK_PER_MSG];  
