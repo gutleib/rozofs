@@ -299,6 +299,11 @@ void *rozofs_stcmoj_thread(void *arg) {
      
     }
   while(1) {
+    if (ctx_p->thread_idx >= common_config.mojette_thread_count)
+    {
+       sleep(30);
+       continue;
+    }
     /*
     ** read the north disk socket
     */

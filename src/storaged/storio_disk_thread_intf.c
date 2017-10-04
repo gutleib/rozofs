@@ -660,7 +660,23 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING(rebuild_stop);      
       break;                  
     }  
-          
+    /*
+    ** RDMA support
+    */
+    case STORIO_DISK_THREAD_READ_RDMA:
+    {
+      STOP_PROFILING_IO(read,msg->size);
+      update_read_detailed_counters(toc - tic);      
+      storio_update_read_counter(tv.tv_sec,msg->size);        
+      break;
+    }           
+    case STORIO_DISK_THREAD_WRITE_RDMA:
+    {
+      STOP_PROFILING_IO(read,msg->size);
+      update_write_detailed_counters(toc - tic);  
+      storio_update_write_counter(tv.tv_sec,msg->size);         
+      break;
+    }     
     default:
       severe("Unexpected opcode %d", opcode);
   }
@@ -893,6 +909,56 @@ int storio_disk_thread_intf_send(storio_device_mapping_t      * fidCtx,
   else {
     af_unix_disk_pending_req_tbl[MAX_PENDING_REQUEST-1]++;    
   }  
+  return 0;
+}
+
+
+/*__________________________________________________________________________
+*/
+/**
+*  Send a disk request to the disk threads to activate the processing of the requests
+   associated with a FID
+*
+* @param fidCtx     FID context
+* @param timeStart  time stamp when the request has been decoded
+*
+* @retval 0 on success -1 in case of error
+*  
+*/
+int storio_disk_thread_intf_serial_send(storio_device_mapping_t      * fidCtx,
+				         uint64_t       timeStart) 
+{
+  int                         ret;
+  storio_disk_thread_msg_t    msg;
+ 
+  /* Fill the message */
+  msg.msg_len          = sizeof(storio_disk_thread_msg_t)-sizeof(msg.msg_len);
+  msg.opcode           = STORIO_DISK_THREAD_FID;
+  msg.status           = 0;
+  msg.transaction_id   = transactionId++;
+  msg.fidIdx           = fidCtx->index;
+  msg.timeStart        = timeStart;
+  msg.size             = 0;
+  msg.rpcCtx           = 0;
+  
+  /* Send the buffer to its destination */
+  ret = sendto(af_unix_disk_south_socket_ref,&msg, sizeof(msg),0,(struct sockaddr*)&storio_north_socket_name,sizeof(storio_north_socket_name));
+  if (ret <= 0) {
+     fatal("storio_disk_thread_intf_send  sendto(%s) %s", storio_north_socket_name.sun_path, strerror(errno));
+     exit(0);  
+  }
+/*
+** the update of the number of pending request is done when the rpcCtx is queued in the pending_list of the FID
+*/
+#if 0  
+  af_unix_disk_pending_req_count++;
+  if (af_unix_disk_pending_req_count<MAX_PENDING_REQUEST) {
+    af_unix_disk_pending_req_tbl[af_unix_disk_pending_req_count]++;
+  }
+  else {
+    af_unix_disk_pending_req_tbl[MAX_PENDING_REQUEST-1]++;    
+  }  
+#endif
   return 0;
 }
 

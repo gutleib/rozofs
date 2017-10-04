@@ -199,7 +199,11 @@ void *rozofs_fuse_thread(void *arg) {
   //info("Fuse Thread %d Started !!\n",ctx_p->thread_idx);
   
   while(1) {
-  
+    if (ctx_p->thread_idx >= common_config.reply_thread_count)
+    {
+       sleep(30);
+       continue;
+    }  
     /*
     ** read the north disk socket
     */

@@ -34,6 +34,7 @@ extern "C" {
 #include <limits.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
+#include <pthread.h>
 
 #include <rozofs/rozofs.h>
 #include <rozofs/common/log.h>
@@ -135,6 +136,13 @@ typedef struct _storio_device_mapping_t
   uint8_t              device[ROZOFS_STORAGE_MAX_CHUNK_PER_FILE];   /**< Device number to write the data on        */
   list_t               running_request;
   list_t               waiting_request;
+  /*
+  ** storio serialise
+  */
+  list_t               serial_pending_request;  /**< list the pending request for the FID   */
+  uint32_t             serial_is_running:1;     /**< assert to one when a disk thread is processing the requests         */
+  pthread_rwlock_t     serial_lock;             /**< lock associated with serial_pending_request list & running flag     */
+    
 //  uint64_t             consistency;
   STORIO_REBUILD_REF_U storio_rebuild_ref;
 } storio_device_mapping_t;
@@ -280,6 +288,8 @@ static inline void storio_device_mapping_ctx_reset(storio_device_mapping_t * p) 
 //  p->consistency   = storio_device_mapping_stat.consistency;
   list_init(&p->running_request);
   list_init(&p->waiting_request);
+  list_init(&p->serial_pending_request);
+  p->serial_is_running = 0;
 
   p->storio_rebuild_ref.u64 = 0xFFFFFFFFFFFFFFFF;
 }
@@ -439,6 +449,7 @@ static inline void storio_device_mapping_ctx_distributor_init(int nbCtx) {
   
   for (idx=0; idx<STORIO_DEVICE_MAPPING_MAX_ENTRIES; idx++) {
     p = storio_device_mapping_ctx_retrieve(idx);
+    pthread_rwlock_init(&p->serial_lock, NULL);
     p->index  = idx;
     p->status = STORIO_FID_FREE;
     storio_device_mapping_ctx_reset(p);

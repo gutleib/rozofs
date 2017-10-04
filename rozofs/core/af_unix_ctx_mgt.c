@@ -741,6 +741,12 @@ void af_unix_ctxInit(af_unix_ctx_generic_t *p, uint8_t creation) {
 
     p->cnx_supevision.u64 = 0;
     p->cnx_availability_state = AF_UNIX_CNX_AVAILABLE;
+    
+    /*
+    ** RDMA section
+    */
+    p->rdma_connected_CallBack = NULL;  /**< call back used by RDMA when the main TCP connection is established   */
+    p->rdma_disconnect_CallBack = NULL; /**< call back used by RDMA when the main TCP connection is disconnected  */
 
 }
 
@@ -1058,6 +1064,7 @@ uint32_t af_unix_module_init(uint32_t af_unix_ctx_count,
 
             p->index = idxCur;
             p->free = TRUE;
+	    
             af_unix_ctxInit(p, TRUE);
             idxCur++;
         }
@@ -1067,4 +1074,33 @@ uint32_t af_unix_module_init(uint32_t af_unix_ctx_count,
     }
 
     return ret;
+}
+
+/**
+*  Get the source/destination IP addresses and ports of a connection
+
+  @param cnx_idx: connection index  
+  @param p: pointer to the array when connection information are returned
+  
+  @retval 0 on success
+  @eetval -1 on error
+*/
+int af_inet_get_connection_info(uint32_t cnx_idx,af_inet_connection_info_t *p)
+{
+
+   af_unix_ctx_generic_t *ctx_p;
+   /*
+   ** Get the af_unix context for cnx_idx
+   */
+   ctx_p = af_unix_getObjCtx_p(cnx_idx);
+   if (ctx_p == NULL)
+   {
+     errno = ERANGE;
+     return -1;
+   }
+   p->src_ip = ctx_p->src_ipaddr_host;
+   p->dst_ip = ctx_p->remote_ipaddr_host;
+   p->src_port = ctx_p->src_port_host;
+   p->dst_port = ctx_p->remote_port_host;
+   return 0;
 }

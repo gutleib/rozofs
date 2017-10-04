@@ -50,7 +50,7 @@ uint64_t rozofs_fuse_buffer_depletion_count = 0;
 uint64_t rozofs_storcli_buffer_depletion_count = 0;
 int rozofs_fuse_loop_count = 2;
 int fuse_sharemem_init_done = 0;
-int fuse_sharemem_enable = 0;
+int fuse_sharemem_enable = 1;
 uint64_t fuse_profile[3];
 int rozofs_storcli_pending_req_count= 0;
 uint64_t rozofs_storcli_xoff_count= 0;

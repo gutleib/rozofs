@@ -348,6 +348,11 @@ typedef struct _af_unix_ctx_generic_t
   af_inet_check_cnx_t   cnx_supevision; /**< supervision context */
   uint8_t               cnx_availability_state;  /**< operational state of the connection */ 
   uint8_t               dscp;          /**< dscp of the TCP connection */ 
+  /*
+  ** RDMA section
+  */
+  generic_connect_CBK_t rdma_connected_CallBack;   /* callback provided by the connection owner block */  
+  generic_disc_CBK_t    rdma_disconnect_CallBack;  /* callback provided by the connection owner block */  
 } af_unix_ctx_generic_t;
 
 

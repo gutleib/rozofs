@@ -95,6 +95,9 @@ static inline int rozofs_scan_mark_file(char * name, int * cid, int * sid, int *
 #define dbg(fmt,...) info(fmt,__VA_ARGS__)
 #endif
 
+
+#define ROZOFS_DECODED_BUF_RDMA_EXTRA_SIZE 128  /**< reserved used in rpc decoded buffer */
+
 /*
 ** Initialize a CRC32 from a FID
 */

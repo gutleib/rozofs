@@ -161,7 +161,8 @@ typedef struct _rozofs_tx_ctx_p_t
     
 //    int moduleId; 
     uint64_t timeStamp;
-    uint32_t opaque_usr[ROZOFS_TX_OPAQUE_MAX];   /**< opaque usr data array   */
+    uint32_t opaque_usr[ROZOFS_TX_OPAQUE_MAX];   /**< opaque usr data array        */
+    void     *rdma_bufref;                      /**< reference of the rdma buffer  */
     
    rozofs_tx_rw_lbg_t  rw_lbg;      /**< context used for r/w load balancing   */
 } rozofs_tx_ctx_t;

@@ -24,6 +24,7 @@
 
 #include "rozofs_storcli.h"
 #include <rozofs/rozofs_srv.h>
+#include <rozofs/rdma/rozofs_rdma.h>
 
 rozofs_storcli_ctx_t *rozofs_storcli_ctx_freeListHead;  /**< head of list of the free context  */
 rozofs_storcli_ctx_t rozofs_storcli_ctx_activeListHead;  /**< list of the active context     */
@@ -975,6 +976,20 @@ uint32_t rozofs_storcli_module_init()
 	 break;
       }
       ruc_buffer_debug_register_pool("SouthLarge",rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL]);      
+#ifdef ROZOFS_RDMA
+      /*
+      ** registration with the RDMA module
+      */
+      {
+	rozofs_rdma_memory_reg_t rdma_reg_ctx;
+
+	rdma_reg_ctx.mem = ruc_buf_get_pool_base_and_length(rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL],&rdma_reg_ctx.len);
+	if (rdma_reg_ctx.mem != NULL)
+	{
+          rozofs_rdma_user_memory_register(&rdma_reg_ctx);
+	}
+      }
+#endif
    break;
    }
    return ret;

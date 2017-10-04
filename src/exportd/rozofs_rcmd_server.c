@@ -180,7 +180,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 void show_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
   char *pChar = uma_dbg_get_buffer();
   int   reset = 0;
-  int   status;
+  unsigned int   status;
   
   if (argv[1] != NULL) {
     if (strcmp(argv[1],"reset")==0) {
@@ -197,7 +197,7 @@ void show_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
   
   pChar += rozofs_string_append(pChar, "  \"errors\" : [\n");
   status = rozofs_rcmd_status_cmd+1;
-  while(status <= rozofs_rcmd_status_max) {
+  while(status < rozofs_rcmd_status_max) {
     if (status!=rozofs_rcmd_status_cmd+1) {
       pChar += rozofs_string_append(pChar, ",\n");
     }

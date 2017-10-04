@@ -73,6 +73,53 @@ xdr_sp_read_ret_no_bins_t (XDR *xdrs, sp_read_ret_t *objp)
 **__________________________________________________________________________
 */
 /**
+    RPC encoding for SP_READ_DMA
+*/
+bool_t
+xdr_sp_read_rdma_no_bins_t (XDR *xdrs, sp_read_t *objp)
+{
+	//register int32_t *buf;
+	//int position;
+
+	 if (!xdr_uint32_t (xdrs, &objp->filler))
+		 return FALSE;
+
+	 if (!xdr_uint32_t (xdrs, &objp->filler1))
+		 return FALSE;
+
+	 if (!xdr_uint32_t (xdrs, &objp->filler2))
+		 return FALSE;
+		 		 		 
+	 if (!xdr_uint32_t (xdrs, &objp->bins.bins_len))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_sp_read_rdma_ret_no_bins_t (XDR *xdrs, sp_read_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_sp_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case SP_SUCCESS:
+		 if (!xdr_sp_read_rdma_no_bins_t (xdrs, &objp->sp_read_ret_t_u.rsp))
+			 return FALSE;
+		break;
+	case SP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->sp_read_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+/*
+**__________________________________________________________________________
+*/
+/**
   Server callback  for GW_PROGRAM protocol:
     
      GW_INVALIDATE_SECTIONS
@@ -217,6 +264,27 @@ void storio_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
       local = sp_clear_error_1_svc_disk_thread;
       size = sizeof (sp_clear_error_arg_t);
       break;    
+
+    case SP_RDMA_SETUP:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_rdma_setup_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_rdma_setup_ret_t;
+      local = sp_rdma_setup;
+      size = sizeof (sp_rdma_setup_arg_t);
+      break;    
+
+    case SP_WRITE_RDMA:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t)xdr_sp_write_rdma_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_write_ret_t;
+      local = sp_write_rdma_1_svc_disk_thread;
+      size = sizeof (xdr_sp_write_rdma_arg_t);
+      break;
+  
+    case SP_READ_RDMA:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_read_rdma_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_read_rdma_ret_no_bins_t;
+      local = sp_read_rdma_1_svc_disk_thread;
+      size = sizeof (sp_read_rdma_arg_t);
+      break;
 
     default:
       rozorpc_srv_ctx_p->xmitBuf = rozorpc_srv_ctx_p->recv_buf;

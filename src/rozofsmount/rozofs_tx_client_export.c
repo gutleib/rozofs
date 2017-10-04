@@ -756,7 +756,10 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
     ** This context is not inserted for read request since read do not require other requests
     ** to follow the same path.
     */
-    if (opcode != STORCLI_READ) {
+    /*
+    ** serialize towards the storcli even for READ operation: this avoid random access at storio level (seen with RDMA)
+    */
+    /*if (opcode != STORCLI_READ)*/ {
       stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);
     }  
     /*

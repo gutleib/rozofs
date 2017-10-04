@@ -21,6 +21,10 @@ include_directories(${PTHREAD_INCLUDE_DIR})
 link_directories(${CMAKE_BINARY_DIR}/rozofs)
 
 
+if(INFINIBAND_FOUND AND RDMA_FOUND)
+  add_definitions(-DROZOFS_RDMA)
+endif()
+
 add_executable(storaged
     mproto.c
     mprotosvc.h
@@ -45,7 +49,7 @@ target_link_libraries(storaged rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFI
 add_executable(rozo_storage_fid2pathname
     rozo_storage_fid2pathname.c
 )
-target_link_libraries(rozo_storage_fid2pathname rozofs ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_storage_fid2pathname rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 add_executable(stspare
     sconfig.h
@@ -135,8 +139,20 @@ add_executable(storio
     storio_crc32.h
 )
 
-target_link_libraries(storio rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
-
+if(INFINIBAND_FOUND AND RDMA_FOUND)
+  message(STATUS "Compiling storio with RDMA support")
+  set(storio_rmda_sources
+  # RDMA section
+      ../../rozofs/rdma/rozofs_rdma.c
+      ../../rozofs/rdma/rozofs_rdma.h
+  )
+  add_library(storio_rmda STATIC ${storio_rmda_sources})
+  set_target_properties(storio_rmda PROPERTIES COMPILE_FLAGS "-fPIC")
+  target_link_libraries(storio storio_rmda rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RDMA_LIBRARY} ${INFINIBAND_LIBRARY})
+else(INFINIBAND_FOUND AND RDMA_FOUND)
+  message(STATUS "Compiling storio without RDMA support")
+  target_link_libraries(storio rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+endif(INFINIBAND_FOUND AND RDMA_FOUND)
 
 add_executable(rozodump
     rozodump.c

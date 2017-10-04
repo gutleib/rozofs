@@ -172,3 +172,11 @@ INT     export min_metadata_inodes             262144
 INT     export min_metadata_MB                   2048
 // Number of trash threads that work in parallel
 INT     export nb_trash_thread                   2    1:8
+// When that flag is asserted, the storcli uses RDMA when storio supports it
+BOOL 	storcli 	rdma_enable	            False
+// Minimum read/write size in KB to trigger RDMA transfer
+INT     storcli min_rmda_size_KB                   64
+// number of Mojette threads
+INT     storcli mojette_thread_count                4  1:4
+// number of Fuse threads
+INT     client reply_thread_count                2  1:4

@@ -56,6 +56,9 @@
 #include "rozofs_storcli_rpc.h"
 #include "rozofs_storcli_lbg_cnf_supervision.h"
 #include "storcli_main.h"
+#include <rozofs/rdma/rozofs_rdma.h>
+#include "rdma_client_send.h"
+
 /*
 **_________________________________________________________________________
 *      PUBLIC FUNCTIONS
@@ -151,7 +154,16 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t rozofsmount_instance)
    {
      fatal( " socket controller init failed" );
    }
-
+#ifdef ROZOFS_RDMA
+   /*
+   ** init of the RDMA in client mode
+   */
+   ret = rozofs_rdma_init(ROZO_SOCKCTRL_CTX_STORCLI,1);
+   if (ret < 0)
+   {
+     severe("fail to initialize RDMA");
+   }
+#endif
    /*
    **  Timer management init
    */
@@ -218,7 +230,11 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t rozofsmount_instance)
        fatal("STORCLI_MAX_LBG constant need at least to be %d",mx_lbg_north_ctx);
      }
      ret = north_lbg_module_init(mx_lbg_north_ctx);
-     if (ret != RUC_OK) break;   
+     if (ret != RUC_OK) break;  
+#ifdef ROZOFS_RDMA
+     ret = rdma_lbg_tmo_table_init(mx_lbg_north_ctx);
+     if (ret != RUC_OK) break;        
+#endif
      /*
      ** init of the storage client structure
      */

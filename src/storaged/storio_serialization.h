@@ -55,4 +55,35 @@ int storio_serialization_begin(storio_device_mapping_t * dev_map_p, rozorpc_srv_
 **___________________________________________________________
 */
 void storio_serialization_end(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) ;
+
+/*
+**_______________________________________________________
+*/
+
+/**
+  That function is intended to be used by the main thread
+  
+  @param p: pointer the FID context that contains the requests lisk
+  @param request: pointer to the request to append to the FID context
+
+  @retval 0: FID context already active
+  @retval 1: not to post a message to activate the FID context 
+*/
+int storio_insert_pending_request_list(storio_device_mapping_t *p,list_t *request);
+
+/*
+**_______________________________________________________
+*/
+
+/**
+  That function is intended to be used by the diskthreads
+  
+  @param p: pointer the FID context that contains the requests lisk
+  @param diskthread_list: pointer to the current disk thread list
+
+  @retval 1: no more request to process
+  @retval 0: the list is not empty
+*/
+int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list);
+
 #endif

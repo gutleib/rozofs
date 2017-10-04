@@ -18,6 +18,17 @@ xdr_sp_uuid_t (XDR *xdrs, sp_uuid_t objp)
 }
 
 bool_t
+xdr_rozofs_rdma_key_t (XDR *xdrs, rozofs_rdma_key_t objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_vector (xdrs, (char *)objp, 6,
+		sizeof (uint32_t), (xdrproc_t) xdr_uint32_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_sp_status_t (XDR *xdrs, sp_status_t *objp)
 {
 	//register int32_t *buf;
@@ -566,5 +577,115 @@ xdr_sp_write_ret_t (XDR *xdrs, sp_write_ret_t *objp)
 	default:
 		break;
 	}
+	return TRUE;
+}
+
+bool_t
+xdr_sp_rdma_setup_arg_t (XDR *xdrs, sp_rdma_setup_arg_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_rozofs_rdma_key_t (xdrs, objp->rdma_key))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_sp_rdma_setup_ret_t (XDR *xdrs, sp_rdma_setup_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_sp_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case SP_SUCCESS:
+		 if (!xdr_sp_rdma_setup_arg_t (xdrs, &objp->sp_rdma_setup_ret_t_u.rsp))
+			 return FALSE;
+		break;
+	case SP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->sp_rdma_setup_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_sp_write_rdma_arg_t (XDR *xdrs, sp_write_rdma_arg_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_uint16_t (xdrs, &objp->cid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->layout))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->spare))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->rebuild_ref))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->alignment1))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->dist_set, ROZOFS_SAFE_MAX_RPC,
+		sizeof (uint32_t), (xdrproc_t) xdr_uint32_t))
+		 return FALSE;
+	 if (!xdr_sp_uuid_t (xdrs, objp->fid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->proj_id))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->bid))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->nb_proj))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->bsize))
+		 return FALSE;
+	 if (!xdr_rozofs_rdma_key_t (xdrs, objp->rdma_key))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->rkey))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->remote_addr))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->remote_len))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_sp_read_rdma_arg_t (XDR *xdrs, sp_read_rdma_arg_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_uint16_t (xdrs, &objp->cid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->layout))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->bsize))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->spare))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->dist_set, ROZOFS_SAFE_MAX_RPC,
+		sizeof (uint32_t), (xdrproc_t) xdr_uint32_t))
+		 return FALSE;
+	 if (!xdr_sp_uuid_t (xdrs, objp->fid))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->bid))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->nb_proj))
+		 return FALSE;
+	 if (!xdr_rozofs_rdma_key_t (xdrs, objp->rdma_key))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->rkey))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->remote_addr))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->remote_len))
+		 return FALSE;
 	return TRUE;
 }

@@ -266,6 +266,10 @@ void rozofs_tx_ctxInit(rozofs_tx_ctx_t *p, uint8_t creation) {
     ** load balancing context init
     */
     ruc_listEltInitAssoc( &p->rw_lbg.link,p);
+    /*
+    ** clear the reference of the RDMA buffer
+    */
+    p->rdma_bufref = NULL;
     
 
 }
@@ -689,7 +693,7 @@ void rozofs_tx_recv_cbk(void *recv_buf) {
   The input parameter is a receive buffer belonging to
   the transaction egine module
   
-  @param socket_ctx_p: pointer to the af unix socket: not used 
+  @param userRef: pointer to the rdma_out_of_seq_CallBack (might be NULL)
   @param lbg_id: reference of the load balancing group
   @param recv_buf: pointer to the receive buffer
  */
@@ -730,6 +734,16 @@ void rozofs_tx_recv_rpc_cbk(void *userRef, uint32_t lbg_id, void *recv_buf) {
         /*
          ** it might be an old transaction id -> drop the received buffer
          */
+	 /*
+	 ** check if there is an associated out of sequence callback with the connection it comes from
+	 */
+	 if (userRef!= NULL)
+	 {
+	    ruc_pf_2uint32_t cbk;
+	    
+	    cbk = (ruc_pf_2uint32_t) userRef;
+	    (*cbk)(lbg_id,this->xid);	 
+	 }
         TX_STATS(ROZOFS_TX_RECV_OUT_SEQ);
         ruc_buf_freeBuffer(recv_buf);
         return;

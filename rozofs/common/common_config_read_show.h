@@ -292,6 +292,12 @@ char * show_common_config_module_client(char * pChar) {
   pChar += rozofs_string_append(pChar,"// statfs period in seconds. minimum is 0.\n");
   COMMON_CONFIG_SHOW_INT(statfs_period,10);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(reply_thread_count,2);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
+  COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:4");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -480,6 +486,38 @@ char * show_common_config_module_storage(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
+** storcli scope configuration parameters
+**
+*/
+char * show_common_config_module_storcli(char * pChar) {
+
+  pChar += rozofs_string_append_bold(pChar,"#\n");
+  pChar += rozofs_string_append_bold(pChar,"# ");
+  pChar += rozofs_string_append_bold(pChar,"storcli");
+  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_enable,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, the storcli uses RDMA when storio supports it\n");
+  COMMON_CONFIG_SHOW_BOOL(rdma_enable,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(min_rmda_size_KB,64);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Minimum read/write size in KB to trigger RDMA transfer\n");
+  COMMON_CONFIG_SHOW_INT(min_rmda_size_KB,64);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(mojette_thread_count,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// number of Mojette threads\n");
+  COMMON_CONFIG_SHOW_INT_OPT(mojette_thread_count,4,"1:4");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
 ** common_config diagnostic function
 **
 */
@@ -503,6 +541,9 @@ char *pChar = uma_dbg_get_buffer();
       else if (strcmp("storage",argv[1])==0) {
         pChar = show_common_config_module_storage(pChar);
       }
+      else if (strcmp("storcli",argv[1])==0) {
+        pChar = show_common_config_module_storcli(pChar);
+      }
       else {
         pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
       }
@@ -521,6 +562,7 @@ char *pChar = uma_dbg_get_buffer();
   pChar = show_common_config_module_export(pChar);
   pChar = show_common_config_module_client(pChar);
   pChar = show_common_config_module_storage(pChar);
+  pChar = show_common_config_module_storcli(pChar);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
   return;
@@ -645,6 +687,8 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_BOOL(async_setattr,False);
   // statfs period in seconds. minimum is 0. 
   COMMON_CONFIG_READ_INT(statfs_period,10);
+  // number of Fuse threads 
+  COMMON_CONFIG_READ_INT_MINMAX(reply_thread_count,2,1,4);
   /*
   ** storage scope configuration parameters
   */
@@ -714,6 +758,15 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(storio_fidctx_ctx,128);
   // Spare file restoring : Number of spare file context in 1K unit 
   COMMON_CONFIG_READ_INT(spare_restore_spare_ctx,16);
+  /*
+  ** storcli scope configuration parameters
+  */
+  // When that flag is asserted, the storcli uses RDMA when storio supports it 
+  COMMON_CONFIG_READ_BOOL(rdma_enable,False);
+  // Minimum read/write size in KB to trigger RDMA transfer 
+  COMMON_CONFIG_READ_INT(min_rmda_size_KB,64);
+  // number of Mojette threads 
+  COMMON_CONFIG_READ_INT_MINMAX(mojette_thread_count,4,1,4);
  
   config_destroy(&cfg);
 }

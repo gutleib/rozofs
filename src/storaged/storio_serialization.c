@@ -62,7 +62,9 @@ static inline void reset_serialization_counters(void) {
 char * serialize_opcode_string(int opcode) {
   switch(opcode) {
     case STORIO_DISK_THREAD_READ: return "read";
+    case STORIO_DISK_THREAD_READ_RDMA: return "read";
     case STORIO_DISK_THREAD_WRITE: return "write";
+    case STORIO_DISK_THREAD_WRITE_RDMA: return "write";
     case STORIO_DISK_THREAD_TRUNCATE: return "truncate";
     case STORIO_DISK_THREAD_REMOVE: return "remove";
     case STORIO_DISK_THREAD_REMOVE_CHUNK: return "remove_chunk";
@@ -206,10 +208,12 @@ static inline int storio_is_request_exclusive(storio_device_mapping_t * dev_map_
     ** Read is non exclusive
     */
     case STORIO_DISK_THREAD_READ: return 0;
+    case STORIO_DISK_THREAD_READ_RDMA: return 0;
 
     /*
     ** Write are exclusive when a new chunk is to be allocated
     */
+    case STORIO_DISK_THREAD_WRITE_RDMA:
     case STORIO_DISK_THREAD_WRITE:
     {
       sp_write_arg_t * write_arg_p = (sp_write_arg_t *) ruc_buf_getPayload(req_ctx_p->decoded_arg);
@@ -258,9 +262,41 @@ static inline int storio_is_request_exclusive(storio_device_mapping_t * dev_map_
 /*
 **___________________________________________________________
 */
+extern int        af_unix_disk_pending_req_count;
+#define MAX_PENDING_REQUEST     64
+extern uint64_t   af_unix_disk_pending_req_tbl[];
+
 int storio_serialization_begin(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) {
   list_t            * p;
   rozorpc_srv_ctx_t * req;
+  
+  /*
+  ** put the start timestamp in the current context
+  */
+  req_ctx_p->profiler_time = rozofs_get_ticker_us();
+  /*
+  ** update the number of pending request
+  */
+  af_unix_disk_pending_req_count++;
+  if (af_unix_disk_pending_req_count<MAX_PENDING_REQUEST) {
+    af_unix_disk_pending_req_tbl[af_unix_disk_pending_req_count]++;
+  }
+  else {
+    af_unix_disk_pending_req_tbl[MAX_PENDING_REQUEST-1]++;    
+  }  
+  /*
+  ** queue the RPC request in the FID context
+  */  
+  if (storio_insert_pending_request_list(dev_map_p,&req_ctx_p->list))
+  {
+     storage_direct_req[req_ctx_p->opcode]++; 
+    storio_disk_thread_intf_serial_send(dev_map_p,0);
+  }
+  else
+  {
+    storage_queued_req[req_ctx_p->opcode]++;
+  }
+  return 0;
    
   /*
   ** When waiting queue is not empty, put the request behind
@@ -390,3 +426,148 @@ void storio_serialization_end(storio_device_mapping_t * dev_map_p, rozorpc_srv_c
   
   return;    
 }
+
+
+
+
+
+/*
+**_________________________________________________________________________________
+**_________________________________________________________________________________
+*/
+/*
+**_______________________________________________________
+*/
+int storio_active_delay(int loop)
+{
+    int val = 0;
+    while(val < loop)
+    {
+       val++;
+    }
+    return val;
+}
+/*
+**_______________________________________________________
+*/
+void storio_get_serial_lock(pthread_rwlock_t *lock)
+{
+    while (pthread_rwlock_trywrlock(lock)!=0)
+    {
+       storio_active_delay(200);
+    }
+    return;
+
+}
+
+/*
+**_______________________________________________________
+*/
+
+/**
+  That function is intended to be used by the diskthreads
+  
+  @param p: pointer the FID context that contains the requests lisk
+  @param diskthread_list: pointer to the current disk thread list
+
+  @retval 1: no more request to process
+  @retval 0: the list is not empty
+*/
+int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list)
+{
+   /*
+   ** check if the serial_pending_request list is empty
+   */
+   if (list_empty(&p->serial_pending_request))
+   {
+      /*
+      ** check if it is the end of processing: this true with the
+      ** diskthread list is empty
+      */
+      if (list_empty(diskthread_list))
+      {
+        /* LOCK */
+        storio_get_serial_lock(&p->serial_lock);
+	if (list_empty(&p->serial_pending_request))
+	{
+	  /*
+	  ** no more request to process-> go the IDLE state for that context
+	  */
+	  p->serial_is_running=0;
+          /* UNLOCK */
+	  pthread_rwlock_unlock(&p->serial_lock);
+	  
+	  return 1;	
+	}
+	/*
+	** there is some more request to process
+	*/
+        list_move_nocheck(diskthread_list,&p->serial_pending_request);
+        /* UNLOCK */
+	pthread_rwlock_unlock(&p->serial_lock);	
+	/*
+	** need to re-order the diskthread_list
+	*/
+	goto reorder;
+      }
+      /*
+      ** the disk thread list is not empty: nothing to re-order
+      */
+      return 0;
+   }
+   /*
+   ** there are new requests pending
+   */
+   /* LOCK */
+   storio_get_serial_lock(&p->serial_lock);
+   /*
+   ** append the pending list to the disk thread list
+   */
+   list_move_nocheck(diskthread_list,&p->serial_pending_request);
+   /* UNLOCK */
+   pthread_rwlock_unlock(&p->serial_lock);	
+   /*
+   ** need to re-order the diskthread_list
+   */
+   goto reorder;
+   
+   /*
+   ** re-ordering of the requests 
+   */
+reorder:
+#warning reorder of requests not needed->done at rozofsmount level by doing serialisation at FID level by marking the READ opcode
+   return 0;
+}
+
+
+/*
+**_______________________________________________________
+*/
+
+/**
+  That function is intended to be used by the main thread
+  
+  @param p: pointer the FID context that contains the requests lisk
+  @param request: pointer to the request to append to the FID context
+
+  @retval 0: FID context already active
+  @retval 1: not to post a message to activate the FID context 
+*/
+int storio_insert_pending_request_list(storio_device_mapping_t *p,list_t *request)
+{
+   int need2activate = 0;
+   list_init(request);
+    /* LOCK */
+    storio_get_serial_lock(&p->serial_lock);
+    if (p->serial_is_running==0)
+    {
+      p->serial_is_running=1;
+      need2activate = 1;
+    }
+    list_push_back(&p->serial_pending_request,request);
+    pthread_rwlock_unlock(&p->serial_lock);
+
+    return need2activate;
+}
+
+
