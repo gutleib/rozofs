@@ -65,8 +65,8 @@ if(INFINIBAND_FOUND AND RDMA_FOUND)
   set(storcli_rmda_sources
   # RDMA section
       rdma_client_send.c
-      ../../rozofs/rdma/save/rozofs_rdma.c
-      ../../rozofs/rdma/save/rozofs_rdma.h
+      ../../rozofs/rdma/rozofs_rdma.c
+      ../../rozofs/rdma/rozofs_rdma.h
   )
   add_library(storcli_rmda STATIC ${storcli_rmda_sources})
   set_target_properties(storcli_rmda PROPERTIES COMPILE_FLAGS "-fPIC")

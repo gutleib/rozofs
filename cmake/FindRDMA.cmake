@@ -22,7 +22,7 @@
 #  RDMA_FOUND       - True if fuse found.
 
 FIND_PATH(RDMA_INCLUDE_DIR rdma_cma.h
-  /usr/include/FDL/rdma
+  /usr/include/rdma
 )
 
 SET(RDMA_NAMES rdmacm)
