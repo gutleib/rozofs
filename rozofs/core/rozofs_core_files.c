@@ -286,10 +286,13 @@ void rozofs_catch_error(int sig){
   pid_t pid = getpid();
 
   /*
-  ** Just ignore SIGTERM from now
+  ** Already processing a signal
   */
-  rozofs_set_handler_signal_ignore(SIGTERM);
-
+  if  (rozofs_fatal_error_processing != 0) {
+    return;
+  }  
+  rozofs_fatal_error_processing = sig;
+  
   /* Log SIGTERM */
   if (sig == SIGTERM) {
     syslog(LOG_INFO, "%s", "SIGTERM"); 
@@ -304,24 +307,12 @@ void rozofs_catch_error(int sig){
     */
     kill(-pid,SIGTERM);  
   }
-    
-  /*
-  ** Not alreay inside handler 
-  ** => let's call the registered crash callbacks
-  */
-  if  (rozofs_fatal_error_processing == 0) { 
-   
-    /*
-    ** Save received signal
-    */
-    rozofs_fatal_error_processing = sig;
 
-    /* 
-    ** Call the registered crash call backs 
-    */
-    for (idx = 0; idx <rozofs_crash_cbk_nb; idx++) {
-      rozofs_crash_cbk[idx](sig);
-    }
+  /* 
+  ** Call the registered crash call backs 
+  */
+  for (idx = 0; idx <rozofs_crash_cbk_nb; idx++) {
+    rozofs_crash_cbk[idx](sig);
   }
     
   /* 
