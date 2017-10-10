@@ -1399,11 +1399,13 @@ def read_size(filename):
 def resize(): 
 #___________________________________________________
 
+  realSizeMB = 15
+  
   # Create a 1M file
-  os.system("dd if=/dev/zero of=%s/resize bs=1M count=1 > /dev/null 2>&1"%(exepath))  
+  os.system("dd if=/dev/zero of=%s/resize bs=1M count=%s > /dev/null 2>&1"%(exepath,realSizeMB))  
   size = read_size("%s/resize"%(exepath))
-  if size != int(1024*1024):
-    report("%s/resize size is %s instead of %d after dd "%(exepath,size,int(1024*1024)))
+  if size != int(1024*1024*realSizeMB):
+    report("%s/resize size is %s instead of %d after dd "%(exepath,size,int(1024*1024*realSizeMB)))
     return 1
     
     
@@ -1422,8 +1424,8 @@ def resize():
     os.system("%s/IT2/test_resize.exe %s/resize"%(os.getcwd(),exepath))
     
     size = read_size("%s/resize"%(exepath))
-    if size != int(1024*1024):
-      report( "%s/resize size is %s instead of %d after resize "%(exepath,size,int(1024*1024)))
+    if size != int(1024*1024*realSizeMB):
+      report( "%s/resize size is %s instead of %d after resize "%(exepath,size,int(1024*1024*realSizeMB)))
       return 1
 
   return 0  
