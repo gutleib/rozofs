@@ -197,7 +197,7 @@ void show_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
   
   pChar += rozofs_string_append(pChar, "  \"errors\" : [\n");
   status = rozofs_rcmd_status_cmd+1;
-  while(status <= rozofs_rcmd_status_max) {
+  while(status < rozofs_rcmd_status_max) {
     if (status!=rozofs_rcmd_status_cmd+1) {
       pChar += rozofs_string_append(pChar, ",\n");
     }
