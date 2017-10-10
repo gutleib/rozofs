@@ -2325,7 +2325,7 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
 
 
     *nb_blocks = buf.st_size/rozofs_disk_psize;
-    if (*nb_blocks == 0) {
+    if ((*nb_blocks == 0)&&(chunk==0)) {
         errno = ENOENT;
         goto out;  
     }   
@@ -2387,6 +2387,12 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
     else if (hdr->s.effective_length<=ROZOFS_BSIZE_BYTES(bsize)) {
       *last_block_size = hdr->s.effective_length;      
     }
+    
+    /*
+    ** Add number of bloxk of the previous chunks
+    */
+    *nb_blocks += (chunk*ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize));
+
     status = 0;
 
 out:
