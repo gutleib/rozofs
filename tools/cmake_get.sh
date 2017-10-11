@@ -46,6 +46,12 @@ rozo_bpo() {
     jessie)
       ROZO_BPO="~bpo8+1"
     ;;
+    stretch)
+      ROZO_BPO="~bpo9+1"
+    ;;
+    buster)
+      ROZO_BPO="~bpo10+1"
+    ;;
     trusty)
       ROZO_BPO="~trusty0+1"
     ;;
@@ -54,6 +60,9 @@ rozo_bpo() {
     ;;
     vivid)
       ROZO_BPO="~vivid0+1"
+    ;;
+    xenial)
+      ROZO_BPO="~xenial0+1"
     ;;
     *)
       ROZO_BPO=""
