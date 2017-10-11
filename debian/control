@@ -98,7 +98,10 @@ Description: RozoFS filesystem (geo-replication software)
 
 Package: rozofs-rozodiag
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libreadline6, ${python:Depends}
+Depends: ${shlibs:Depends}
+		,${misc:Depends}
+		, libreadline6 | libreadline7
+		, ${python:Depends}
 Description: RozoFS filesystem (diagnostic tools)
  rozodiag allows deep audit of RozoFS filesystems.
  .
