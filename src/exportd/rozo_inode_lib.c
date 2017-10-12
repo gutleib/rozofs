@@ -1931,19 +1931,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
 
 //         printf("user_id %d file_id %d \n",user_id,file_id);
          file_count+=1;
-	 if (callback_trk_fct)
-	 {
-	    /*
-	    ** get the stat information of the tracking file
-	    */
-	    exp_metadata_get_tracking_file_stat(inode_metadata_p,user_id,file_id,&stat);
-	    stat_to_mattr(&stat,&ext_attr.s.attrs);
-	    match = (*callback_trk_fct)(e,&ext_attr,param_trk);
-	    if (match == 0) 
-	    {
-	      continue;
-	    }
-	 }
+
 	 ret = exp_metadata_get_tracking_file_header(inode_metadata_p,user_id,file_id,&tracking_buffer,NULL);
 	 if (ret < 0)
 	 {
@@ -1954,6 +1942,25 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
 	   }
 	   continue;
 	 }
+         
+	 if (callback_trk_fct)
+	 {
+	    /*
+	    ** get the stat information of the tracking file
+	    */
+	    exp_metadata_get_tracking_file_stat(inode_metadata_p,user_id,file_id,&stat);
+	    stat_to_mattr(&stat,&ext_attr.s.attrs);
+            /*
+            ** get creation time from tracking file header
+            */
+            ext_attr.s.cr8time = tracking_buffer.creation_time;
+	    match = (*callback_trk_fct)(e,&ext_attr,param_trk);
+	    if (match == 0) 
+	    {
+	      continue;
+	    }
+	 }
+
          /*
 	 ** load the content of the tracking file in memory
 	 */

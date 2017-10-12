@@ -127,6 +127,13 @@ int         exclude_symlink=1;
 int         exclude_regular=0;
 
 /*
+** Whether to scan all tracking files or only those whose
+** creation and modification time match the research date
+** criteria
+*/
+int scan_all_tracking_files = 0; // Only those matching research criteria
+
+/*
 **__________________________________________________________________
 **
 ** Read the name from the inode
@@ -784,6 +791,7 @@ static void usage() {
     printf("\n\033[1mOPTIONS:\033[0m\n");
     printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
     printf("\t\033[1m-h,--help\033[0m\t\tprint this message and exit.\n");
+    printf("\t\033[1m-a,--all\033[0m\t\tScan all tracking files and not only those matching time criteria.\n");
     printf("\n\033[1mCRITERIA:\033[0m\n");
     printf("\t\033[1m-x,--xattr\033[0m\t\twith xattribute.\n");
     printf("\t\033[1m-X,--noxattr\033[0m\t\twithout xattribute.\n");    
@@ -870,6 +878,7 @@ static inline time_t rozofs_date_in_seconds(int year, int month, int day, int ho
   if (sec > 60) return -1;
   mytime.tm_sec = sec;  
   t = mktime(&mytime); 
+//  printf("%d-%2d-%2d %2d:%2d:%2d -> %d", year,month,day,hour,minute,sec,t);
   return t;
 }
 /*
@@ -947,6 +956,112 @@ char * get_export_root_path(uint8_t eid) {
   }
   return NULL;
 }
+#if 1
+#define dbg(fmt,...)
+#define dbgsuccess(big,small) 
+#define dbgfailed(small,big)  
+#else
+#define dbg(fmt,...) printf(fmt,__VA_ARGS__)
+#define dbgsuccess(big,small) printf("  Success "#big" %llu later or equal "#small" %llu\n",(long long unsigned int)big, (long long unsigned int)small)
+#define dbgfailed(small,big)  printf("  Failed "#small" %llu later "#big" %llu\n",(long long unsigned int)small, (long long unsigned int)big)
+#endif
+
+#define docheck(big,small) \
+  if (small>big) { \
+    dbgfailed(small,big);\
+    return 0;\
+  }\
+  else {\
+    dbgsuccess(big,small);\
+  }  
+
+/*
+**_______________________________________________________________________
+** Check whether the tracking file c an match the given date criteria
+**   
+**  @param  eid : eport identifier
+**    
+**  @retval 0 = do not read this file / 1 = read this file
+*/
+int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
+  ext_mattr_t * inode_p = inode;
+
+  dbg("- rozofs_check_trk_file_date cr8 %llu modif %llu\n", (long long unsigned int)inode_p->s.cr8time,(long long unsigned int)inode_p->s.attrs.mtime);
+
+  /*
+  ** Must have a creation time bigger than cr8_bigger
+  */ 
+  if (cr8_bigger != -1) {
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime,cr8_bigger);
+  }  
+
+  /*
+  ** Must have a creation time lower than cr8_lower
+  */    
+  if (cr8_lower != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(cr8_lower,inode_p->s.cr8time);
+  }  
+
+  /*
+  ** Must have a creation time equal to cr8_equal
+  */    
+  if (cr8_equal != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(cr8_equal,inode_p->s.cr8time) ;
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime,cr8_equal);
+  } 
+  
+   
+  /*
+  ** Must have a modification time bigger than mod_bigger
+  */ 
+  if (mod_bigger != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(mod_bigger,inode_p->s.cr8time);
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime, mod_bigger);
+  }  
+
+  /*
+  ** Must have a modification time lower than mod_lower
+  */    
+  if (mod_lower != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(mod_lower,inode_p->s.cr8time);
+  }     
+
+  /*
+  ** Must have a modification time equal to mod_equal
+  */    
+  if (mod_equal != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(mod_equal,inode_p->s.cr8time);
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime,mod_equal);
+  } 
+  return 1; 
+}
 /*
 **_______________________________________________________________________
 **
@@ -972,7 +1087,9 @@ int main(int argc, char *argv[]) {
     char  crit=0;
     char *comp;
     int   expect_comparator = 0;
-    
+    int   date_criteria_is_set = 0;
+    check_inode_pf_t date_criteria_cbk;
+     
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"path", required_argument, 0, 'p'},
@@ -1000,6 +1117,7 @@ int main(int argc, char *argv[]) {
         {"eq", required_argument, 0, '='},
         {"ne", required_argument, 0, '!'},
         {"dir", no_argument, 0, 'd'},
+        {"all", no_argument, 0, 'a'},
         {0, 0, 0, 0}
     };
     
@@ -1034,7 +1152,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSR", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSRa", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1044,6 +1162,9 @@ int main(int argc, char *argv[]) {
           case 'h':
               usage();
               exit(EXIT_SUCCESS);
+              break;
+          case 'a':
+              scan_all_tracking_files = 1; // scan all tracking files
               break;
           case 'p':
               root_path = optarg;
@@ -1064,9 +1185,11 @@ int main(int argc, char *argv[]) {
               break;
           case 'c':
               NEW_CRITERIA(SCAN_CRITERIA_CR8);
+              date_criteria_is_set = 1;
               break;
           case 'm':
               NEW_CRITERIA(SCAN_CRITERIA_MOD);
+              date_criteria_is_set = 1;
               break;
           case 's':
               NEW_CRITERIA(SCAN_CRITERIA_SIZE);
@@ -1666,11 +1789,21 @@ int main(int argc, char *argv[]) {
   */
   lv2_cache_initialize(&cache);
   rz_set_verbose_mode(verbose);
+  
+  /*
+  ** Use call back to reject a whole attribute file when date criteria is set
+  */
+  date_criteria_cbk = NULL;
+  if (!scan_all_tracking_files && date_criteria_is_set) {
+    date_criteria_cbk = rozofs_check_trk_file_date;
+  }
+
+  
   if (search_dir) {
-    rz_scan_all_inodes(rozofs_export_p,ROZOFS_DIR,1,rozofs_visit,NULL,NULL,NULL);
+    rz_scan_all_inodes(rozofs_export_p,ROZOFS_DIR,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
   else {
-    rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,NULL,NULL);
+    rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
   
   exit(EXIT_SUCCESS);  
