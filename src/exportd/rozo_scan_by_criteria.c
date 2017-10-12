@@ -838,6 +838,8 @@ static void usage() {
 static inline time_t rozofs_date_in_seconds(int year, int month, int day, int hour, int minute, int sec) {
   struct tm mytime = {0};
   time_t    t;
+  
+  mytime.tm_isdst = -1; // system should determine daylight saving time 
  
   if (year < 1900) return -1;
   mytime.tm_year = year - 1900;
@@ -918,7 +920,7 @@ static inline uint64_t rozofs_scan_u64(char * str) {
 **_______________________________________________________________________
 **
 **  M A I N
-*/\
+*/
 
 #define NEW_CRITERIA(criteria){\
               if (expect_comparator) {\
