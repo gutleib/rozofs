@@ -71,7 +71,7 @@ ROZOFS_SERVICE_PORT_RANGE_DESC_T rozofs_service_port_range[ROZOFS_SERVICE_PORT_M
   },
   
   [ROZOFS_SERVICE_PORT_STORAGED_DIAG] = {
-    .defaultValue = 50027,
+    .defaultValue = 50200,
     .rangeSize    = NB_STORIO+1,
     .name         = "rozofs_storaged_diag",
     .service      = "Storaged & storio diagnostic",
