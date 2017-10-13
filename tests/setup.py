@@ -1093,7 +1093,7 @@ class rozofs_class:
     self.device_selfhealing_delay = 1
     self.nb_listen=1;
     self.storio_mode="multiple";
-    self.interface = "eth0"
+    self.interface = "lo"
     self.read_mojette_threads = False
     self.write_mojette_threads = True
     self.mojette_threads_threshold = None
