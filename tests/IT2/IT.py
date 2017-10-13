@@ -44,7 +44,6 @@ sids=[]
 hosts=[]
 verbose=False
 
-
 #___________________________________________________
 # Messages and logs
 #___________________________________________________
@@ -987,8 +986,11 @@ def crc32():
 
   # Corrupt the bins file
   f = open(bins, 'r+b')     
-  f.seek(876) 
-  char = f.read(1)
+  f.seek(1211) 
+  f.write("DDT")
+  f.seek(3111) 
+  f.write("DDT")
+  f.seek(4444) 
   f.write("DDT")    
   f.close()
   backline("Corrupt bins file")
