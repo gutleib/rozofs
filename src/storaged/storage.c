@@ -85,7 +85,7 @@ typedef struct _storio_device_error_log_record_t {
 /*
 ** Dimensionning factor of the log
 */
-#define STORIO_DEVICE_ERROR_LOG_MAX_RECORD      128
+#define STORIO_DEVICE_ERROR_LOG_MAX_RECORD      256
 
 typedef struct _storio_device_error_log {
   pthread_rwlock_t                  lock; 
@@ -1884,6 +1884,10 @@ int storage_write_repair_chunk(storage_t * st, uint8_t * device, uint8_t layout,
 	  } 
 	  error +=1;
        }
+       else {
+         errno = 0;
+         storio_fid_error(fid, device[chunk], chunk, bid+block_idx, 1,"crc32 repaired"); 		     
+       }
        /*
        ** update the data pointer for the next write
        */
@@ -2160,9 +2164,15 @@ retry:
 				       crc32_errors);      
     }
     if (result!=0) { 
+      int i;
       errno = 0;
-      storio_fid_error(fid, device[chunk], chunk, bid, result,"read crc32"); 		     
-      //if (result>1) storage_error_on_device(st,device[chunk]); 
+      for (i = 0; i < nb_proj_effective ; i++) {
+        if (crc32_errors[i/64] & (1ULL<<(i%64))) {
+          storio_fid_error(fid, device[chunk], chunk, bid+i, 1,"crc32"); 		     
+          result--;
+          if(result==0) break;
+        }
+      }  
     }	  
 
     // Update the length read
