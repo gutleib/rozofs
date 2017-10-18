@@ -115,9 +115,6 @@ typedef union storio_rebuild_ref_u {
   uint64_t    u64;
 } STORIO_REBUILD_REF_U;
 
-#define    STORIO_FID_FREE     0
-#define    STORIO_FID_RUNNING  1
-#define    STORIO_FID_INACTIVE 2
 typedef struct _storio_device_mapping_key_t
 {
   fid_t                fid;
@@ -128,19 +125,16 @@ typedef struct _storio_device_mapping_key_t
 typedef struct _storio_device_mapping_t
 {
   list_t               link;  
-  uint32_t             status:4;
-  uint32_t             padding:2;
+//  uint32_t             padding:5;
   uint32_t             recycle_cpt:2;
+  uint32_t             serial_is_running:1;     /**< assert to one when a disk thread is processing the requests         */
   uint32_t             index:24;
   storio_device_mapping_key_t key;
   uint8_t              device[ROZOFS_STORAGE_MAX_CHUNK_PER_FILE];   /**< Device number to write the data on        */
-  list_t               running_request;
-  list_t               waiting_request;
   /*
   ** storio serialise
   */
   list_t               serial_pending_request;  /**< list the pending request for the FID   */
-  uint32_t             serial_is_running:1;     /**< assert to one when a disk thread is processing the requests         */
   pthread_rwlock_t     serial_lock;             /**< lock associated with serial_pending_request list & running flag     */
     
 //  uint64_t             consistency;
@@ -148,16 +142,11 @@ typedef struct _storio_device_mapping_t
 } storio_device_mapping_t;
 
 list_distributor_t storio_device_mapping_ctx_distributor;
-list_t             storio_device_mapping_ctx_running_list;
-list_t             storio_device_mapping_ctx_inactive_list;
+list_t             storio_device_mapping_ctx_initialized_list;
 
 
 typedef struct _storio_device_mapping_stat_t
 {
-//  uint64_t            consistency; 
-  uint64_t            inactive;
-  uint64_t            running;
-  uint64_t            free;
   uint64_t            allocation;
   uint64_t            release;
   uint64_t            out_of_ctx;
@@ -203,78 +192,6 @@ static inline uint32_t storio_device_mapping_hash32bits_compute(storio_device_ma
 **______________________________________________________________________________
 */
 /**
-* Put the FID context in the correct list
-*
-* @param idx The context index
-*
-* @return the rebuild context address or NULL
-*/
-static inline int storio_device_mapping_ctx_check_running(storio_device_mapping_t * p) {
-      
-  if ((p->storio_rebuild_ref.u64 != 0xFFFFFFFFFFFFFFFF)
-  ||  (!list_empty(&p->running_request))
-  ||  (!list_empty(&p->waiting_request))) {
-    return 1; 
-  }
-  return 0;  
-}
-
-/*
-**______________________________________________________________________________
-*/
-/**
-* Put the FID context in the correct list
-*
-* @param idx The context index
-*
-* @return the rebuild context address or NULL
-*/
-static inline void storio_device_mapping_ctx_evaluate(storio_device_mapping_t * p) {
-   
-  if (p == NULL) return;
-  
-   
-  /*
-  ** The context was not running. Check whether it is running now
-  */
-  if (p->status == STORIO_FID_INACTIVE) { 
- 
-    /*
-    ** Is there any running requests
-    */
-    if (storio_device_mapping_ctx_check_running(p)) {
-      p->status = STORIO_FID_RUNNING;
-      storio_device_mapping_stat.inactive--;
-      storio_device_mapping_stat.running++; 
-      list_remove(&p->link);        
-      list_push_back(&storio_device_mapping_ctx_running_list,&p->link); 
-    }
-    return;
-  }
-  
-  /*
-  ** The context was running. Check whether it is still running
-  */
-  if (p->status == STORIO_FID_RUNNING) { 
- 
-    /*
-    ** Is there any running requests
-    */
-    if (!storio_device_mapping_ctx_check_running(p)) {
-      p->status = STORIO_FID_INACTIVE;
-      storio_device_mapping_stat.inactive++;
-      storio_device_mapping_stat.running--; 
-      list_remove(&p->link);        
-      list_push_back(&storio_device_mapping_ctx_inactive_list,&p->link); 
-    }
-    return;
-  }   
-}
-
-/*
-**______________________________________________________________________________
-*/
-/**
 * Reset a storio device_mapping context
 
   @param p the device_mapping context to initialize
@@ -286,14 +203,23 @@ static inline void storio_device_mapping_ctx_reset(storio_device_mapping_t * p) 
   memset(&p->key,0,sizeof(storio_device_mapping_key_t));
   memset(p->device,ROZOFS_UNKNOWN_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
 //  p->consistency   = storio_device_mapping_stat.consistency;
-  list_init(&p->running_request);
-  list_init(&p->waiting_request);
   list_init(&p->serial_pending_request);
   p->serial_is_running = 0;
 
   p->storio_rebuild_ref.u64 = 0xFFFFFFFFFFFFFFFF;
 }
+/*
+**______________________________________________________________________________
+*/
+/**
+* Refresh context in the list of allocated context when used
 
+  @param p : pointer to the user cache entry   
+*/
+static inline void storio_device_mapping_refresh(storio_device_mapping_t *p) {
+  list_remove(&p->link);        
+  list_push_back(&storio_device_mapping_ctx_initialized_list,&p->link);   
+}
 /*
 **______________________________________________________________________________
 */
@@ -317,27 +243,11 @@ static inline void storio_device_mapping_release_entry(storio_device_mapping_t *
   }
      
 
-  if (storio_device_mapping_ctx_check_running(p)) {
-    severe("storio_device_mapping_ctx_free but ctx is running");
+  if ((p->serial_is_running)||(!list_empty(&p->serial_pending_request)))
+  {
+    fatal("storio_device_mapping_ctx_free but ctx is running");
   }
    
-  /*
-  ** The context was not running. Check whether it is running now
-  */
-  if (p->status == STORIO_FID_INACTIVE) { 
-    storio_device_mapping_stat.inactive--;
-  }
-  
-  /*
-  ** The context was running. Check whether it is still running
-  */
-  else if (p->status == STORIO_FID_RUNNING) { 
-    storio_device_mapping_stat.running--;
-  }
-   
-
-  storio_device_mapping_stat.free++;  
-
   /*
   ** Unchain the context
   */
@@ -368,26 +278,23 @@ static inline storio_device_mapping_t * storio_device_mapping_ctx_allocate() {
     /*
     ** No more free context. Let's recycle an unused one
     */
-    if (list_empty(&storio_device_mapping_ctx_inactive_list)) {
+    if (list_empty(&storio_device_mapping_ctx_initialized_list)) {
       storio_device_mapping_stat.out_of_ctx++;
       return NULL;
     }
-    p = list_first_entry(&storio_device_mapping_ctx_inactive_list,storio_device_mapping_t, link);
+    p = list_first_entry(&storio_device_mapping_ctx_initialized_list,storio_device_mapping_t, link);
     storio_device_mapping_release_entry(p);
   }    
 
   p = list_first_entry(&storio_device_mapping_ctx_distributor.list,storio_device_mapping_t, link);
   storio_device_mapping_ctx_reset(p);
 
+  storio_device_mapping_stat.allocation++;
+  
   /*
   ** Default is to create the context in running mode
   */
-  p->status  = STORIO_FID_RUNNING;   
-  storio_device_mapping_stat.free--;
-  storio_device_mapping_stat.running++; 
-  storio_device_mapping_stat.allocation++;
-  list_remove(&p->link);        
-  list_push_back(&storio_device_mapping_ctx_running_list,&p->link);   
+  storio_device_mapping_refresh(p);
   return p;
 }
 /*
@@ -430,15 +337,13 @@ static inline void storio_device_mapping_ctx_distributor_init(int nbCtx) {
   /*
   ** Init list heads
   */
-  list_init(&storio_device_mapping_ctx_running_list);
-  list_init(&storio_device_mapping_ctx_inactive_list);
+  list_init(&storio_device_mapping_ctx_initialized_list);
   
   /*
   ** Reset stattistics 
   */
   memset(&storio_device_mapping_stat, 0, sizeof(storio_device_mapping_stat));
-  storio_device_mapping_stat.free = STORIO_DEVICE_MAPPING_MAX_ENTRIES;
-  
+
   /*
   ** Allocate memory
   */
@@ -451,7 +356,6 @@ static inline void storio_device_mapping_ctx_distributor_init(int nbCtx) {
     p = storio_device_mapping_ctx_retrieve(idx);
     pthread_rwlock_init(&p->serial_lock, NULL);
     p->index  = idx;
-    p->status = STORIO_FID_FREE;
     storio_device_mapping_ctx_reset(p);
   }  
 }

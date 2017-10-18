@@ -627,11 +627,6 @@ error:
     STOP_PROFILING(write);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;
 }
 /*
@@ -751,11 +746,6 @@ error:
     STOP_PROFILING(read);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;    
 }
 
@@ -847,11 +837,6 @@ error:
     STOP_PROFILING(read);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;    
 }
 
@@ -1084,11 +1069,6 @@ error:
     STOP_PROFILING(write);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;
 }
 /*
@@ -1267,11 +1247,6 @@ send_response:
     rozorpc_srv_release_context(req_ctx_p);
     STOP_PROFILING(rebuild_start);    
  
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;        
 }
 /*
@@ -1394,12 +1369,7 @@ send_response:
     STOP_PROFILING(rebuild_stop);
 
 out:    
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);   
-    return ;
+   return ;
 }
 /*
 **___________________________________________________________
@@ -1545,11 +1515,6 @@ error:
     STOP_PROFILING(truncate);
     
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);    
     return ;
 }
 
@@ -1648,11 +1613,6 @@ error:
     STOP_PROFILING(remove);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);   
     return ;
 }
 /*
@@ -1748,11 +1708,6 @@ error:
     STOP_PROFILING(remove);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);    
     return ;
 }
 
@@ -1832,11 +1787,6 @@ error:
     STOP_PROFILING(repair);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;
 }
 /*
@@ -1915,11 +1865,6 @@ error:
     STOP_PROFILING(repair);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;
 }
 /*
@@ -2060,11 +2005,12 @@ void sp_rdma_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ret.status = SP_SUCCESS;
     goto out;
     
+/*
 error:    
     
     ret.status                  = SP_FAILURE;            
     ret.sp_rdma_setup_ret_t_u.error = errno;
-
+*/
 out:    
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
