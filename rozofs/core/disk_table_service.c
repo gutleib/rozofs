@@ -82,8 +82,16 @@ int disk_tb_load_bitmap_file(disk_table_header_t *ctx_p)
    ** allocate the memory
    */
    ctx_p->file_btmap_p = memalign(32,sizeof(disk_tb_bitmap_file_t)+ctx_p->bitmap_size-1);
-   if (ctx_p->file_btmap_p == NULL) goto error;
+   if (ctx_p->file_btmap_p == NULL) {
+     severe("out of memory");
+     return -1;
+   }
    bitmap_p = (disk_tb_bitmap_file_t*)ctx_p->file_btmap_p;
+   /*
+   ** Clear bitmap before reading from disk
+   */
+   memset(bitmap_p->bitmap,0,ctx_p->bitmap_size);
+   bitmap_p->dirty = 0;
    /*
    ** read the bitmap from disk
    */    
@@ -94,27 +102,22 @@ int disk_tb_load_bitmap_file(disk_table_header_t *ctx_p)
        /*
        ** do not complain, just clear the buffer
        */
-       memset(bitmap_p->bitmap,0,ctx_p->bitmap_size);
-       bitmap_p->dirty = 0;
+       warning("File %s does not yet exist", fullpath);        
        return 0;     
      }
-     goto error;
+     severe("open(%s) %s", fullpath, strerror(errno));        
+     return -1;     
    }
+   
    ssize_t len = pread(fd,bitmap_p->bitmap,ctx_p->bitmap_size,0);
-   if (len != ctx_p->bitmap_size) goto error;
-   /*
-   ** clear the dirty bit
-   */
-   bitmap_p->dirty = 0;
+   if (len != ctx_p->bitmap_size) {
+     warning("File %s has size %u instead of %u", fullpath, (int)len, ctx_p->bitmap_size);
+   }  
    /*
    ** close the file
    */
    close(fd);
    return 0;
-   
-error:
-   if (fd != -1) close(fd);
-   return -1;
 }
 /*
 **__________________________________________________________________
@@ -130,7 +133,7 @@ error:
 */
 void disk_tb_file_bitmap_update(disk_table_header_t *ctx_p,int file_idx,int set)
 {
-    uint16_t byte_idx;
+    uint32_t byte_idx;
     int bit_idx ;
     disk_tb_bitmap_file_t *bitmap_p;
     
@@ -169,7 +172,7 @@ void disk_tb_file_bitmap_update(disk_table_header_t *ctx_p,int file_idx,int set)
 */
 int disk_tb_check_file_idx_bit(disk_table_header_t *ctx_p,int file_idx)
 {
-    uint16_t byte_idx;
+    uint32_t byte_idx;
     int bit_idx ;
     disk_tb_bitmap_file_t *bitmap_p;
     
