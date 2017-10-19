@@ -33,7 +33,7 @@ typedef struct _disk_table_header_t
 {  
    char *basename;    /**< basename of the table   */
    uint16_t entry_sz;  /**< size of the object stored in the table */
-   uint16_t bitmap_size;  /**< size of the bitmap in bytes  */
+   uint32_t bitmap_size;  /**< size of the bitmap in bytes  */
 
    char *root_path;  /**< root path of the table              */
    disk_tb_bitmap_file_t *file_btmap_p;
