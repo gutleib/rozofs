@@ -67,7 +67,7 @@
 #define ROZOFS_QT_MAX_ENTRIES (64*1024)
 #define ROZOFS_MAX_IQ_TIME  604800	/* (7*24*60*60) 1 week */
 #define ROZOFS_MAX_DQ_TIME  604800	/* (7*24*60*60) 1 week */
-#define ROZOFS_QUOTA_DISK_TB_SZ_POWER2 13
+#define ROZOFS_QUOTA_DISK_TB_SZ_POWER2 18
 
 typedef union _rozofs_quota_key_t
 {
