@@ -11,6 +11,18 @@ import datetime
 from optparse import OptionParser
 from pyparsing import *
 
+def syntax(error):
+  if error == None:
+    print "\n%s !!!\n"%(msg)
+
+  print "Usage: enum2String.py -n <enum> -f <file> [ -c <#char> ] [ -u ]"
+  print " -n <enum>    provides the name of the enumeration"
+  print " -f <file>    provides the file name containing the enumeration definition"
+  print " -c <#char>   enables to truncate the <#char> first characters from the enumeration definitions"
+  print " -u           May be used to avoid transformation of underscores to spaces"
+  sys.exit(1)	     
+
+
 def parse_file(enum_name, fname):
 
   # Read source file name 
@@ -50,8 +62,7 @@ parser.add_option("-u","--underscore", action="store_true",default=False, dest="
 
 # Check enum name is given
 if options.name == None: 
-  print "Missing enum name"
-  sys.exit(1)	   
+  syntax("Missing enum name")   
 enum_name = options.name
 
 # Check number of char to cut at the beginning
@@ -61,24 +72,20 @@ else:
   try:
     cut = int(options.cut)  
   except:
-    print "Bad cut value"
-    sys.exit(1)	   
+    syntax("Bad cut value")
      
 # Check source file name is given
 if options.fname == None:
-  print "Missing source file name"
-  sys.exit(1)	   
+  syntax("Missing source file name")
 
 # Check source file name exists  
 if not os.path.exists(options.fname):
-  print "%s file does not exist"%(options.fname)
-  sys.exit(1)	   
-   
+  syntax("%s file does not exist"%(options.fname))
+  
 # Read source file name 
 enum = parse_file(enum_name,options.fname)
 if enum == None:
-  print "No such enum in file"
-  sys.exit(1)	   
+  syntax("No such enum in file")
 
 
 #print enum
