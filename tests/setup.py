@@ -949,7 +949,8 @@ class exportd_class:
         print "      { ip4subnet=\"127.0.0.0/28\",     rule=\"forbid\"},"
         print "      { ip4subnet=\"127.0.0.16/28\",    rule=\"forbid\"},"
         print "      { ip4subnet=\"127.0.0.1/32\",     rule=\"allow\"},"
-        print "      { ip4subnet=\"127.0.0.17/32\",    rule=\"allow\"}"
+        print "      { ip4subnet=\"127.0.0.17/32\",    rule=\"allow\"},"
+        print "      { ip4subnet=\"192.168.10.0/24\",  rule=\"allow\"}"
         print "    );"
         print "  }"
     print ");"
@@ -1363,7 +1364,7 @@ class rozofs_class:
     display_config_int("export_buf_cnt",32)
     display_config_int("spare_restore_spare_ctx",1)
     display_config_int("spare_restore_loop_delay",rozofs.spare_restore_loop_delay);
-    display_config_int("storio_fidctx_ctx",16)   
+    display_config_int("storio_fidctx_ctx",1)   
     display_config_int("trashed_file_per_run",rozofs.trashed_file_per_run)
     if rozofs.min_metadata_inodes != None:
       display_config_int("min_metadata_inodes",rozofs.min_metadata_inodes)
@@ -2006,7 +2007,7 @@ def test_init():
   global geomgr
   
   rozofs  = rozofs_class()
-  exportd = exportd_class("zanzibar/localhost")
+  exportd = exportd_class("localhost1/localhost2")
   geomgr  = geomgr_class()
   
 
