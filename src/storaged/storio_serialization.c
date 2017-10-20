@@ -134,12 +134,15 @@ static inline int storio_check_write_allocate_chunk(storio_device_mapping_t * de
   sp_write_arg_t * write_arg_p = (sp_write_arg_t *) ruc_buf_getPayload(req_ctx_p->decoded_arg);
   int block_per_chunk          = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(write_arg_p->bsize);
   int chunk                    = write_arg_p->bid/block_per_chunk;
+  uint8_t dev;
 
   /* Is chunk number valid */
   if (chunk >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) return 0;
 
+  dev = storio_get_dev(dev_map_p,chunk);
+  
   /* Is this chunk already allocated */
-  if ((dev_map_p->device[chunk] == ROZOFS_EOF_CHUNK) || (dev_map_p->device[chunk] == ROZOFS_EMPTY_CHUNK)) {
+  if ((dev == ROZOFS_EOF_CHUNK) || (dev == ROZOFS_EMPTY_CHUNK)) {
     return 1;
   }
 
@@ -151,9 +154,10 @@ static inline int storio_check_write_allocate_chunk(storio_device_mapping_t * de
   /* Is next chunk valid */   
   chunk++; 
   if (chunk >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) return 0;
+  dev = storio_get_dev(dev_map_p,chunk);
 
   /* Is the next chunk already allocated */
-  if ((dev_map_p->device[chunk] == ROZOFS_EOF_CHUNK) || (dev_map_p->device[chunk] == ROZOFS_EMPTY_CHUNK)) {
+  if ((dev == ROZOFS_EOF_CHUNK) || (dev == ROZOFS_EMPTY_CHUNK)) {
     return 1;
   }
   return 0;

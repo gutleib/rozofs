@@ -194,23 +194,7 @@ char * storio_display_one_mapping_ctx(char * pChar, storio_device_mapping_t * p)
   ** Display the list of devices per chunk until the end of file
   */
   pChar += rozofs_string_append(pChar,"      \"devices\" : \"");
-  {
-    int idx;
-    for (idx=0; idx<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; idx++) {
-      if (p->device[idx]== ROZOFS_UNKNOWN_CHUNK) {
-        pChar += rozofs_string_append(pChar,"?");
-        break;
-      }  
-      if (p->device[idx]== ROZOFS_EOF_CHUNK) break;
-      if (p->device[idx]==ROZOFS_EMPTY_CHUNK)  {
-        pChar += rozofs_string_append(pChar,"E");
-      }  
-      else {
-        pChar += rozofs_u32_append(pChar,p->device[idx]);
-      } 
-      pChar += rozofs_string_append(pChar,"/");
-    }  
-  }
+  pChar  = trace_device(pChar,p);
   pChar += rozofs_string_append(pChar,"\",\n");
   
   
@@ -282,41 +266,24 @@ void storage_fid_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   ** Display general information
   */
   if (argv[1] == NULL) {
+    
+    pChar += rozofs_string_append(pChar,"{ \"FID mapping statistics\" : {\n");
 
     pChar = display_cache_fid_stat(pChar);
     
-    pChar += rozofs_string_append(pChar,"chunk size  : ");    
-    if ((ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE)>(1024*1024*1024)) {
-      pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE/(1024*1024*1024));
-      pChar += rozofs_string_append(pChar," G\n");    
-    }
-    else if ((ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE)>(1024*1024)) {
-      pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE/(1024*1024));
-      pChar += rozofs_string_append(pChar," M\n");    
-    }  
-    else if ((ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE)>(1024)) {
-      pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE/(1024));
-      pChar += rozofs_string_append(pChar," K\n");    
-    }
-    else {
-      pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
-      pChar += rozofs_eol(pChar);    
-    }  
-    
-    pChar += rozofs_string_append(pChar,"ctx nb x sz : ");
-    pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES);
-    pChar += rozofs_string_append(pChar," x ");
+    pChar += rozofs_string_append(pChar,",\n  \"FID ctx statistics\" : {\n    \"chunk size\"  : ");    
+    pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);  
+    pChar += rozofs_string_append(pChar,",\n    \"context size\" : ");
     pChar += rozofs_u32_append(pChar,sizeof(storio_device_mapping_t));
-    pChar += rozofs_string_append(pChar," = ");    
+    pChar += rozofs_string_append(pChar,",\n    \"context number\" : ");    
+    pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES);
+    pChar += rozofs_string_append(pChar,",\n    \"total size\" : ");
     pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES * sizeof(storio_device_mapping_t));
-    pChar += rozofs_string_append(pChar,"\nallocation  : ");
+    pChar += rozofs_string_append(pChar,",\n    \"allocation\"  : ");
     pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.allocation);
-    pChar += rozofs_string_append(pChar," (release+");
-    pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.allocation-storio_device_mapping_stat.release);
-    pChar += rozofs_string_append(pChar,")\nrelease     : ");
+    pChar += rozofs_string_append(pChar,",\n    \"release\" : ");
     pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.release);
-    pChar += rozofs_eol(pChar);
-
+    pChar += rozofs_string_append(pChar,"\n  }\n}}\n");
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;       
   }

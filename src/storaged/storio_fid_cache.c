@@ -64,14 +64,14 @@ uint8_t lowest1[0xFF];
   pChar += rozofs_string_append(pChar,end);\
 }  
 char * display_cache_fid_stat(char * pChar) {
-  pChar += rozofs_string_append(pChar,"  \"statistics\" : {\n");
+  pChar += rozofs_string_append(pChar,"  \"cache statistics\" : {\n");
   DISPLAY_CACHE_FID_STAT(count,",\n");
   DISPLAY_CACHE_FID_STAT(hit,",\n");
   DISPLAY_CACHE_FID_STAT(miss,",\n");
   DISPLAY_CACHE_FID_STAT(bkts,",\n");
   DISPLAY_CACHE_FID_STAT(mxbkt,",\n");
   DISPLAY_CACHE_FID_STAT(mxcol,"\n")
-  pChar += rozofs_string_append(pChar,"  }\n");
+  pChar += rozofs_string_append(pChar,"  }");
   *pChar = 0;
   return pChar;
 }  

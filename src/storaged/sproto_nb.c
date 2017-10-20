@@ -530,7 +530,7 @@ void sp_write_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ** A mapping context exist containing information synchronized
     ** with the disk header file content.
     */    
-    if (dev_map_p->device[0] != ROZOFS_UNKNOWN_CHUNK) {
+    if (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK) {
       /*
       ** This is not the same recycling counter, so let's recycle
       */
@@ -540,8 +540,8 @@ void sp_write_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 	** Let's clear the chunk distribution to force a header file update
 	** and a data truncate.
 	*/
-	memset(dev_map_p->device,ROZOFS_UNKNOWN_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE); 
-	dev_map_p->recycle_cpt =  rozofs_get_recycle_from_fid(write_arg_p->fid);
+        storio_free_dev_mapping(dev_map_p);
+        dev_map_p->recycle_cpt =  rozofs_get_recycle_from_fid(write_arg_p->fid);
       }
     } 
 
@@ -688,7 +688,7 @@ void sp_read_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ** A mapping context exist containing information synchronized
     ** with the disk header file content.
     */    
-    if ((dev_map_p) && (dev_map_p->device[0] != ROZOFS_UNKNOWN_CHUNK)) {
+    if ((dev_map_p) && (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK)) {
       /*
       ** This is not the same recycling counter, 
       ** so the requested FID does not exist.
@@ -788,7 +788,7 @@ void sp_read_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ** A mapping context exist containing information synchronized
     ** with the disk header file content.
     */    
-    if ((dev_map_p) && (dev_map_p->device[0] != ROZOFS_UNKNOWN_CHUNK)) {
+    if ((dev_map_p) && (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK)) {
       /*
       ** This is not the same recycling counter, 
       ** so the requested FID does not exist.
@@ -971,8 +971,8 @@ void sp_write_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     /*
     ** A mapping context exist containing information synchronized
     ** with the disk header file content.
-    */    
-    if (dev_map_p->device[0] != ROZOFS_UNKNOWN_CHUNK) {
+    */   
+    if (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK) { 
       /*
       ** This is not the same recycling counter, so let's recycle
       */
@@ -982,7 +982,7 @@ void sp_write_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 	** Let's clear the chunk distribution to force a header file update
 	** and a data truncate.
 	*/
-	memset(dev_map_p->device,ROZOFS_UNKNOWN_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE); 
+        storio_free_dev_mapping(dev_map_p);
 	dev_map_p->recycle_cpt =  rozofs_get_recycle_from_fid(write_arg_p->fid);
       }
     } 
@@ -1323,11 +1323,11 @@ void sp_rebuild_stop_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) 
     }
 	 
     /*
-    ** In caase no relocation has been done, or relocation has been done on the same
+    ** In case no relocation has been done, or relocation has been done on the same
     ** device, just send back the response
     */	 
     if ((pRebuild->relocate != RBS_RELOCATED)
-    ||  (pRebuild->old_device == dev_map_p->device[pRebuild->chunk])) {
+    ||  (pRebuild->old_device == storio_get_dev(dev_map_p,pRebuild->chunk))) {
     	           
       storio_rebuild_ctx_free (pRebuild);
       dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF;    
