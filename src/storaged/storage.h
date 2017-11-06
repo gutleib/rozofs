@@ -35,6 +35,7 @@
 #include <rozofs/common/common_config.h>
 #include <rozofs/core/rozofs_string.h>
 #include <rozofs/core/rozofs_share_memory.h>
+#include <rozofs/rpc/sproto.h>
 
 #include "storio_device_mapping.h"
 
@@ -898,23 +899,20 @@ static inline int storage_write(storage_t * st, storio_device_mapping_t * fidCtx
 #else
 #define repairdbg(fmt,...) info(fmt,__VA_ARGS__)
 #endif
-int storage_write_repair_chunk(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
-        uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, uint64_t * bitmap, uint8_t version,
+char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+        uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, sp_b2rep_t * blk2repair, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty);
 
-static inline int storage_write_repair(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
-        uint8_t spare, fid_t fid, bid_t input_bid, uint32_t input_nb_proj, uint64_t * bitmap, uint8_t version,
+static inline int storage_write_repair3(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+        uint8_t spare, fid_t fid, bid_t input_bid, uint32_t input_nb_proj, sp_b2rep_t * blk2repair, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty) {
-    int ret1,ret2;
     bid_t      bid;
-    uint32_t   nb_proj;
     char   * pBins;    
     int      block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
     int      chunk                   = input_bid/block_per_chunk;
-    int      last_block_idx;
-    int      block0_chunk2;
-    uint64_t local_bitmask[3];
-    int      i;
+    int      last_relative_block_idx_in_1rst_chunk;
+    int      first_block2repair_in_2nd_chunk;
+    int      idx;
 
     
     if (chunk>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) { 
@@ -924,120 +922,103 @@ static inline int storage_write_repair(storage_t * st, uint8_t * device, uint8_t
     
     bid = input_bid - (chunk * block_per_chunk);
          
-    repairdbg ("repair input_bid %llu = chunk/block %d/%d  %d blocks to rebuild. %d block per chunk.",
+    repairdbg ("repair3 input_bid %llu = chunk/block %d/%d  %d blocks to rebuild. %d block per chunk.",
 	          (long long unsigned int)input_bid,chunk,(int)bid, input_nb_proj,block_per_chunk); 
     /*
     ** Find out the last block number to repair
     */
     if (input_nb_proj==0) {
-      severe("storage_write_repair with no block");
+      severe("storage_write_repair3 with no block");
       return -1;
     }
-    
-    nb_proj        = input_nb_proj;    
-    last_block_idx = 0;
-    while (last_block_idx<(3*64)) {
-      if (ROZOFS_BITMAP64_TEST1(last_block_idx,bitmap)){
-        repairdbg("- bit/block %d/%d",last_block_idx,last_block_idx+(int)bid);
-        nb_proj--;             // One more projection found
-	if (nb_proj==0) break; // all projection found
-      }	
-      last_block_idx++;  // check next block    
-    }
-    if (nb_proj!=0) { // Not all projection ound within 513 bits !!!
-      severe("storage_write_repair inconsistent request");
+    if (input_nb_proj>ROZOFS_MAX_REPAIR_BLOCKS) {
+      severe("storage_write_repair3 too much blocks %d > %d",input_nb_proj,ROZOFS_MAX_REPAIR_BLOCKS);
       return -1;
-    }    
-    last_block_idx += bid; // Last block number in this chunk
+    }  
+    if (blk2repair[input_nb_proj-1].relative_bid > (3*64)) {
+      severe("storage_write_repair3 blk2repair[%d].relative_bid = %d (192)",input_nb_proj-1,blk2repair[input_nb_proj-1].relative_bid);
+      return -1;
+    }  
 
     
+    
+    /*
+    ** Compute the relative index of the last block of the chunk
+    */
+    last_relative_block_idx_in_1rst_chunk =  block_per_chunk - 1 - bid;     
 	   
-    if (last_block_idx < block_per_chunk) { 
+    if (last_relative_block_idx_in_1rst_chunk >= blk2repair[input_nb_proj-1].relative_bid) { 
       repairdbg("all in one chunk %d",chunk);
     
       /*
       ** Every block can be written in one time in the same chunk
       */
-      ret1 = storage_write_repair_chunk(st, device, layout, bsize, dist_set,
-        			 spare, fid, chunk, bid, input_nb_proj,bitmap, version,
+      pBins = storage_write_repair3_chunk(st, device, layout, bsize, dist_set,
+        			 spare, fid, chunk, bid, input_nb_proj, &blk2repair[0], version,
         			 file_size, bins, is_fid_faulty);
-      if (ret1 == -1) {
-        dbg("write errno %s",strerror(errno));			     
+      if (pBins == NULL) {
+        dbg("write errno %s",strerror(errno));	
+        return -1;		     
       }
-      return ret1;	 
+      return 0;	 
     }  
 
     /* 
     ** We have to repair two chunks
-    */ 
+    */     
     
     if ((chunk+1)>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) { 
       errno = EFBIG;
       return -1;
     }        
 
-    // 1rst block of 2nd chunk  
-    block0_chunk2 = block_per_chunk - bid;
-
-    repairdbg("1rst chunk : bid %d last bit/block %d/%d",(int)bid, block0_chunk2-1,block0_chunk2-1+(int)bid);
-    
-    // Build the bitmap for the 1rst chunk
-    nb_proj = 0;
-    ROZOFS_BITMAP64_ALL_RESET(local_bitmask);
-    
-    for (i=0; i<block0_chunk2; i++) {
-      if (ROZOFS_BITMAP64_TEST1(i,bitmap)) {
-        nb_proj++;
-        ROZOFS_BITMAP64_SET(i,local_bitmask);
-        repairdbg("set bit/block %d/%d for 1rst chunk %d",i, i+(int)bid, chunk);	
-      }	
+    /*
+    ** Find out the last block in the blocks to repair within the 1rst chunk
+    */
+    for (first_block2repair_in_2nd_chunk=0; first_block2repair_in_2nd_chunk < input_nb_proj; first_block2repair_in_2nd_chunk++) {
+      if (blk2repair[first_block2repair_in_2nd_chunk].relative_bid > last_relative_block_idx_in_1rst_chunk) break; 
     }
+     
+    repairdbg("1rst chunk : bid %d repair %d blocks",(int)bid, first_block2repair_in_2nd_chunk);
+    
 
-    ret1 = 0;
     pBins = (char *) bins; 
         
-    if (nb_proj) {
-      ret1 = storage_write_repair_chunk(st, device, layout, bsize, dist_set,
-        			   spare, fid, chunk, bid, nb_proj, local_bitmask, version,
+    if (first_block2repair_in_2nd_chunk) {
+      pBins = storage_write_repair3_chunk(st, device, layout, bsize, dist_set,
+        			   spare, fid, chunk, bid, first_block2repair_in_2nd_chunk, &blk2repair[0], version,
         			   file_size, (bin_t*)pBins, is_fid_faulty);    
-      if (ret1 == -1) {
-	    dbg("write errno %s",strerror(errno));
-	    return -1;			     
+      if (pBins == NULL) {
+	dbg("write errno %s",strerror(errno));
+	return -1;			     
       }
     }
 	    
       
     // 2nd chunk
     chunk++;         
+    bid = 0;
 
-    last_block_idx -= block_per_chunk;
-
-    repairdbg("2nd chunk : 1rst bit/block %d/%d last bit/block %d/%d",
-	           block0_chunk2, block0_chunk2+(int)bid, last_block_idx+block0_chunk2, last_block_idx+block0_chunk2+(int)bid);
-    bid     = 0;
-    
-    // Build the bitmap for the 2nd chunk
-    nb_proj = 0;
-    ROZOFS_BITMAP64_ALL_RESET(local_bitmask);
-    
-    for (i=0; i<=last_block_idx; i++) {
-      if (ROZOFS_BITMAP64_TEST1(i+block0_chunk2,bitmap)) {
-        nb_proj++;
-        ROZOFS_BITMAP64_SET(i,local_bitmask);
-        repairdbg("set bit/block %d/%d for chunk %d",i,i+chunk*block_per_chunk, chunk);	
-      }	
+    /*
+    ** Find out the last block in the blocks to repair within the 1rst chunk
+    */
+    for (idx = first_block2repair_in_2nd_chunk;idx < input_nb_proj; idx++) {
+      blk2repair[idx].relative_bid -= (last_relative_block_idx_in_1rst_chunk+1); 
     }
+     
     
-    pBins += ret1;  
-    ret2 = storage_write_repair_chunk(st, device, layout, bsize, dist_set,
-        			 spare, fid, chunk, bid, nb_proj, local_bitmask, version,
+    repairdbg("2nd chunk : bid %d repair %d blocks",(int)bid, input_nb_proj-first_block2repair_in_2nd_chunk);
+    
+    
+    pBins = storage_write_repair3_chunk(st, device, layout, bsize, dist_set,
+        			 spare, fid, chunk, bid, input_nb_proj-first_block2repair_in_2nd_chunk, &blk2repair[first_block2repair_in_2nd_chunk], version,
         			 file_size, (bin_t*)pBins, is_fid_faulty);    
-    if (ret2 == -1) {
+    if (pBins == NULL) {
       dbg("write errno %s",strerror(errno));
       return -1;			     
     }
     
-    return ret2+ret1;
+    return 0;
 }
 
 /** Read nb_proj projections

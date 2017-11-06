@@ -3,6 +3,20 @@
 
 import sys
 
+red = '\033[91m'
+green = '\033[92m'
+yellow = '\033[93m'
+blue = '\033[94m'
+purple = '\033[95m'
+cyan = '\033[96m'
+white = '\033[97m'
+endeffect = '\033[0m'
+bold = '\033[1m'
+underline = '\033[4m'
+blink = '\033[5m'
+reverse = '\033[7m'
+
+
 #_______________________________________________
 class constants:
 
@@ -32,8 +46,9 @@ class column_desc:
 #_______________________________________________
 class big_title:
 
-  def __init__(self,text):  
-    self.text = text
+  def __init__(self,text,effect=None):  
+    self.text   = text
+    self.effect = effect
 
   def display(self,column_desc):
     l=0
@@ -46,9 +61,13 @@ class big_title:
     line+="| "
     start = int(l)/2
     end   = int(l)-start
-    for i in range(start): line+=" "	    	
+    
+    if self.effect != None:
+      line+=self.effect+bold+reverse
+    for i in range(start): line+=" "
     line+=self.text
     for i in range(end): line+=" " 
+    line+=endeffect
     line+=" |"   
     print line  
 #_______________________________________________
@@ -102,23 +121,31 @@ class separator_line:
     line+=self.extreme   
     print line    
 #_______________________________________________
+class display_element:
+
+  def __init__(self,value,effect=None):  
+    self.value  = value 
+    self.effect = effect
+     
+
+#_______________________________________________
 class display_line:
 
   def __init__(self,centered=False):  
     self.column     = []   
     self.centered   = centered
       
-  def set_column(self,column,value):
+  def set_column(self,column,value,effect=None):
     # Extend column number
     if int(column) > len(self.column):
       for i in range(len(self.column),int(column)):
-        self.column.append('')
-    self.column[int(column)-1] = value
+        self.column.append(display_element(''))
+    self.column[int(column)-1] = display_element(value,effect)
 
   def check_column(self,column,value):
     # Extend column number
     if int(column) > len(self.column): return False
-    if self.column[int(column)-1] == value: return True
+    if self.column[int(column)-1].value == value: return True
     return False
     
   # Join a colum with its preceding column  
@@ -127,8 +154,8 @@ class display_line:
     # Extend column number
     if int(column) > len(self.column):
       for i in range(len(self.column),int(column)):
-        self.column.append('')
-    self.column[int(column)-1] = const.joined_column()
+        self.column.append(display_element(''))
+    self.column[int(column)-1] = display_element(const.joined_column())
 
   def display(self,column_desc):
     const = constants()
@@ -137,15 +164,18 @@ class display_line:
     line+="| "
     for col in range(column_desc.column_nb):
     
-      try:     val=self.column[col]
-      except:  val=''	
+      try:     elt=self.column[col]
+      except:  elt=display_element('')	
+      
+      val = elt.value
+      eff = elt.effect
       
       if val == const.joined_column(): continue
 
       l = column_desc.column_sizes[col]-len(val)
       joined = 0
       for jc in range(col+1,column_desc.column_nb):
-        try:    next = self.column[jc]
+        try:    next = self.column[jc].value
 	except: next = ''
         if next != const.joined_column(): break
 	l += column_desc.column_sizes[jc]+3
@@ -161,10 +191,12 @@ class display_line:
 	except:
 	  start = 0
 	  end = l
-
-      for i in range(start): line+=" "	    	
+          
+      if eff != None: line+=eff+bold+reverse
+      for i in range(start): line+=" "
       line+=val
       for i in range(end): line+=" " 
+      line+=endeffect
       line+=" | "  
       col+=joined 
     print line
@@ -172,7 +204,7 @@ class display_line:
 #_______________________________________________
 class adaptative_tbl:
 
-  def __init__(self, shift, title=None):  
+  def __init__(self, shift, title=None,effect=None):  
     self.row_nb      = int(0)
     self.row         = [] 
     self.current_row = None 
@@ -181,7 +213,7 @@ class adaptative_tbl:
       self.separator(' ',' ')      
     else:
       self.separator(' ','_')
-      self.row.append(big_title(title)) 
+      self.row.append(big_title(title,effect)) 
       self.row_nb += 1
       self.separator('|','_')
     
@@ -201,8 +233,8 @@ class adaptative_tbl:
             
   def end_separator(self): self.separator('|','|')	 
          
-  def set_column(self,column,value):
-    self.current_row.set_column(column,value)
+  def set_column(self,column,value,effect=None):
+    self.current_row.set_column(column,value,effect)
     self.column_desc.update_column(column,len(value))      
 
   def join_preceding_column(self,column):
