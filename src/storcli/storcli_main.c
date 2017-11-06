@@ -74,7 +74,6 @@ DEFINE_PROFILING(stcpp_profiler_t);
 */
 storcli_shared_t storcli_rozofsmount_shared_mem[SHAREMEM_PER_FSMOUNT];
 
-void show_repair2(char * argv[], uint32_t tcpRef, void *bufRef);
 
 
 /*
@@ -85,6 +84,13 @@ void show_repair2(char * argv[], uint32_t tcpRef, void *bufRef);
 
 int storcli_site_number = 0;
 
+/* 
+**____________________________________________________
+** REPAIR man & CLI
+**
+*/
+void storcli_man_repair(char * pChar) ;
+void storcli_cli_repair(char * argv[], uint32_t tcpRef, void *bufRef) ;
 /*__________________________________________________________________________
  */
 /**
@@ -2114,12 +2120,9 @@ int main(int argc, char *argv[]) {
     uma_dbg_addTopicAndMan("corrupted", show_corrupted, man_corrupted, 0);
     uma_dbg_addTopicAndMan("rwerror", show_rwerror, man_rwerror, 0);
 
-    /*
-    ** add the topic for repair capabilities
-    */
-    uma_dbg_addTopic("repair2", show_repair2);
-
-    /*
+    
+    uma_dbg_addTopicAndMan("repair", storcli_cli_repair, storcli_man_repair, UMA_DBG_OPTION_RESET);
+   /*
      ** add the topic to display the storcli configuration
      */    
     uma_dbg_addTopic("start_config", show_start_config);

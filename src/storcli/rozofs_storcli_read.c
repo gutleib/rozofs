@@ -1632,19 +1632,6 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     }
     STORCLI_STOP_KPI(storcli_kpi_transform_inverse,0);
 
-    /*
-    ** now the inverse transform is finished, release the allocated ressources used for
-    ** rebuild
-    */
-    read_prj_work_p = working_ctx_p->prj_ctx;
-    for (projection_id = 0; projection_id < rozofs_safe; projection_id++)
-    {
-      if  (read_prj_work_p[projection_id].prj_buf != NULL) {
-        ruc_buf_freeBuffer(read_prj_work_p[projection_id].prj_buf);
-      }	
-      read_prj_work_p[projection_id].prj_buf = NULL;
-      read_prj_work_p[projection_id].prj_state = ROZOFS_PRJ_READ_IDLE;
-    }
 
     /*
     ** update the index of the next block to read
@@ -1655,6 +1642,11 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     */
     if (working_ctx_p->cur_nmbs2read < storcli_read_rq_p->nb_proj)
     {
+      /*
+      ** now the inverse transform is finished, release the allocated ressources used for
+      ** rebuild
+      */
+      rozofs_storcli_release_prj_buf(working_ctx_p,layout);
       /*
       ** attempt to read block with the next distribution
       */
@@ -1675,6 +1667,11 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
       }
     
     }
+    /*
+    ** now the inverse transform is finished, release the allocated ressources used for
+    ** rebuild
+    */
+    rozofs_storcli_release_prj_buf(working_ctx_p,layout);
     
     rozofs_storcli_read_reply_success(working_ctx_p);
     /*

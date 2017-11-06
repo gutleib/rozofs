@@ -82,6 +82,8 @@ void rozofs_storcli_transform_update_headers(rozofs_storcli_projection_ctx_t *pr
       rozofs_bins_hdr_p = (rozofs_stor_bins_hdr_t*) (prj_ctx_p->bins 
                         + (prj_size_in_msg/sizeof(bin_t)) * block_idx);
 
+      memcpy(&prj_ctx_p->rcv_hdr[block_idx], rozofs_bins_hdr_p, sizeof(rozofs_stor_bins_hdr_t));
+      
       /*
       ** take care of the crc errors
       */

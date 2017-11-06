@@ -46,9 +46,8 @@ verbose=False
 
 #___________________________________________________
 # Messages and logs
+
 #___________________________________________________
-
-
 resetLine="\r"
 #___________________________________________________
 # output a message in syslog
@@ -214,7 +213,7 @@ def reset_storcli_counter():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c profiler reset"%(instance,instance,instance,instance)         
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   
@@ -898,8 +897,11 @@ def crc32():
 
   backline("Create file %s/crc32"%(exepath))
 
+
+  crcfile="%s/crc32"%(exepath)
   # Create a file
-  os.system("dd if=/dev/zero of=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
+  if os.path.exists(crcfile): os.remove(crcfile)      
+  os.system("cp ./ref %s"%(crcfile))  
   
   # Clear error counter
   reset_storcli_counter()
@@ -909,7 +911,7 @@ def crc32():
     return 1 
     
   # Get its localization  
-  os.system("./setup.py cou %s/crc32 > /tmp/crc32loc"%(exepath))
+  os.system("./setup.py cou %s > /tmp/crc32loc"%(crcfile))
      
   # Find the 1rst mapper file
   mapper = None
@@ -944,18 +946,18 @@ def crc32():
     return -1
 
   # Reset storages
-  os.system("./setup.py storage all reset")
+  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
   wait_until_all_sid_up()
       
   # Reread the file
-  os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
            
   # Check mapper file has been repaired
   statinfo = os.stat(mapper)
   if statinfo.st_size == 0:
     report("%s has not been repaired"%(mapper))
     return -1             
-  backline("mapper/header has been repaired")
+  backline("mapper/header has been repaired ")
 
   # Corrupt mapper file 
   f = open(mapper, "w+")     
@@ -969,11 +971,12 @@ def crc32():
   backline("Corrupt mapper/header file ")
       
   # Reset storage
-  os.system("./setup.py storage all reset")
+  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
   wait_until_all_sid_up()
      
   # Reread the file
-  os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))           
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+  #if filecmp.cmp(crcfile,"./ref") == False: report("%s and %s differ"%(crcfile,"./ref"))
 
   # Check file has been re written
   f = open(mapper, "rb")      
@@ -981,8 +984,7 @@ def crc32():
   if char == 'a':
     report("%s has not been rewritten"%(mapper))
     return -1      
-  backline("mapper/header has been repaired")
-
+  backline("mapper/header has been repaired ")
 
   # Corrupt the bins file
   f = open(bins, 'r+b')     
@@ -992,8 +994,38 @@ def crc32():
   f.write("DDT")
   f.seek(4444) 
   f.write("DDT")    
+  f.seek(1024*112) 
+  f.write("DDT")    
+  f.seek(1024*114) 
+  f.write("DDT")    
+  f.seek(1024*115) 
+  f.write("DDT")    
+  f.seek(1024*118) 
+  f.write("DDT")    
+  f.seek(1024*120) 
+  f.write("DDT")    
+  size = os.path.getsize(bins)
+  f.seek(size-11);
+  f.write("DDT")       
   f.close()
-  backline("Corrupt bins file")
+  backline("Corrupt bins file ")
+
+  # Reset storages
+  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
+  wait_until_all_sid_up()
+ 
+  # Clear error counter
+  reset_storcli_counter()
+  
+  # Reread the file
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+ 
+  # Checl for CRC32 errors
+  if check_storcli_crc(True) == True:
+    backline("Repair procedure has been run ")
+  else:     
+    report("No CRC errors after file reread")
+    return 1 
 
   # Reset storages
   os.system("./setup.py storage all reset")
@@ -1003,15 +1035,19 @@ def crc32():
   reset_storcli_counter()
   
   # Reread the file
-  os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))           
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
  
   # Checl for CRC32 errors
-  if check_storcli_crc(True) == True:
-    backline("Bins file has been repaired")
-    return 0
+  if check_storcli_crc(False) == True:
+    report("Bins file still has errors")
+    return 1     
+  backline("Bins file is repaired")
+  
+  if filecmp.cmp(crcfile,"./ref") == False: 
+    report("%s and %s differ"%(crcfile,"./ref"))
+    return 1
     
-  report("No CRC errors after file reread")
-  return 1 
+  return 0 
  
 #___________________________________________________
 def xattr():
@@ -1359,7 +1395,7 @@ def compil_openmpi():
 # Get rozofs from github, compile it and test rozodiag
 #___________________________________________________     
 def compil_rozofs():  
-  os.system("cd %s; rm -rf git; mkdir git; git clone https://github.com/rozofs/rozofs.git git  > %s/compil_rozofs 2>&1; cd git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1>> %s/compil_rozofs; make -j16  >> %s/compil_rozofs 2>&1"%(exepath,exepath,exepath,exepath))
+  os.system("cd %s; rm -rf git; git clone https://github.com/rozofs/rozofs.git git  > %s/compil_rozofs 2>&1; cd %s/git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1>> %s/compil_rozofs; make -j16  >> %s/compil_rozofs 2>&1"%(exepath,exepath,exepath,exepath,exepath))
   if is_elf("src/rozodiag/rozodiag") == False: return 1
   if is_elf("src/exportd/exportd") == False: return 1
   if is_elf("src/rozofsmount/rozofsmount") == False: return 1

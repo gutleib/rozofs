@@ -187,6 +187,55 @@ xdr_sp_write_repair2_arg_t (XDR *xdrs, sp_write_repair2_arg_t *objp)
 }
 
 bool_t
+xdr_sp_b2rep_t (XDR *xdrs, sp_b2rep_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_vector (xdrs, (char *)objp->hdr, 2,
+		sizeof (uint64_t), (xdrproc_t) xdr_uint64_t))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->relative_bid))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_sp_write_repair3_arg_t (XDR *xdrs, sp_write_repair3_arg_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_uint16_t (xdrs, &objp->cid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->layout))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->spare))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->dist_set, ROZOFS_SAFE_MAX_RPC,
+		sizeof (uint32_t), (xdrproc_t) xdr_uint32_t))
+		 return FALSE;
+	 if (!xdr_sp_uuid_t (xdrs, objp->fid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->proj_id))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->bid))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->nb_proj))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->bsize))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->blk2repair, ROZOFS_MAX_REPAIR_BLOCKS,
+		sizeof (sp_b2rep_t), (xdrproc_t) xdr_sp_b2rep_t))
+		 return FALSE;
+	 if (!xdr_bytes (xdrs, (char **)&objp->bins.bins_val, (u_int *) &objp->bins.bins_len, ~0))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_sp_write_repair_arg_no_bins_t (XDR *xdrs, sp_write_repair_arg_no_bins_t *objp)
 {
 	//register int32_t *buf;
@@ -249,6 +298,41 @@ xdr_sp_write_repair2_arg_no_bins_t (XDR *xdrs, sp_write_repair2_arg_no_bins_t *o
 		 return FALSE;
 	 if (!xdr_vector (xdrs, (char *)objp->bitmap, 3,
 		sizeof (uint64_t), (xdrproc_t) xdr_uint64_t))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->len))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_sp_write_repair3_arg_no_bins_t (XDR *xdrs, sp_write_repair3_arg_no_bins_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_uint16_t (xdrs, &objp->cid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->layout))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->spare))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->dist_set, ROZOFS_SAFE_MAX_RPC,
+		sizeof (uint32_t), (xdrproc_t) xdr_uint32_t))
+		 return FALSE;
+	 if (!xdr_sp_uuid_t (xdrs, objp->fid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->proj_id))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->bid))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->nb_proj))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->bsize))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->blk2repair, ROZOFS_MAX_REPAIR_BLOCKS,
+		sizeof (sp_b2rep_t), (xdrproc_t) xdr_sp_b2rep_t))
 		 return FALSE;
 	 if (!xdr_uint32_t (xdrs, &objp->len))
 		 return FALSE;

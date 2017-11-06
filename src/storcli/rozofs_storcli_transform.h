@@ -78,6 +78,7 @@ typedef struct _rozofs_storcli_projection_ctx_t
    void    *prj_buf_missing;         /**< ruc buffer that contains the payload             */ 
    uint64_t timestamp;       /**< monitoring timestamp                             */
    rozofs_stor_bins_hdr_t block_hdr_tab[ROZOFS_MAX_BLOCK_PER_MSG];
+   rozofs_stor_bins_hdr_t rcv_hdr[ROZOFS_MAX_BLOCK_PER_MSG];
    uint64_t raw_file_size;    /**< file size reported from a fstat on the projection file */
    uint64_t crc_err_bitmap[ROZOFS_BLOCK_BITMAP_NB_UINT64];   /**< bitmap of the blocks on which a crc error has detected by storaged */
 } rozofs_storcli_projection_ctx_t;
@@ -276,5 +277,111 @@ int rozofs_storcli_transform_inverse_check_for_thread(rozofs_storcli_projection_
                                        rozofs_storcli_inverse_block_t *block_ctx_p,
                                        uint32_t *number_of_blocks_p,
 				       uint8_t  *rozofs_storcli_prj_idx_table,
-				       uint32_t *corrupted_blocks);                                        
+				       uint32_t *corrupted_blocks);         
+                                       
+/*
+**__________________________________________________________________________
+*/
+/** 
+ * Check out whether a block needs to be repaired in the read projections
+ * At the time this function is called, the data have been transformed back 
+ * succesfully
+ * 
+ * @param *prj_ctx_p: pointer to the working array of the projection
+ * @param first_block_idx: index of the first block to transform
+ * @param number_of_blocks: number of blocks to write
+ * @param *data: pointer to the source data that must be transformed
+   @param *number_of_blocks_p: pointer to the array where the function returns number of blocks on which the transform was applied
+  @param *rozofs_storcli_prj_idx_table: pointer to the array used for storing the projections index for inverse process
+ *
+ * @return: the length written on success, -1 otherwise (errno is set)
+ */
+static inline void rozofs_storcli_check_block_2_repair(rozofs_storcli_projection_ctx_t * prj_ctx_p,  
+                                         uint8_t                           rozofs_inverse, 
+                                         uint8_t                           rozofs_forward,
+                                         uint8_t                           rozofs_safe,
+                                         int                               prj_size_in_msg,
+                                         uint32_t                          number_of_blocks, 
+                                         rozofs_storcli_inverse_block_t  * block_ctx_p)
+ {
+    int                      block_idx;
+    int                      prj_ctx_idx;
+    int                      received        = 0;
+    rozofs_stor_bins_hdr_t * hdr;      
+    int                      prj2repair = -1;
+    int                      blk2repair = -1;
+        
+    /*
+    ** One must have read at least 3 blocks to decide to rebuild a block of a projection
+    */
+    if (number_of_blocks < 5) return;
+
+    /*
+    ** When no more than inverse projections has been read, every block is perfect
+    */ 
+    for (prj_ctx_idx = 0; prj_ctx_idx <rozofs_safe; prj_ctx_idx++) {
+        if (prj_ctx_p[prj_ctx_idx].prj_state == ROZOFS_PRJ_READ_DONE) received++;
+    }
+    if (received <= rozofs_inverse) return;
+    
+
+    /*
+    ** Proceed examination block per block
+    */
+    for (block_idx = 0; block_idx < number_of_blocks; block_idx++) {
+
+        /*
+        ** We are looking for a non empty blocks to be repaired
+        */
+        if (block_ctx_p[block_idx].timestamp == 0) continue;
+             
+        /*
+        ** Loop on the received projections
+        */     
+        for (prj_ctx_idx = 0; prj_ctx_idx <rozofs_safe; prj_ctx_idx++) {
+            
+            /*
+            ** Only the received ones
+            */
+            if (prj_ctx_p[prj_ctx_idx].prj_state != ROZOFS_PRJ_READ_DONE) continue;
+            
+            /*
+            ** Not those from the spare SIDs
+            */
+            if (prj_ctx_p[prj_ctx_idx].stor_idx >= rozofs_forward) continue;
+
+            /*
+            ** Point to the received header
+            */
+            hdr = (rozofs_stor_bins_hdr_t*)(prj_ctx_p[prj_ctx_idx].bins + (prj_size_in_msg/sizeof(bin_t)) * block_idx);
+            
+            /*
+            ** This block comes from a regular SID 
+            */
+            if (hdr->s.timestamp == 0) {
+               /*
+               ** Let's declare a fault to repair on this projection and block
+               */
+               if (blk2repair == -1) {
+                  blk2repair = block_idx;
+                  prj2repair = prj_ctx_idx;
+               }
+               else {
+                 /*
+                 ** To much errors. Do not try to repair anything
+                 */
+                 return;
+               }  
+            }   
+    	}	
+    }
+    
+    /*
+    ** Only one block in one projection to repair
+    */
+    if (blk2repair != -1) {
+      ROZOFS_BITMAP64_SET(blk2repair,prj_ctx_p[prj2repair].crc_err_bitmap);
+    }      
+}         
+                                                      
 #endif

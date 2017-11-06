@@ -55,6 +55,78 @@ int      re_enumration_required=0;
 time_t   storio_last_enumeration_date;
 
 
+/*_______________________________________________________________________
+* REPAIT STATISTICS
+*
+*/
+typedef struct storio_repair_stat_t {
+  uint64_t   file_error;
+  uint64_t   nb_requests;
+  uint64_t   nb_blocks_requested;  
+  uint64_t   nb_blocks_attempted;
+  uint64_t   nb_blocks_success;
+} storio_repair_stat_t;
+storio_repair_stat_t storio_repair_stat = { 0 };
+/*_______________________________________________________________________
+*  man
+*
+*/
+void storio_repair_stat_man(char * pChar) {
+  pChar += rozofs_string_append(pChar,"usage:\nprofiler reset       : reset statistics\nprofiler             : display statistics\n");  
+}
+/*
+**____________________________________________________
+** Display counters 
+**
+*/
+char * storio_repair_stat_show(char * pChar) {  
+
+  pChar += rozofs_string_append(pChar, "{ \"repair\" : {\n");
+  pChar += rozofs_string_append(pChar, "    \"file errors\" : ");
+  pChar += rozofs_u64_append(pChar, storio_repair_stat.file_error);
+  pChar += rozofs_string_append(pChar, ",\n      \"requests\"  : ");    
+  pChar += rozofs_u64_append(pChar, storio_repair_stat.nb_requests);
+  pChar += rozofs_string_append(pChar, ",\n      \"block requested\" : ");    
+  pChar += rozofs_u64_append(pChar, storio_repair_stat.nb_blocks_requested);
+  pChar += rozofs_string_append(pChar, ",\n      \"block attempted\" : ");    
+  pChar += rozofs_u64_append(pChar, storio_repair_stat.nb_blocks_attempted);
+  pChar += rozofs_string_append(pChar, ",\n      \"block success\" : ");    
+  pChar += rozofs_u64_append(pChar, storio_repair_stat.nb_blocks_success);
+  pChar += rozofs_string_append(pChar, "\n  }\n}\n");  
+  
+  return pChar;
+  
+}
+/*_______________________________________________________________________
+*  cli
+*
+*/
+void storio_repair_stat_cli(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char *pChar = uma_dbg_get_buffer();
+
+  if (argv[1] != NULL) {
+
+    /*
+    ** Reset counter
+    */
+    if (strcasecmp(argv[1],"reset")==0) {
+      pChar = storio_repair_stat_show(pChar);
+      memset(&storio_repair_stat,0, sizeof(storio_repair_stat));     
+    }
+
+    /*
+    ** Help
+    */      
+    else {
+      storio_repair_stat_man(pChar);  
+    }	 
+  }  
+  else {
+    pChar = storio_repair_stat_show(pChar);    
+  } 
+  
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
 
 /*
 =================== STORIO LOG SERVICE ====================================
@@ -1769,20 +1841,22 @@ open:
 //    storage_build_ts_table_from_prj_header((char*)bins,nb_proj,rozofs_max_psize,buf_ts_storage_write);
 //    storio_cache_insert(fid,bid,nb_proj,buf_ts_storage_write,0);
     
-    // Stat file for return the size of bins file after the write operation
-    if (fstat(fd, &sb) == -1) {
-        severe("fstat failed: %s", strerror(errno));
-        goto out;
-    }
-
-    *file_size = sb.st_size;
-
 
     // Write is successful
     status = nb_proj * rozofs_msg_psize;
 
 out:
-    if (fd != -1) close(fd);
+    if (fd != -1) {
+      // Stat file for return the size of bins file after the write operation
+      if (fstat(fd, &sb) == -1) {
+        severe("fstat failed: %s", strerror(errno));
+        *file_size = 0;
+      }
+      else {      
+        *file_size = sb.st_blocks;
+      }
+      close(fd);
+    }
 
     /*
     ** Update device array in FID cache from header file
@@ -1793,13 +1867,13 @@ out:
         
     return status;
 }
-int storage_write_repair_chunk(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
-        uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, uint64_t * bitmap, uint8_t version,
+char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+        uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, sp_b2rep_t * blk2repair, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty) {
-    int status = -1;
     char path[FILENAME_MAX];
     int fd = -1;
     size_t nb_write = 0;
+    size_t nb_read = 0;
     off_t bins_file_offset = 0;
     uint16_t rozofs_msg_psize;
     uint16_t rozofs_disk_psize;
@@ -1807,17 +1881,26 @@ int storage_write_repair_chunk(storage_t * st, uint8_t * device, uint8_t layout,
     rozofs_stor_bins_file_hdr_t file_hdr;
     storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
 
+    char *data_p = NULL;
+    int block_idx;
+    int i;
+    char myblock[4096];
+    rozofs_stor_bins_hdr_t  * bins_hdr = (rozofs_stor_bins_hdr_t*)myblock;
+    
+ 
     // No specific fault on this FID detected
     *is_fid_faulty = 0; 
 
     dbg("%d/%d repair chunk %d : ", st->cid, st->sid, chunk);
-        
+ 
+           
     /*
     ** This is a repair, so the blocks to repair have been read and the CRC32 
     ** was incorrect, so the chunk must exist.
     */
     if ((device[chunk] == ROZOFS_EOF_CHUNK)||(device[chunk] == ROZOFS_EMPTY_CHUNK)||(device[chunk] == ROZOFS_UNKNOWN_CHUNK)) {
       errno = EADDRNOTAVAIL;
+      storio_repair_stat.file_error++;
       goto out;
     }   
  
@@ -1826,6 +1909,7 @@ int storage_write_repair_chunk(storage_t * st, uint8_t * device, uint8_t layout,
                                         	    fid, layout, dist_set, 
 						    spare, path, 0, &file_hdr);
     if (map_result == MAP_FAILURE) {
+      storio_repair_stat.file_error++;
       goto out;      
     }  
         
@@ -1834,6 +1918,7 @@ int storage_write_repair_chunk(storage_t * st, uint8_t * device, uint8_t layout,
     if (fd < 0) {
       storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"open repair"); 		
       storage_error_on_device(st,device[chunk]); 
+      storio_repair_stat.file_error++;
       goto out;
     }
 
@@ -1844,73 +1929,103 @@ int storage_write_repair_chunk(storage_t * st, uint8_t * device, uint8_t layout,
     storage_get_projection_size(spare, st->sid, layout, bsize, dist_set,
                                 &rozofs_msg_psize, &rozofs_disk_psize); 
 	       
-    char *data_p = (char *)bins;
-    int block_idx = 0;
-    int block_count = 0;
-    int error = 0;   
-    uint32_t crc32 = fid2crc32((uint32_t *)fid)+bid;
+    data_p = (char *)bins;
     
-    block_idx = -1;        
-    while (nb_proj) {
+    
+    /*
+    ** Initializae CRC32 base 
+    */ 
+    uint32_t crc32 = fid2crc32((uint32_t *)fid);
+    storio_repair_stat.nb_requests++;
         
-       block_idx++;
+    /*
+    ** Loop on every block to repair within this projection chunk
+    */   
+    for (i=0; i < nb_proj; i++,data_p += rozofs_msg_psize) {
 
-       if (ROZOFS_BITMAP64_TEST0(block_idx,bitmap)) continue;
-       
-       nb_proj--;
-       
        /*
-       ** generate the crc32c for each projection block
+       ** Get relative block index from bid
+       */
+       block_idx = blk2repair[i].relative_bid + bid;
+       storio_repair_stat.nb_blocks_requested++;
+                       
+       /*
+       ** Read the block 
+       */
+       bins_file_offset = block_idx * rozofs_disk_psize;
+       nb_read = pread(fd, myblock, rozofs_disk_psize, bins_file_offset);
+       if (nb_read < sizeof(rozofs_stor_bins_hdr_t)) continue;       
+    
+       {
+         uint64_t error_counter;
+         uint64_t error_bitmask;
+         storio_check_crc32(myblock,1, rozofs_disk_psize,
+		             &error_counter, crc32+block_idx, &error_bitmask);
+       }    
+ 	  
+       /*
+       ** Check the read timestamp against the given one
+       ** Do not modify the file when it has been rewritten
+       */
+       if (memcmp(blk2repair[i].hdr, bins_hdr, sizeof(rozofs_stor_bins_hdr_t)) != 0) {
+         continue; 
+       }
+       /* 
+       ** Let's write the corrected block since the timestamp has not changed
+       */
+       storio_repair_stat.nb_blocks_attempted++;
+       
+       /* 
+       ** generate the crc32c
        */
        storio_gen_crc32((char*)data_p,1,rozofs_disk_psize,crc32+block_idx);
-       /* 
-       **  write the projection on disk
+
+                
+       /*
+       ** Re-write the block
+       */  
+       nb_write = pwrite(fd, data_p, rozofs_disk_psize, bins_file_offset);               
+       if (nb_write == rozofs_disk_psize) {
+         /*
+         ** Trace CRC32 repair in sgorio log
+         */
+         storio_fid_error(fid, device[chunk], chunk, block_idx, 1,"crc32 repaired"); 	
+         storio_repair_stat.nb_blocks_success++;
+         continue;	     
+       }       
+
+       /*
+       ** Only few bytes written since no space left on device 
        */
-       bins_file_offset = (bid+block_idx) * rozofs_disk_psize;
-       nb_write = pwrite(fd, data_p, rozofs_disk_psize, bins_file_offset);
-       if (nb_write != rozofs_disk_psize) {
-
- 	  storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"write repair");
-	  storage_error_on_device(st,device[chunk]);
-
-	  /*
-	  ** Only few bytes written since no space left on device 
-	  */
-          if ((errno==0)||(errno==ENOSPC)) {
-	    errno = ENOSPC;
-          }
-	  else {
-            severe("pwrite failed: %s", strerror(errno));
-	  } 
-	  error +=1;
+       if ((errno==0)||(errno==ENOSPC)) {
+         errno = ENOSPC;
        }
        else {
-         errno = 0;
-         storio_fid_error(fid, device[chunk], chunk, bid+block_idx, 1,"crc32 repaired"); 		     
-       }
+         severe("pwrite failed: %s", strerror(errno));
+       } 
+
        /*
-       ** update the data pointer for the next write
+       ** Trace error 
        */
-       data_p+=rozofs_msg_psize;
-       block_count += rozofs_msg_psize;
-    }
-    if (error != 0) goto out;
-    
+       storio_fid_error(fid, device[chunk], chunk, block_idx, 1,"write repair");
+       storage_error_on_device(st,device[chunk]);
 
-    // Stat file for return the size of bins file after the write operation
-    if (fstat(fd, &sb) == -1) {
-        severe("fstat failed: %s", strerror(errno));
-        goto out;
-    }
-    *file_size = sb.st_size;
-
-
-    // Write is successful
-    status = block_count;
+    }    
 
 out:
-    if (fd != -1) close(fd);
-    return status;
+    if (fd != -1) {
+      // Stat file for return the size of bins file after the write operation
+      if (fstat(fd, &sb) == -1) {
+        severe("fstat failed: %s", strerror(errno));
+        *file_size = 0;
+      }
+      else {      
+        *file_size = sb.st_blocks;
+      }
+      close(fd);
+    }
+
+    return data_p;
 }
 
 uint64_t buf_ts_storage_before_read[STORIO_CACHE_BCOUNT];
@@ -2131,11 +2246,17 @@ retry:
     if ((nb_read % rozofs_disk_psize) != 0) {
         char fid_str[37];
         rozofs_uuid_unparse(fid, fid_str);
-        severe("storage_read failed (FID: %s layout %d bsize %d chunk %d bid %d): read inconsistent length %d not modulo of %d",
+        warning("storage_read (FID: %s layout %d bsize %d chunk %d bid %d): read inconsistent length %d not modulo of %d",
 	       fid_str,layout,bsize,chunk, (int) bid,(int)nb_read,rozofs_disk_psize);
-	nb_read = (nb_read / rozofs_disk_psize);
-	nb_read += 1;
-	nb_read *= rozofs_disk_psize;
+        if ((nb_read % rozofs_disk_psize) >= sizeof(rozofs_stor_bins_file_hdr_t)) {      
+	  nb_read = (nb_read / rozofs_disk_psize);
+	  nb_read += 1;
+	  nb_read *= rozofs_disk_psize;
+        }
+        else {
+	  nb_read = (nb_read / rozofs_disk_psize);
+	  nb_read *= rozofs_disk_psize;          
+        }  
     }
 
     int nb_proj_effective;
@@ -2163,6 +2284,7 @@ retry:
 				       crc32,
 				       crc32_errors);      
     }
+    
     if (result!=0) { 
       int i;
       errno = 0;
@@ -2173,7 +2295,7 @@ retry:
           if(result==0) break;
         }
       }  
-    }	  
+    }
 
     // Update the length read
     *len_read = (nb_read/rozofs_disk_psize)*rozofs_msg_psize;
@@ -2402,7 +2524,6 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
     ** Add number of bloxk of the previous chunks
     */
     *nb_blocks += (chunk*ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize));
-
     status = 0;
 
 out:

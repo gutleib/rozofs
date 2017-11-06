@@ -789,11 +789,11 @@ out:
   
   @retval: none
 */
-static inline void storio_disk_write_repair(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
+static inline void storio_disk_write_repair3(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
   struct timeval     timeDay;
   unsigned long long timeBefore, timeAfter;
   storage_t *st = 0;
-  sp_write_repair_arg_no_bins_t * args;
+  sp_write_repair3_arg_no_bins_t * args;
   rozorpc_srv_ctx_t      * rpcCtx;
   sp_write_ret_t           ret;
   uint8_t                  version = 0;
@@ -813,7 +813,7 @@ static inline void storio_disk_write_repair(rozofs_disk_thread_ctx_t *thread_ctx
   thread_ctx_p->stat.diskRepair_count++;
   
   rpcCtx = msg->rpcCtx;
-  args   = (sp_write_repair_arg_no_bins_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+  args   = (sp_write_repair3_arg_no_bins_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
 
   fidCtx = storio_device_mapping_ctx_retrieve(msg->fidIdx);
   if (fidCtx == NULL) {
@@ -844,107 +844,10 @@ static inline void storio_disk_write_repair(rozofs_disk_thread_ctx_t *thread_ctx
   
   
   // Write projections
-  size =  storage_write_repair(st, fidCtx->device, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
-          (unsigned char *) args->fid, args->bid, args->nb_proj, &args->bitmap, version,
+  size =  storage_write_repair3(st, fidCtx->device, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
+          (unsigned char *) args->fid, args->bid, args->nb_proj, args->blk2repair, version,
           &ret.sp_write_ret_t_u.file_size,(bin_t *) pbuf, &is_fid_faulty);
-  if (size <= 0)  {
-    ret.sp_write_ret_t_u.error = errno;
-    thread_ctx_p->stat.diskRepair_error++; 
-    if (is_fid_faulty) {
-      storio_register_faulty_fid(thread_ctx_p->thread_idx,
-				 args->cid,
-				 args->sid,
-				 (uint8_t*)args->fid);
-    }       
-    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    storio_send_response(thread_ctx_p,msg,-1);
-    return;
-  }
-  msg->size = size;   
-    
-  ret.status = SP_SUCCESS;  
-  ret.sp_write_ret_t_u.file_size = 0;
-           
-  storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-  thread_ctx_p->stat.diskRepair_Byte_count += size;
-  storio_send_response(thread_ctx_p,msg,0);
-
-  /*
-  ** Update statistics
-  */
-  gettimeofday(&timeDay,(struct timezone *)0);  
-  timeAfter = MICROLONG(timeDay);
-  thread_ctx_p->stat.diskRepair_time +=(timeAfter-timeBefore);  
-}   
-/*__________________________________________________________________________
-*/
-/**
-*  repair data of a file
-
-  @param thread_ctx_p: pointer to the thread context
-  @param msg         : address of the message received
-  
-  @retval: none
-*/
-static inline void storio_disk_write_repair2(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
-  struct timeval     timeDay;
-  unsigned long long timeBefore, timeAfter;
-  storage_t *st = 0;
-  sp_write_repair2_arg_no_bins_t * args;
-  rozorpc_srv_ctx_t      * rpcCtx;
-  sp_write_ret_t           ret;
-  uint8_t                  version = 0;
-  int                      size;
-  int                      is_fid_faulty;
-  storio_device_mapping_t * fidCtx;
-    
-  
-  gettimeofday(&timeDay,(struct timezone *)0);  
-  timeBefore = MICROLONG(timeDay);
-
-  ret.status = SP_FAILURE;          
-  
-  /*
-  ** update statistics
-  */
-  thread_ctx_p->stat.diskRepair_count++;
-  
-  rpcCtx = msg->rpcCtx;
-  args   = (sp_write_repair2_arg_no_bins_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
-
-  fidCtx = storio_device_mapping_ctx_retrieve(msg->fidIdx);
-  if (fidCtx == NULL) {
-    ret.sp_write_ret_t_u.error = EIO;
-    severe("Bad FID ctx index %d",msg->fidIdx); 
-    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    thread_ctx_p->stat.diskRepair_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
-    return;
-  }  
-    
-  /*
-  ** set the pointer to the bins that are in the xmit buffer
-  ** since received bufer is also used for the response
-  */
-  char *pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf); 
-  pbuf += rpcCtx->position;
-  
-
-  // Get the storage for the couple (cid;sid)
-  if ((st = storaged_lookup(args->cid, args->sid)) == 0) {
-    ret.sp_write_ret_t_u.error = errno;
-    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    thread_ctx_p->stat.diskRepair_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
-    return;
-  }
-  
-  
-  // Write projections
-  size =  storage_write_repair(st, fidCtx->device, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
-          (unsigned char *) args->fid, args->bid, args->nb_proj, args->bitmap, version,
-          &ret.sp_write_ret_t_u.file_size,(bin_t *) pbuf, &is_fid_faulty);
-  if (size <= 0)  {
+  if (size < 0)  {
     ret.sp_write_ret_t_u.error = errno;
     thread_ctx_p->stat.diskRepair_error++; 
     if (is_fid_faulty) {
@@ -1300,12 +1203,9 @@ void *storio_disk_thread(void *arg) {
         storio_disk_truncate(ctx_p,&msg);
         break;
 
-      case STORIO_DISK_THREAD_WRITE_REPAIR:
-        storio_disk_write_repair(ctx_p,&msg);
-        break;
-	
-      case STORIO_DISK_THREAD_WRITE_REPAIR2:
-        storio_disk_write_repair2(ctx_p,&msg);
+        
+      case STORIO_DISK_THREAD_WRITE_REPAIR3:
+        storio_disk_write_repair3(ctx_p,&msg);
         break;
 	
       case STORIO_DISK_THREAD_REMOVE:
@@ -1316,11 +1216,11 @@ void *storio_disk_thread(void *arg) {
         storio_disk_remove_chunk(ctx_p,&msg);
         break;
 	
-      case STORIO_DISK_REBUILD_START:
+      case STORIO_DISK_THREAD_REBUILD_START:
         storio_disk_rebuild_start(ctx_p,&msg);
         break;
 	
-      case STORIO_DISK_REBUILD_STOP:
+      case STORIO_DISK_THREAD_REBUILD_STOP:
         storio_disk_rebuild_stop(ctx_p,&msg);
         break;
 

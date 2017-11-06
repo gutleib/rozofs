@@ -39,7 +39,7 @@
 #define RANDOM_BLOCK_SIZE      (9*1024)
 #define READ_BUFFER_SIZE       (RANDOM_BLOCK_SIZE+file_mb)
 
-#define ERROR(...) printf("%d proc %d %s - ", __LINE__,myProcId,filename); printf(__VA_ARGS__)
+#define ERROR(...) printf("%d %s - ", __LINE__,filename); printf(__VA_ARGS__)
 
 
 int shmid;
@@ -94,11 +94,7 @@ void hexdump(void *mem, unsigned int offset, unsigned int len)
 
 char FILENAME[500];
 
-char * pReadBuff    = NULL;
-char * pCompareBuff = NULL;
-char * pBlock       = NULL;
 int nbProcess       = DEFAULT_NB_PROCESS;
-int myProcId;
 int loop=DEFAULT_LOOP;
 
 typedef enum _CHECK_MODE_E {
@@ -270,7 +266,7 @@ char *argv[];
 }
 
 
-int do_write_offset(int f, int offset, int blockSize, char *filename) {
+int do_write_offset(int f, int offset, int blockSize, char *filename, char * pCompareBuff, char * pBlock) {
     ssize_t size;
    
     memcpy(&pCompareBuff[offset],pBlock,blockSize);
@@ -283,7 +279,7 @@ int do_write_offset(int f, int offset, int blockSize, char *filename) {
     return 0;
 
 }
-int do_total_read_and_check(int f, char *filename) {
+int do_total_read_and_check(int f, char *filename, char * pReadBuff, char * pCompareBuff) {
     ssize_t size;
     int idx2;
     size = pread(f, pReadBuff, READ_BUFFER_SIZE, 0);
@@ -308,7 +304,7 @@ int do_total_read_and_check(int f, char *filename) {
     
     return 0;
 }
-int do_random_read_and_check(int f, char *filename) {
+int do_random_read_and_check(int f, char *filename,char * pReadBuff, char * pCompareBuff) {
     ssize_t      size;
     int          idx2;    
     unsigned int nbControl;
@@ -318,9 +314,9 @@ int do_random_read_and_check(int f, char *filename) {
     nbControl = loop;    
     while (nbControl--) {
 
-      offset    = (random()+offset)    % file_mb; 
       blockSize = (random()+blockSize) % RANDOM_BLOCK_SIZE;      
-      if (blockSize == 0) blockSize = 1;
+      if (blockSize == 0) blockSize = 1;      
+      offset    = (random()+offset)    % (file_mb-blockSize); 
 
       memset(pReadBuff,0,blockSize);
       size = pread(f, pReadBuff, blockSize, offset);
@@ -345,7 +341,7 @@ int do_random_read_and_check(int f, char *filename) {
     }
     return 0;
 }
-int do_partial_read_and_check(int f, char *filename) {
+int do_partial_read_and_check(int f, char *filename, char * pReadBuff, char * pCompareBuff) {
     ssize_t size,len;
     int idx=0,idx2;
     int offsetStart;
@@ -389,7 +385,7 @@ int do_partial_read_and_check(int f, char *filename) {
  
     return 0;
 }
-int do_one_test(int * f, char * filename, int count) {
+int do_one_test(int * f, char * filename, int count, char * pReadBuff,char * pCompareBuff, char * pBlock) {
     unsigned int blockSize=0;
     unsigned int offset=0;
     unsigned int nbWrite;
@@ -399,11 +395,13 @@ int do_one_test(int * f, char * filename, int count) {
 //    nbWrite = 1 + count % 3;
     nbWrite = 1 ;    
     while (nbWrite--) {
-      offset    = (random()+offset)    % file_mb; 
-      blockSize = (random()+blockSize) % RANDOM_BLOCK_SIZE;      
-      if (blockSize == 0) blockSize = 1;
 
-      if (do_write_offset(*f, offset, blockSize, filename) != 0) {
+      blockSize = (random()+blockSize) % RANDOM_BLOCK_SIZE;      
+      if (blockSize == 0) blockSize = 1;      
+      offset    = (random()+offset)    % (file_mb-blockSize); 
+      
+
+      if (do_write_offset(*f, offset, blockSize, filename, pCompareBuff, pBlock) != 0) {
 	ERROR("blocksize %6d  - offset %6d\n", blockSize, offset);
 	close(*f);      
 	return -1;
@@ -427,54 +425,32 @@ int do_one_test(int * f, char * filename, int count) {
     
     switch (ckeck_mode) {
       case CHECK_MODE_TOTAL:
-	return do_total_read_and_check(*f,filename);
+	return do_total_read_and_check(*f,filename, pReadBuff, pCompareBuff);
 	
       case CHECK_MODE_PARTIAL:	
-	return do_partial_read_and_check(*f,filename);
+	return do_partial_read_and_check(*f,filename, pReadBuff, pCompareBuff);
 	
       case CHECK_MODE_RANDOM:	
-	return do_random_read_and_check(*f,filename);
+	return do_random_read_and_check(*f,filename, pReadBuff, pCompareBuff);
 	
       default:
         ERROR("unknown ckeck_mode %d\n",ckeck_mode);   	
         return -1;    
     }
 }
-int read_empty_file(char * filename) {
-    int f;
-    ssize_t size;
 
-
-    f = open(filename, O_RDWR | O_CREAT, 0640);
-    if (f == -1) {
-        ERROR("open %s\n",strerror(errno));
-        return 0;
-    }
-
-
-    size = pread(f, pReadBuff, READ_BUFFER_SIZE, 0);
-    if (size < 0) {
-        ERROR("pread size %llu %s\n", READ_BUFFER_SIZE, strerror(errno));
-        close(f);
-        return 0;
-    }
-    
-    f = close(f);
-    if (f != 0) {
-        ERROR("close %s\n",strerror(errno));
-    }
-    return 1;
-}
-
-int loop_test_process() {
+int loop_test_process(int myProcId,char mySep) {
   int count=0; 
   char filename[500];
   char c;
   char * pChar;
   int    fd;
-  
+  char * pReadBuff;
+  char * pCompareBuff;
+  char * pBlock;
+   
   pBlock = NULL;
-  pBlock = malloc(RANDOM_BLOCK_SIZE + 10);
+  pBlock = malloc(RANDOM_BLOCK_SIZE + 1000);
   if (pBlock == NULL) {
       printf("Can not allocate %d bytes\n", RANDOM_BLOCK_SIZE+1);
       perror("malloc");
@@ -484,7 +460,7 @@ int loop_test_process() {
   pChar = pBlock;
   c = 'A'+ (myProcId%26);
   while ((pChar - pBlock)<RANDOM_BLOCK_SIZE) {
-    pChar += sprintf(pChar,"%c%2.2d/", c,myProcId);
+    pChar += sprintf(pChar,"%c%2.2d%c", c,myProcId,mySep);
     if  (c == 'Z') {
       c = 'a';
     }	
@@ -530,7 +506,7 @@ int loop_test_process() {
           
   while (1) {
     count++;    
-    if  (do_one_test(&fd,filename,count) != 0) {
+    if  (do_one_test(&fd,filename,count, pReadBuff, pCompareBuff, pBlock) != 0) {
       ERROR("ERROR in loop %d\n", count);   
       close(fd);   
       return -1;
@@ -596,6 +572,7 @@ int main(int argc, char **argv) {
   pid_t pid[2000];
   int proc;
   int ret;
+  char Sep[6]={':','/','*','-','+','_'};
     
   read_parameters(argc, argv);
 
@@ -613,8 +590,7 @@ int main(int argc, char **argv) {
   
      pid[proc] = fork();     
      if (pid[proc] == 0) {
-       myProcId = proc;
-       result[proc] = loop_test_process();
+       result[proc] = loop_test_process(proc,Sep[proc%6]);
        exit(0);
      }  
   }
