@@ -539,6 +539,11 @@ int storio_check_crc32(char     * bins,
       if (crc==0) crc = 1;      
 
       /*
+      ** Restore CRC in the read header
+      */
+      ((rozofs_stor_bins_hdr_t*)(buf))->s.filler = cur_crc;
+      
+      /*
       ** control with the one stored in the header
       */
       if (cur_crc != crc)
@@ -654,6 +659,10 @@ int  storio_check_crc32_vect(struct iovec * vector,
       crc = initial_crc + i;
       crc = crc32c(crc,buf,crc_size);
       if (crc==0) crc = 1;      
+      /*
+      ** Restore CRC in the read header
+      */
+      ((rozofs_stor_bins_hdr_t*)(buf))->s.filler = cur_crc;
       /*
       ** control with the one stored in the header
       */    

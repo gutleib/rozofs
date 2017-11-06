@@ -94,8 +94,8 @@ int transform_libinit()
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize);
     *number_of_blocks_p = 0;
     
-    
-    uint8_t rozofs_inverse = rozofs_get_rozofs_inverse(layout);
+    uint8_t rozofs_inverse, rozofs_forward, rozofs_safe;
+    rozofs_get_rozofs_invers_forward_safe(layout, &rozofs_inverse, &rozofs_forward, &rozofs_safe);   
     
     projections = rozofs_inv_projections;
     
@@ -203,6 +203,11 @@ int transform_libinit()
     ** rebuild
     */
     *number_of_blocks_p = number_of_blocks;
+    
+    /*
+    ** Check whether a block should be repaired
+    */
+    rozofs_storcli_check_block_2_repair(prj_ctx_p, rozofs_inverse, rozofs_forward, rozofs_safe, prj_size_in_msg, number_of_blocks, block_ctx_p);
     return 0;   
 }
 /*

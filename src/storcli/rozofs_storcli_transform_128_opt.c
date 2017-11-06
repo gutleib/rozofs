@@ -154,6 +154,12 @@
     ** rebuild
     */
     *number_of_blocks_p = number_of_blocks;
+    
+    /*
+    ** Check whether a block should be repaired
+    */
+    rozofs_storcli_check_block_2_repair(prj_ctx_p, rozofs_inverse, rozofs_forward, rozofs_safe, prj_size_in_msg, number_of_blocks, block_ctx_p);
+    
     return 0;   
 }
 

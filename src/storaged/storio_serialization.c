@@ -66,10 +66,9 @@ char * serialize_opcode_string(int opcode) {
     case STORIO_DISK_THREAD_TRUNCATE: return "truncate";
     case STORIO_DISK_THREAD_REMOVE: return "remove";
     case STORIO_DISK_THREAD_REMOVE_CHUNK: return "remove_chunk";
-    case STORIO_DISK_THREAD_WRITE_REPAIR: return "write repair";
-    case STORIO_DISK_THREAD_WRITE_REPAIR2: return "write repair2";
-    case STORIO_DISK_REBUILD_START: return "rebuild start";
-    case STORIO_DISK_REBUILD_STOP: return "rebuild stop";
+    case STORIO_DISK_THREAD_WRITE_REPAIR3: return "write repair";
+    case STORIO_DISK_THREAD_REBUILD_START: return "rebuild start";
+    case STORIO_DISK_THREAD_REBUILD_STOP: return "rebuild stop";
     default: return "Unknown";
   }
 }
