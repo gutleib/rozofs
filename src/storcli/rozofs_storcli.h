@@ -1740,4 +1740,30 @@ static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t
   storcli_trace_prj_status(&rec->prj[0], rozofs_safe, working_ctx_p);
 }
 
+/*_________________________________________________________________
+ * Release the projection buffers
+ * 
+ * @param *prj_ctx_p: pointer to the working array of the projection
+ * @param first_block_idx: index of the first block to transform
+ * @param number_of_blocks: number of blocks to write
+ * @param *data: pointer to the source data that must be transformed
+   @param *number_of_blocks_p: pointer to the array where the function returns number of blocks on which the transform was applied
+  @param *rozofs_storcli_prj_idx_table: pointer to the array used for storing the projections index for inverse process
+ *
+ * @return: the length written on success, -1 otherwise (errno is set)
+ */
+static inline void rozofs_storcli_release_prj_buf(rozofs_storcli_ctx_t * working_ctx_p, uint8_t layout) {
+  int                                projection_id;
+  rozofs_storcli_projection_ctx_t  * read_prj_work_p = working_ctx_p->prj_ctx;
+  uint8_t                            rozofs_forward  = rozofs_get_rozofs_forward(layout);
+  
+
+  for (projection_id = 0; projection_id < rozofs_forward; projection_id++,read_prj_work_p++) {
+    if  (read_prj_work_p->prj_buf != NULL) {
+      ruc_buf_freeBuffer(read_prj_work_p->prj_buf);
+    }	
+    read_prj_work_p->prj_buf = NULL;
+    read_prj_work_p->prj_state = ROZOFS_PRJ_READ_IDLE;
+  }
+}    
 #endif

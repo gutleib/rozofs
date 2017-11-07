@@ -44,8 +44,74 @@ hosts=[]
 verbose=False
 
 #___________________________________________________
-def clean_cache(val=1): os.system("echo %s > /proc/sys/vm/drop_caches"%val)
+# Messages and logs
 #___________________________________________________
+resetLine="\r"
+#___________________________________________________
+# output a message in syslog
+def log(string): 
+#___________________________________________________
+  syslog.syslog(string)
+#___________________________________________________
+# output a message on the console
+def console(string): 
+#___________________________________________________
+  # Reset current line
+  clearline()  
+  # Add carriage return to the message
+  string="\r"+string+"\n"
+  # write the message in the buffer
+  sys.stdout.write(string)
+  # force ouput
+  sys.stdout.flush()
+#___________________________________________________
+# output a message on the console as well as in syslog
+def report(string): 
+#___________________________________________________
+  console(string)
+  log(string)  
+#___________________________________________________
+# Add temporary text to the current line 
+def addline(string):
+#___________________________________________________
+  global resetLine
+  # Set bold and yellow effects
+  sys.stdout.write(bold+yellow)
+  # Add the string in the buffer
+  sys.stdout.write(string)
+  # End of effects
+  sys.stdout.write(endeffect)
+  # force ouput
+  sys.stdout.flush() 
+  # Prepare the reset line that should overwrite 
+  # current line with ' '
+  resetLine = resetLine + (' ' * len(string)) 
+#___________________________________________________
+# Clear the temporary text of the current line 
+def clearline():
+#___________________________________________________
+  global resetLine
+  # End of effects
+  sys.stdout.write(endeffect)
+  # Write the reset line that should overwrite 
+  # current line text with ' '
+  sys.stdout.write(resetLine)
+  # force ouput  
+  sys.stdout.flush()
+  # Restart reset line  
+  resetLine="\r"
+#___________________________________________________
+# Clear current line and restart a new temporary line
+def backline(string):
+#___________________________________________________
+  clearline()
+  addline("\r%s"%(string))   
+    
+    
+#___________________________________________________
+def clean_cache(val=3): 
+#___________________________________________________
+  os.system("echo %s > /proc/sys/vm/drop_caches"%val)
 
 #___________________________________________________
 def clean_rebuild_dir():
@@ -145,22 +211,28 @@ def reset_storcli_counter():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c counter reset"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 #___________________________________________________
-def check_storcli_crc():
+def check_storcli_crc(expect):
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c profiler"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c profiler"%(instance,instance,instance,instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+  os.system("echo \"\" > /tmp/trace_crc")
+  result = False    
   for line in cmd.stdout:
+    os.system("echo \"%s\" >> /tmp/trace_crc"%(line))
     if "read_blk_crc" in line:
-      return True   
-  return False    
+      result = True
+      break; 
+  if expect != result:
+    os.system("cat /tmp/trace_crc")
+  return result  
    
 #___________________________________________________
 def export_count_sid_up ():
@@ -651,35 +723,104 @@ def read_parallel ():
   prepare_file_to_read(zefile,fileSize) 
   ret=os.system("./IT2/read_parallel.exe -process %s -loop %s -file %s"%(process,loop,zefile)) 
   return ret 
-#___________________________________________________
-def crc32_reread():
-  ret = os.system("./IT2/test_crc32.exe -action REREAD -mount %s -file crc32"%(exepath))
-  if ret != 0:
-    print "Reread error"
-  return ret    
+
+ 
 #___________________________________________________
 def crc32():
 #___________________________________________________
 
+  backline("Create file %s/crc32"%(exepath))
+
+  crcfile="%s/crc32"%(exepath)
+  # Create a file
+  if os.path.exists(crcfile): os.remove(crcfile)      
+  os.system("cp ./ref %s"%(crcfile))  
+  
   # Clear error counter
   reset_storcli_counter()
   # Check CRC errors 
-  if check_storcli_crc():
-    print "CRC errors after counter reset"
+  if check_storcli_crc(False) == True:
+    report("CRC errors after counter reset")
     return 1 
     
-  # Create CRC32 errors  
-  os.system("./IT2/test_crc32.exe -action CREATE -mount %s -file crc32"%(exepath))
-  os.system("./IT2/test_crc32.exe -action CORRUPT -mount %s -file crc32"%(exepath))
-  ret = crc32_reread()
-  if ret != 0: return ret
+  # Get its localization  
+  os.system("./setup.py cou %s > /tmp/crc32loc"%(crcfile))
+      
+  # Find the 1rst bins file
+  bins = None
+  with open("/tmp/crc32loc","r") as f: 
+    for line in f.readlines():
+      if "/bins_0/" in line:
+        bins = line.split()[3]
+        break;
+  if bins == None:
+    report("Fail to find bins file name in /tmp/crc32loc")
+    return -1    
+
+  # Corrupt the bins file
+  f = open(bins, 'r+b')     
+  f.seek(1211) 
+  f.write("DDT")
+  f.seek(3111) 
+  f.write("DDT")
+  f.seek(4444) 
+  f.write("DDT")    
+  f.seek(1024*112) 
+  f.write("DDT")    
+  f.seek(1024*114) 
+  f.write("DDT")    
+  f.seek(1024*115) 
+  f.write("DDT")    
+  f.seek(1024*118) 
+  f.write("DDT")    
+  f.seek(1024*120) 
+  f.write("DDT")    
+  size = os.path.getsize(bins)
+  f.seek(size-11);
+  f.write("DDT")       
+  f.close()
+  backline("Corrupt bins file ")
+
+  # Reset storages
+  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
+  wait_until_all_sid_up()
+ 
+  # Clear error counter
+  reset_storcli_counter()
   
-  # Check CRC errors 
-  if check_storcli_crc() == False: 
-    print "No CRC errors after test"  
-    return 0
+  # Reread the file
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+
+  time.sleep(1)
+ 
+  # Checl for CRC32 errors
+  if check_storcli_crc(True) == True:
+    backline("Repair procedure has been run ")
+  else:     
+    report("No CRC errors after file reread")
+    return 1 
+
+  # Reset storages
+  os.system("./setup.py storage all reset")
+  wait_until_all_sid_up()
+ 
+  # Clear error counter
+  reset_storcli_counter()
   
-  return storageFailed('crc32_reread')
+  # Reread the file
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+ 
+  # Checl for CRC32 errors
+  if check_storcli_crc(False) == True:
+    report("Bins file still has errors")
+    return 1     
+  backline("Bins file is repaired")
+  
+  if filecmp.cmp(crcfile,"./ref") == False: 
+    report("%s and %s differ"%(crcfile,"./ref"))
+    return 1
+    
+  return 0 
  
 #___________________________________________________
 def xattr():

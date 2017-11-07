@@ -79,6 +79,7 @@ void rozofs_storcli_transform_update_headers(rozofs_storcli_projection_ctx_t *pr
       rozofs_stor_bins_hdr_t *rozofs_bins_hdr_p = (rozofs_stor_bins_hdr_t*)(prj_ctx_p->bins +
       ((rozofs_get_max_psize(layout)+((sizeof(rozofs_stor_bins_hdr_t)+sizeof(rozofs_stor_bins_footer_t))/sizeof(bin_t))) * block_idx));
 
+      memcpy(prj_ctx_p->rcv_hdr[block_idx],rozofs_bins_hdr_p, sizeof(rozofs_stor_bins_hdr_t));
 				    
       if (rozofs_bins_hdr_p->s.timestamp == 0)
       {
@@ -752,6 +753,12 @@ static __inline__ unsigned long long rdtsc(void)
     ** rebuild
     */
     *number_of_blocks_p = number_of_blocks;
+    
+    /*
+    ** Check whether a block should be repaired
+    */
+    rozofs_storcli_check_block_2_repair(prj_ctx_p, rozofs_inverse, rozofs_forward, rozofs_safe, prj_size_in_msg, number_of_blocks, block_ctx_p);
+    
     return 0;   
 }
 

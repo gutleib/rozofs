@@ -223,8 +223,6 @@ typedef enum _ROZOFS_BSIZE_E {
 #define ROZOFS_XATTR_VALUE_MAX 65536
 #define ROZOFS_XATTR_LIST_MAX 65536
 #define ROZOFS_FILENAME_MAX (255*2)
-/* Maximum file size (check for truncate) */
-#define ROZOFS_FILESIZE_MAX 0x20000000000LL
 
 /* Value for rpc buffer size used for sproto */
 #define ROZOFS_RPC_STORAGE_BUFFER_SIZE (1024*300) 
@@ -281,6 +279,10 @@ typedef enum _ROZOFS_BSIZE_E {
 #define ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize) (ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE/ROZOFS_BSIZE_BYTES(bsize))
 #define ROZOFS_STORAGE_GET_CHUNK_NB(offset)     ((offset)/(ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE))
 
+/* 
+** Old constant redefined on new constant
+*/
+#define ROZOFS_FILESIZE_MAX ROZOFS_STORAGE_FILE_MAX_SIZE
 /*
 **   Socket controller configuration: define the max nuumber of context per process
 */

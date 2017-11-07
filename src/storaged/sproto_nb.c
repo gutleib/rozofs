@@ -503,7 +503,7 @@ void sp_write_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
       */
       
       if (pRebuild->relocate == RBS_TO_RELOCATE) {
-        req_ctx_p->opcode = STORIO_DISK_REBUILD_START;
+        req_ctx_p->opcode = STORIO_DISK_THREAD_REBUILD_START;
       }
       goto send_to_disk_thread;   
     }
@@ -1040,7 +1040,7 @@ void sp_rebuild_stop_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) 
     ** When relocation was requested one has to delete
     ** either old or new data file
     */
-    req_ctx_p->opcode = STORIO_DISK_REBUILD_STOP;
+    req_ctx_p->opcode = STORIO_DISK_THREAD_REBUILD_STOP;
     
     /*
     ** If any request is already running, chain this request on the FID context
@@ -1434,10 +1434,10 @@ out:
 **___________________________________________________________
 */
 
-void sp_write_repair2_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+void sp_write_repair3_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static sp_write_ret_t ret;
     storio_device_mapping_t * dev_map_p = NULL;
-    sp_write_repair2_arg_no_bins_t * repair2_arg_p = (sp_write_repair2_arg_no_bins_t *) pt;
+    sp_write_repair3_arg_no_bins_t * repair3_arg_p = (sp_write_repair3_arg_no_bins_t *) pt;
     int                       same_recycle_cpt;                    
     
     START_PROFILING(repair);
@@ -1451,9 +1451,9 @@ void sp_write_repair2_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p)
     /*
     ** Lookup for the FID context in the lookup table
     */ 
-    dev_map_p = storio_device_mapping_search(repair2_arg_p->cid,
-                                             repair2_arg_p->sid,
-					     repair2_arg_p->fid,
+    dev_map_p = storio_device_mapping_search(repair3_arg_p->cid,
+                                             repair3_arg_p->sid,
+					     repair3_arg_p->fid,
 					     &same_recycle_cpt);
     if (dev_map_p == NULL) { 
       /*
@@ -1478,90 +1478,7 @@ void sp_write_repair2_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p)
     ** that repairs the file too.
     */
             
-    req_ctx_p->opcode = STORIO_DISK_THREAD_WRITE_REPAIR2;
-        
-    /*
-    ** If any request is already running, chain this request on the FID context
-    */
-    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
-      goto out;
-    }   
-
-    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
-      goto out;
-    }  
-    severe("storio_disk_thread_intf_send %s", strerror(errno));
-
-
-error:    
-    
-    ret.status                = SP_FAILURE;            
-    ret.sp_write_ret_t_u.error = errno;
-    
-    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
-    /*
-    ** release the context
-    */
-    rozorpc_srv_release_context(req_ctx_p);
-    STOP_PROFILING(repair);
-
-out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
-    return;
-}
-/*
-**___________________________________________________________
-*/
-
-void sp_write_repair_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
-    static sp_write_ret_t ret;
-    storio_device_mapping_t * dev_map_p = NULL;
-    sp_write_repair_arg_no_bins_t * repair_arg_p = (sp_write_repair_arg_no_bins_t *) pt;
-    int                       same_recycle_cpt;                    
-    
-    START_PROFILING(repair);
-
-    /*
-    ** Use received buffer for the response
-    */
-    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
-    req_ctx_p->recv_buf = NULL;
-  
-    /*
-    ** Lookup for the FID context in the lookup table
-    */ 
-    dev_map_p = storio_device_mapping_search(repair_arg_p->cid,
-                                             repair_arg_p->sid,
-					     repair_arg_p->fid,
-					     &same_recycle_cpt);
-    if (dev_map_p == NULL) { 
-      /*
-      ** The file is supposed to have just been read, and a CRC32 error has been detected
-      ** that the STORCLI want to fix. A FID context should exist !!!
-      */
-      errno = ENOENT;
-      goto error;
-    }  
-    
-    /*
-    ** This is not the same FID recycling counter, as the file that has been read
-    ** Better not modify the file
-    */
-    if (!same_recycle_cpt) {
-      errno = EAGAIN;
-      goto error;
-    }
-    
-    /*
-    ** This write repairs the file, and so can not break any rebuild process
-    ** that repairs the file too.
-    */
-            
-    req_ctx_p->opcode = STORIO_DISK_THREAD_WRITE_REPAIR;
+    req_ctx_p->opcode = STORIO_DISK_THREAD_WRITE_REPAIR3;
         
     /*
     ** If any request is already running, chain this request on the FID context

@@ -579,8 +579,7 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       break;
     }  
        
-    case STORIO_DISK_THREAD_WRITE_REPAIR:
-    case STORIO_DISK_THREAD_WRITE_REPAIR2:
+    case STORIO_DISK_THREAD_WRITE_REPAIR3:
     {  
       STOP_PROFILING_IO(repair,msg->size);
       update_write_detailed_counters(toc - tic); 
@@ -599,13 +598,13 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       break;    
     }  
           
-    case STORIO_DISK_REBUILD_START:
+    case STORIO_DISK_THREAD_REBUILD_START:
     {
       STOP_PROFILING(rebuild_start);
       break; 
     }  
           
-    case STORIO_DISK_REBUILD_STOP:
+    case STORIO_DISK_THREAD_REBUILD_STOP:
     {
       dev_map_p = storio_device_mapping_ctx_retrieve(msg->fidIdx);
 
@@ -613,7 +612,7 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
         sp_rebuild_stop_response(dev_map_p, rpcCtx);
       }
       else {
-        severe("STORIO_DISK_REBUILD_STOP");
+        severe("STORIO_DISK_THREAD_REBUILD_STOP");
       }	
       STOP_PROFILING(rebuild_stop);      
       break;                  
