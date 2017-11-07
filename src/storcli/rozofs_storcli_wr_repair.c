@@ -240,7 +240,9 @@ static inline int rozofs_storcli_all_prj_write_repair_check(uint8_t layout,rozof
  *
  * @return: the length written on success, -1 otherwise (errno is set)
  */
+#undef REGENERATION_TRACE
 int rozofs_storcli_regenerate_initial_block(rozofs_storcli_ctx_t             * working_ctx_p,
+                                            uint8_t                            moj_prj_id, int k, uint8_t zsid,
                                 	    uint8_t                            layout,
                                             uint8_t                            bsize,
                                             int                                blockIdx,
@@ -249,17 +251,25 @@ int rozofs_storcli_regenerate_initial_block(rozofs_storcli_ctx_t             * w
   int          prjIdx;  
   int          projection_id;
   projection_t inverse_projections[ROZOFS_SAFE_MAX];                  
-  uint8_t      rozofs_safe     = rozofs_get_rozofs_safe(layout);
-  uint8_t      rozofs_inverse  = rozofs_get_rozofs_inverse(layout);
+  uint8_t      rozofs_safe , rozofs_inverse, rozofs_forward;
   int          prj_size_in_msg = rozofs_get_max_psize_in_msg(layout,bsize);
   uint32_t     bbytes          = ROZOFS_BSIZE_BYTES(bsize);
-  char      * pChar;
+  char      *  pChar;
+  uint64_t     prjBitMap;
+  
+#ifdef REGENERATION_TRACE   
+  char string[64];
+  char * pString = string;
+#endif     
+
+  rozofs_get_rozofs_invers_forward_safe(layout, &rozofs_inverse, &rozofs_forward, &rozofs_safe);
    
   /*
   ** Loop on the read projecttions to find out the ones that have been used
   ** to regenrate the user data
   */
   prjIdx = 0;
+  prjBitMap = 0;
   for (idx = 0; idx < rozofs_safe; idx++) {
               
     /*
@@ -288,15 +298,46 @@ int rozofs_storcli_regenerate_initial_block(rozofs_storcli_ctx_t             * w
     */
     projection_id = working_ctx_p->prj_ctx[idx].block_hdr_tab[blockIdx].s.projection_id;
 
+    /*
+    ** Check projection id
+    */
+    if (projection_id >= rozofs_forward) {
+      continue;
+    }
+    
+    /*
+    ** Is this projection already i  the list ?
+    */
+    if (prjBitMap & (1ULL<<projection_id)) {
+      continue;
+    }
+      
+    /*
+    ** Let's get this projection to reb uild the initial data
+    */  
+    prjBitMap |= (1ULL<<projection_id);
     inverse_projections[prjIdx].angle.p = rozofs_get_angles_p(layout,projection_id);
     inverse_projections[prjIdx].angle.q = rozofs_get_angles_q(layout,projection_id);
     inverse_projections[prjIdx].size    = rozofs_get_128bits_psizes(layout,bsize,projection_id);
     pChar = (char *) working_ctx_p->prj_ctx[idx].bins;
     pChar += ((blockIdx*prj_size_in_msg) + sizeof(rozofs_stor_bins_hdr_t));
     inverse_projections[prjIdx].bins    = (bin_t*)pChar;
+#ifdef REGENERATION_TRACE
+    {
+      uint8_t sid = (uint8_t) rozofs_storcli_lbg_prj_get_sid(working_ctx_p->lbg_assoc_tb, working_ctx_p->prj_ctx[idx].stor_idx);
+      pString += sprintf(pString,"/ s%d p%d c%d",sid, projection_id, idx);
+    } 
+#endif     
     prjIdx++;
   }
-  
+#ifdef REGENERATION_TRACE  
+  {  
+    storcli_read_arg_t *storcli_read_rq_p = (storcli_read_arg_t*)&working_ctx_p->storcli_read_arg;  
+    char FID[64];
+    rozofs_fid_append(FID,storcli_read_rq_p->fid);
+    info("MJP %s B %d s%d p%d c%d FROM %s", FID, blockIdx+storcli_read_rq_p->bid, zsid, moj_prj_id, k, string);
+  }
+#endif    
   if (prjIdx < rozofs_inverse) {
     severe("rozofs_storcli_regenerate_initial_block");
     return -1;
@@ -330,8 +371,8 @@ int rozofs_storcli_regenerate_initial_block(rozofs_storcli_ctx_t             * w
  *
  * @return: the length written on success, -1 otherwise (errno is set)
  */
- void rozofs_storcli_transform_forward_repair(rozofs_storcli_ctx_t             * working_ctx_p,
-                                              rozofs_storcli_projection_ctx_t  * repair_prj_ctx, 
+void rozofs_storcli_transform_forward_repair(rozofs_storcli_ctx_t             * working_ctx_p,
+                                             rozofs_storcli_projection_ctx_t  * repair_prj_ctx, 
                                 	      uint8_t                            layout,
                                 	      char                             * data) 
  {
@@ -396,7 +437,7 @@ int rozofs_storcli_regenerate_initial_block(rozofs_storcli_ctx_t             * w
           /*
 	  ** it is the reference of a spare sid, so go to the next projection context
 	  */
-          ROZOFS_BITMAP64_ALL_RESET(prj_ctx_p[k].crc_err_bitmap) ;        
+          repair_prj_ctx[k].bins = NULL;        
 	  continue;
        }
        
@@ -482,25 +523,25 @@ int rozofs_storcli_regenerate_initial_block(rozofs_storcli_ctx_t             * w
           }
 
           /*
-          ** Let's forget about this block !
+          ** Let's forget about this projection !
           */
           if (pRegeneratedBlock == NULL) {
-            severe("Out of memory");
-            ROZOFS_BITMAP64_RESET(blockIdx,prj_ctx_p[k].crc_err_bitmap);
-            continue;
+            repair_prj_ctx[k].bins = NULL;
+            break;
           }  
 	  
           /*
           ** Regenerate the initial block from the read projection
           */    
           if (rozofs_storcli_regenerate_initial_block(working_ctx_p,
+                                                      moj_prj_id, k, sid,
                                                       layout, 
                                                       bsize, 
                                                       blockIdx, 
                                                       pRegeneratedBlock) < 0) {
             severe("rozofs_storcli_regenerate_initial_block %d",blockIdx);
-            ROZOFS_BITMAP64_RESET(blockIdx,prj_ctx_p[k].crc_err_bitmap);
-            continue;
+            repair_prj_ctx[k].bins = NULL;
+            break;
           } 
           
           /*
@@ -853,15 +894,18 @@ void rozofs_storcli_write_repair_req_processing(rozofs_storcli_ctx_t *working_ct
      int ret; 
 
 
-      /*
-      ** Do not fix the spare
-      */
-      if (prj_cxt_p[projection_id].stor_idx >= rozofs_forward) continue;
+     /*
+     ** Do not fix the spare
+     */
+     if (prj_cxt_p[projection_id].stor_idx >= rozofs_forward) continue;
      /*
      ** skip the projections for which no error has been detected 
      */
      if (ROZOFS_BITMAP64_TEST_ALL0(working_ctx_p->prj_ctx[projection_id].crc_err_bitmap)) continue;	 
-	 
+     /*
+     ** This projection could not be generated. Repairing is abandonned
+     */
+     if (prj_cxt_p[projection_id].bins == NULL) continue; 
      xmit_buf = prj_cxt_p[projection_id].prj_buf;
      if (xmit_buf == NULL)
      {
