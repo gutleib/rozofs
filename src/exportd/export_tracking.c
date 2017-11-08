@@ -7776,8 +7776,8 @@ reloop:
       
         lock_elt = list_entry(p, rozofs_file_lock_t, next_fid_lock);	
 	
-	if (must_file_lock_be_removed(e->bsize,lock_requested, &lock_elt->lock, &new_lock, info)) {
-	  lv2_cache_free_file_lock(lock_elt);
+	if (must_file_lock_be_removed(e->eid,e->bsize,lock_requested, &lock_elt->lock, &new_lock, info)) {
+	  lv2_cache_free_file_lock(e->eid,lock_elt);
 	  lv2->nb_locks--;
 	  if (list_empty(&lv2->file_lock)) {
 	    lv2->nb_locks = 0;
@@ -7860,7 +7860,7 @@ concatenate:
 
 	if (try_file_locks_concatenate(e->bsize,lock_requested,&lock_elt->lock)) {
           overlap--;
-	  lv2_cache_free_file_lock(lock_elt);
+	  lv2_cache_free_file_lock(e->eid,lock_elt);
 	  lv2->nb_locks--;
 	  if (list_empty(&lv2->file_lock)) {
 	    lv2->nb_locks = 0;
@@ -7874,7 +7874,7 @@ concatenate:
     ** Since we have reached this point all the locks are compatibles with the new one.
     ** and it does not overlap any more with an other lock. Let's insert this new lock
     */
-    lock_elt = lv2_cache_allocate_file_lock(lock_requested, info);
+    lock_elt = lv2_cache_allocate_file_lock(e->eid,lock_requested, info);
     list_push_front(&lv2->file_lock,&lock_elt->next_fid_lock);
     lv2->nb_locks++;
     status = 0; 
@@ -7961,8 +7961,8 @@ out:
 int export_clear_client_file_lock(export_t *e, ep_lock_t * lock_requested, ep_client_info_t * info) {
 
     START_PROFILING(export_clearclient_flock);
-    file_lock_remove_client(lock_requested->client_ref);
-    file_lock_poll_client(lock_requested->client_ref,info);
+    file_lock_remove_client(e->eid,lock_requested->client_ref);
+    file_lock_poll_client(e->eid,lock_requested->client_ref,info);
     STOP_PROFILING(export_clearclient_flock);
     return 0;
 }
@@ -8005,7 +8005,7 @@ reloop:
       if ((lock_elt->lock.client_ref == lock_requested->client_ref) &&
           (lock_elt->lock.owner_ref == lock_requested->owner_ref)) {
 	  /* Found a lock to free */
-	  lv2_cache_free_file_lock(lock_elt);
+	  lv2_cache_free_file_lock(e->eid,lock_elt);
 	  lv2->nb_locks--;
 	  if (list_empty(&lv2->file_lock)) {
 	    lv2->nb_locks = 0;
@@ -8035,7 +8035,7 @@ out:
 int export_poll_file_lock(export_t *e, ep_lock_t * lock_requested, ep_client_info_t * info) {
 
     START_PROFILING(export_poll_file_lock);
-    file_lock_poll_client(lock_requested->client_ref,info);
+    file_lock_poll_client(e->eid,lock_requested->client_ref,info);
     STOP_PROFILING(export_poll_file_lock);
     return 0;
 }
