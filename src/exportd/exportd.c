@@ -1990,6 +1990,11 @@ int export_reload_nb()
         severe("can't unlock config: %s", strerror(errno));
         goto error;
     }
+  
+    /*
+    ** Clean up file locks in case some export has been removed
+    */
+    file_lock_reload(); 
 
     // XXX: An export may have been deleted while the rest of the files deleted.
     // These files will never be deleted.
