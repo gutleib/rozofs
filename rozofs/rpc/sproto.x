@@ -95,6 +95,34 @@ struct sp_write_repair2_arg_t {
     opaque      bins<>;
 };
 
+struct sp_b2rep_t {
+    uint64_t hdr[2];
+    uint32_t relative_bid;
+};    
+
+/*
+** If you modify this constant, it will modify the position of
+** bins field in sp_write_repair3_arg_t. 
+**
+** The bins HAS TO BE ALIGNED ON 128 bits (16 bytes)
+**
+*/
+const ROZOFS_MAX_REPAIR_BLOCKS = 6;
+
+struct sp_write_repair3_arg_t {
+    uint16_t    cid;
+    uint8_t     sid;          
+    uint8_t     layout;
+    uint8_t     spare;
+    uint32_t    dist_set[ROZOFS_SAFE_MAX_RPC];
+    sp_uuid_t   fid;        
+    uint8_t     proj_id; 
+    uint64_t    bid;        
+    uint32_t    nb_proj;
+    uint32_t    bsize;
+    sp_b2rep_t  blk2repair[ROZOFS_MAX_REPAIR_BLOCKS];
+    opaque      bins<>;
+};
 /*
 ** write repair structure without the bins -> use for storcli
 */
@@ -125,6 +153,20 @@ struct sp_write_repair2_arg_no_bins_t {
     uint32_t    nb_proj;
     uint32_t    bsize;    
     uint64_t    bitmap[3];
+    uint32_t    len;
+};
+struct sp_write_repair3_arg_no_bins_t {
+    uint16_t    cid;
+    uint8_t     sid;          
+    uint8_t     layout;
+    uint8_t     spare;
+    uint32_t    dist_set[ROZOFS_SAFE_MAX_RPC];
+    sp_uuid_t   fid;        
+    uint8_t     proj_id; 
+    uint64_t    bid;        
+    uint32_t    nb_proj;
+    uint32_t    bsize;
+    sp_b2rep_t  blk2repair[ROZOFS_MAX_REPAIR_BLOCKS];
     uint32_t    len;
 };
 
@@ -343,6 +385,7 @@ program STORAGE_PROGRAM {
 
         sp_write_ret_t
         SP_WRITE_RDMA(sp_write_rdma_arg_t)        = 13;
-
+	sp_write_ret_t
+        SP_WRITE_REPAIR3(sp_write_repair3_arg_t)        = 14;
     }=1;
 } = 0x20000002;

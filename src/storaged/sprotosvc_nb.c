@@ -216,18 +216,12 @@ void storio_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
       size = sizeof (sp_truncate_arg_no_bins_t);
       break;
 
-    case SP_WRITE_REPAIR:
-      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_write_repair_arg_no_bins_t;
+      
+    case SP_WRITE_REPAIR3:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_write_repair3_arg_no_bins_t;
       rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_write_ret_t;
-      local = sp_write_repair_1_svc_disk_thread;
-      size = sizeof (sp_write_repair_arg_no_bins_t);
-      break;
-
-    case SP_WRITE_REPAIR2:
-      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_write_repair2_arg_no_bins_t;
-      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_write_ret_t;
-      local = sp_write_repair2_1_svc_disk_thread;
-      size = sizeof (sp_write_repair2_arg_no_bins_t);
+      local = sp_write_repair3_1_svc_disk_thread;
+      size = sizeof (sp_write_repair3_arg_no_bins_t);
       break;
 
     case SP_REMOVE:

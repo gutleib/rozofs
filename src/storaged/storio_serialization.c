@@ -59,22 +59,7 @@ static inline void reset_serialization_counters(void) {
 /*_______________________________________________________________________
 * Display opcode
 */
-char * serialize_opcode_string(int opcode) {
-  switch(opcode) {
-    case STORIO_DISK_THREAD_READ: return "read";
-    case STORIO_DISK_THREAD_READ_RDMA: return "read";
-    case STORIO_DISK_THREAD_WRITE: return "write";
-    case STORIO_DISK_THREAD_WRITE_RDMA: return "write";
-    case STORIO_DISK_THREAD_TRUNCATE: return "truncate";
-    case STORIO_DISK_THREAD_REMOVE: return "remove";
-    case STORIO_DISK_THREAD_REMOVE_CHUNK: return "remove_chunk";
-    case STORIO_DISK_THREAD_WRITE_REPAIR: return "write repair";
-    case STORIO_DISK_THREAD_WRITE_REPAIR2: return "write repair2";
-    case STORIO_DISK_REBUILD_START: return "rebuild start";
-    case STORIO_DISK_REBUILD_STOP: return "rebuild stop";
-    default: return "Unknown";
-  }
-}
+#include "storio_disk_thread_request_e2String.h"
 /*_______________________________________________________________________
 * Serialization debug function
 */
@@ -100,7 +85,7 @@ void display_serialization_counters (char * argv[], uint32_t tcpRef, void *bufRe
   p += rozofs_string_append(p, sep); 
   for (opcode=1; opcode<STORIO_DISK_THREAD_MAX_OPCODE; opcode++) {  
     *p++ = '|'; *p++ = ' ';
-    p += rozofs_string_padded_append(p,15,rozofs_left_alignment,serialize_opcode_string(opcode));
+    p += rozofs_string_padded_append(p,15,rozofs_left_alignment,storio_disk_thread_request_e2String(opcode));
     *p++ = '|'; 
     p += rozofs_u64_padded_append(p,17,rozofs_right_alignment,storage_direct_req[opcode]);
     *p++ = ' '; *p++ = '|';
@@ -126,42 +111,6 @@ void serialization_counters_init(void) {
   uma_dbg_addTopic_option("serialization", display_serialization_counters, UMA_DBG_OPTION_RESET); 
 }
 
-/*
-**___________________________________________________________
-** Get chunk information from a write request
-*/
-static inline int storio_check_write_allocate_chunk(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) {
-  sp_write_arg_t * write_arg_p = (sp_write_arg_t *) ruc_buf_getPayload(req_ctx_p->decoded_arg);
-  int block_per_chunk          = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(write_arg_p->bsize);
-  int chunk                    = write_arg_p->bid/block_per_chunk;
-  uint8_t dev;
-
-  /* Is chunk number valid */
-  if (chunk >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) return 0;
-
-  dev = storio_get_dev(dev_map_p,chunk);
-  
-  /* Is this chunk already allocated */
-  if ((dev == ROZOFS_EOF_CHUNK) || (dev == ROZOFS_EMPTY_CHUNK)) {
-    return 1;
-  }
-
-  /* Does the request requires more than one chunk */    
-  if (((write_arg_p->bid%block_per_chunk)+write_arg_p->nb_proj) <= block_per_chunk){
-    return 0;
-  }     
-
-  /* Is next chunk valid */   
-  chunk++; 
-  if (chunk >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) return 0;
-  dev = storio_get_dev(dev_map_p,chunk);
-
-  /* Is the next chunk already allocated */
-  if ((dev == ROZOFS_EOF_CHUNK) || (dev == ROZOFS_EMPTY_CHUNK)) {
-    return 1;
-  }
-  return 0;
-} 
 
 /*
 **___________________________________________________________

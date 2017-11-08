@@ -82,6 +82,8 @@ int    decoded_rpc_buffer_size;
 
 DECLARE_PROFILING(spp_profiler_t);
 
+void  storio_repair_stat_man(char * pChar);
+void  storio_repair_stat_cli(char * argv[], uint32_t tcpRef, void *bufRef);
 /*
  **_________________________________________________________________________
  *      PUBLIC FUNCTIONS
@@ -380,6 +382,7 @@ int storio_start_nb_th(void *args) {
   ** Create a buffer pool to decode spproto RPC requests
   */
   size = sizeof(sp_write_arg_no_bins_t);
+  if (size < sizeof(sp_write_repair3_arg_no_bins_t)) size = sizeof(sp_write_repair3_arg_no_bins_t);
   if (size < sizeof(sp_read_arg_t)) size = sizeof(sp_read_arg_t);
   if (size < sizeof(sp_truncate_arg_no_bins_t)) size = sizeof(sp_truncate_arg_no_bins_t);
   if (size < sizeof(sp_remove_arg_t)) size = sizeof(sp_remove_arg_t);
@@ -387,9 +390,7 @@ int storio_start_nb_th(void *args) {
   if (size < sizeof(sp_rebuild_stop_arg_t)) size = sizeof(sp_rebuild_stop_arg_t);
   if (size < sizeof(sp_remove_chunk_arg_t)) size = sizeof(sp_remove_chunk_arg_t);
   if (size < sizeof(sp_clear_error_arg_t)) size = sizeof(sp_clear_error_arg_t);
-  if (size < sizeof(sp_write_repair_arg_no_bins_t)) size = sizeof(sp_write_repair_arg_no_bins_t);
-  if (size < sizeof(sp_write_repair2_arg_no_bins_t)) size = sizeof(sp_write_repair2_arg_no_bins_t);
-  if (size < sizeof(sp_read_rdma_arg_t)) size = sizeof(sp_read_rdma_arg_t);
+ if (size < sizeof(sp_read_rdma_arg_t)) size = sizeof(sp_read_rdma_arg_t);
   
   /*
   ** align the size on 8 bytes 
@@ -451,6 +452,8 @@ int storio_start_nb_th(void *args) {
   ** add profiler subject 
   */
   uma_dbg_addTopic_option("profiler", show_profile_storaged_io_display,UMA_DBG_OPTION_RESET);
+  
+  uma_dbg_addTopicAndMan("repair", storio_repair_stat_cli, storio_repair_stat_man, UMA_DBG_OPTION_RESET);
 
     if (pHostArray[0] != NULL) {
         info("storio started (instance: %d, host: %s, dbg port: %d).",

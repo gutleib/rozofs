@@ -34,6 +34,7 @@ storage_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		sp_rdma_setup_arg_t sp_rdma_setup_1_arg;
 		sp_read_rdma_arg_t sp_read_rdma_1_arg;
 		sp_write_rdma_arg_t sp_write_rdma_1_arg;
+		sp_write_repair3_arg_t sp_write_repair3_1_arg;
 	} argument;
 	char *result;
 	xdrproc_t _xdr_argument, _xdr_result;
@@ -122,6 +123,12 @@ storage_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_argument = (xdrproc_t) xdr_sp_write_rdma_arg_t;
 		_xdr_result = (xdrproc_t) xdr_sp_write_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) sp_write_rdma_1_svc;
+		break;
+
+	case SP_WRITE_REPAIR3:
+		_xdr_argument = (xdrproc_t) xdr_sp_write_repair3_arg_t;
+		_xdr_result = (xdrproc_t) xdr_sp_write_ret_t;
+		local = (char *(*)(char *, struct svc_req *)) sp_write_repair3_1_svc;
 		break;
 
 	default:
