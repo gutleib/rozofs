@@ -6,4 +6,5 @@
 /usr/share/man/man8/rozofsmount.8
 /usr/bin/rozo_distribution_check
 /usr/bin/rozo_mount_cleanup
+/usr/bin/rozofsmount_wrapper
 /usr/share/man/man8/rozo_trash.8
