@@ -974,6 +974,7 @@ void show_mount(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += sprintf(pChar, "host       : %s\n",conf.host);
     pChar += sprintf(pChar, "eid        : %d\n",exportclt.eid);
     pChar += sprintf(pChar, "multi site : %s\n",rozofs_get_msite()?"Yes":"No");
+    pChar += sprintf(pChar, "thin prov. : %s\n",rozofs_get_thin_provisionnong()?"Yes":"No");
     pChar += sprintf(pChar, "local site : %d\n",rozofs_site_number);	
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }

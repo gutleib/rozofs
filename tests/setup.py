@@ -705,6 +705,7 @@ class export_class:
     self.eid   = eid_nb
     self.bsize = bsize
     self.volume= volume
+    self.thin = False
     if layout == None:
       self.layout = volume.layout
     else:
@@ -719,6 +720,9 @@ class export_class:
     
   def set_hquota(self,quota):
     self.hquota= quota
+    
+  def set_thin(self):
+    self.thin = True
     
   def set_squota(self,quota):
     self.squota= quota            
@@ -965,7 +969,9 @@ class exportd_class:
         else             : squota="squota=\"%s\";"%(e.squota)
         if e.hquota == "": hquota=""
         else             : hquota="hquota=\"%s\";"%(e.hquota)
-	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout))
+        if e.thin == True: thin = ", thin-provisionning = True"
+        else             : thin=""
+	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s %s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout),thin)
 	nexte=","	
     print ");"
 

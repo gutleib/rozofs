@@ -461,6 +461,14 @@ void ep_mount_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         goto error;
 
     /*
+    ** Thin provisonning requires a MSIT mount
+    */
+    if (exp->thin) {
+      errno = ENOTSUP;
+      goto error;
+    }
+    
+    /*
     ** Check whether this client is allowed
     */
     uint32_t ip = af_unix_get_remote_ip(req_ctx_p->socketRef);
@@ -622,6 +630,16 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     if (!(exp = exports_lookup_export(*eid)))
         goto error;
     
+    ret.status_gw.ep_mount_msite_ret_t_u.export.msite = 0;
+    
+    /*
+    ** Tell whether thin provisionning is configured
+    */
+    if (exp->thin) {
+      ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_THIN_PROVISIONNING_BIT;
+    }
+    
+         
     /*
     ** Check whether this client is allowed
     */
@@ -652,7 +670,7 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 			** Volume is declared as multi site
 			*/
 			if (vc->multi_site) {
-			   ret.status_gw.ep_mount_msite_ret_t_u.export.msite = 1; 
+			   ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_MSITE_BIT; 
 			}	
 							
             /*
@@ -736,7 +754,7 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     }
 
     ret.status_gw.status = EP_SUCCESS;
-
+    
     goto out;
 error:
     ret.status_gw.status = EP_FAILURE;

@@ -61,6 +61,7 @@ typedef struct export_config {
     vid_t vid;
     uint8_t layout;
     ROZOFS_BSIZE_E  bsize;
+    uint8_t         thin;  /* Thin provisionning */
     char root[FILENAME_MAX];
     char name[FILENAME_MAX];
     char md5[MD5_LEN];

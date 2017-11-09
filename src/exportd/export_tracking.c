@@ -1301,7 +1301,7 @@ static void *load_trash_dir_thread(void *v) {
 
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name) {
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin) {
 
     char fstat_path[PATH_MAX];
     char const_path[PATH_MAX];
@@ -1335,6 +1335,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     e->eid = eid;
     e->volume = volume;
     e->bsize = bsize;
+    e->thin = thin;
     e->lv2_cache = lv2_cache;
     if (layout<LAYOUT_MAX) {
       e->layout = layout; // Layout used for this volume

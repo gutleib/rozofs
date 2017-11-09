@@ -205,6 +205,9 @@ typedef struct export {
     char root[PATH_MAX]; ///< absolute path of the storage root
     char name[PATH_MAX]; ///< Export name
     uint8_t layout; ///< layout
+    
+    /*  Some options */
+    uint8_t thin:1;  //< Thin provisionning */
     /*
     ** To check metadat device resources
     */
@@ -321,11 +324,12 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  * @param squota: soft quotas
  * @param: hard quotas
  * @param: IPv4 filter name
+ * @param: thin whether thin provisionning is used
  * @return 0 on success -1 otherwise (errno is set)
  */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name);
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin);
 
 /** initialize an export.
  *
