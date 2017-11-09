@@ -15,11 +15,13 @@ def syntax(error):
   if error == None:
     print "\n%s !!!\n"%(msg)
 
-  print "Usage: enum2String.py -n <enum> -f <file> [ -c <#char> ] [ -u ]"
+  print "Usage: enum2String.py -n <enum> -f <file> [ -c <#char> ] [ -u ] [-l|-U]"
   print " -n <enum>    provides the name of the enumeration"
   print " -f <file>    provides the file name containing the enumeration definition"
   print " -c <#char>   enables to truncate the <#char> first characters from the enumeration definitions"
   print " -u           May be used to avoid transformation of underscores to spaces"
+  print " -l           For lower case display"
+  print " -U           For upper case display"
   sys.exit(1)	     
 
 
@@ -56,7 +58,9 @@ parser = OptionParser()
 parser.add_option("-n","--name", action="store",type="string", dest="name", help="Enum name.")
 parser.add_option("-f","--file", action="store",type="string", dest="fname", help="File name.")
 parser.add_option("-c","--cut", action="store",type="string", dest="cut", help="number of char to remove at the beginning")
-parser.add_option("-u","--underscore", action="store_true",default=False, dest="underscore", help="Not to replace underscore with space")
+parser.add_option("-u","--underscore", action="store_true",default=False, dest="underscore", help="To keep underscores")
+parser.add_option("-l","--lower", action="store_true",default=False, dest="lower", help="To use lower case display")
+parser.add_option("-U","--upper", action="store_true",default=False, dest="upper", help="To use upper case display")
 
 (options, args) = parser.parse_args()
 
@@ -64,6 +68,10 @@ parser.add_option("-u","--underscore", action="store_true",default=False, dest="
 if options.name == None: 
   syntax("Missing enum name")   
 enum_name = options.name
+
+
+if options.lower == True and options.upper == True:
+  syntax ("-l and -U are incompatible options");
 
 # Check number of char to cut at the beginning
 if options.cut == None:
@@ -102,6 +110,7 @@ print "#ifdef __cplusplus"
 print "extern \"C\" {"
 print "#endif /*__cplusplus*/"
 
+print "#include <strings.h>"
 
 print "\n/*___________________________________________________________________"
 print " "
@@ -113,11 +122,10 @@ cmd=""
 for param in sys.argv:
   cmd = cmd + " " + param
 print cmd
-  
-  
-print "\n ____________________________________________________________________"
-print " */"
-#print "#include \"%s\""%(options.fname)
+print "\n  ____________________________________________________________________"
+print "*/"
+
+
 print "\n/*_________________________________________________________________"
 print " * Builds a string from an integer value supposed to be within"
 print " * the enumerated list %s"%(enum_name) 
@@ -130,7 +138,7 @@ print " * values, \"??\" is returned"
 print " *"
 print " * @return A char pointer to the constant string or \"??\""
 print " *_________________________________________________________________*/ "   
-print "static inline char * %s2String (%s x) {\n"%(enum_name,enum_name) 
+print "static inline char * %s2String (const %s x) {"%(enum_name,enum_name) 
 print "  switch(x) {"
 
 for value in enum.split(','):
@@ -142,13 +150,42 @@ for value in enum.split(','):
   
   val_display = val_name[cut:]   
   if options.underscore == False: val_display = val_display.replace("_", " ")
-    
+  if options.lower == True:  val_display = val_display.lower()   
+  if options.upper == True:  val_display = val_display.upper()       
   print "    case %-40s: return(\"%s\");"%(val_name,val_display)  
 
 print "    /* Unexpected value */";
 print "    default: return \"??\";"
 print "  }";
 print "}";
+
+print "/*_________________________________________________________________"
+print " * Translate a string supposed to be within the enumerated list"
+print " * %s to its integer value."%(enum_name) 
+print " *"  
+print " * @param s : the string to translate into an integer" 
+print " *"
+print " * The input string is translated into its corresponding integer value."
+print " * When the input value do not fit any expected string -1 is returned."
+print " *"
+print " * @return The integer value or -1"
+print " *_________________________________________________________________*/ "   
+print "static inline int string2%s (const char * s) {"%(enum_name) 
+
+for value in enum.split(','):
+
+  val_name = value.split("=")[0]
+  val_name = val_name.replace(" ","")
+  
+  if val_name == "": continue
+  
+  val_display = val_name[cut:]   
+  if options.underscore == False: val_display = val_display.replace("_", " ")
+  print "  if (strcasecmp(s,\"%s\")==0)  \treturn %s;"%(val_display,val_name)  
+print "  /* Unexpected value */";
+print "  return -1;"
+print "}";
+print ""
 print "#ifdef	__cplusplus";
 print "}";
 print "#endif";
