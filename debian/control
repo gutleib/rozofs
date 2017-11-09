@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Rozo Systems S.A.S <devel@rozofs.com>
 Build-Depends: 	debhelper (>= 9),
 				,dh-python
+				,dh-systemd
 				,cmake
 				,libfuse-dev (>= 2.9.0)
 				,libattr1-dev
