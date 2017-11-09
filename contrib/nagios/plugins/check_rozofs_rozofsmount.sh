@@ -258,7 +258,7 @@ if [ ! -z "$instance" ];
 then
   if [ ${instance} = "ALL" ]
   then
-    instance_list=` grep -o 'instance=.*' /etc/fstab | cut -f1 -d, | cut -f2 -d= | tr '\n' ' '`
+    instance_list=` grep -e '^rozofsmount' /etc/fstab | grep -o 'instance=.*' | cut -f1 -d, | cut -f2 -d= | tr '\n' ' '`
   else  
     instance_list=${instance}
   fi
