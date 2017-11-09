@@ -138,7 +138,7 @@ print " * values, \"??\" is returned"
 print " *"
 print " * @return A char pointer to the constant string or \"??\""
 print " *_________________________________________________________________*/ "   
-print "static inline char * %s2String (%s x) {"%(enum_name,enum_name) 
+print "static inline char * %s2String (const %s x) {"%(enum_name,enum_name) 
 print "  switch(x) {"
 
 for value in enum.split(','):
@@ -170,7 +170,7 @@ print " * When the input value do not fit any expected string -1 is returned."
 print " *"
 print " * @return The integer value or -1"
 print " *_________________________________________________________________*/ "   
-print "static inline int string2%s (char * s) {"%(enum_name) 
+print "static inline int string2%s (const char * s) {"%(enum_name) 
 
 for value in enum.split(','):
 
