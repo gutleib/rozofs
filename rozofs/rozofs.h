@@ -91,7 +91,13 @@ static inline char * rozofs_file_distribution_rule2sting(rozofs_file_distributio
 
 
 
-
+/*
+**
+** Bitmap of export options returned on the mount inside the msite field
+**
+*/
+#define ROZOFS_EXPORT_MSITE_BIT              (1<<0)
+#define ROZOFS_EXPORT_THIN_PROVISIONNING_BIT (1<<1)
 
 
 

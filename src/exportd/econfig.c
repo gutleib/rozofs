@@ -62,6 +62,7 @@
 #define EFORBID     "forbid"
 #define EIP4SUBNET  "ip4subnet"
 #define ESUBNETS    "subnets"
+#define ETHIN       "thin-provisionning"
 
 /*
 ** constant for exportd gateways
@@ -209,7 +210,7 @@ void expgw_config_release(expgw_config_t *c) {
 
 
 int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t layout, uint32_t bsize,
-        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name) {
+        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name, int thin) {
     DEBUG_FUNCTION;
 
     e->eid = eid;
@@ -221,6 +222,7 @@ int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t l
     strncpy(e->md5, md5, MD5_LEN);
     e->squota = squota;
     e->hquota = hquota;
+    e->thin   = thin;
     if (filter_name == NULL) {
       e->filter_name = NULL;
     }  
@@ -985,11 +987,13 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         int vid; // Volume identifier
 	int bsize; // Block size
 	int layout; // Export layout
+        int thin;
 #else
         long int eid; // Export identifier
         long int vid; // Volume identifier
         long int bsize; // Block size
-	long int layout; // Export layout	
+	long int layout; // Export layout
+        long int thin;	
 #endif
         const char *str;
         uint64_t squota;
@@ -1117,6 +1121,9 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
             goto out;
         }
 
+        // Check for thin provisionning
+        thin = 0;
+        config_setting_lookup_bool(mfs_setting, ETHIN, &thin);
 		
         // Lookup export layout if any
         if (config_setting_lookup_int(mfs_setting, ELAYOUT, &layout) == CONFIG_FALSE) {
@@ -1141,7 +1148,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
 	
         econfig = xmalloc(sizeof (export_config_t));
         if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
-                md5, squota, hquota, filter_name) != 0) {
+                md5, squota, hquota, filter_name, thin) != 0) {
             severe("can't initialize export config.");
         }
         // Initialize export

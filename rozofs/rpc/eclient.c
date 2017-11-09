@@ -37,11 +37,18 @@
  uint32_t exportd_configuration_file_hash = 0; /**< hash value of the configuration file */
 
 static int rozofs_msite = 0;
+static int rozofs_thin = 0;
+
 /**______________________________________________________________________________
 *  Re intialize the storage direct access table 
 */
 int rozofs_get_msite(void) { return rozofs_msite; }
 
+
+/**______________________________________________________________________________
+*  Whether thin provisionning is configured 
+*/
+int rozofs_get_thin_provisionnong(void) { return rozofs_thin; }
 
 
 /**______________________________________________________________________________
@@ -160,12 +167,27 @@ int exportclt_msite_initialize(exportclt_t * clt, const char *host, char *root,i
             goto error;
         }
     }
-
+    
     /*
     ** Is it a multi site config
     */
-	if (ret->status_gw.ep_mount_msite_ret_t_u.export.msite) rozofs_msite = 1;
-	
+    if (ret->status_gw.ep_mount_msite_ret_t_u.export.msite & ROZOFS_EXPORT_MSITE_BIT) {
+      rozofs_msite = 1;
+    }
+    else {
+      rozofs_msite = 0;
+    } 
+     
+    /*
+    ** Is thin provisionning configured
+    */      
+    if (ret->status_gw.ep_mount_msite_ret_t_u.export.msite & ROZOFS_EXPORT_THIN_PROVISIONNING_BIT) {
+      rozofs_thin = 1;
+    }
+    else {
+      rozofs_thin = 0;
+    }
+                
     /* Copy eid, layout, root fid */
     clt->eid = ret->status_gw.ep_mount_msite_ret_t_u.export.eid;
     clt->layout = ret->status_gw.ep_mount_msite_ret_t_u.export.rl;
