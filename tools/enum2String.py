@@ -15,11 +15,13 @@ def syntax(error):
   if error == None:
     print "\n%s !!!\n"%(msg)
 
-  print "Usage: enum2String.py -n <enum> -f <file> [ -c <#char> ] [ -u ]"
+  print "Usage: enum2String.py -n <enum> -f <file> [ -c <#char> ] [ -u ] [-l|-U]"
   print " -n <enum>    provides the name of the enumeration"
   print " -f <file>    provides the file name containing the enumeration definition"
   print " -c <#char>   enables to truncate the <#char> first characters from the enumeration definitions"
   print " -u           May be used to avoid transformation of underscores to spaces"
+  print " -l           For lower case display"
+  print " -U           For upper case display"
   sys.exit(1)	     
 
 
@@ -56,7 +58,9 @@ parser = OptionParser()
 parser.add_option("-n","--name", action="store",type="string", dest="name", help="Enum name.")
 parser.add_option("-f","--file", action="store",type="string", dest="fname", help="File name.")
 parser.add_option("-c","--cut", action="store",type="string", dest="cut", help="number of char to remove at the beginning")
-parser.add_option("-u","--underscore", action="store_true",default=False, dest="underscore", help="Not to replace underscore with space")
+parser.add_option("-u","--underscore", action="store_true",default=False, dest="underscore", help="To keep underscores")
+parser.add_option("-l","--lower", action="store_true",default=False, dest="lower", help="To use lower case display")
+parser.add_option("-U","--upper", action="store_true",default=False, dest="upper", help="To use upper case display")
 
 (options, args) = parser.parse_args()
 
@@ -64,6 +68,8 @@ parser.add_option("-u","--underscore", action="store_true",default=False, dest="
 if options.name == None: 
   syntax("Missing enum name")   
 enum_name = options.name
+if options.lower == True and options.upper == True:
+  syntax ("-l and -U are incompatible options");
 
 # Check number of char to cut at the beginning
 if options.cut == None:
@@ -142,7 +148,8 @@ for value in enum.split(','):
   
   val_display = val_name[cut:]   
   if options.underscore == False: val_display = val_display.replace("_", " ")
-    
+  if options.lower == True:  val_display = val_display.lower()   
+  if options.upper == True:  val_display = val_display.upper()       
   print "    case %-40s: return(\"%s\");"%(val_name,val_display)  
 
 print "    /* Unexpected value */";
