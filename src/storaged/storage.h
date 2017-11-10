@@ -1484,5 +1484,20 @@ char * rozofs_get_device_mountpath(const char * dev) ;
  * @return: 1 when mounted else 0
  */
 int rozofs_check_mountpath(const char * mntpoint);
+/*_____________________________________________________________________________
+** Compute the size of a file as well as the number of allocated sectors
+** from  stat() on every projection file.
+**
+** @param st            The logical storage context
+** @param fid           The FID of the target file
+** @param spare         Whether this storage is spare for this file
+** @param nb_chunk      returned number of chunk
+** @param size_B        returned size of projections
+** @param allocated_KB  returned allocated sectors of projections
+**
+** @retval 0 on success. -1 on error (errno is set)
+**_____________________________________________________________________________
+*/
+int storage_size_file(storage_t * st, fid_t fid, uint8_t spare, uint32_t * nb_chunk, uint64_t * size_B, uint64_t * allocated_KB);
 #endif
 

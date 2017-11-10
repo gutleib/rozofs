@@ -3030,6 +3030,117 @@ void storage_rm_best_effort(storage_t * st, fid_t fid, uint8_t spare) {
 	close(dirfd);
   }    
 }
+/*_____________________________________________________________________________
+** Compute the size of a file as well as the number of allocated sectors
+** from  stat() on every projection file.
+**
+** @param st                  The logical storage context
+** @param fid                 The FID of the target file
+** @param spare               Whether this storage is spare for this file
+** @param nb_chunk            returned number of created chunk
+** @param file_size_in_blocks returned nfile size in blocks
+** @param allocated_sectors   returned allocated sectors of projections
+**
+** @retval 0 on success. -1 on error (errno is set)
+**_____________________________________________________________________________
+*/
+int storage_size_file(storage_t * st, fid_t fid, uint8_t spare, uint32_t * nb_chunk, 
+                      uint64_t * file_size_in_blocks, uint64_t * allocated_sectors) {
+  STORAGE_READ_HDR_RESULT_E   read_hdr_res;
+  int                         chunk;
+  rozofs_stor_bins_file_hdr_t file_hdr;
+  int32_t                     storage_slice;
+  char                        path[FILENAME_MAX];
+  uint8_t                     dev;
+  struct stat                 buf;
+  uint16_t                    rozofs_msg_psize;
+  uint16_t                    rozofs_disk_psize;
+  
+  
+  *file_size_in_blocks = 0;
+  *allocated_sectors   = 0;
+  *nb_chunk            = 0;
+
+  /*
+  ** Let's read the header file 
+  */      
+  read_hdr_res = storage_read_header_file(
+          st,       // cid/sid context
+          fid,      // FID we are looking for
+	  spare,    // Whether the storage is spare for this FID
+	  &file_hdr,// Returned header file content
+          0 );      // Update header file when not the same recycling value
+
+
+  if (read_hdr_res == STORAGE_READ_HDR_ERRORS) {
+    /*
+    ** No header file is correct....
+    */
+    errno = EIO;
+    return -1;
+  }
+  
+  if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) {
+    /*
+    ** File does nor exist
+    */
+    errno = ENOENT;
+    return -1;
+  }
+  
+  /*
+  ** Compute the storage slice from the FID
+  */
+  storage_slice = rozofs_storage_fid_slice(fid);    
+
+  /*
+  ** Retrieve the projection size in the message 
+  ** and the projection size on disk
+  */
+  storage_get_projection_size(spare, st->sid, file_hdr.v0.layout, file_hdr.v0.bsize, file_hdr.v0.dist_set_current,
+                              &rozofs_msg_psize, &rozofs_disk_psize); 
+
+  /*
+  ** stat every chunk
+  */
+  for (chunk=0; chunk<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk++) {
+
+    dev = file_hdr.v0.device[chunk];
+
+    /*
+    ** No more chunk
+    */
+    if (dev == ROZOFS_EOF_CHUNK) {
+      break;
+    }
+
+    /*
+    ** This chunk is empty
+    */
+    if (dev == ROZOFS_EMPTY_CHUNK) {
+      continue;
+    }
+
+    /*
+    ** stat this chunk
+    */
+    storage_build_chunk_full_path(path, st->root, dev, spare, storage_slice, fid, chunk);
+    if (stat(path,&buf) == 0) {
+      *file_size_in_blocks = buf.st_size;
+      *allocated_sectors  += buf.st_blocks;
+      *nb_chunk           += 1;
+    }
+  }
+  
+  if (chunk) {
+    *file_size_in_blocks /= rozofs_disk_psize;
+    *file_size_in_blocks += ((chunk-1)*ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.v0.bsize));
+  }
+  
+  //info("%d chunks %llu blocks %llu sectors",*nb_chunk,*file_size_in_blocks, *allocated_sectors)
+  
+  return 0;               
+} 
 int storage_rm2_file(storage_t * st, fid_t fid, uint8_t spare) {
  STORAGE_READ_HDR_RESULT_E read_hdr_res;
  int chunk;

@@ -43,6 +43,10 @@ typedef struct _storaged_sub_thread_stat_t {
   uint64_t            list_bins_count;
   uint64_t            list_bins_errors;
   uint64_t            list_bins_time;
+
+  uint64_t            size_count;
+  uint64_t            size_errors;
+  uint64_t            size_time;
   
 } storaged_sub_thread_stat_t;
 /*

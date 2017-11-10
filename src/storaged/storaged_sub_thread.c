@@ -265,6 +265,54 @@ out:
 /*__________________________________________________________________________
 */
 /**
+*  Compute file size and allocated sectors
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
+static inline void storaged_sub_thread_size(storaged_sub_thread_ctx_t *thread_ctx_p,storaged_sub_thread_msg_t * msg) {
+  struct timeval                 timeDay;
+  unsigned long long             timeBefore, timeAfter;
+  rozorpc_srv_ctx_t            * rpcCtx;
+  mp_size_arg_t                * args;  
+  mp_size_ret_t                  ret;
+ int                             status=-1;
+      
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeBefore = MICROLONG(timeDay);  
+
+  ret.status = MP_FAILURE;          
+ 
+   /*
+  ** update statistics
+  */
+  thread_ctx_p->stat.remove_count++; 
+  
+  rpcCtx = msg->rpcCtx;
+  args   = (mp_size_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+
+  if (storage_size_file(msg->st, (unsigned char *) args->fid, args->spare, 
+                        &ret.mp_size_ret_t_u.rsp.nb_chunk, 
+                        &ret.mp_size_ret_t_u.rsp.file_size_in_blocks, 
+                        &ret.mp_size_ret_t_u.rsp.allocated_sectors) != 0) {
+    ret.mp_size_ret_t_u.error = errno;
+    thread_ctx_p->stat.size_errors++ ;   
+    goto out;   
+  } 
+  ret.status = MP_SUCCESS;
+  
+out:  
+  storaged_sub_thread_encode_rpc_response(rpcCtx,(char*)&ret);  
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeAfter = MICROLONG(timeDay);
+  thread_ctx_p->stat.size_time +=(timeAfter-timeBefore);  
+  storaged_sub_thread_intf_send_response(thread_ctx_p,msg,status);
+} 
+/*__________________________________________________________________________
+*/
+/**
 *  Perform a file remove
 
   @param thread_ctx_p: pointer to the thread context
@@ -408,6 +456,9 @@ void *storaged_sub_thread(void *arg) {
       case MP_LIST_BINS_FILES:
         storaged_sub_thread_list_bins(ctx_p,&msg);
         break;		
+      case MP_SIZE:
+        storaged_sub_thread_size(ctx_p,&msg);
+        break;
        	
       default:
         fatal(" unexpected opcode : %d\n",msg.opcode);
