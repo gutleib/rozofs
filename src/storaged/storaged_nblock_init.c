@@ -145,6 +145,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
     sp_display_probe(gprofiler, ports);
     sp_display_probe(gprofiler, remove);
     sp_display_probe(gprofiler, list_bins_files);
+    sp_display_probe(gprofiler, size);
     if (argv[1] != NULL) {
 
         if (strcmp(argv[1], "reset") == 0) {
@@ -153,6 +154,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
             sp_clear_probe(gprofiler, ports);
             sp_clear_probe(gprofiler, remove);
             sp_clear_probe(gprofiler, list_bins_files);
+            sp_clear_probe(gprofiler, size);
 	    pChar += sprintf(pChar,"Reset Done\n");  
 	    gprofiler->uptime = this_time;  	      
         }
@@ -625,6 +627,7 @@ int storaged_start_nb_th(void *args) {
     size = sizeof(mp_remove2_arg_t);
     if (size < sizeof(mp_remove_arg_t)) size = sizeof(mp_remove_arg_t);  
     if (size < sizeof(mp_list_bins_files_arg_t)) size = sizeof(mp_list_bins_files_arg_t);
+    if (size < sizeof(mp_size_arg_t)) size = sizeof(mp_size_arg_t);
     
     storaged_decoded_rpc_buffer_pool = ruc_buf_poolCreate(STORAGED_BUF_RECV_CNT,size);
     if (storaged_decoded_rpc_buffer_pool == NULL) {

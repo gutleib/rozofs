@@ -53,6 +53,24 @@ struct mp_sstat_t {
     uint64_t free;
 };
 
+struct mp_size_rsp_t {
+  uint64_t     file_size_in_blocks;
+  uint64_t     allocated_sectors;
+  uint32_t     nb_chunk;
+};
+
+union mp_size_ret_t switch (mp_status_t status) {
+    case MP_FAILURE:    int            error;
+    default:            mp_size_rsp_t  rsp;
+};
+
+struct mp_size_arg_t {
+    uint16_t    cid;
+    uint8_t     sid;
+    uint8_t     spare;
+    mp_uuid_t   fid;
+};
+
 union mp_stat_ret_t switch (mp_status_t status) {
     case MP_SUCCESS:    mp_sstat_t  sstat;
     case MP_FAILURE:    int         error;
@@ -135,6 +153,9 @@ program MONITOR_PROGRAM {
 
         mp_status_ret_t
         MP_REMOVE2(mp_remove2_arg_t)                    = 5;
+
+	mp_size_rsp_t
+        MP_SIZE(mp_size_arg_t)                          = 6;
 
     }=1;
 } = 0x20000003;
