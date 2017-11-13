@@ -157,7 +157,7 @@ INT     storage spare_restore_loop_delay            240
 // 0 means no limit
 INT     storage spare_restore_read_throughput       2
 // Storio number of FID context in 1K unit
-INT     storage storio_fidctx_ctx                128      
+INT     storage storio_fidctx_ctx                256      
 // When that flag is asserted, the rozofsmount client can cache the extended attributes
 BOOL 	client 	client_xattr_cache	            False
 // When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode

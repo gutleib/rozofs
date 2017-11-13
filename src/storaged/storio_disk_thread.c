@@ -250,7 +250,7 @@ static inline void storio_disk_rebuild_stop(rozofs_disk_thread_ctx_t *thread_ctx
   /* 
   ** well ? Nothing to do
   */
-  if (pRebuild->old_device == fidCtx->device[pRebuild->chunk]) {
+  if (pRebuild->old_device == storio_get_dev(fidCtx,pRebuild->chunk)) {
     goto out;
   }    
   
@@ -281,7 +281,7 @@ static inline void storio_disk_rebuild_stop(rozofs_disk_thread_ctx_t *thread_ctx
   ** The rebuild is failed, so let's remove the newly created file 
   ** and restore the old device 
   */
-  storage_restore_chunk(st, fidCtx->device,(unsigned char*)args->fid, pRebuild->spare, 
+  storage_restore_chunk(st, fidCtx,(unsigned char*)args->fid, pRebuild->spare, 
                                  pRebuild->chunk, pRebuild->old_device);
 
 out:           
@@ -352,7 +352,7 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
   // Check whether this is exactly the same FID
   // This is to handle the case when the read request has been serialized
   // After serialization, the recycling counter may not be the same !!!
-  if (fidCtx->device[0] != ROZOFS_UNKNOWN_CHUNK) {
+  if (storio_get_dev(fidCtx,0) != ROZOFS_UNKNOWN_CHUNK) {
     if (rozofs_get_recycle_from_fid(args->fid) != fidCtx->recycle_cpt) {
       // This is not the same recycling counter, so not the same file
       ret.sp_read_ret_t_u.error = ENOENT;
@@ -473,7 +473,7 @@ static inline void storio_disk_resize(rozofs_disk_thread_ctx_t *thread_ctx_p,sto
   // Check whether this is exactly the same FID
   // This is to handle the case when the read request has been serialized
   // After serialization, the recycling counter may not be the same !!!
-  if (fidCtx->device[0] != ROZOFS_UNKNOWN_CHUNK) {
+  if (storio_get_dev(fidCtx,0) != ROZOFS_UNKNOWN_CHUNK) {
     if (rozofs_get_recycle_from_fid(args->fid) != fidCtx->recycle_cpt) {
       // This is not the same recycling counter, so not the same file
       ret.sp_read_ret_t_u.error = ENOENT;
@@ -750,7 +750,7 @@ static inline void storio_disk_rebuild_start(rozofs_disk_thread_ctx_t *thread_ct
     int block_per_chunk = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
     int chunk           = args->bid/block_per_chunk;
       
-    res = storage_relocate_chunk(st, fidCtx->device,(unsigned char *)args->fid, args->spare, 
+    res = storage_relocate_chunk(st, fidCtx,(unsigned char *)args->fid, args->spare, 
                                  chunk, &pRebuild->old_device);
     if (res != 0)  {
       ret.sp_write_ret_t_u.error = errno;
@@ -844,7 +844,7 @@ static inline void storio_disk_write_repair3(rozofs_disk_thread_ctx_t *thread_ct
   
   
   // Write projections
-  size =  storage_write_repair3(st, fidCtx->device, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
+  size =  storage_write_repair3(st, fidCtx, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
           (unsigned char *) args->fid, args->bid, args->nb_proj, args->blk2repair, version,
           &ret.sp_write_ret_t_u.file_size,(bin_t *) pbuf, &is_fid_faulty);
   if (size < 0)  {
@@ -1087,7 +1087,7 @@ static inline void storio_disk_remove_chunk(rozofs_disk_thread_ctx_t *thread_ctx
   
 
   // remove chunk file
-  result = storage_rm_chunk(st, fidCtx->device, 
+  result = storage_rm_chunk(st, fidCtx, 
                             args->layout, args->bsize, args->spare,
 			    (sid_t *)args->dist_set, (unsigned char*)args->fid,
 			    args->chunk, &is_fid_faulty);

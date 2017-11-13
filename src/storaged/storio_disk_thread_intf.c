@@ -680,13 +680,7 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
     /*
     ** Send waiting request if any
     */
-    storio_serialization_end(dev_map_p,rpcCtx) ;	
-        
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);  
+    storio_serialization_end(dev_map_p,rpcCtx) ;	 
   } 
     
   /*

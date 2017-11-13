@@ -530,7 +530,7 @@ void sp_write_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ** A mapping context exist containing information synchronized
     ** with the disk header file content.
     */    
-    if (dev_map_p->device[0] != ROZOFS_UNKNOWN_CHUNK) {
+    if (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK) {
       /*
       ** This is not the same recycling counter, so let's recycle
       */
@@ -540,8 +540,8 @@ void sp_write_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 	** Let's clear the chunk distribution to force a header file update
 	** and a data truncate.
 	*/
-	memset(dev_map_p->device,ROZOFS_UNKNOWN_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE); 
-	dev_map_p->recycle_cpt =  rozofs_get_recycle_from_fid(write_arg_p->fid);
+        storio_free_dev_mapping(dev_map_p);
+        dev_map_p->recycle_cpt =  rozofs_get_recycle_from_fid(write_arg_p->fid);
       }
     } 
 
@@ -627,11 +627,6 @@ error:
     STOP_PROFILING(write);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;
 }
 /*
@@ -670,17 +665,10 @@ void sp_read_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(read);
             
     /*
-    ** allocate a buffer for the response
+    ** Use received buffer for the response
     */
-    req_ctx_p->xmitBuf = ruc_buf_getBuffer(storage_xmit_buffer_pool_p);
-    if (req_ctx_p->xmitBuf == NULL)
-    {
-      severe("sp_read_1_svc_disk_thread Out of memory STORAGE_NORTH_LARGE_POOL");
-      errno = ENOMEM;
-      req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
-      req_ctx_p->recv_buf = NULL;
-      goto error;         
-    }
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
  
     /*
     ** Set the position where the data has to be written in the xmit buffer 
@@ -700,7 +688,7 @@ void sp_read_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ** A mapping context exist containing information synchronized
     ** with the disk header file content.
     */    
-    if ((dev_map_p) && (dev_map_p->device[0] != ROZOFS_UNKNOWN_CHUNK)) {
+    if ((dev_map_p) && (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK)) {
       /*
       ** This is not the same recycling counter, 
       ** so the requested FID does not exist.
@@ -758,11 +746,6 @@ error:
     STOP_PROFILING(read);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;    
 }
 /*
@@ -941,11 +924,6 @@ send_response:
     rozorpc_srv_release_context(req_ctx_p);
     STOP_PROFILING(rebuild_start);    
  
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;        
 }
 /*
@@ -1022,11 +1000,11 @@ void sp_rebuild_stop_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) 
     }
 	 
     /*
-    ** In caase no relocation has been done, or relocation has been done on the same
+    ** In case no relocation has been done, or relocation has been done on the same
     ** device, just send back the response
     */	 
     if ((pRebuild->relocate != RBS_RELOCATED)
-    ||  (pRebuild->old_device == dev_map_p->device[pRebuild->chunk])) {
+    ||  (pRebuild->old_device == storio_get_dev(dev_map_p,pRebuild->chunk))) {
     	           
       storio_rebuild_ctx_free (pRebuild);
       dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF;    
@@ -1068,12 +1046,7 @@ send_response:
     STOP_PROFILING(rebuild_stop);
 
 out:    
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);   
-    return ;
+   return ;
 }
 /*
 **___________________________________________________________
@@ -1219,11 +1192,6 @@ error:
     STOP_PROFILING(truncate);
     
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);    
     return ;
 }
 
@@ -1322,11 +1290,6 @@ error:
     STOP_PROFILING(remove);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);   
     return ;
 }
 /*
@@ -1422,11 +1385,6 @@ error:
     STOP_PROFILING(remove);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);    
     return ;
 }
 
@@ -1506,11 +1464,6 @@ error:
     STOP_PROFILING(repair);
 
 out:
-    /*
-    ** Put the FID context in the correct list
-    ** (i.e running or inactive list)
-    */
-    storio_device_mapping_ctx_evaluate(dev_map_p);
     return;
 }
 /*
