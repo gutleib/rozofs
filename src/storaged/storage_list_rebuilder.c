@@ -278,7 +278,7 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
     uint8_t  rozofs_forward    = rozofs_get_rozofs_forward(layout);
     uint8_t  rozofs_inverse    = rozofs_get_rozofs_inverse(layout);
     uint16_t disk_block_size   = rozofs_get_max_psize_on_disk(layout,bsize);
-    uint32_t requested_blocks  = ROZOFS_BLOCKS_IN_BUFFER(layout,bsize);
+    uint32_t requested_blocks  = ROZOFS_MAX_BLOCK_PER_MSG;
     uint32_t nb_blocks_read_distant = requested_blocks;
     uint32_t block_per_chunk = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(re->bsize);
     uint32_t chunk_stop;
@@ -632,7 +632,7 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st,
     uint16_t rozofs_disk_psize      = rozofs_get_psizes(layout,bsize,proj_id_to_rebuild);
     uint8_t  rozofs_safe            = rozofs_get_rozofs_safe(layout);
     uint16_t rozofs_max_psize       = rozofs_get_max_psize_in_msg(layout,bsize);
-    uint32_t requested_blocks       = ROZOFS_BLOCKS_IN_BUFFER(layout,bsize);
+    uint32_t requested_blocks       = ROZOFS_MAX_BLOCK_PER_MSG;
     uint32_t nb_blocks_read_distant = requested_blocks;
     bin_t * saved_bins = NULL;
     int     i;   
