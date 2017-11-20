@@ -1028,10 +1028,6 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   */ 
   if (mod_bigger != -1) {
     /*
-    ** The tracking file must have been created at this time or before
-    */
-    docheck(mod_bigger,inode_p->s.cr8time);
-    /*
     ** The tracking file must have been modified at this timer or later
     */
     docheck(inode_p->s.attrs.mtime, mod_bigger);

@@ -490,10 +490,10 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,2);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(storio_fidctx_ctx,128);
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_fidctx_ctx,256);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Storio number of FID context in 1K unit\n");
-  COMMON_CONFIG_SHOW_INT(storio_fidctx_ctx,128);
+  COMMON_CONFIG_SHOW_INT(storio_fidctx_ctx,256);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_spare_ctx,16);
@@ -745,7 +745,7 @@ static inline void common_config_generated_read(char * fname) {
   // 0 means no limit 
   COMMON_CONFIG_READ_INT(spare_restore_read_throughput,2);
   // Storio number of FID context in 1K unit 
-  COMMON_CONFIG_READ_INT(storio_fidctx_ctx,128);
+  COMMON_CONFIG_READ_INT(storio_fidctx_ctx,256);
   // Spare file restoring : Number of spare file context in 1K unit 
   COMMON_CONFIG_READ_INT(spare_restore_spare_ctx,16);
  

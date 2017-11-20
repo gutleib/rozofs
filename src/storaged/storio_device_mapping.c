@@ -128,81 +128,237 @@ void storio_register_faulty_fid(int threadNb, uint8_t cid, uint8_t sid, fid_t fi
 
 /*
 **______________________________________________________________________________
+**
+** Display one rebuild context
+**
+** @param pChar       Where to format the output string
+** @param pRebuild    The rebuild context to display
+**
+** retval the end of the formated string
+**______________________________________________________________________________
 */
-/**
-* Debug 
+char *  storage_rebuild_one_debug(char * pChar, STORIO_REBUILD_T * pRebuild) {
+  pChar += rozofs_string_append(pChar, "        { \"FID\" : \"");
+  pChar += rozofs_fid_append(pChar,pRebuild->fid);  
+  pChar += rozofs_string_append(pChar, "\", \"ref\" : ");
+  pChar += rozofs_u32_append(pChar,pRebuild->ref);
+  pChar += rozofs_string_append(pChar, ", \"spare\" : ");
+  pChar += rozofs_u32_append(pChar,pRebuild->spare);
+  pChar += rozofs_string_append(pChar, ", \"chunk\" : ");
+  pChar += rozofs_u32_append(pChar,pRebuild->chunk);
+  pChar += rozofs_string_append(pChar, ", \"dev\" : ");
+  pChar += rozofs_u32_append(pChar,pRebuild->old_device);
+  pChar += rozofs_string_append(pChar, ", \"start\" : ");
+  pChar += rozofs_u32_append(pChar,pRebuild->start_block);
+  pChar += rozofs_string_append(pChar, ", \"stop\" : ");
+  pChar += rozofs_u32_append(pChar,pRebuild->stop_block);
+  pChar += rozofs_string_append(pChar, ", \"age\" : ");  
+  pChar += rozofs_u64_append(pChar,(time(NULL)-pRebuild->rebuild_ts));
+  pChar += rozofs_string_append(pChar, "}");
+  return pChar;
+}
+/*
+**______________________________________________________________________________
+**
+** Display one FID device mapping context
+**
+** @param pChar   Where to format the output string
+** @param p       The FID device mapping context to display
+**
+** retval the end of the formated string
+**______________________________________________________________________________
+*/
+char * storio_display_one_mapping_ctx(char * pChar, storio_device_mapping_t * p) {
+  int                            count=0;
+  uint8_t                        nb_rebuild;
+  uint8_t                        storio_rebuild_ref;
+  STORIO_REBUILD_T           *   pRebuild;
   
+  pChar += rozofs_string_append(pChar,"    { \"index\" : ");
+  pChar += rozofs_u32_append(pChar,p->index);    
+  pChar += rozofs_string_append(pChar,", \"cid\" : ");
+  pChar += rozofs_u32_append(pChar,p->key.cid);
+  pChar += rozofs_string_append(pChar,", \"sid\" : ");
+  pChar += rozofs_u32_append(pChar,p->key.sid);
+  pChar += rozofs_string_append(pChar,", \"FID\" : \"");
+  pChar += rozofs_fid_append(pChar,p->key.fid);
+  pChar += rozofs_string_append(pChar,"\", \"running\" : ");
+
+  if (!list_empty(&p->running_request)) {    
+    pChar += rozofs_string_append(pChar,"\"YES\",\n");
+  }
+  else {  
+    pChar += rozofs_string_append(pChar,"\"NO\",\n");
+  }
+  
+  /*
+  ** Display the list of devices per chunk until the end of file
+  */
+  pChar += rozofs_string_append(pChar,"      \"devices\" : \"");
+  pChar  = trace_device(pChar,p);
+  pChar += rozofs_string_append(pChar,"\",\n");
+  
+  
+  pChar += rozofs_string_append(pChar,"      \"rebuilds\" :  [");
+    
+  if (p->storio_rebuild_ref.u64 == 0xFFFFFFFFFFFFFFFF) {
+    pChar += rozofs_string_append(pChar,"]\n    }"); 
+    return pChar;
+  }
+
+  /*
+  ** Add the rebuild contexts associated to this FID mapping context
+  */
+  count = 0;  
+  for (nb_rebuild=0; nb_rebuild   <MAX_FID_PARALLEL_REBUILD; nb_rebuild++) {
+
+    storio_rebuild_ref = p->storio_rebuild_ref.u8[nb_rebuild];
+    if (storio_rebuild_ref == 0xFF) continue;
+    pRebuild = storio_rebuild_ctx_retrieve(storio_rebuild_ref, NULL);
+    if (pRebuild == NULL) continue;
+    
+    if (count==0) {
+      pChar += rozofs_string_append(pChar,"\n");
+    }
+    else {
+      pChar += rozofs_string_append(pChar,",\n");
+    }
+    count++;
+
+    pChar = storage_rebuild_one_debug(pChar,pRebuild);
+  }
+  pChar += rozofs_string_append(pChar,"\n      ]\n    }"); 
+  return pChar;
+}
+/*
+**______________________________________________________________________________
+**
+** Man of FID rozodiag command
+**
+**______________________________________________________________________________
+*/
+void storage_fid_man(char * pChar) {
+  pChar += rozofs_string_append_bold(pChar,"fid\n");
+  pChar += rozofs_string_append     (pChar,"    Display some general information.\n");  
+  pChar += rozofs_string_append_bold(pChar,"fid <FID>\n");  
+  pChar += rozofs_string_append     (pChar,"    Display FID mapping context matching FID <FID>.\n");  
+  pChar += rozofs_string_append_bold(pChar,"fid <index>\n");
+  pChar += rozofs_string_append     (pChar,"    Display FID mapping context of index <index>.\n");  
+  pChar += rozofs_string_append_bold(pChar,"fid last [<nb>]\n");
+  pChar += rozofs_string_append     (pChar,"    Display last <nb> activated FID contexts. Default <nb> is 6.\n");  
+}
+/*
+**______________________________________________________________________________
+**
+** Display some FID device mapping context
+** argv may tell what c ontext is being requested
+**
+**______________________________________________________________________________
 */
 void storage_fid_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   char                         * pChar=uma_dbg_get_buffer();
-  uint8_t                        nb_rebuild;
-  uint8_t                        storio_rebuild_ref;
-  STORIO_REBUILD_T             * pRebuild; 
   int                            ret;
   storio_device_mapping_key_t    key;
   storage_t                    * st;
-  int                            found;
-
-  pChar += rozofs_string_append(pChar,"chunk size  : ");    
-  if ((ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE)>(1024*1024*1024)) {
-    pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE/(1024*1024*1024));
-    pChar += rozofs_string_append(pChar," G\n");    
-  }
-  else if ((ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE)>(1024*1024)) {
-    pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE/(1024*1024));
-    pChar += rozofs_string_append(pChar," M\n");    
-  }  
-  else if ((ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE)>(1024)) {
-    pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE/(1024));
-    pChar += rozofs_string_append(pChar," K\n");    
-  }
-  else {
-    pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
-    pChar += rozofs_eol(pChar);    
-  }  
+  int                            count;
+  storio_device_mapping_t      * p;  
  
 
+  /*
+  ** Display general information
+  */
   if (argv[1] == NULL) {
+    
+    pChar += rozofs_string_append(pChar,"{ \"FID mapping statistics\" : {\n");
     pChar = display_cache_fid_stat(pChar);
     
-    pChar += rozofs_string_append(pChar,"ctx nb x sz : ");
-    pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES);
-    pChar += rozofs_string_append(pChar," x ");
+    pChar += rozofs_string_append(pChar,",\n  \"FID ctx statistics\" : {\n    \"chunk size\"  : ");    
+    pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);  
+    pChar += rozofs_string_append(pChar,",\n    \"context size\" : ");
     pChar += rozofs_u32_append(pChar,sizeof(storio_device_mapping_t));
-    pChar += rozofs_string_append(pChar," = ");    
+    pChar += rozofs_string_append(pChar,",\n    \"context number\" : ");    
+    pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES);
+    pChar += rozofs_string_append(pChar,",\n    \"total size\" : ");
     pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES * sizeof(storio_device_mapping_t));
-    pChar += rozofs_eol(pChar);    
-    pChar += rozofs_string_append(pChar,"free        : ");
-    pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.free);
-    pChar += rozofs_string_append(pChar,"\nrunning     : ");
-    pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.running);
-    pChar += rozofs_string_append(pChar,"\ninactive    : ");
-    pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.inactive);
-    pChar += rozofs_string_append(pChar,"\nallocation  : ");
+    pChar += rozofs_string_append(pChar,",\n    \"allocation\"  : ");
     pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.allocation);
-    pChar += rozofs_string_append(pChar," (release+");
-    pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.allocation-storio_device_mapping_stat.release);
-    pChar += rozofs_string_append(pChar,")\nrelease     : ");
+    pChar += rozofs_string_append(pChar,",\n    \"release\" : ");
     pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.release);
-    pChar += rozofs_string_append(pChar,"\nout of ctx  : ");
-    pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.out_of_ctx);
-    pChar += rozofs_eol(pChar);
+    pChar += rozofs_string_append(pChar,"\n  }\n}}\n");
 
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;       
-  }     
+  }
+  
+  
+  /*
+  ** Display some FID mapping context
+  ** depending on given arguments
+  */  
+     
+  pChar += rozofs_string_append(pChar,"{ \"FID mapping\" : [ \n");
 
 
-  ret = rozofs_uuid_parse(argv[1],key.fid);
-  if (ret != 0) {
-    pChar += rozofs_string_append(pChar,argv[1]);
-    pChar += rozofs_string_append(pChar," is not a FID !!!\n");
-    uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
-    return;
+  /*
+  ** Display the last used FID  mapping contexts
+  */
+  if (strcmp(argv[1],"last")==0) {
+    /*
+    ** Default is to display 6 contexts, but
+    ** it is possible to request a different number
+    */ 
+    int max = 6;
+    if (argv[2] != NULL) {
+      sscanf(argv[2],"%d",&max);
+    }
+    /*
+    ** Get first running FID context in the list
+    */
+    p = NULL;
+    count = 0;
+
+    p = list_last_entry(&storio_device_mapping_ctx_initialized_list,storio_device_mapping_t, link); 
+
+    while ((p!= NULL) &&(count<max)) {
+    
+      if (count) {
+        pChar += rozofs_string_append(pChar,",\n");
+      }
+      count++;
+      pChar = storio_display_one_mapping_ctx(pChar,p); 
+      
+      p = list_last_entry(&p->link,storio_device_mapping_t, link); 
+      if ((void*)p == (void*)&storio_device_mapping_ctx_initialized_list) {
+         p = NULL; 
+      }
+    }
+    goto out;
+    return;          
   }
 
+  /*
+  ** scan argument for a FID
+  */ 
+  ret = rozofs_uuid_parse(argv[1],key.fid);
+  if (ret != 0) {
+    int idx;
+    /*
+    ** It is possible to request a context by its index
+    */ 
+    if (sscanf(argv[1],"%d",&idx) != 1) goto out;
+    
+    p = storio_device_mapping_ctx_retrieve(idx);     
+    if (p==NULL) goto out;
+      
+    pChar = storio_display_one_mapping_ctx(pChar,p);        
+    goto out;
+  }
+
+  /*
+  ** It is possible to request a context by its FID
+  */ 
   st = NULL;
-  found = 0;
+  count = 0;
   while ((st = storaged_next(st)) != NULL) {
   
     key.cid = st->cid;
@@ -212,60 +368,20 @@ void storage_fid_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     if (index == -1) {
       continue;
     } 
-    
-    found=1;
-    storio_device_mapping_t * p = storio_device_mapping_ctx_retrieve(index);
+    p = storio_device_mapping_ctx_retrieve(index);
     if (p == NULL) {
-      pChar += rozofs_string_append(pChar,argv[1]);
-      pChar += rozofs_string_append(pChar," no match found !!!\n");
-      continue;
-    }
-    pChar += rozofs_string_append(pChar,"cid/sid ");
-    pChar += rozofs_u32_append(pChar,key.cid);
-    pChar += rozofs_string_append(pChar,"/");
-    pChar += rozofs_u32_append(pChar,key.sid);
-    pChar += rozofs_eol(pChar);
+     continue;
+    }    
 
-    pChar = trace_device(p->device, pChar);             
-    pChar += rozofs_string_append(pChar,"\n  running_request = ");
-    pChar += rozofs_u32_append(pChar,list_size(&p->running_request));
-    pChar += rozofs_string_append(pChar,"\n  waiting_request = ");
-    pChar += rozofs_u32_append(pChar,list_size(&p->waiting_request));
-    pChar += rozofs_eol(pChar);
-    
-    if (p->storio_rebuild_ref.u64 != 0xFFFFFFFFFFFFFFFF) {
-      for (nb_rebuild=0; nb_rebuild   <MAX_FID_PARALLEL_REBUILD; nb_rebuild++) {
-	storio_rebuild_ref = p->storio_rebuild_ref.u8[nb_rebuild];
-	if (storio_rebuild_ref == 0xFF) continue;
-	pChar += rozofs_string_append(pChar,"    rebuild ");
-	pChar += rozofs_u32_append(pChar,nb_rebuild+1);
-        pChar += rozofs_eol(pChar);
-	if (storio_rebuild_ref >= MAX_STORIO_PARALLEL_REBUILD) {
-	  pChar += rozofs_string_append(pChar,"Bad reference ");
-	  pChar += rozofs_u32_append(pChar,storio_rebuild_ref);  
-	  pChar += rozofs_eol(pChar);
-          continue;
-	}
-	pRebuild = storio_rebuild_ctx_retrieve(storio_rebuild_ref, (char*)key.fid);
-	if (pRebuild == 0) {
-          pChar += rozofs_string_append(pChar,"Context reallocated to an other FID\n");  
-          continue;
-	}
-	pChar += rozofs_string_append(pChar,"start ");
-	pChar += rozofs_u64_append(pChar, pRebuild->start_block);
-	pChar += rozofs_string_append(pChar," stop ");
-	pChar += rozofs_u64_append(pChar, pRebuild->stop_block);
-	pChar += rozofs_string_append(pChar," aging ");
-	pChar += rozofs_u64_append(pChar, (time(NULL)-pRebuild->rebuild_ts));
-	pChar += rozofs_eol(pChar);
-      }
-    }  
+    if (count) {
+      pChar += rozofs_string_append(pChar,",\n");
+    }
+    count++;
+    pChar = storio_display_one_mapping_ctx(pChar,p);    
   }  
-  if (found == 0) {
-    pChar += rozofs_string_append(pChar,argv[1]);
-    pChar += rozofs_string_append(pChar," no such FID !!!\n");    
-  }
   
+out:  
+  pChar += rozofs_string_append(pChar,"\n] }\n");  
   uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
   return;         
 }
@@ -440,6 +556,13 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
   return;         
 }
+/*
+**______________________________________________________________________________
+*/
+/**
+* Debug 
+  
+*/
 void storage_rebuild_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   uint8_t                        storio_ref;
   STORIO_REBUILD_T             * pRebuild;
@@ -468,35 +591,22 @@ void storage_rebuild_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   pChar += rozofs_string_append(pChar,"\nlookup bad index : ");
   pChar += rozofs_u64_append(pChar,storio_rebuild_stat.lookup_bad_index);
   
-  pChar += rozofs_string_append(pChar,"\nRunning rebuilds : "); 
+  pChar += rozofs_string_append(pChar,"\n{ \"rebuilds\" : ["); 
   
   for (storio_ref=0; storio_ref <MAX_STORIO_PARALLEL_REBUILD; storio_ref++) {
 
     pRebuild = storio_rebuild_ctx_retrieve(storio_ref, NULL);
     if (pRebuild->rebuild_ts == 0) continue;
-    
-    pChar += rozofs_eol(pChar);
-    pChar += rozofs_u32_padded_append(pChar,2,rozofs_zero,storio_ref); 
-    *pChar++ = ')';
-    *pChar++ = ' ';
-    rozofs_uuid_unparse(pRebuild->fid,pChar);
-    pChar += 36;
-    pChar += rozofs_string_append(pChar," chunk ");
-    pChar += rozofs_u32_padded_append(pChar,3,rozofs_right_alignment,pRebuild->chunk);
-    pChar += rozofs_string_append(pChar," device ");
-    pChar += rozofs_u32_padded_append(pChar,3,rozofs_right_alignment,pRebuild->old_device);
-    pChar += rozofs_string_append(pChar," start ");
-    pChar += rozofs_u64_padded_append(pChar,10,rozofs_right_alignment,pRebuild->start_block);
-    pChar += rozofs_string_append(pChar," stop ");
-    pChar += rozofs_u64_padded_append(pChar,10,rozofs_right_alignment,pRebuild->stop_block);
-    pChar += rozofs_string_append(pChar," aging ");
-    pChar += rozofs_u64_append(pChar,(time(NULL)-pRebuild->rebuild_ts));
-    pChar += rozofs_string_append(pChar," sec");
-   nb++;
+    if (nb) {
+      pChar += rozofs_string_append(pChar,",\n");
+    }
+    else{
+      pChar += rozofs_string_append(pChar,"\n");
+    } 
+    pChar = storage_rebuild_one_debug(pChar,pRebuild);
+    nb++;
   }
-  
-  if (nb == 0) pChar += rozofs_string_append(pChar,"NONE\n");
-  else         pChar += rozofs_eol(pChar);
+  pChar += rozofs_string_append(pChar,"\n] }"); 
 
   if (doreset) {
     memset(&storio_rebuild_stat,0,sizeof(storio_rebuild_stat));
@@ -621,10 +731,7 @@ uint32_t storio_device_mapping_delete_req(uint32_t index) {
   /*
   ** Release the context when inactive
   */  
-  if (p->status == STORIO_FID_INACTIVE) {
-    storio_device_mapping_release_entry(p);
-    return 1;
-  }
+  storio_device_mapping_release_entry(p);
   return 0;
 }	   
 /*
@@ -670,7 +777,7 @@ uint32_t storio_device_mapping_init()
   ** Add a debug topic
   */
   uma_dbg_addTopicAndMan("device", storage_device_debug, storage_device_man, 0); 
-  uma_dbg_addTopic("fid", storage_fid_debug); 
+  uma_dbg_addTopicAndMan("fid", storage_fid_debug,  storage_fid_man, 0); 
   uma_dbg_addTopic_option("rebuild", storage_rebuild_debug, UMA_DBG_OPTION_RESET); 
   return 0;
 }
