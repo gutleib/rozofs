@@ -48,7 +48,7 @@ int rozofs_get_msite(void) { return rozofs_msite; }
 /**______________________________________________________________________________
 *  Whether thin provisionning is configured 
 */
-int rozofs_get_thin_provisionnong(void) { return rozofs_thin; }
+int rozofs_get_thin_provisioning(void) { return rozofs_thin; }
 
 
 /**______________________________________________________________________________

@@ -98,6 +98,7 @@ typedef struct export_fstat {
     uint64_t blocks;
     uint64_t files;
     uint64_t file_per_size[ROZOFS_MAX_BLOCK_BITS];
+    uint64_t blocks_thin;  /**< number of blocks for thin provisioning */
 } export_fstat_t;
 
 
@@ -208,6 +209,7 @@ typedef struct export {
     
     /*  Some options */
     uint8_t thin:1;  //< Thin provisionning */
+    uint8_t backup:1;  //< backupflag needed for asynchronous replication */
 
     /*
     ** To check metadat device resources
@@ -1102,4 +1104,10 @@ static inline int export_metadata_device_full(export_t *e, uint64_t microsec) {
   pRes->next_microsec = microsec + (ONE_SECOND_TICK_CREDIT/2);   
   return 0;
 }   
+
+/**
+ * hashing function used to find lv2 entry in the cache
+ */
+uint32_t lv2_hash(void *key);
+int lv2_cmp(void *k1, void *k2);
 #endif

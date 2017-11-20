@@ -67,6 +67,8 @@
 #include "export_internal_channel.h"
 #include "export_share.h"
 #include "geo_profiler.h"
+#include "export_thin_prov_api.h"
+
 #define EXPORTD_PID_FILE "exportd.pid"
 /* Maximum open file descriptor number for exportd daemon */
 #define EXPORTD_MAX_OPEN_FILES 5000
@@ -1566,7 +1568,8 @@ static int exportd_initialize() {
         fatal("can't create balancing thread %s", strerror(errno));
 
     if (expgwc_non_blocking_conf.slave != 0) {
-      start_all_remove_bins_thread();     
+      start_all_remove_bins_thread();   
+      start_all_expthin_thread();  
     }
     	
     /*
@@ -1952,6 +1955,7 @@ int export_reload_nb()
     } 
 
     stop_all_remove_bins_thread();
+    stop_all_expthin_thread();
 
     // Canceled the export tracking pthread before reload list of exports
     if ((errno = pthread_cancel(exp_tracking_thread)) != 0)
@@ -2002,6 +2006,7 @@ int export_reload_nb()
     // Start pthread for remove bins file on slave thread only
     if (expgwc_non_blocking_conf.slave != 0) {
       start_all_remove_bins_thread();
+      start_all_expthin_thread();
     }
 
     if (pthread_create(&exp_tracking_thread, NULL, export_tracking_thread, NULL) != 0)
@@ -2326,7 +2331,6 @@ int main(int argc, char *argv[]) {
                     strerror(errno));
             goto error;
         }
-
         daemon_start("exportd", common_config.nb_core_file, EXPORTD_PID_FILE,
                 on_start, on_stop, on_hup);
     }

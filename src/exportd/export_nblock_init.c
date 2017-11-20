@@ -70,6 +70,7 @@
 #include "geo_replica_ctx.h"
 #include "rozofs_quota_api.h"
 #include "export_quota_thread_api.h"
+#include "export_thin_prov_api.h"
 
 DECLARE_PROFILING(epp_profiler_t);
 
@@ -1236,6 +1237,11 @@ int expgwc_start_nb_blocking_th(void *args) {
     ** add topic to get the configuration path
     */
     uma_dbg_addTopic("export_conf_path",show_conf_path);
+    /*
+    ** add topic of thin provisoning
+    */
+    expthin_init();
+    uma_dbg_addTopic("thin_prov", show_thin_prov);
        
     if (args_p->slave == 0)
     {

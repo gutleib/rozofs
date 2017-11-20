@@ -154,7 +154,7 @@ program MONITOR_PROGRAM {
         mp_status_ret_t
         MP_REMOVE2(mp_remove2_arg_t)                    = 5;
 
-	mp_size_rsp_t
+	mp_size_ret_t
         MP_SIZE(mp_size_arg_t)                          = 6;
 
     }=1;

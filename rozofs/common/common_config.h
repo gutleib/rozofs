@@ -101,6 +101,15 @@ typedef struct _common_config_t {
   int32_t     min_metadata_MB;
   // Number of trash threads that work in parallel
   int32_t     nb_trash_thread;
+  // Number of thin provisioning threads that work in parallel
+  int32_t     nb_thin_thread;
+  // Max number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run.
+  // A new run occurs every 2 seconds.
+  int32_t     thin_scan_file_per_run;
+  // Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart) 
+  int32_t     thin_lv1_hash_tb_size;
+  // Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning
+  int32_t     expthin_guard_delay_sec;
 
   /*
   ** client scope configuration parameters

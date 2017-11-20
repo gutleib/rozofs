@@ -70,6 +70,24 @@ typedef union
 #define ROZOFS_DIR_BACKUP_RECURSIVE 2      /**< when asserted it indicates that the backup state must be propagated to children */
 #define ROZOFS_DIR_TRASH_RECURSIVE 2      /**< when asserted it indicates that the trash state must be propagated to children */
 
+/**
+*  extra metadata associated with a directory
+*/
+#define ROZOFS_DIR_VERSION_1 1
+typedef union
+{
+  sid_t sids[ROZOFS_SAFE_MAX];
+  struct {
+    rozofs_dir0_sids_t  sid0; /**< see structure above      */
+    uint8_t  version;      /**< i-node version       */
+    uint8_t  layout;       /**< bit 7:(0:no layout/1: layout defined); bit 6-0: layout value */
+    uint8_t  filler1[5];   /**< 40 bits for future usage   */
+    uint64_t update_time;  /**< current time of last change of a directory's child */
+    uint64_t nb_bytes;     /**< number of bytes in that directory */
+    uint16_t profile_id;   /**< profile associated with the directory    */
+    uint8_t filler2[8];    /**< for future usage */ 
+  } s;            
+} ext_dir_mattr_t;
 /*
 **__________________________________________________________________
 */

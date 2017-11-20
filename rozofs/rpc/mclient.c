@@ -139,6 +139,51 @@ out:
   }  
   return status;
 }
+
+
+/*_________________________________________________________________
+** Ask to a logical storage to get the number of blocks of file 
+  The purpose of that service is to address the case of the thin provisioning
+
+  @param  clt     The client toward the storaged
+  @param  cid     The cluster identifier
+  @param  sid     The storage identifier within the cluster
+  @param  fid     The FID of the file  
+  @param  rsp_p : pointer to the array with the response is stored
+
+  @retval         0 on sucess
+  @retval          -1 on error (see errno for details)
+*/
+int mstoraged_client_get_file_size(mstorage_client_t * clt, cid_t cid, sid_t sid, fid_t fid,uint8_t spare, mp_size_rsp_t *rsp_p) {
+  int               status = -1;
+  mp_size_ret_t * ret    = 0;
+  mp_size_arg_t  args;
+
+  args.cid   = cid;
+  args.sid   = sid;
+  args.spare = spare;
+  memcpy(args.fid, fid, sizeof (fid_t));
+
+  if (!(clt->rpcclt.client) || !(ret = mp_size_1(&args, clt->rpcclt.client))) {
+    errno = EPROTO;
+    goto out;
+  }
+  
+  if (ret->status != 0) {
+    errno = ret->mp_size_ret_t_u.error;
+    goto out;
+  }
+  /*
+  ** copy the received data
+  */
+  memcpy(rsp_p,&ret->mp_size_ret_t_u.rsp,sizeof(mp_size_rsp_t));
+  status = 0;
+out:
+  if (ret) {
+    xdr_free((xdrproc_t) xdr_mp_status_ret_t, (char *) ret);
+  }  
+  return status;
+}
 /*_________________________________________________________________
 ** Ask to a logical storage its devices statistics
 ** 

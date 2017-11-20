@@ -172,3 +172,12 @@ INT     export min_metadata_inodes             262144
 INT     export min_metadata_MB                   2048
 // Number of trash threads that work in parallel
 INT     export nb_trash_thread                   2    1:8
+// Number of thin provisioning threads that work in parallel
+INT     export nb_thin_thread                   2    1:4
+// Max number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run.
+// A new run occurs every 2 seconds.
+INT	export 	thin_scan_file_per_run		1000
+// Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart) 
+INT	export 	thin_lv1_hash_tb_size		10 6:128
+// Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning
+INT   	export expthin_guard_delay_sec		10  1:600

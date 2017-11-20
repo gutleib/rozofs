@@ -280,7 +280,7 @@ static inline int rozodu_bufout_release(rozodu_wrctx_t *p)
 */
 static inline int rozodu_bufout_flush(rozodu_wrctx_t *p)
 {
-   int ret;
+   int ret=0;
    
    if (p->buf== 0) return 0;
    if (p->fd_out == NULL) return 0;

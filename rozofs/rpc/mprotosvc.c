@@ -70,7 +70,7 @@ monitor_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 
 	case MP_SIZE:
 		_xdr_argument = (xdrproc_t) xdr_mp_size_arg_t;
-		_xdr_result = (xdrproc_t) xdr_mp_size_rsp_t;
+		_xdr_result = (xdrproc_t) xdr_mp_size_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) mp_size_1_svc;
 		break;
 

@@ -29,6 +29,7 @@
 #include "cache.h"
 #include "export.h"
 #include "rozofs_exp_mover.h"
+#include "export_thin_prov_api.h"
 
 #include <rozofs/common/export_track.h>
 
@@ -51,7 +52,7 @@ export_tracking_table_t * export_tracking_table[EXPGW_EID_MAX_IDX+1] = { 0 };
 /**
  * hashing function used to find lv2 entry in the cache
  */
-static inline uint32_t lv2_hash(void *key) {
+uint32_t lv2_hash(void *key) {
     uint32_t       hash = 0;
     uint8_t       *c;
     int            i;
@@ -77,7 +78,7 @@ static inline uint32_t lv2_hash(void *key) {
     return hash;
 }
 
-static inline int lv2_cmp(void *k1, void *k2) {
+int lv2_cmp(void *k1, void *k2) {
     rozofs_inode_t fake_inode1;
     rozofs_inode_t fake_inode2;  
       
@@ -124,7 +125,14 @@ static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
   /*
   ** remove from the move_list
   */
-  list_remove(&entry->move_list);  
+  list_remove(&entry->move_list); 
+  /*
+  ** check if there was a thin-provisioning context. If it the case we should release the
+  ** entry
+  */
+#ifndef LIBROZO_FLAG
+  expthin_remove_entry(entry);
+#endif   
   free(entry);
   cache->size--;  
 }
