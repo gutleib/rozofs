@@ -2968,7 +2968,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     
     plv2->attributes.s.attrs.children++;
     plv2->attributes.s.attrs.nlink++;
-    plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = plv2->attributes.s.cr8time = time(NULL);
+    plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
     if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto error;
 
