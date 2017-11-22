@@ -370,4 +370,20 @@ int mstoraged_client_remove2(mstorage_client_t * clt, cid_t cid, sid_t sid, fid_
 ** @retval         0 on success / -1 on failure
 */
 int mstoraged_client_stat(mstorage_client_t * clt,  cid_t cid, sid_t sid, sstat_t * st);
+
+/*_________________________________________________________________
+** Ask to a logical storage to get the number of blocks of file 
+  The purpose of that service is to address the case of the thin provisioning
+
+  @param  clt     The client toward the storaged
+  @param  cid     The cluster identifier
+  @param  sid     The storage identifier within the cluster
+  @param  fid     The FID of the file  
+  @param  rsp_p : pointer to the array with the response is stored
+
+  @retval         0 on sucess
+  @retval          -1 on error (see errno for details)
+*/
+int mstoraged_client_get_file_size(mstorage_client_t * clt, cid_t cid, sid_t sid, fid_t fid,uint8_t spare, mp_size_rsp_t *rsp_p);
+
 #endif

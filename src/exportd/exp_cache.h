@@ -88,6 +88,7 @@ typedef struct lv2_entry {
     int            nb_locks;    ///< Number of locks on the FID
     list_t         file_lock;   ///< List of the lock on the FID
     list_t         move_list;   ///< pending fist of the file waiting for move validation
+    void           *thin_provisioning_ctx_p;   /**< pointer to the thin provisioning context (for exportd with thin provisioning option) */
 } lv2_entry_t;
 
 /** lv2 cache

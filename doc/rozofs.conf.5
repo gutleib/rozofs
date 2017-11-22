@@ -51,6 +51,8 @@ This parameter enables to choose the file distribution rule at file creation. Th
 Maximum number of files that the remove bins thread of a slave export can remove in a run. A 2 second delay occurs between every run. This provides the maximum deletion rate.
 .SS deletion_delay 
 Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
+.SS nb_trash_thread
+Number of trash threads that work in parallel (default: 2, maximum: 8)
 .SS statfs_period 
 caching delay in second of the data reported by a statfs(). The default value is 10 seconds. When the delay is 0, there is no caching.
 
@@ -205,6 +207,14 @@ This parameter is the maximum network/disk bandwidth that the spare file restori
 Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation (default 256K)
 .SS min_metadata_MB
 Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation (default 2048 MB)
+.SS export nb_thin_thread
+Number of thin provisioning threads that work in parallel. (default:2; maximum:4)
+.SS thin_scan_file_per_run
+Number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run. A new run occurs every 2 seconds. This requires that the export has been configured with thin provisioning. (default:1000)
+.SS thin_lv1_hash_tb_size
+Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart)
+.SS expthin_guard_delay_sec
+Guard delay en seconds between two file scanning of a file that belongs to an export configured for thin provisioning. (default:10; maximum 600)
 .SH EXAMPLE
 .PP
 .nf

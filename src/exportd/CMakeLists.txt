@@ -108,6 +108,8 @@ add_executable(exportd
     rozofs_exp_mover.c
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h
+    
+    export_thin_prov.c
 )
 target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -221,10 +223,9 @@ set (librozo_inode_sources
        test_mdirent_stub.c
        rozo_inode_lib.c
        rozo_inode_lib.h
-
 )
 add_library(rozofs_inode STATIC ${librozo_inode_sources})
-set_target_properties(rozofs_inode PROPERTIES COMPILE_FLAGS "-fPIC")
+set_target_properties(rozofs_inode PROPERTIES COMPILE_FLAGS "-fPIC -DLIBROZO_FLAG")
 
 
 #add_executable(rzsave

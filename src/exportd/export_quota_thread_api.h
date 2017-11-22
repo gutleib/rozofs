@@ -73,13 +73,26 @@ int export_fstat_delete_files(uint16_t eid, uint32_t n);
  * @param eid: the export to update
  * @param newblocks: new number of blocks
  * @param oldblocks: old number of blocks
+   @param thin_provisioning: assert to 1 if export is configured with thin provisioning
  *
  * @return 0 on success -1 otherwise
  */
-int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks);
+int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning);
 
 /*
 **_______________________________________________________________
 */
-void show_export_fstat_thread(char * argv[], uint32_t tcpRef, void *bufRef); 
+void show_export_fstat_thread(char * argv[], uint32_t tcpRef, void *bufRef);
+
+/*
+**__________________________________________________________________
+*/
+/** update the number of blocks in file system
+ *
+ * @param eid: the export to update
+ * @param n: number of blocks
+ *
+ * @return 0 on success -1 otherwise
+ */
+int expthin_fstat_update_blocks(uint16_t eid,uint32_t nb_blocks, int dir);
  #endif

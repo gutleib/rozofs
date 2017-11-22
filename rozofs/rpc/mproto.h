@@ -182,8 +182,8 @@ extern  mp_list_bins_files_ret_t * mp_list_bins_files_1_svc(mp_list_bins_files_a
 extern  mp_status_ret_t * mp_remove2_1(mp_remove2_arg_t *, CLIENT *);
 extern  mp_status_ret_t * mp_remove2_1_svc(mp_remove2_arg_t *, struct svc_req *);
 #define MP_SIZE 6
-extern  mp_size_rsp_t * mp_size_1(mp_size_arg_t *, CLIENT *);
-extern  mp_size_rsp_t * mp_size_1_svc(mp_size_arg_t *, struct svc_req *);
+extern  mp_size_ret_t * mp_size_1(mp_size_arg_t *, CLIENT *);
+extern  mp_size_ret_t * mp_size_1_svc(mp_size_arg_t *, struct svc_req *);
 extern int monitor_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -206,8 +206,8 @@ extern  mp_list_bins_files_ret_t * mp_list_bins_files_1_svc();
 extern  mp_status_ret_t * mp_remove2_1();
 extern  mp_status_ret_t * mp_remove2_1_svc();
 #define MP_SIZE 6
-extern  mp_size_rsp_t * mp_size_1();
-extern  mp_size_rsp_t * mp_size_1_svc();
+extern  mp_size_ret_t * mp_size_1();
+extern  mp_size_ret_t * mp_size_1_svc();
 extern int monitor_program_1_freeresult ();
 #endif /* K&R C */
 

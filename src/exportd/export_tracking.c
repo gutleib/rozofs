@@ -56,6 +56,7 @@
 #include "rozofs_quota_api.h"
 #include "export_quota_thread_api.h"
 #include "rozofs_exp_mover.h"
+#include "export_thin_prov_api.h"
 
 #include <rozofs/common/acl.h>
 int rozofs_acl_access_check(const char *name, const char *value, size_t size,mode_t *mode_p);
@@ -950,7 +951,9 @@ static inline int mstor_subslice_resolve_entry(char *root_path, fid_t fid, uint3
     }
     return 0;
 }
-
+/*
+**__________________________________________________________________
+*/
 /** build a full path based on export root and fid of the lv2 file
  *
  * lv2 is the second level of files or directories in storage of metadata
@@ -985,7 +988,9 @@ static inline int export_lv2_resolve_path_internal(char *root_path, fid_t fid, c
 
     return -1;
 }
-
+/*
+**__________________________________________________________________
+*/
 /** build a full path based on export root and fid of the lv2 file
  *
  * lv2 is the second level of files or directories in storage of metadata
@@ -1007,7 +1012,9 @@ int export_lv2_resolve_path(export_t *export, fid_t fid, char *path) {
     return ret;
 }
 
-
+/*
+**__________________________________________________________________
+*/
 /**
 *  open the parent directory
 
@@ -1024,6 +1031,104 @@ int export_open_parent_directory(export_t *e,fid_t parent)
     return -1;
 }
 
+/*
+**__________________________________________________________________
+
+     D I R E C T O R Y   S T A T I S T I C S 
+**__________________________________________________________________
+*/
+/**
+*  The goal of the following service is to keep that of the following:
+     - total number of bytes within a directory
+     - tracking any change that could occur on a child that belongs to the directory
+*/
+
+/*
+**__________________________________________________________________
+*/
+/**
+
+ adjust the cumulative byte sizes of a directory. The goal is to maintain the directory
+ statistics. The child can be either a directory, a regular file
+ or a symbolic link.
+ 
+ @param dir: pointer to the directory i-node (cache structure)
+ @param size: size in bytes units to remove (regular file only)
+ @param add: 1:add/0: remove
+
+
+*/
+void export_dir_adjust_child_size(lv2_entry_t *dir,uint64_t size,int add)
+{
+   ext_dir_mattr_t *stats_attr_p;
+
+
+   stats_attr_p = (ext_dir_mattr_t *)&dir->attributes.s.attrs.sids[0];
+
+    if (add)
+    {
+      stats_attr_p->s.nb_bytes +=size;
+    } 
+    else
+    {
+      if (stats_attr_p->s.nb_bytes < size) stats_attr_p->s.nb_bytes = 0;
+      else stats_attr_p->s.nb_bytes -=size;    
+    
+    }
+}
+/*
+**__________________________________________________________________
+*/
+/**
+
+ adjust the modification time of a directory. The goal is to maintain the directory
+ statistics. The child can be either a directory, a regular file
+ or a symbolic link.
+ 
+ @param dir: pointer to the directory i-node (cache structure)
+ @param size: size in bytes units to remove (regular file only)
+
+
+*/
+void export_dir_update_time(lv2_entry_t *dir)
+{
+   ext_dir_mattr_t *stats_attr_p;
+
+
+   stats_attr_p = (ext_dir_mattr_t *)&dir->attributes.s.attrs.sids[0];
+   stats_attr_p->s.update_time = time(NULL);
+}
+/*
+**__________________________________________________________________
+*/
+/**
+*  Get the parent directory for statistics update
+
+   @param e: pointer to the export configuration
+   @param child_lv2: pointer to the lv2 entry of the child
+   
+   @retval NULL: not found or the export is not configure with backup feature
+   @retval <> NULL : pointer to the lv2 entry that contains the parent attributes
+*/
+lv2_entry_t *export_dir_get_parent(export_t *e, lv2_entry_t *child_lv2)
+{
+   lv2_entry_t *plv2;
+   
+   if (e->backup == 0) return NULL;
+   plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, child_lv2->attributes.s.pfid);
+   return plv2;
+}
+   
+
+/*
+**__________________________________________________________________
+
+     D I R E C T O R Y   S T A T I S T I C S  END
+**__________________________________________________________________
+*/
+/*
+**__________________________________________________________________
+*/
 /** update the number of files in file system
  *
  * @param e: the export to update
@@ -1046,7 +1151,9 @@ static int export_update_files(export_t *e, int32_t n) {
     STOP_PROFILING(export_update_files);
     return status;
 }
-
+/*
+**__________________________________________________________________
+*/
 /** update the number of blocks in file system
  *
  * @param e: the export to update
@@ -1060,11 +1167,35 @@ static int export_update_blocks(export_t * e, uint64_t newblocks, uint64_t oldbl
     if (oldblocks == newblocks) return 0;
     
     START_PROFILING(export_update_blocks);
-     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks);
+     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin);
     STOP_PROFILING(export_update_blocks);
     return status;
 }
 
+/*
+**__________________________________________________________________
+*/
+/** update the number of blocks in file system for an exportd that
+    has been configured with thin provisioning
+ 
+  @param e: the export to update
+  @param nb_blocks: number of blocks (4KB unit)
+  @param dir: 1: add/-1: substract
+ 
+  @return 0 on success -1 otherwise
+ */
+static int expthin_update_blocks(export_t * e, uint32_t nb_blocks, int dir) {
+    int status = -1;
+    
+    START_PROFILING(export_update_blocks);
+     status = expthin_fstat_update_blocks(e->eid, nb_blocks, dir);
+    STOP_PROFILING(export_update_blocks);
+    return status;
+}
+
+/*
+**__________________________________________________________________
+*/
 /** constants of the export */
 typedef struct export_const {
     char version[20]; ///< rozofs version
@@ -1097,7 +1228,9 @@ int export_is_valid(const char *root) {
     return 0;
 }
 
-
+/*
+**__________________________________________________________________
+*/
 int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache) {
     const char *version = VERSION;
     char path[PATH_MAX];
@@ -1298,7 +1431,9 @@ static void *load_trash_dir_thread(void *v) {
 
     return 0;
 }
-
+/*
+**__________________________________________________________________
+*/
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *name, const char *md5,
         uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin) {
@@ -1529,12 +1664,16 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     }  
     return 0;
 }
-
+/*
+**__________________________________________________________________
+*/
 void export_release(export_t * e) {
     close(e->fdstat);
     // TODO set members to clean values
 }
-
+/*
+**__________________________________________________________________
+*/
 int export_stat(export_t * e, ep_statfs_t * st) {
     int status = -1;
     struct statfs stfs;
@@ -1589,15 +1728,23 @@ int export_stat(export_t * e, ep_statfs_t * st) {
 
     /*
     ** When some quota are defined, not all the volume 
-    ** can be used by this export
+    ** can be used by this export.
     */
     if (e->hquota < st->blocks) {
       st->blocks = e->hquota;
     }
-
-    used = estats->blocks; // Written blocks of data
+    /*
+    ** take care of the thin provisioning configuration
+    */
+    if (e->thin == 0)
+    {
+      used = estats->blocks; // Written blocks of data
+    }
+    else
+    {
+      used = estats->blocks_thin; // Written blocks of data    
+    }
     st->bfree = st->blocks - used;
-
     if (st->bfree > free) {
       st->bfree = free;
     }      
@@ -1891,6 +2038,25 @@ out:
     */
     if (plv2 != NULL)export_dir_flush_root_idx_bitmap(e,pfid,plv2->dirent_root_idx_p);
     /*
+    ** check the case of the thin_provisioning
+    */
+    if ((e->thin != 0) && (lv2 != NULL))
+    {
+      uint32_t nb_blocks;
+      int dir;
+      int retcode;
+      retcode = expthin_check_entry(e,lv2,0,&nb_blocks,&dir);
+      if (retcode == 1)
+      {
+         expthin_update_blocks(e,nb_blocks,dir);
+         // info("FDL LOOKUP  thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
+	 /*
+	 ** write inode attributes on disk
+	 */
+	 export_attr_thread_submit(lv2,e->trk_tb_p, 0);      
+      }    
+    }    
+    /*
     ** close the parent directory
     */
     if (fdp != -1) close(fdp);
@@ -1995,6 +2161,22 @@ int export_getattr(export_t *e, fid_t fid, mattr_t *attrs,mattr_t * pattrs) {
     export_get_parent_attributes(e,lv2->attributes.s.pfid,pattrs);
 
     status = 0;
+    if ((e->thin != 0) && (lv2 != NULL))
+    {
+      uint32_t nb_blocks;
+      int dir;
+      int retcode;
+      retcode = expthin_check_entry(e,lv2,0,&nb_blocks,&dir);
+      if (retcode == 1)
+      {
+         expthin_update_blocks(e,nb_blocks,dir);
+         //info("FDL GETATTR thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
+	 /*
+	 ** write inode attributes on disk
+	 */
+	 export_attr_thread_submit(lv2,e->trk_tb_p, 0);      
+      }    
+    }    
 out:
     STOP_PROFILING(export_getattr);
     return status;
@@ -2050,7 +2232,12 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	 goto out;
       }
     }
-
+#if 0
+    /*
+    ** attempt to get the parent attribute to address the case of the asynchronous fast replication
+    */
+    plv2 = export_dir_get_parent(e,lv2);
+#endif
     if ((to_set & EXPORT_SET_ATTR_SIZE) && S_ISREG(lv2->attributes.s.attrs.mode)) {
         
         // Check new file size
@@ -2061,7 +2248,10 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	/*
 	** Get the parent i-node
 	*/
-	plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, lv2->attributes.s.pfid);        
+	if (plv2 == NULL)
+	{
+	   plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, lv2->attributes.s.pfid); 
+	}       
 	if (plv2!=NULL) share= plv2->attributes.s.attrs.cid;
 	
         nrb_new = ((attrs->size + bbytes - 1) / bbytes);
@@ -2069,10 +2259,18 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	if (nrb_new > nrb_old)
 	{
           rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_new-nrb_old)*bbytes,ROZOFS_QT_INC,share); 
+	  /*
+	  ** adjust the directory statistics
+	  */
+	  if (plv2) export_dir_adjust_child_size(plv2,(nrb_new-nrb_old)*bbytes,1);
 	}
 	else
 	{
           rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_old-nrb_new)*bbytes,ROZOFS_QT_DEC,share); 	
+	  /*
+	  ** adjust the directory statistics
+	  */	  
+	  if (plv2) export_dir_adjust_child_size(plv2,(nrb_new-nrb_old)*bbytes,0);
 	}      		
         if (export_update_blocks(e, nrb_new, nrb_old)!= 0)
             goto out;
@@ -2115,6 +2313,34 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	 rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,lv2->attributes.s.attrs.size,ROZOFS_QT_INC,0);       
        }       
     }
+    /*
+    ** check the case of the truncate with thin provisioning
+    */
+    if (e->thin)
+    {
+      uint32_t nb_blocks;
+      int dir;
+      int retcode;
+      if (to_set & EXPORT_SET_ATTR_SIZE)
+      {
+	retcode = expthin_check_entry(e,lv2,1,&nb_blocks,&dir);
+	if (retcode == 1)
+	{
+	   expthin_update_blocks(e,nb_blocks,dir);
+           //info("FDL TRUNCATE thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
+	}
+      }
+    }    
+#if 0
+    /*
+    ** adjust the directory statistics
+    */
+    if(plv2) 
+    {
+      export_dir_update_time(plv2);
+      export_attr_thread_submit(plv2,e->trk_tb_p,0);
+    }
+#endif
     status = export_lv2_write_attributes(e->trk_tb_p,lv2,sync);
 out:
     STOP_PROFILING(export_setattr);
@@ -2369,13 +2595,25 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     }    
     /*
     ** Check that some space os left for the new file in case a hard quota is set
+    ** that care of the thin-provisioning option for the exportd
     */
     if (e->hquota) {
-      export_fstat_t * estats = export_fstat_get_stat(e->eid);
-      if ((estats != NULL)&&(estats->blocks >= e->hquota)) {
-        errno = ENOSPC;
-        goto error;
+      if (e->thin == 0)
+      {
+	export_fstat_t * estats = export_fstat_get_stat(e->eid);
+	if ((estats != NULL)&&(estats->blocks >= e->hquota)) {
+          errno = ENOSPC;
+          goto error;
+	}
       }
+      else
+      {
+	export_fstat_t * estats = export_fstat_get_stat(e->eid);
+	if ((estats != NULL)&&(estats->blocks_thin >= e->hquota)) {
+          errno = ENOSPC;
+          goto error;
+	}
+      }      
     }
     /*
     **  check user and group quota
@@ -2762,10 +3000,26 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     ** Check that some space os left for the new file in case a hard quota is set
     */
     if (e->hquota) {
-      export_fstat_t * estats = export_fstat_get_stat(e->eid);    
-      if ((estats!=NULL) && (estats->blocks >= e->hquota)) {
-        errno = ENOSPC;
-        goto error;
+      export_fstat_t * estats = export_fstat_get_stat(e->eid); 
+      /*
+      ** check the case of the thin provisioning versus not thin provisioning..
+      ** When thin-provisioning is enabled for the exportd, the number of blocks
+      ** that we should compare is in the blocks_thin field versus blocks field
+      ** for the default mode
+      */
+      if (e->thin == 0)
+      {   
+	if ((estats!=NULL) && (estats->blocks >= e->hquota)) {
+          errno = ENOSPC;
+          goto error;
+	}
+      }
+      else
+      {
+	if ((estats!=NULL) && (estats->blocks_thin >= e->hquota)) {
+          errno = ENOSPC;
+          goto error;
+	}
       }
     }
     /*
@@ -3105,13 +3359,25 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     }    
     /*
     ** Check that some space is left for the new file in case a hard quota is set
+    ** take care of the tin provisioning configuration case for the exportd
     */
     if (e->hquota) {
-      export_fstat_t * estats = export_fstat_get_stat(e->eid);    
-      if ((estats!=NULL) && (estats->blocks >= e->hquota)) {
-        errno = ENOSPC;
-       goto error;
+      if (e->thin==0)
+      {
+	export_fstat_t * estats = export_fstat_get_stat(e->eid);    
+	if ((estats!=NULL) && (estats->blocks >= e->hquota)) {
+          errno = ENOSPC;
+	 goto error;
+	}
       }
+      else
+      {
+	export_fstat_t * estats = export_fstat_get_stat(e->eid);    
+	if ((estats!=NULL) && (estats->blocks_thin >= e->hquota)) {
+          errno = ENOSPC;
+	 goto error;
+	}
+      }      
     }    
     /*
     **  check user and group quota
@@ -4170,6 +4436,13 @@ duplicate_deleted_file:
                   severe("export_update_blocks failed: %s", strerror(errno));
                   // Best effort
               }
+	      /*
+	      ** check the case of the exportd configured with thoin provisioning
+	      */
+	      if (e->thin)
+	      {
+	        expthin_update_blocks(e,(uint32_t)lv2->attributes.s.attrs.children,-1);
+	      }
 	    }
         } 
 	else 
@@ -6089,6 +6362,13 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
                                     strerror(errno));
                             // Best effort
                         }
+			/*
+			** check the case of the exportd configured with thin provisioning
+			*/
+			if (e->thin)
+			{
+			  expthin_update_blocks(e, lv2_to_replace->attributes.s.attrs.children,-1); 			
+			}
                     } else {
                         /* 
 			** file empty: release the inode
@@ -6418,6 +6698,35 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     }
     // Update mtime and ctime
     lv2->attributes.s.attrs.mtime = lv2->attributes.s.attrs.ctime = time(NULL);
+    /*
+    ** check the case of the thin provisioning
+    */
+    if (e->thin)
+    {
+      uint32_t nb_blocks;
+      int dir;
+      int retcode;
+      retcode = expthin_check_entry(e,lv2,1,&nb_blocks,&dir);
+      if (retcode == 1)
+      {
+        // info("FDL thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
+         retcode = expthin_update_blocks(e,nb_blocks,dir);
+	 if (retcode != 0)
+	 {
+	   /*
+	   ** no quota left! (errno is asserted by expthin_update_blocks())
+	   ** note: the number
+	   ** of blocks might not reflect the effective number of blocks
+	   ** this might be updated on the next lookup of the file.
+	   ** The inode is re_written on disk to reflect the exact number of blocks
+	   ** that are used. If we do not do it, we need to have a next write to see
+	   ** them recomputed by a thin provisioning thread.
+	   */
+	   export_attr_thread_submit(lv2,e->trk_tb_p, sync);
+	   goto out;
+	 }
+      }
+    }
     /*
     ** write inode attributes on disk
     */
@@ -6847,6 +7156,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   }  
   else {
     DISPLAY_ATTR_TXT("MODE", "REGULAR FILE");
+    if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.attrs.children);
     DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
   }
   
@@ -7563,7 +7873,14 @@ static inline int get_rozofs_xattr_max_size(export_t *e, lv2_entry_t *lv2, char 
   if (e->hquota > 0) {
     export_fstat_t * estats = export_fstat_get_stat(e->eid);    
     if (estats!=NULL) {  
-      uint64_t quota_left = (e->hquota - estats->blocks);
+      uint64_t quota_left;
+      /*
+      ** take care of the thin provisioning
+      */
+      if (e->thin == 0)
+        quota_left = (e->hquota - estats->blocks);
+      else
+        quota_left = (e->hquota - estats->blocks_thin);      
       if (free > quota_left) {
         free = quota_left;
         quota = 1;

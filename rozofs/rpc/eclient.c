@@ -38,15 +38,17 @@
 
 static int rozofs_msite = 0;
 static int rozofs_thin = 0;
+
 /**______________________________________________________________________________
 *  Re intialize the storage direct access table 
 */
 int rozofs_get_msite(void) { return rozofs_msite; }
 
+
 /**______________________________________________________________________________
 *  Whether thin provisionning is configured 
 */
-int rozofs_get_thin_provisionnong(void) { return rozofs_thin; }
+int rozofs_get_thin_provisioning(void) { return rozofs_thin; }
 
 
 /**______________________________________________________________________________
@@ -165,7 +167,6 @@ int exportclt_msite_initialize(exportclt_t * clt, const char *host, char *root,i
             goto error;
         }
     }
-
     
     /*
     ** Is it a multi site config

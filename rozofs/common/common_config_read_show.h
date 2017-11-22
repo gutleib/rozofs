@@ -224,6 +224,31 @@ char * show_common_config_module_export(char * pChar) {
   pChar += rozofs_string_append(pChar,"// Number of trash threads that work in parallel\n");
   COMMON_CONFIG_SHOW_INT_OPT(nb_trash_thread,2,"1:8");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_thin_thread,2);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Number of thin provisioning threads that work in parallel\n");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_thin_thread,2,"1:4");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(thin_scan_file_per_run,1000);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Max number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run.\n");
+  pChar += rozofs_string_append(pChar,"// A new run occurs every 2 seconds.\n");
+  COMMON_CONFIG_SHOW_INT(thin_scan_file_per_run,1000);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(thin_lv1_hash_tb_size,10);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart) \n");
+  COMMON_CONFIG_SHOW_INT_OPT(thin_lv1_hash_tb_size,10,"6:128");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(expthin_guard_delay_sec,10);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning\n");
+  COMMON_CONFIG_SHOW_INT_OPT(expthin_guard_delay_sec,10,"1:600");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -666,6 +691,15 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(min_metadata_MB,2048);
   // Number of trash threads that work in parallel 
   COMMON_CONFIG_READ_INT_MINMAX(nb_trash_thread,2,1,8);
+  // Number of thin provisioning threads that work in parallel 
+  COMMON_CONFIG_READ_INT_MINMAX(nb_thin_thread,2,1,4);
+  // Max number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run. 
+  // A new run occurs every 2 seconds. 
+  COMMON_CONFIG_READ_INT(thin_scan_file_per_run,1000);
+  // Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart)  
+  COMMON_CONFIG_READ_INT_MINMAX(thin_lv1_hash_tb_size,10,6,128);
+  // Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning 
+  COMMON_CONFIG_READ_INT_MINMAX(expthin_guard_delay_sec,10,1,600);
   /*
   ** client scope configuration parameters
   */

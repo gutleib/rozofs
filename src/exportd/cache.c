@@ -29,7 +29,6 @@
 #include <rozofs/rpc/export_profiler.h>
 #include "cache.h"
 #include <rozofs/core/af_unix_socket_generic.h>
-
 #include "exportd.h"
 
 /*
@@ -50,6 +49,7 @@ static file_lock_stat_t file_lock_stat;
 ** List of the client owning a lock 
 */
 static list_t  file_lock_client_list[EXPGW_EID_MAX_IDX];
+
 /*
 ** Context of a client
 */

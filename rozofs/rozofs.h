@@ -91,7 +91,6 @@ static inline char * rozofs_file_distribution_rule2sting(rozofs_file_distributio
 
 
 
-
 /*
 **
 ** Bitmap of export options returned on the mount inside the msite field
@@ -434,6 +433,17 @@ typedef union
 static inline int rozofs_get_recycle_from_fid(void * fid) {
   rozofs_inode_t * inode = (rozofs_inode_t *) fid; 
   return inode->s.recycle_cpt;
+}
+
+/*
+**__________________________________________
+** Extract the dif from the FID
+** @param fid : the FID
+** @retval the recycle counter value
+*/
+static inline eid_t rozofs_get_eid_from_fid(void * fid) {
+  rozofs_inode_t * inode = (rozofs_inode_t *) fid; 
+  return inode->s.eid;
 }
 /*
 **__________________________________________

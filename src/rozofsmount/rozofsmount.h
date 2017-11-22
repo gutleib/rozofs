@@ -567,9 +567,19 @@ static inline struct stat *mattr_to_stat(mattr_t * attr, struct stat *st, uint32
     st->st_size = attr->size;
     st->st_ctime = attr->ctime;
     st->st_atime = attr->atime;
-    st->st_mtime = attr->mtime;
+    st->st_mtime = attr->mtime;    
     st->st_blksize = ROZOFS_BSIZE_BYTES(bsize);
-    st->st_blocks = ((attr->size + 512 - 1) / 512);
+    /*
+    ** check the case of the thin provisioning
+    */
+    if ((rozofs_get_thin_provisioning()) && (S_ISREG(st->st_mode)))
+    {
+      uint64_t local_blocks = attr->children;
+      local_blocks *=4096;
+      st->st_blocks = ((local_blocks + 512 - 1) / 512);
+    }
+    else
+      st->st_blocks = ((attr->size + 512 - 1) / 512);
     st->st_dev = 0;
     st->st_uid = attr->uid;
     st->st_gid = attr->gid;

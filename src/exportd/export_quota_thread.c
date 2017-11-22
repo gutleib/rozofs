@@ -111,8 +111,8 @@ char *show_export_fstat_entry(char *pChar,export_fstat_ctx_t *tab_p,uint16_t eid
    pChar += sprintf(pChar,"file statistics for eid %d(%p) :%s\n",eid,tab_p,tab_p->pathname);
    export_fstat_t *p;
    p = &tab_p->memory;
-   pChar += sprintf(pChar," number of blocks (mem) : %llu\n",(unsigned long long int) p->blocks);
-   pChar += sprintf(pChar," number of files  (mem) : %llu\n",(unsigned long long int) p->files);
+   pChar += sprintf(pChar," number of blocks (max/allocated) (mem) : %llu/%llu\n",(unsigned long long int) p->blocks,(unsigned long long int) p->blocks_thin);
+   pChar += sprintf(pChar," number of files                  (mem) : %llu\n",(unsigned long long int) p->files);
    int i;
    pChar += sprintf(pChar,"   nb files per number of block\n");
    if (p->file_per_size[0] != 0) {
@@ -125,11 +125,11 @@ char *show_export_fstat_entry(char *pChar,export_fstat_ctx_t *tab_p,uint16_t eid
    }      
    
    p = &tab_p->last_written;
-   pChar += sprintf(pChar," number of blocks (disk): %llu\n",(unsigned long long int) p->blocks);
-   pChar += sprintf(pChar," number of files  (disk): %llu\n",(unsigned long long int) p->files);
-   pChar += sprintf(pChar," hardware quota         : %llu\n",(unsigned long long int) tab_p->hquota);
-   pChar += sprintf(pChar," software quota         : %llu\n",(unsigned long long int) tab_p->squota);
-   pChar += sprintf(pChar," quota exceeded         : %s\n",(tab_p->quota_exceeded_flag==0)?"NO":"YES");
+   pChar += sprintf(pChar," number of blocks (max/allocated) (disk): %llu/%llu\n",(unsigned long long int) p->blocks,(unsigned long long int) p->blocks_thin);
+   pChar += sprintf(pChar," number of files                  (disk): %llu\n",(unsigned long long int) p->files);
+   pChar += sprintf(pChar," hardware quota                         : %llu\n",(unsigned long long int) tab_p->hquota);
+   pChar += sprintf(pChar," software quota                         : %llu\n",(unsigned long long int) tab_p->squota);
+   pChar += sprintf(pChar," quota exceeded                         : %s\n",(tab_p->quota_exceeded_flag==0)?"NO":"YES");
 
 
    return pChar;
@@ -436,12 +436,14 @@ int export_fstat_create_files(uint16_t eid, uint32_t n) {
 */
 /** update the number of blocks in file system
  *
- * @param eid: the export to update
- * @param n: number of blocks
- *
+  @param eid: the export to update
+  @param newblocks: new number of blocks
+  @param oldblocks: old number of blocks
+  @param thin_provisioning: assert to 1 if export is configured with thin provisioning
+
  * @return 0 on success -1 otherwise
  */
-int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks) {
+int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning) {
     int status = -1;
     export_fstat_ctx_t *tab_p;
     time_t timecur;
@@ -504,8 +506,103 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
     }
     else 
     {
+      /*
+      ** do that control only for exportd that do not support thin provisioning
+      */
+      if (thin_provisioning == 0)
+      {
+	if (tab_p->hquota > 0 && tab_p->memory.blocks + n > tab_p->hquota) 
+	{
+           if (tab_p->quota_exceeded_flag == 0)
+	   {
+	     tab_p->quota_exceeded_time = time(NULL); 
+	   }
+	   /*
+	   ** send a warning if is time to do it
+	   */
+	   timecur = time(NULL);
+	   if (( tab_p->quota_exceeded_flag == 1) || 
+	      ((timecur -tab_p->quota_exceeded_time ) > export_fstat_quota_delay))
+	   {
+              warning("quota exceed: %llu over %llu", tab_p->memory.blocks + n,
+                       (long long unsigned int)tab_p->hquota);
+  	      tab_p->quota_exceeded_time = time(NULL); 
+	      tab_p->quota_exceeded_flag = 1;
+           }
+           errno = EDQUOT;
+           goto out;
+	}
+	else
+	{
+          tab_p->quota_exceeded_flag = 0;
+	}
+      }
+      tab_p->memory.blocks += n;      
+    }
+    status = 0;
+out:
+    return status;
+}
 
-      if (tab_p->hquota > 0 && tab_p->memory.blocks + n > tab_p->hquota) 
+/*
+**__________________________________________________________________
+*/
+/** update the number of blocks in file system
+ *
+ * @param eid: the export to update
+ * @param n: number of blocks
+ *
+ * @return 0 on success -1 otherwise
+ */
+int expthin_fstat_update_blocks(uint16_t eid,uint32_t nb_blocks, int dir) {
+    int status = -1;
+    export_fstat_ctx_t *tab_p;
+    time_t timecur;
+    long long int n = nb_blocks;
+
+   if (n == 0) return 0;   
+    
+   if (export_fstat_init_done == 0)
+   {
+      return 0;
+   }
+   /*
+   ** check the index of the eid
+   */
+   if (eid > EXPGW_EID_MAX_IDX) 
+   {
+      /*
+      ** eid value is out of range
+      */
+      export_fstat_stats.eid_out_of_range_err++;
+      return 0;
+   }
+   if (export_fstat_table[eid]== NULL)  
+   {
+      export_fstat_stats.no_eid_err++;
+      return 0;   
+   } 
+   tab_p = export_fstat_table[eid];
+  
+    /*
+    ** Check if we release or add some blocks 
+    */
+    if (dir<0) {    
+      /*
+      ** Releasing more blocks than allocated !!!
+      */
+      if (n > tab_p->memory.blocks_thin) {
+        warning("export thin %s blocks %"PRIu64" files %"PRIu64". Releasing %lld blocks",
+	      tab_p->pathname, tab_p->memory.blocks_thin, tab_p->memory.files, n); 
+        n = tab_p->memory.blocks_thin;
+      }
+
+      tab_p->memory.blocks_thin -= n;
+    }
+    else 
+    {
+
+      if (tab_p->hquota > 0 && tab_p->memory.blocks_thin + n > tab_p->hquota) 
       {
          if (tab_p->quota_exceeded_flag == 0)
 	 {
@@ -518,7 +615,7 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
 	 if (( tab_p->quota_exceeded_flag == 1) || 
 	    ((timecur -tab_p->quota_exceeded_time ) > export_fstat_quota_delay))
 	 {
-            warning("quota exceed: %llu over %llu", tab_p->memory.blocks + n,
+            warning("(thin provisioning) quota exceed: %llu over %llu", tab_p->memory.blocks_thin + n,
                      (long long unsigned int)tab_p->hquota);
   	    tab_p->quota_exceeded_time = time(NULL); 
 	    tab_p->quota_exceeded_flag = 1;
@@ -530,7 +627,7 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
       {
         tab_p->quota_exceeded_flag = 0;
       }
-      tab_p->memory.blocks += n;      
+      tab_p->memory.blocks_thin += n;      
     }
     status = 0;
 out:
@@ -671,7 +768,8 @@ void export_fstat_thread_update(export_fstat_ctx_t *tab_p)
    /*
    ** check if there is a change
    */
-   if ((tab_p->memory.blocks!= tab_p->last_written.blocks) || (tab_p->memory.files!= tab_p->last_written.files))
+   if ((tab_p->memory.blocks!= tab_p->last_written.blocks) || (tab_p->memory.files!= tab_p->last_written.files) 
+       || (tab_p->memory.blocks_thin!= tab_p->last_written.blocks_thin))
    {
       if ((fd = open(tab_p->pathname, O_RDWR /*| NO_ATIME*/ | O_CREAT, S_IRWXU)) < 1) {
           export_fstat_stats.open_err++;

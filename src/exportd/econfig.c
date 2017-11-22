@@ -62,7 +62,7 @@
 #define EFORBID     "forbid"
 #define EIP4SUBNET  "ip4subnet"
 #define ESUBNETS    "subnets"
-#define ETHIN       "thin-provisionning"
+#define ETHIN       "thin-provisioning"
 
 /*
 ** constant for exportd gateways
