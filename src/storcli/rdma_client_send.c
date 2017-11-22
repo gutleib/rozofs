@@ -45,6 +45,57 @@ int storage_bin_read_first_bin_to_write = 0;
 **__________________________________________________________________________
 */
 /**
+*  Procedure to check the current state of the RDMA connection
+
+   The purpose of that service is to return true when the RDMA connection is available
+   When the RDMA connection is down, the service might attempt to retry the re-estasblish
+   the RDMA connection if the context is in the ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT state
+   
+   The state of the connection is moved in that state when the client receives a RDMA disconnect
+   event from the RDMA_CMA entity.
+   
+   @param lbg_idx: index of the load balancing group
+   @param ref_p: when not NULL, it is the pointer to the array where the service returns the pointer to the tcp_rdma_cnx structure.
+   
+   @retval ref_p: pointer to the rdma_tcp context (rozofs_rdma_tcp_cnx_t structure)
+*/
+int storcli_lbg_is_rdma_up(int lbg_idx,uint32_t *ref_p)
+{
+  int status;
+  rozofs_rdma_tcp_cnx_t *rdma_tcp_cnx_p;
+  
+  status = north_lbg_is_rdma_up(lbg_idx,ref_p);
+  /*
+  ** stop here if the RDMA connection is UP
+  */
+  if (status != 0) return status;
+  /*
+  ** Check if we need to restart the connection: nothing to do if there is no context
+  */
+  if (ref_p == NULL) return status;
+  /*
+  ** Check the current state of the connection: nothing to do if it is not in the ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT
+  ** state
+  */
+   rdma_tcp_cnx_p = rozofs_rdma_get_tcp_connection_context_from_af_unix_id(*ref_p,0);
+   if (rdma_tcp_cnx_p == NULL)
+   {
+     /*
+     ** no TCP context, should revert to normal TCP
+     */
+     return status;
+   }
+  if (rdma_tcp_cnx_p->state != ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT) return status;
+  /*
+  ** attempt to re-establish the connection
+  */
+  rozofs_rdma_tcp_cli_reconnect(rdma_tcp_cnx_p);
+  return status;
+}
+/*
+**__________________________________________________________________________
+*/
+/**
 *   That function is intenede to be called when sending SP_READ_RDMA to compute the
     first byte offset where returned data must be copy
     

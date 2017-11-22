@@ -262,5 +262,24 @@ void rozofs_storcli_write_rdma_req_processing_cbk(void *this,void *param);
 */
 int  rdma_lbg_tmo_table_init(uint32_t mx_lbg_north_ctx);
 
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Procedure to check the current state of the RDMA connection
+
+   The purpose of that service is to return true when the RDMA connection is available
+   When the RDMA connection is down, the service might attempt to retry the re-estasblish
+   the RDMA connection if the context is in the ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT state
+   
+   The state of the connection is moved in that state when the client receives a RDMA disconnect
+   event from the RDMA_CMA entity.
+   
+   @param lbg_idx: index of the load balancing group
+   @param ref_p: when not NULL, it is the pointer to the array where the service returns the pointer to the tcp_rdma_cnx structure.
+   
+   @retval ref_p: pointer to the rdma_tcp context (rozofs_rdma_tcp_cnx_t structure)
+*/
+int storcli_lbg_is_rdma_up(int lbg_idx,uint32_t *ref_p);
 
  #endif 

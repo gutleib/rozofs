@@ -466,6 +466,12 @@ void storio_disk_read_rdma_cbk(void *user_param,int status, int error)
   
   if (status < 0)
   {
+    sp_read_rdma_arg_t* args;
+    /*
+    ** Check if the RDMA connection should but shut down
+    */
+    args   = (sp_read_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+    rozofs_rdma_on_completion_check_status_of_rdma_connection(status,error,(rozofs_rdma_tcp_assoc_t*) &args->rdma_key);
     ret.status = SP_FAILURE;     
     ret.sp_read_ret_t_u.error = error;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
@@ -546,7 +552,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
   // Check whether this is exactly the same FID
   // This is to handle the case when the read request has been serialized
   // After serialization, the recycling counter may not be the same !!!
-  if (fidCtx->device[0] != ROZOFS_UNKNOWN_CHUNK) {
+  if (storio_get_dev(fidCtx,0) != ROZOFS_UNKNOWN_CHUNK) {
     if (rozofs_get_recycle_from_fid(args->fid) != fidCtx->recycle_cpt) {
       // This is not the same recycling counter, so not the same file
       ret.sp_read_ret_t_u.error = ENOENT;
@@ -626,6 +632,12 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
 				 
   if (status < 0)
   {
+    sp_read_rdma_arg_t* args;
+    /*
+    ** force the shutdown of the RDMA connection.
+    */
+    args   = (sp_read_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+    rozofs_rdma_on_completion_check_status_of_rdma_connection(status,-1,(rozofs_rdma_tcp_assoc_t*) &args->rdma_key);
     ret.status = SP_FAILURE;     
     ret.sp_read_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);

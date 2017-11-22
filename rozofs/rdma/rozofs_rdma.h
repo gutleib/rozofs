@@ -121,7 +121,8 @@ typedef struct _rozofs_rdma_mod_stats_t {
     uint64_t   rdma_create_id[3];            /**< cm_id context creation: rdma_create_id()      */
     uint64_t   rdma_destroy_id[3];            /**< cm_id contextdeletion: rdma_destroy_id       */
     uint64_t   signalling_sock_create[3];  /**<signalling socket creation               */
-    uint64_t   rmda_listen[3];            /**<number of RDMA listen                     */
+    uint64_t   rdma_listen[3];            /**<number of RDMA listen                     */
+    uint64_t   rdma_reconnect[3];            /**<number of RDMA reconnect attempt               */
 } rozofs_rdma_mod_stats_t;
 
 
@@ -152,6 +153,11 @@ typedef struct _rozofs_rmda_ibv_cxt_t {
   pthread_t cq_poller_thread[ROZOFS_CQ_THREAD_NUM];
 } rozofs_rmda_ibv_cxt_t;
 
+/*
+** signalling thread constant
+*/
+#define ROZOFS_RDMA_SIG_RECONNECT_CREDIT_COUNT      100
+#define ROZOFS_RDMA_SIG_RECONNECT_CREDIT_PERIOD_SEC 10
 /**
 *  context of the completion queue thread
 */
@@ -187,6 +193,7 @@ typedef enum _rozofs_rdma_tcp_st_e
    ROZOFS_RDMA_ST_TCP_RDMA_CONNECTING,
    ROZOFS_RDMA_ST_TCP_WAIT_RDMA_CONNECTED,
    ROZOFS_RDMA_ST_TCP_RDMA_ESTABLISHED,
+   ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT,
    ROZOFS_RDMA_ST_TCP_DEAD,
    ROZOFS_RDMA_ST_TCP_MAX,
 } rozofs_rdma_tcp_st_e; 
@@ -236,6 +243,7 @@ typedef struct _rozofs_rdma_tcp_cnx_t {
   uint32_t opaque_ref;                 /**< user reference                    */
   rozofs_rdma_cnx_statechg_pf_t state_cbk; /**< callback for state change    */
   rozofs_rdma_tcp_assoc_t assoc;       /**< RDMA/TCP connection identifier: only relevant for client connection     */
+  uint64_t last_down_ts;               /**< last time the connection has been detected as DOWN status reported by RDMA side upon RDMA xfer error */
 } rozofs_rdma_tcp_cnx_t;
 
 typedef struct _rozofs_rdma_memory_reg_t {             
@@ -643,6 +651,45 @@ int rozofs_rdma_post_send2(rozofs_wr_id2_t *wr_th_p,
 			   int len,
 			   uint64_t remote_addr,
 			   uint32_t remote_key);
+
+/*
+**__________________________________________________
+*/
+/**
+*  Procedure that check the status of the RDMA operation in order to
+   potentially trigger a RDMA disconnect if there is an error.
+   
+   That procedure is intended to be called by the server side (storio) upon
+   the end of either RDMA_READ or RDMA_WRITE.
+   
+   
+   @param status: 0 : no error; -1: error
+   @param error: error code .
+   @param assoc_p : pointer to the association context that exists between the TCP and RDMA side
+   (note: that information is found in the parameter of the RPC request associated with RDMA_READ or RDMA_WRITE)
+   
+   @retval none
+*/
+void rozofs_rdma_on_completion_check_status_of_rdma_connection(int status,int error,rozofs_rdma_tcp_assoc_t *assoc_p);
+
+/*
+**__________________________________________________
+*/
+/**
+ The purpose of that service is to re-establish the RDMA connection by posting
+ a RDMA_CONNECT_REQ towards the RDMA signalling thread of RozoFS.
+ 
+ That service is intended to be called when the client detects that the connection
+ on the TCP side is in the ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT state
+ 
+ It is assumed that the reference of the server side is still valid since that
+ service is called when the TCP connection is still UP.
+ 
+ @param conn: pointer to the tcp_rdma connection context
+ 
+ @retval none
+*/ 
+void rozofs_rdma_tcp_cli_reconnect(rozofs_rdma_tcp_cnx_t *conn);
 
 #endif // ROZOFS_RDMA
 #endif

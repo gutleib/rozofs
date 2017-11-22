@@ -53,7 +53,9 @@ int  rozofs_rdma_enable= 0;                    /**< set to 1 when RDMA is enable
 void *rdma_sig_sockctrl_p=NULL;
 uint64_t rozofs_deleted_rdma_tcp_contexts = 0;   /**< total number of deleted contexts     **/
 uint64_t rozofs_allocated_rdma_tcp_contexts = 0; /**< total number of allocated contexts   **/
-
+int rdma_sig_reconnect_credit = 0;              /**< credit for reconnect attempt (client side only)            */
+int rdma_sig_reconnect_credit_conf = 0;             /**< configured credit for reconnect                       */
+int rdma_sig_reconnect_period_conf = 0;             /**< configured rperiod for reconnect attempt credits       */
 struct rdma_cm_id *rozofs_rdma_listener[ROZOFS_RDMA_MAX_LISTENER];   /**< rdma listener contexts (server side)  */
 int rozofs_rdma_listener_count = 0;                                  /**< current number of listener            */
 int rozofs_rdma_listener_max = 0;                                   /**< max number of listening contexts       */
@@ -141,14 +143,14 @@ int rozofs_rdma_listening_create(uint32_t ip,uint16_t port)
   /*
   ** attempt to listen on that port
   */
-  RDMA_STATS_REQ(rmda_listen);
+  RDMA_STATS_REQ(rdma_listen);
   if (rdma_listen(rozofs_rdma_listener[rozofs_rdma_listener_count], ROZOFS_RDMA_BACKLOG_COUNT) < 0)
   {
-     RDMA_STATS_RSP_NOK(rmda_listen);
+     RDMA_STATS_RSP_NOK(rdma_listen);
      warning("RDMA rdma_listen failed for %x:%d; %s",ip,port,strerror(errno));
      return -1;      
   }
-  RDMA_STATS_RSP_OK(rmda_listen);
+  RDMA_STATS_RSP_OK(rdma_listen);
   rozofs_rdma_listener_count++;
   return 0;
 
@@ -291,6 +293,7 @@ void show_rdma_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += sprintf(pChar, "----------------------------+-----------------+-----------------+-----------------+\n");
 
     SHOW_RDMA_STATS( rdma_connect);             /**< RDMA connect request : rdma_connect()          */
+    SHOW_RDMA_STATS( rdma_reconnect);           /**< RDMA reconnect : number of client  attempts    */
     SHOW_RDMA_STATS( rdma_disconnect);          /**< RDMA disconnect : rdma_disconnect()            */
     SHOW_RDMA_STATS( rdma_accept);              /**< RDMA accept rdma_accept()                      */
     SHOW_RDMA_STATS( rdma_reject);              /**< RDMA reject rdma_reject()                      */
@@ -306,7 +309,7 @@ void show_rdma_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
     SHOW_RDMA_STATS( rdma_create_id);            /**< cm_id context creation: rdma_create_id()      */
     SHOW_RDMA_STATS( rdma_destroy_id);            /**< cm_id contextdeletion: rdma_destroy_id       */
     SHOW_RDMA_STATS( signalling_sock_create);  /**<signalling socket creation               */
-    SHOW_RDMA_STATS( rmda_listen);            /**<number of RDMA listen                     */
+    SHOW_RDMA_STATS( rdma_listen);            /**<number of RDMA listen                     */
     if (argv[1] != NULL)
     {
       if (strcmp(argv[1],"reset")==0) {
@@ -444,7 +447,7 @@ int rozofs_rdma_send2tcp_side(int opcode,rozofs_rdma_tcp_assoc_t *assoc_p)
 **__________________________________________________
 */
 /**
-  send  a message from RDMA local side to TCP local side
+  send  a message from TCP local side to RDMA local side
       
   @param opcode 
   @param rozofs_rdma_tcp_assoc_t
@@ -489,6 +492,12 @@ int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode)
   rozofs_rdma_listener_count = 0;
   rozofs_rdma_listener_max   = ROZOFS_RDMA_MAX_LISTENER;
   memset(&rozofs_rdma_listener[0],0,sizeof(uint64_t*)*ROZOFS_RDMA_MAX_LISTENER);
+  /*
+  ** signalling thread conf. parameters
+  */
+  rdma_sig_reconnect_credit_conf = ROZOFS_RDMA_SIG_RECONNECT_CREDIT_COUNT;
+  rdma_sig_reconnect_credit = rdma_sig_reconnect_credit_conf;
+  rdma_sig_reconnect_period_conf = ROZOFS_RDMA_SIG_RECONNECT_CREDIT_PERIOD_SEC;
   
   rozofs_rdma_tcp_table = malloc(sizeof(rozofs_rdma_connection_t*)*nb_rmda_tcp_context);
   if (rozofs_rdma_tcp_table ==NULL)
@@ -663,6 +672,7 @@ void * rozofs_rmda_signaling_th(void *ctx)
    char  private_data[256];  
    struct timeval timeout;   
    time_t last_del_time =0;
+   time_t last_reconnect_time =0;
    struct timeval cur_time;
    int nb_select;
    memset(&rozofs_rdma_sig_th_stats,0,sizeof(rozofs_rdma_sig_th_stats));
@@ -748,6 +758,17 @@ void * rozofs_rmda_signaling_th(void *ctx)
         last_del_time=cur_time.tv_sec;
 	rozofs_rdma_del_process(last_del_time);	      
       }
+      if (rozofs_rdma_signalling_thread_mode) /* only for client side */
+      {
+	/*
+	** Check if it is time to refill the reconnect attempt counter
+	*/
+	if (cur_time.tv_sec > last_reconnect_time+rdma_sig_reconnect_period_conf)
+	{
+          last_reconnect_time=cur_time.tv_sec;
+	  rdma_sig_reconnect_credit = rdma_sig_reconnect_credit_conf;	      
+	}
+      }      
       
    }
 error:
@@ -975,7 +996,7 @@ error:
       */
       fatal("RDMA failure on sem_post: %s",strerror(errno));
     }
-#warning do not disconnect
+//#warning do not disconnect
 //    rdma_disconnect(conn->id);
   }
 }
@@ -1051,7 +1072,41 @@ void rozofs_on_completion2(struct ibv_wc *wc)
   * check if RDMA connect must be turned down in case of error
   */
 }
+/*
+**__________________________________________________
+*/
+/**
+*  Procedure that check the status of the RDMA operation in order to
+   potentially trigger a RDMA disconnect if there is an error.
+   
+   That procedure is intended to be called by the server side (storio) upon
+   the end of either RDMA_READ or RDMA_WRITE.
+   
+   
+   @param status: 0 : no error; -1: error
+   @param error: error code .
+   @param assoc_p : pointer to the association context that exists between the TCP and RDMA side
+   (note: that information is found in the parameter of the RPC request associated with RDMA_READ or RDMA_WRITE)
+   
+   @retval none
+*/
+void rozofs_rdma_on_completion_check_status_of_rdma_connection(int status,int error,rozofs_rdma_tcp_assoc_t *assoc_p)
+{
 
+    /*
+    ** nothing to do when there is no error
+    */
+    if (status == 0) return ;
+    /*
+    ** There is a RDMA error: for now we shut down the RDMA connection. By doing it, the client will be warned
+    ** and revert to TCP mode only.
+    ** In order to do it, a ROZOFS_RDMA_EV_RDMA_DEL_IND message must be sent to the RDMA signalling thread.
+    ** We use the ROZOFS_RDMA_EV_RDMA_DEL_IND in order to inform the TCP side that RDMA has disconnected
+    */
+    
+    rozofs_rdma_send2rdma_side(ROZOFS_RDMA_EV_RDMA_DEL_IND,assoc_p);
+    return;
+}
 /*
 **__________________________________________________
 */
@@ -1074,7 +1129,7 @@ void * rozofs_poll_cq_th(void *ctx)
   struct ibv_wc wc;
 //  int wc_to_ack = 0;
   
-  printf("CQ thread#%d started \n",th_ctx_p->thread_idx);
+  info("CQ thread#%d started \n",th_ctx_p->thread_idx);
 #if 1
     {
       struct sched_param my_priority;
@@ -1611,7 +1666,7 @@ int rozofs_rdma_srv_on_disconnect_request(struct rdma_cm_id *id)
 {
   rozofs_rdma_connection_t *conn = (rozofs_rdma_connection_t *)id->context;
 
-  printf("peer disconnected.\n");
+  info("peer disconnected.\n");
 
   if (id->qp != NULL) rdma_destroy_qp(id);
   /*
@@ -1771,7 +1826,7 @@ void rozofs_rdma_srv_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,struct rdma_cm_even
    if (conn ==NULL)
    {
      rozofs_print_rdma_fsm_state(-1,evt_code,(event==NULL)?0:event->event);
-     printf("FDL NULL context assoc %p event %p evt_code %d\n",assoc,event,evt_code); 
+     warning("NULL context assoc %p event %p evt_code %d\n",assoc,event,evt_code); 
      /*
      ** send a RDMA DEL indication towards the TCP side
      */
@@ -1970,7 +2025,7 @@ int rozofs_rdma_cli_on_addr_resolved(struct rdma_cm_id *id)
   rozofs_rdma_connection_t *conn;
   rozofs_rmda_ibv_cxt_t *s_ctx;  
 
-  printf("address resolved.\n");
+  info("address resolved.\n");
 
   RDMA_STATS_RSP_OK(rdma_resolve_addr);
   s_ctx = rozofs_build_rdma_context(id->verbs);
@@ -2062,7 +2117,7 @@ int rozofs_rdma_cli_on_route_resolved(struct rdma_cm_id *id)
   memset(&cm_params, 0, sizeof(cm_params));
   cm_params.private_data =&conn->assoc;
   cm_params.private_data_len = sizeof(rozofs_rdma_tcp_assoc_t)+32;
-  printf("FDL cli/srv_ref %d/%d port_cli/srv %d/%d len %d\n",conn->assoc.cli_ref,
+  info ("cli/srv_ref %d/%d port_cli/srv %d/%d len %d\n",conn->assoc.cli_ref,
              conn->assoc.srv_ref,
 	     conn->assoc.port_cli,
 	     conn->assoc.port_srv,
@@ -2145,7 +2200,7 @@ int rozofs_rdma_cli_on_disconnect(struct rdma_cm_id *id)
 {
   rozofs_rdma_connection_t *conn = (rozofs_rdma_connection_t *)id->context;
 
-  printf("disconnected.\n");
+  info("disconnected.\n");
 
   rdma_destroy_qp(id);
 
@@ -2250,7 +2305,7 @@ void rozofs_rdma_cli_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,struct rdma_cm_even
       {
         rozofs_print_rdma_fsm_state(-1,evt_code,(event==NULL)?0:event->event);
 
-	printf("FDL NULL context assoc %p event %p evt_code %d\n",assoc,event,evt_code); 
+	warning("FDL NULL context assoc %p event %p evt_code %d\n",assoc,event,evt_code); 
 	/*
 	** send a RDMA DEL indication towards the TCP side
 	*/
@@ -2462,7 +2517,50 @@ rozofs_rdma_tcp_cnx_t *rozofs_rdma_get_cli_tcp_connection_context_from_assoc(roz
    }   
    return tcp_cnx_tb[assoc->cli_ref];  
 }
+/*
+**__________________________________________________
+*/
+/**
+ The purpose of that service is to re-establish the RDMA connection by posting
+ a RDMA_CONNECT_REQ towards the RDMA signalling thread of RozoFS.
+ 
+ That service is intended to be called when the client detects that the connection
+ on the TCP side is in the ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT state
+ 
+ It is assumed that the reference of the server side is still valid since that
+ service is called when the TCP connection is still UP.
+ 
+ @param conn: pointer to the tcp_rdma connection context
+ 
+ @retval none
+*/ 
+void rozofs_rdma_tcp_cli_reconnect(rozofs_rdma_tcp_cnx_t *conn)
+{
+  int ret;
+  
+  /*
+  ** check if the max attempt has been reached
+  */
+  if (rdma_sig_reconnect_credit < 0)
+  {
+    /*
+    ** too many reconnect attempt
+    */
+    return;
+  }
+  rdma_sig_reconnect_credit--;
+  RDMA_STATS_REQ(rdma_reconnect);
+  ret = rozofs_rdma_send2rdma_side(ROZOFS_RDMA_EV_RDMA_CONNECT,&conn->assoc);
+  if (ret < 0)
+  {
+     RDMA_STATS_RSP_NOK(rdma_reconnect);
+    conn->state = ROZOFS_RDMA_ST_TCP_DEAD;
+    return;
+  }
+  RDMA_STATS_RSP_OK(rdma_reconnect);
+  conn->state = ROZOFS_RDMA_ST_TCP_WAIT_RDMA_CONNECTED;
 
+}
 /*
 **__________________________________________________
 */
@@ -2571,7 +2669,14 @@ void rozofs_rdma_tcp_cli_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,rozofs_rdma_int
 	      ** indicates that RDMA is DOWN
 	      */
 	      if (conn->state_cbk!= NULL) (conn->state_cbk)(conn->opaque_ref,0,conn->assoc.cli_ref);
-	      conn->state = ROZOFS_RDMA_ST_TCP_IDLE;
+//	      conn->state = ROZOFS_RDMA_ST_TCP_IDLE;
+	      /*
+	      ** register the time at which the RDMA has reported a down state.
+	      ** It is intended to be used for retrying to establish the RDMA connection
+	      */
+	      conn->last_down_ts = rozofs_ticker_microseconds;
+	      conn->state = ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT;
+	      
 	      break;
 
 	    case ROZOFS_RDMA_EV_TCP_DISCONNECT:
@@ -2583,6 +2688,28 @@ void rozofs_rdma_tcp_cli_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,rozofs_rdma_int
 	     break;	
 	 }       
 	break;
+
+       /*
+       ** ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT
+       */ 
+       /*
+       ** The FSM enters that state when the client has received at deleition indication from the
+       ** RDMA side. Only the TCP disconnect is considered when the FSM is in that state since we should
+       ** not received any other message for tha RDMA connection from the RDMA side
+       */      
+       case ROZOFS_RDMA_ST_TCP_WAIT_RDMA_RECONNECT:
+         switch (evt_code)
+	 {
+	    case ROZOFS_RDMA_EV_TCP_DISCONNECT:
+	      rozofs_rdma_send2rdma_side(ROZOFS_RDMA_EV_RDMA_DEL_REQ,assoc);
+	      conn->state = ROZOFS_RDMA_ST_TCP_DEAD;
+	      break;
+
+	    default:
+	     break;		 
+	 
+	 }
+         break;
        /*
        ** ROZOFS_RDMA_ST_TCP_DEAD
        */       

@@ -119,7 +119,7 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
     ** - if it exist a RDMA connection between the storio and the storcli
     ** - if the read size is greater than a predefined threshold (future)
     */
-    if ((common_config.rdma_enable) && (north_lbg_is_rdma_up(lbg_id,&rdma_socket_ref)))
+    if ((common_config.rdma_enable) && (storcli_lbg_is_rdma_up(lbg_id,&rdma_socket_ref)))
     {
        switch (opcode) 
        {
