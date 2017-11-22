@@ -960,9 +960,11 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     /*
     ** Save interresting information
     */
-    fidCtx->data.layout = file_hdr.v0.layout;
-    fidCtx->data.bsize  = file_hdr.v0.bsize;
-    memcpy(fidCtx->data.dist,file_hdr.v0.dist_set_current,sizeof(fidCtx->data.dist));
+    fidCtx->data.layout = file_hdr.layout;
+    fidCtx->data.bsize  = file_hdr.bsize;
+    int size2copy = sizeof(file_hdr.distrib);
+    memcpy(fidCtx->data.dist,file_hdr.distrib,size2copy);
+    memset(&fidCtx->data.dist[size2copy],0,sizeof(fidCtx->data.dist)-size2copy);
     fidCtx->data.mtime  = 0; /* This tells that the file not yet read */
   }        
 
