@@ -183,7 +183,7 @@ char *argv[];
   else      
     sprintf(path,"%s/rebuild", mount);
 }
-#define LOOP_NB  257
+#define LOOP_NB  (257*3)
 #define BLKSIZE (1024*4)
 char    refblock[BLKSIZE];
 char    readblock[BLKSIZE*LOOP_NB];

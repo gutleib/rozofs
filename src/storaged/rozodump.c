@@ -59,6 +59,7 @@ int    bbytes=-1;
 int    dump_data=0;
 uint64_t  first=0,last=-1;
 unsigned int prjid = -1;
+int    display_blocks=0;
 
 #define HEXDUMP_COLS 16
 void hexdump(void *mem, unsigned int offset, unsigned int len) {
@@ -107,15 +108,22 @@ int rozofs_storage_get_device_number(char * root) {
   return 0;
 }
 
-int read_hdr_file(char * root, int devices, int slice, rozofs_stor_bins_file_hdr_t * hdr, uuid_t uuid, int *spare) {
+int read_hdr_file(char * root, int devices, int slice, rozofs_stor_bins_file_hdr_vall_t * hdr, uuid_t uuid, int *spare) {
   char             path[256];
   int              dev;
   int              Zdev=-1;
   struct stat      st;
   uint64_t         ts=0;
   int              fd;
-  int              safe;
+  uint8_t          safe;
+  uint8_t          fwd;
+  uint8_t          inv;
   char            *pChar;
+  uint32_t        *pCrc;
+  uint32_t         crcLen;
+  int              i;
+  sid_t         * pDist;
+  uint8_t val;
   
   for (*spare=0; *spare<2; *spare+=1) {
   
@@ -159,59 +167,92 @@ int read_hdr_file(char * root, int devices, int slice, rozofs_stor_bins_file_hdr
       if (nb_read < 0) {
         printf("pread(%s) %s",path, strerror(errno));
 	return -1; 
-      }
+      } 
+      
       close(fd);  
-      printf("%15s : %s\n","Header file",path);
-      printf("%15s : %d\n","version",hdr->v0.version);
-      printf("%15s : %d\n","layout",hdr->v0.layout);
-      printf("%15s : %d\n","bsize",hdr->v0.bsize);
-      if (hdr->v0.version>0) {
-        printf("%15s : %d/%d\n","cid/sid",hdr->v1.cid,hdr->v1.sid); 	 
+      printf("{ \"header file\" : {\n");
+      printf("  \"path\"    : \"%s\",\n",path);
+      printf("  \"version\" : %d,\n",hdr->v0.version);
+      printf("  \"layout\"  : %d,\n",hdr->v0.layout);
+      printf("  \"bsize\"   : %d,\n",hdr->v0.bsize);
+      switch(hdr->v0.version) {
+        case 0:
+          rozofs_get_rozofs_invers_forward_safe(hdr->v0.layout, &inv, &fwd, &safe);
+          pDist = hdr->v0.dist_set_current;
+          break;
+        case 1:  
+          rozofs_get_rozofs_invers_forward_safe(hdr->v1.layout, &inv, &fwd, &safe);
+          pDist = hdr->v1.dist_set_current;
+          printf("  \"cid\"     : %d,\n", hdr->v1.cid);
+          printf("  \"sid\"     : %d,\n", hdr->v1.sid);
+          break;
+        case 2:
+          rozofs_get_rozofs_invers_forward_safe(hdr->v2.layout, &inv, &fwd, &safe);
+          pDist = hdr->v2.distrib;
+          printf("  \"cid\"     : %d,\n", hdr->v2.cid);
+          printf("  \"sid\"     : %d,\n", hdr->v2.sid);
+          memset(&hdr->v2.devFromChunk[hdr->v2.nbChunks], ROZOFS_EOF_CHUNK, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-hdr->v2.nbChunks);
+          break;
+        default:
+          printf("Unknown header version\n");
+          continue;
+          break;     	 
+      }    
+      crcLen = rozofs_st_get_header_file_crc(hdr, &pCrc);
+      
+      printf("  \"distibution\" : {\n");      
+      printf("      \"inverse\" : [");      
+      printf(" %d", pDist[0]);
+      for (i=1; i< inv; i++) {
+        printf(", %d",pDist[i]);
       }
-      printf("%15s : %d","distibution",hdr->v0.dist_set_current[0]);
-      safe    = rozofs_get_rozofs_safe(hdr->v0.layout);
-      int i;
-      for (i=1; i< safe; i++) {
-        printf("-%d",hdr->v0.dist_set_current[i]);
+      printf("],\n      \"forward\" : [ %d",pDist[i]);      
+      i++;
+      for (  ; i< fwd; i++) {
+        printf(", %d",pDist[i]);
       }
-      printf("\n");
-      printf("%15s : ","devices/chunk");
+      printf("],\n      \"safe\"    : [ %d",pDist[i]);      
+      i++;
+      for (  ; i< safe; i++) {
+        printf(", %d",pDist[i]);
+      }          
+      printf("]\n  },\n");
+          
+
       i = 0;
+      val = rozofs_st_header_get_chunk(hdr,i);
+      printf("  \"devices\" : [ %d", val);
+      i++;
       while(i<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) {
-        if (hdr->v0.device[i] == ROZOFS_EOF_CHUNK) break;
-	if (hdr->v0.device[i] == ROZOFS_EMPTY_CHUNK) printf("/E");
-	else                                      printf("/%d",hdr->v0.device[i]);
-	i++;
+        val = rozofs_st_header_get_chunk(hdr,i);
+        if (val == ROZOFS_EOF_CHUNK) break;
+        if (val == ROZOFS_EMPTY_CHUNK) printf(", E");
+        else printf(", %d",val);
+        i++;
       }
-      printf("\n");
-      
-      uint32_t save_crc32 = hdr->v0.crc32;
-      hdr->v0.crc32 = 0;
-      uint32_t crc32;
-      
-      if (save_crc32 != 0) {
-        int len;
-        printf("%15s : 0x%x","crc32",save_crc32);
-        crc32 = fid2crc32((uint32_t *)uuid);
-	if (hdr->v0.version == 0) {
-	  len = sizeof(hdr->v0);
-	}
-	else {
-	  len = sizeof(*hdr);
-	}    
-        crc32 = crc32c(crc32,(char *) hdr, len);
-        hdr->v0.crc32 = save_crc32;
-	
+      printf("],\n");
+            
+      uint32_t save_crc32 = *pCrc;;
+      printf("  \"crc32\"   : ");
+      if (save_crc32 == 0) {
+        printf("\"None\"\n");
+      }
+      else { 
+        *pCrc = 0;
+        uint32_t crc32;
+        crc32 = fid2crc32((uint32_t *)uuid);   
+        crc32 = crc32c(crc32,(char *) hdr, crcLen);
+        *pCrc = save_crc32;
+
 	if (save_crc32 != crc32) {
-          printf(" expecting 0x%x !!!\n",crc32);
+          printf("BAD %x. Rxpecting %x\"\n",save_crc32,crc32);
+          continue;
 	}	
-	else {
-          printf(" OK\n");
-	}   
-      }	
-      return 0; 
-    }        
-    
+        printf("\"OK\"\n");
+      }
+      printf("}}\n");
+      return 0;  	
+    }            
     // Check for spare
   }
   return -1;
@@ -235,7 +276,7 @@ char * ts2string(uint64_t u64) {
   return dateSting;
 }    
 unsigned char buffer[2*1024*33];
-void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_t * hdr, int spare, uint64_t firstBlock) {
+void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t * hdr, int spare, uint64_t firstBlock) {
   uint16_t rozofs_disk_psize;
   int      fd;
   rozofs_stor_bins_hdr_t * pH;
@@ -264,12 +305,21 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_t * hdr,
   if (spare==0) {
   
     /* Header version 1. Find the sid in  the distribution */
-    if (hdr->v0.version == 1) {
-      int fwd = rozofs_get_rozofs_forward(hdr->v0.layout);
+    if (hdr->v0.version == 2) {
+      int fwd = rozofs_get_rozofs_forward(hdr->v2.layout);
       int idx;
       for (idx=0; idx< fwd;idx++) {
-	if (hdr->v0.dist_set_current[idx] != hdr->v1.sid) continue;
-	rozofs_disk_psize = rozofs_get_psizes_on_disk(hdr->v0.layout,hdr->v0.bsize,idx);
+	if (hdr->v2.distrib[idx] != hdr->v2.sid) continue;
+	rozofs_disk_psize = rozofs_get_psizes_on_disk(hdr->v2.layout,hdr->v2.bsize,idx);
+	break; 
+      }
+    }  
+    else if (hdr->v0.version == 1) {
+      int fwd = rozofs_get_rozofs_forward(hdr->v1.layout);
+      int idx;
+      for (idx=0; idx< fwd;idx++) {
+	if (hdr->v1.dist_set_current[idx] != hdr->v1.sid) continue;
+	rozofs_disk_psize = rozofs_get_psizes_on_disk(hdr->v1.layout,hdr->v1.bsize,idx);
 	break; 
       }
     }  
@@ -348,7 +398,7 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_t * hdr,
         sprintf(crc32_string,"NONE");
       }
       else {
-        crc32 = fid2crc32((uint32_t *)fid)+bid;
+        crc32 = fid2crc32((uint32_t *)fid)+bid-firstBlock;
         crc32 = crc32c(crc32,(char *) pH, rozofs_disk_psize);
 	if (crc32 != save_crc32) sprintf(crc32_string,"ERROR");
 	else                     sprintf(crc32_string,"OK");
@@ -398,6 +448,7 @@ void usage() {
     printf("   -h                   \tPrint this message.\n");
     printf("   -a                   \tGive the projection id in the case it can not be determine automatically.\n");    
     printf("   -d                   \tTo dump the data blocks and not only the block headers\n");
+    printf("   -b                   \tDisplay all blocks.\n");
     printf("   -b <first>:<last>    \tTo display block numbers within <first> and <last>.\n"); 
     printf("   -b <first>:          \tTo display from block number <first> to the end.\n");
     printf("   -b :<last>           \tTo display from start to block number <last>.\n");  
@@ -414,7 +465,7 @@ int main(int argc, char *argv[]) {
   int           ret;
   int           slice;
   int           devices;
-  rozofs_stor_bins_file_hdr_t hdr;
+  rozofs_stor_bins_file_hdr_vall_t hdr;
   char          path[256];
   int           spare;
   int           block_per_chunk;
@@ -497,11 +548,12 @@ int main(int argc, char *argv[]) {
             
     /* -b */
     if (strcmp(argv[idx], "-b") == 0) {
+      display_blocks = 1;
       idx++;
       if (idx == argc) {
-        printf("%s option set but missing value !!!\n", argv[idx-1]);
-        usage();
+        continue;
       } 
+      
       ret = sscanf(argv[idx], "%llu:%llu", (long long unsigned int *)&first, (long long unsigned int *)&last);
       if (ret == 2) {
         if (first>last) {
@@ -531,8 +583,7 @@ int main(int argc, char *argv[]) {
 	continue;
       }
    
-      printf("Bad -b option value \"%s\" !!!\n", argv[idx]);
-      usage();
+      continue;
     }
     
     printf("No such option or parameter %s\n",argv[idx]);
@@ -582,22 +633,26 @@ int main(int argc, char *argv[]) {
   }  
      
   while(chunk<chunk_stop) {
-  
+    int dev;
+    
+    dev = rozofs_st_header_get_chunk(&hdr, chunk);
       
-    if (hdr.v0.device[chunk] == ROZOFS_EOF_CHUNK) {
+    if (dev == ROZOFS_EOF_CHUNK) {
       printf ("\n============ CHUNK %d EOF   ================\n", chunk);      
       break;
     }
-    if (hdr.v0.device[chunk] == ROZOFS_EMPTY_CHUNK) {
+    if (dev == ROZOFS_EMPTY_CHUNK) {
       printf ("\n============ CHUNK %d EMPTY ================\n", chunk);
       chunk++;
       continue;
     }
     
-    storage_build_chunk_full_path(path, pRoot, hdr.v0.device[chunk], spare, slice, fid, chunk);
+    storage_build_chunk_full_path(path, pRoot, dev, spare, slice, fid, chunk);
     printf ("\n============ CHUNK %d ==  %s ================\n", chunk, path);
-
-    read_chunk_file(fid,path,&hdr,spare, chunk*block_per_chunk);
+    
+    if (display_blocks) {
+      read_chunk_file(fid,path,&hdr,spare, chunk*block_per_chunk);
+    }  
     chunk++;
   }
   return 0;

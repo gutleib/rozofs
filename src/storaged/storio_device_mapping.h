@@ -48,17 +48,8 @@ extern "C" {
 #include <rozofs/core/rozofs_string.h>
 
 #include "storio_fid_cache.h"
+#include "storage_header.h"
 
-//__Specific values in the chunk to device array
-// Used in the interface When the FID is not inserted in the cache and so the
-// header file will have to be read from disk.
-#define ROZOFS_UNKNOWN_CHUNK  255
-// Used in the device per chunk array when no device has been allocated 
-// because the chunk is after the end of file
-#define ROZOFS_EOF_CHUNK      254
-// Used in the device per chunk array when no device has been allocated 
-// because it is included in a whole of the file
-#define ROZOFS_EMPTY_CHUNK    253
 
 /**
 * Attributes cache constants
@@ -270,23 +261,14 @@ static inline int storio_get_last_chunk(storio_device_mapping_t * p,
 **
 ** @retval the last valid chunk
 */
-static inline void storio_store_to_ctx(storio_device_mapping_t * p, uint8_t * devices) {
-  int        chunk_max;
+static inline void storio_store_to_ctx(storio_device_mapping_t * p, uint32_t nbChunks, uint8_t * devices) {
   uint8_t  * ptr = NULL;
-  
-  /*
-  ** Find out the last valid chunk number in the disk distribution
-  */
-  chunk_max = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-1;
-  while ((chunk_max>0) && (devices[chunk_max] == ROZOFS_EOF_CHUNK)) {
-    chunk_max--;
-  }
-  
+    
   
   /*
   ** Few valid chunks
   */
-  if (chunk_max<=ROZOFS_MAX_SMALL_ARRAY_CHUNK) {
+  if (nbChunks <= (ROZOFS_MAX_SMALL_ARRAY_CHUNK+1)) {
 
     /*
     ** Save big array pointer to release it later
@@ -339,13 +321,14 @@ static inline void storio_store_to_ctx(storio_device_mapping_t * p, uint8_t * de
 **
 ** @retval the last valid chunk
 */
-static inline void storio_read_from_ctx(storio_device_mapping_t * p, uint8_t * devices) {
-  
+static inline void storio_read_from_ctx(storio_device_mapping_t * p, uint8_t * nbChunk, uint8_t * devices) {
+  int idx;
   /*
   ** Distribution is unknown
   */
   if (p->device_unknown) {
     memset(devices,ROZOFS_EOF_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+    * nbChunk = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
     return;
   } 
   
@@ -353,12 +336,26 @@ static inline void storio_read_from_ctx(storio_device_mapping_t * p, uint8_t * d
   ** Few valid chunks
   */
   if (p->small_device_array) {
+    * nbChunk = rozofs_st_header_roundup_chunk_number(ROZOFS_MAX_SMALL_ARRAY_CHUNK+1);
     memcpy(devices, p->device.small, ROZOFS_MAX_SMALL_ARRAY_CHUNK+1);
     memset(&devices[ROZOFS_MAX_SMALL_ARRAY_CHUNK+1], ROZOFS_EOF_CHUNK, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-ROZOFS_MAX_SMALL_ARRAY_CHUNK-1);
     return;
   }
   
-  memcpy(devices, p->device.ptr, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE); 
+  /*
+  ** Copy devices until EOF
+  */
+  for (idx = 0; idx < ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; idx ++) {
+    devices[idx] = p->device.ptr[idx];
+    if (devices[idx] == ROZOFS_EOF_CHUNK) {
+      break;
+    }
+  }
+  * nbChunk = rozofs_st_header_roundup_chunk_number(idx);
+  /*
+  ** Set rest of array to EOF
+  */
+  memset(&devices[idx], ROZOFS_EOF_CHUNK, (ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-idx));
 }
 
 

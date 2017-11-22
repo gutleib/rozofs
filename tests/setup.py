@@ -1247,7 +1247,7 @@ class rozofs_class:
       report("%sMB %-12s %s %s(%s)"%(rozofs.disk_size_mb,loop,path,mark,content))
       
     # Create the file with the given path
-    os.system("dd if=/dev/zero of=%s bs=1MB count=%s > /dev/null 2>&1"%(path,rozofs.disk_size_mb))
+    os.system("truncate -s %s %s 2>&1"%(rozofs.disk_size_mb*1024*1024, path))
     
     # Bind the loop back device to the file    
     string="losetup %s %s "%(loop,path)
@@ -1357,7 +1357,7 @@ class rozofs_class:
     display_config_int("alloc_estimated_mb",self.alloc_mb)
     display_config_string("storaged_start_script",self.storaged_start_script)
     display_config_bool("device_automount",self.device_automount)
-    display_config_int("device_self_healing_process",2)
+    #display_config_int("device_self_healing_process",2)
     display_config_int("device_selfhealing_delay",rozofs.device_selfhealing_delay)
     display_config_string("device_selfhealing_mode",rozofs.device_selfhealing_mode)
     display_config_string("export_hosts",exportd.export_host)
