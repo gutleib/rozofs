@@ -57,6 +57,12 @@
 #include "export_quota_thread_api.h"
 #include "rozofs_exp_mover.h"
 #include "export_thin_prov_api.h"
+#include "exportd.h"
+
+#define ROZOFS_DIR_STATS 1
+#ifdef ROZOFS_DIR_STATS
+#warning Works with directory tracking
+#endif
 
 #include <rozofs/common/acl.h>
 int rozofs_acl_access_check(const char *name, const char *value, size_t size,mode_t *mode_p);
@@ -1058,23 +1064,38 @@ int export_open_parent_directory(export_t *e,fid_t parent)
 
 
 */
-void export_dir_adjust_child_size(lv2_entry_t *dir,uint64_t size,int add)
+void export_dir_adjust_child_size(lv2_entry_t *dir,uint64_t size,int add,int bbytes)
 {
    ext_dir_mattr_t *stats_attr_p;
-
+   uint64_t rounded_size;
+   
+   if (size == 0) return;
+   if (size%bbytes)
+   {   
+     rounded_size = size/bbytes+1;
+     rounded_size *=bbytes;
+   }
+   else
+   {
+     rounded_size = size;
+   }
 
    stats_attr_p = (ext_dir_mattr_t *)&dir->attributes.s.attrs.sids[0];
 
     if (add)
     {
-      stats_attr_p->s.nb_bytes +=size;
+      stats_attr_p->s.nb_bytes +=rounded_size;
     } 
     else
     {
-      if (stats_attr_p->s.nb_bytes < size) stats_attr_p->s.nb_bytes = 0;
-      else stats_attr_p->s.nb_bytes -=size;    
+      if (stats_attr_p->s.nb_bytes < rounded_size) stats_attr_p->s.nb_bytes = 0;
+      else stats_attr_p->s.nb_bytes -=rounded_size;    
     
     }
+    /*
+    ** mark the entry as dirty
+    */
+    dir->dirty_bit = 1;
 }
 /*
 **__________________________________________________________________
@@ -1086,17 +1107,26 @@ void export_dir_adjust_child_size(lv2_entry_t *dir,uint64_t size,int add)
  or a symbolic link.
  
  @param dir: pointer to the directory i-node (cache structure)
- @param size: size in bytes units to remove (regular file only)
+
 
 
 */
 void export_dir_update_time(lv2_entry_t *dir)
 {
    ext_dir_mattr_t *stats_attr_p;
-
+   uint64_t cur_time;
 
    stats_attr_p = (ext_dir_mattr_t *)&dir->attributes.s.attrs.sids[0];
-   stats_attr_p->s.update_time = time(NULL);
+   cur_time = time(NULL);   
+   /*
+   ** update the time only if it is not in the configured period
+   */
+   if (stats_attr_p->s.update_time < cur_time)
+   {
+      if (stats_attr_p->s.version == 0) stats_attr_p->s.version = ROZOFS_DIR_VERSION_1;
+      stats_attr_p->s.update_time = time(NULL)+common_config.expdir_guard_delay_sec;
+   }
+   dir->dirty_bit = 0;
 }
 /*
 **__________________________________________________________________
@@ -1114,12 +1144,140 @@ lv2_entry_t *export_dir_get_parent(export_t *e, lv2_entry_t *child_lv2)
 {
    lv2_entry_t *plv2;
    
-   if (e->backup == 0) return NULL;
+//   if (e->backup == 0) return NULL;
    plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, child_lv2->attributes.s.pfid);
    return plv2;
 }
    
+/*
+**__________________________________________________________________
+*/
+/**
 
+ Re-write the directory attributes if it is time to do so
+ 
+ @param e: pointer to texport context
+ @param dir: pointer to the directory i-node (cache structure)
+
+
+*/
+void export_dir_async_write(export_t *e,lv2_entry_t *dir)
+{
+   ext_dir_mattr_t *stats_attr_p;
+   uint64_t cur_time;
+
+   stats_attr_p = (ext_dir_mattr_t *)&dir->attributes.s.attrs.sids[0];
+   /*
+   ** check if is time type to update the i-node on disk
+   */
+   cur_time = time(NULL);
+   if (stats_attr_p->s.update_time < cur_time) 
+   {
+     START_PROFILING_EID(dir_wr_on_time,e->eid);
+     if (stats_attr_p->s.version == 0) stats_attr_p->s.version = ROZOFS_DIR_VERSION_1;
+      /*
+      ** re-write attributes on disk
+      */
+      dir->dirty_bit = 0;
+      stats_attr_p->s.update_time = common_config.expdir_guard_delay_sec+cur_time;
+      export_attr_thread_submit(dir,e->trk_tb_p,0);   
+      STOP_PROFILING_EID(dir_wr_on_time,e->eid);
+
+   }
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+
+ check for Re-write the directory attributes if it is time to do so
+ 
+ @param e: pointer to texport context
+ @param dir: pointer to the directory i-node (cache structure)
+
+
+*/
+void export_dir_check_async_write(export_t *e,lv2_entry_t *dir)
+{
+   ext_dir_mattr_t *stats_attr_p;
+   
+   stats_attr_p = (ext_dir_mattr_t *)&dir->attributes.s.attrs.sids[0];
+   
+   /*
+   ** check dirty_bit
+   */
+   if (dir->dirty_bit == 0) return;
+   /*
+   ** check if is time type to update the i-node on disk: we do not change the update time since it assumed
+   ** that is was already done
+   */
+   if (stats_attr_p->s.update_time < time(NULL)) 
+   {
+     START_PROFILING_EID(dir_wr_on_check,e->eid);
+
+     if (stats_attr_p->s.version == 0) stats_attr_p->s.version = ROZOFS_DIR_VERSION_1;
+      /*
+      ** re-write attributes on disk
+      */
+      dir->dirty_bit = 0;
+      export_attr_thread_submit(dir,e->trk_tb_p,0);   
+      STOP_PROFILING_EID(dir_wr_on_check,e->eid);
+   }
+}
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+
+ check for Re-write the directory attributes if it is time to do so when the entry is removed from lv2 cache
+ 
+ @param dir: pointer to the directory i-node (cache structure)
+
+
+*/
+void export_dir_check_sync_write_on_lru(lv2_entry_t *dir)
+{
+   ext_dir_mattr_t *stats_attr_p;
+   export_t *e;
+   eid_t eid;  
+
+   /*
+   ** check dirty_bit
+   */
+   if (dir->dirty_bit == 0) return;
+      
+    
+   stats_attr_p = (ext_dir_mattr_t *)&dir->attributes.s.attrs.sids[0];
+   
+   /*
+   ** check if is time type to update the i-node on disk: we do not change the update time since it assumed
+   ** that is was already done
+   */
+   {
+      eid = rozofs_get_eid_from_fid(dir->attributes.s.attrs.fid);
+      e = exports_lookup_export(eid);
+      if (e == NULL)
+      {
+	 /*
+	 ** quite strange, but since it is for statistics, just return without warning
+	 */
+	 return;
+      }
+
+     START_PROFILING_EID(dir_wr_on_lru,e->eid);
+
+     if (stats_attr_p->s.version == 0) stats_attr_p->s.version = ROZOFS_DIR_VERSION_1;
+      /*
+      ** re-write attributes on disk
+      */
+      dir->dirty_bit = 0;
+      export_lv2_write_attributes(e->trk_tb_p,dir,0);   
+      STOP_PROFILING_EID(dir_wr_on_lru,e->eid);
+   }
+}
 /*
 **__________________________________________________________________
 
@@ -2056,6 +2214,16 @@ out:
 	 export_attr_thread_submit(lv2,e->trk_tb_p, 0);      
       }    
     }    
+
+#ifdef ROZOFS_DIR_STATS
+   /*
+   ** check if the parent attributes must be written back on disk because of directory statistics
+   */
+   if ((lv2 != NULL) && S_ISDIR(lv2->attributes.s.attrs.mode) &&(lv2->dirty_bit))
+   {
+     export_dir_check_async_write(e,lv2);
+   }
+#endif
     /*
     ** close the parent directory
     */
@@ -2106,6 +2274,15 @@ void export_get_parent_attributes(export_t *e, fid_t pfid, mattr_t *pattrs)
      return;
    }
    memcpy(pattrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
+#ifdef ROZOFS_DIR_STATS
+   /*
+   ** check if the parent attributes must be written back on disk because of directory statistics
+   */
+   if (plv2->dirty_bit)
+   {
+     export_dir_check_async_write(e,plv2);
+   }
+#endif
    if (test_no_extended_attr(plv2)) rozofs_clear_xattr_flag(&pattrs->mode);                
 }
 /*
@@ -2232,7 +2409,7 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	 goto out;
       }
     }
-#if 0
+#ifdef ROZOFS_DIR_STATS
     /*
     ** attempt to get the parent attribute to address the case of the asynchronous fast replication
     */
@@ -2262,15 +2439,17 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	  /*
 	  ** adjust the directory statistics
 	  */
-	  if (plv2) export_dir_adjust_child_size(plv2,(nrb_new-nrb_old)*bbytes,1);
+	  if (plv2) export_dir_adjust_child_size(plv2,(nrb_new-nrb_old)*bbytes,1,bbytes);
 	}
 	else
 	{
           rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_old-nrb_new)*bbytes,ROZOFS_QT_DEC,share); 	
+#ifdef ROZOFS_DIR_STATS
 	  /*
 	  ** adjust the directory statistics
 	  */	  
-	  if (plv2) export_dir_adjust_child_size(plv2,(nrb_new-nrb_old)*bbytes,0);
+	  if (plv2) export_dir_adjust_child_size(plv2,(nrb_old-nrb_new)*bbytes,0,bbytes);
+#endif
 	}      		
         if (export_update_blocks(e, nrb_new, nrb_old)!= 0)
             goto out;
@@ -2331,14 +2510,13 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	}
       }
     }    
-#if 0
+#ifdef ROZOFS_DIR_STATS
     /*
     ** adjust the directory statistics
     */
     if(plv2) 
     {
-      export_dir_update_time(plv2);
-      export_attr_thread_submit(plv2,e->trk_tb_p,0);
+      export_dir_async_write(e,plv2);
     }
 #endif
     status = export_lv2_write_attributes(e->trk_tb_p,lv2,sync);
@@ -2437,6 +2615,13 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, mattr_
     plv2->attributes.s.attrs.children++;
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
 
+#ifdef ROZOFS_DIR_STATS
+    /*
+    ** Update the directory statistics
+    */
+    export_dir_adjust_child_size(plv2,target->attributes.s.attrs.size,1,ROZOFS_BSIZE_BYTES(e->bsize));
+    export_dir_update_time(plv2);
+#endif
     // Write attributes of parents
     if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto out;
@@ -3147,6 +3332,13 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     // Update children nb. and times of parent
     plv2->attributes.s.attrs.children++;
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
+
+    /*
+    ** Update the directory statistics
+    */
+#ifdef ROZOFS_DIR_STATS
+    export_dir_update_time(plv2);
+#endif
     /*
     ** write parent attributes on disk
     */
@@ -3505,7 +3697,13 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     
     plv2->attributes.s.attrs.children++;
     plv2->attributes.s.attrs.nlink++;
-    plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = plv2->attributes.s.cr8time = time(NULL);
+    plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
+    /*
+    ** Update the directory statistics
+    */
+#ifdef ROZOFS_DIR_STATS
+    export_dir_update_time(plv2);
+#endif
     if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto error;
 
@@ -4443,6 +4641,12 @@ duplicate_deleted_file:
 	      {
 	        expthin_update_blocks(e,(uint32_t)lv2->attributes.s.attrs.children,-1);
 	      }
+	      /*
+	      ** Update the directory statistics
+	      */
+#ifdef ROZOFS_DIR_STATS
+              export_dir_adjust_child_size(plv2,lv2->attributes.s.attrs.size,0,ROZOFS_BSIZE_BYTES(e->bsize));
+#endif
 	    }
         } 
 	else 
@@ -4484,6 +4688,9 @@ duplicate_deleted_file:
         lv2->attributes.s.attrs.nlink--;
         lv2->attributes.s.attrs.ctime = time(NULL);
         export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* No sync */);
+#ifdef ROZOFS_DIR_STATS
+        export_dir_adjust_child_size(plv2,lv2->attributes.s.attrs.size,0,ROZOFS_BSIZE_BYTES(e->bsize));
+#endif
         // Return a empty fid because no inode has been deleted
         //memset(fid, 0, sizeof (fid_t));
     }
@@ -4615,6 +4822,12 @@ out:
     {
       if (write_parent_attributes) 
       {
+	/*
+	** Update the directory statistics
+	*/
+#ifdef ROZOFS_DIR_STATS
+        export_dir_update_time(plv2);
+#endif
         /*
 	** write parent attributes on disk
 	*/
@@ -5548,7 +5761,16 @@ out:
     */
     if (plv2 != NULL) 
     {
-       if (write_parent_attributes) export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */);
+       if (write_parent_attributes) 
+       {
+	 /*
+	 ** Update the directory statistics
+	 */
+#ifdef ROZOFS_DIR_STATS
+          export_dir_update_time(plv2);
+#endif
+          export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */);
+       }
        export_dir_flush_root_idx_bitmap(e,pfid,plv2->dirent_root_idx_p);
     }
     
@@ -5701,6 +5923,13 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     plv2->attributes.s.attrs.children++;
     // update times of parent
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
+    /*
+    ** Update the directory statistics
+    */
+#ifdef ROZOFS_DIR_STATS
+    export_dir_update_time(plv2);
+#endif
+
     if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto error;
 
@@ -6030,9 +6259,6 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     int old_parent_fdp = -1;
     int new_parent_fdp = -1;
     int to_replace_fdp = -1;
-    rmfentry_disk_t trash_entry;
-    int ret;
-    rozofs_inode_t *fake_inode_p;    
     mdirent_fid_name_info_t fid_name_info;
     int root_dirent_mask_name= 0;
     int root_dirent_mask_newname =0;
@@ -6264,142 +6490,22 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
             memcpy(fid, fid_to_replace, sizeof (fid_t));
 
         } else {
-            // The entry (to replace) is an existing file
-            if (S_ISREG(lv2_to_replace->attributes.s.attrs.mode) || S_ISLNK(lv2_to_replace->attributes.s.attrs.mode)) {
-
-                // Get nlink
-                uint16_t nlink = lv2_to_replace->attributes.s.attrs.nlink;
-
-                // 2 cases:
-                // nlink > 1, it's a hardlink -> not delete the lv2 file
-                // nlink=1, it's not a harlink -> put the lv2 file on trash
-                // directory
-
-                // Not a hardlink
-                if (nlink == 1) {
-                    // Check if it's a regular file not empty 
-                    if (lv2_to_replace->attributes.s.attrs.size > 0 &&
-                            S_ISREG(lv2_to_replace->attributes.s.attrs.mode)) {
-	        	/*
-			** take care of the mover: the "mover" distribution must be pushed in trash when it exits
-			*/
-	        	rozofs_mover_unlink_mover_distribution(e,lv2_to_replace);
-
-                        // Compute hash value for this fid
-                        uint32_t hash = rozofs_storage_fid_slice(lv2_to_replace->attributes.s.attrs.fid);
-        		/*
-			** prepare the trash entry
-			*/
-        		memcpy(trash_entry.fid, lv2_to_replace->attributes.s.attrs.fid, sizeof (fid_t));
- 			/*
-			** compute the storage fid
-			*/
-			{
-			  rozofs_mover_children_t mover_idx;
-			  mover_idx.u32 = lv2_to_replace->attributes.s.attrs.children;
-			  rozofs_build_storage_fid(trash_entry.fid,mover_idx.fid_st_idx.primary_idx);
-			}
-        		trash_entry.cid = lv2_to_replace->attributes.s.attrs.cid;
-        		memcpy(trash_entry.initial_dist_set, lv2_to_replace->attributes.s.attrs.sids,
-                		sizeof (sid_t) * ROZOFS_SAFE_MAX);
-        		memcpy(trash_entry.current_dist_set, lv2_to_replace->attributes.s.attrs.sids,
-                		sizeof (sid_t) * ROZOFS_SAFE_MAX);
-			fake_inode_p =  (rozofs_inode_t *)pfid;   
-        		ret = exp_trash_entry_create(e->trk_tb_p,fake_inode_p->s.usr_id,&trash_entry); 
-			if (ret < 0)
-			{
-			   /*
-			   ** error while inserting entry in trash file
-			   */
-			   severe("error on trash insertion name %s error %s",name,strerror(errno)); 
-        		}
-        		/*
-			** delete the metadata associated with the file
-			*/
-			ret = exp_delete_file(e,lv2_to_replace);						
-        		/*
-			** Preparation of the rmfentry
-			*/
-			rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
-			
-                        /*
-                        ** Acquire lock on bucket trash list
-			*/
-                        if ((errno = pthread_rwlock_wrlock
-                                (&e->trash_buckets[hash].rm_lock)) != 0) {
-                            severe("pthread_rwlock_wrlock failed: %s",
-                                    strerror(errno));
-                            // Best effort
-                        }
-                        /*
-                        ** Check size of file 
-			*/
-                        if (lv2_to_replace->attributes.s.attrs.size
-                                >= RM_FILE_SIZE_TRESHOLD) {
-                            // Add to front of list
-                            list_push_front(&e->trash_buckets[hash].rmfiles,
-                                    &rmfe->list);
-                        } else {
-                            // Add to back of list
-                            list_push_back(&e->trash_buckets[hash].rmfiles,
-                                    &rmfe->list);
-                        }
-                        /*
-			** lock release
-			*/
-                        if ((errno = pthread_rwlock_unlock
-                                (&e->trash_buckets[hash].rm_lock)) != 0) {
-                            severe("pthread_rwlock_unlock failed: %s",
-                                    strerror(errno));
-                            // Best effort
-                        }
-
-                        // Update the nb. of blocks
-                        if (export_update_blocks(e,0,
-                                (((int64_t) lv2_to_replace->attributes.s.attrs.size
-                                + ROZOFS_BSIZE_BYTES(e->bsize) - 1) / ROZOFS_BSIZE_BYTES(e->bsize))) != 0) {
-                            severe("export_update_blocks failed: %s",
-                                    strerror(errno));
-                            // Best effort
-                        }
-			/*
-			** check the case of the exportd configured with thin provisioning
-			*/
-			if (e->thin)
-			{
-			  expthin_update_blocks(e, lv2_to_replace->attributes.s.attrs.children,-1); 			
-			}
-                    } else {
-                        /* 
-			** file empty: release the inode
-			*/			
-			if (exp_delete_file(e,lv2_to_replace) < 0)
-			{
-			   severe("error on inode release : %s",strerror(errno));
-			}
-                    }
-
-                    // Update export files
-                    if (export_update_files(e, -1) != 0)
-                        goto out;
-
-                    // Remove from the cache (will be closed and freed)
-                     if (export_attr_thread_check_context(lv2_to_replace)==0) lv2_cache_del(e->lv2_cache, fid_to_replace);
-		    lv2_to_replace = 0;
-
-                    // Return the fid of deleted directory
-                    memcpy(fid, fid_to_replace, sizeof (fid_t));
-                }
-
-                // It's a hardlink
-                if (nlink > 1) {
-                    lv2_to_replace->attributes.s.attrs.nlink--;
-                    export_lv2_write_attributes(e->trk_tb_p,lv2_to_replace,0/* No sync */);
-                    // Return a empty fid because no inode has been deleted
-                    memset(fid, 0, sizeof (fid_t));
-                }
-                lv2_new_parent->attributes.s.attrs.children--;
-            }
+	    /*
+	    **________________________________________________
+              THE ENTRY (TO REPLACE) IS AN EXISTING FILE
+	    **________________________________________________
+	    */
+            if (S_ISREG(lv2_to_replace->attributes.s.attrs.mode) || S_ISLNK(lv2_to_replace->attributes.s.attrs.mode)) 
+            {
+	       fid_t fake_fid;
+	       mattr_t fake_pattr;
+	       
+	       /*
+	       ** use the regular export_unlink function since it addresses the case of the trash and mover
+	       ** However, we that call, the parent attributes will be written twice (in async mode)
+	       */
+               export_unlink(e,npfid, newname,fake_fid,&fake_pattr);	    
+	    }
         }
     } else {
         /*
@@ -6453,6 +6559,20 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
         lv2_new_parent->attributes.s.attrs.mtime = lv2_new_parent->attributes.s.attrs.ctime = time(NULL);
         lv2_old_parent->attributes.s.attrs.mtime = lv2_old_parent->attributes.s.attrs.ctime = time(NULL);
 
+#ifdef ROZOFS_DIR_STATS
+	 /*
+	 ** Update the directory statistics: old & new parent
+	 */
+           if (S_ISREG(lv2_to_rename->attributes.s.attrs.mode))
+	   {
+	     export_dir_adjust_child_size(lv2_new_parent,lv2_to_rename->attributes.s.attrs.size,1,ROZOFS_BSIZE_BYTES(e->bsize));
+	     export_dir_adjust_child_size(lv2_old_parent,lv2_to_rename->attributes.s.attrs.size,0,ROZOFS_BSIZE_BYTES(e->bsize));
+	   
+	   }
+           export_dir_update_time(lv2_new_parent);
+           export_dir_update_time(lv2_old_parent);
+#endif
+
         if (export_lv2_write_attributes(e->trk_tb_p,lv2_new_parent,0/* No sync */) != 0)
             goto out;
 
@@ -6472,6 +6592,12 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
               lv2_new_parent->attributes.s.attrs.nlink++;
           }              
 	}
+#ifdef ROZOFS_DIR_STATS
+	 /*
+	 ** Update the directory statistics:  new parent
+	 */
+         export_dir_update_time(lv2_new_parent);
+#endif
         lv2_new_parent->attributes.s.attrs.mtime = lv2_new_parent->attributes.s.attrs.ctime = time(NULL);
 
         if (export_lv2_write_attributes(e->trk_tb_p,lv2_new_parent,0/* No sync */) != 0)
@@ -6575,25 +6701,6 @@ out:
 
     return length;
 }
-/*
-**______________________________________________________________________________
-*/
-int export_read_block(export_t *e, fid_t fid, bid_t bid, uint32_t n, dist_t * d) {
-    int status = 0;
-    lv2_entry_t *lv2 = NULL;
-
-    START_PROFILING(export_read_block);
-
-    // Get the lv2 entry
-    if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid)))
-        goto out;
-
-    status = mreg_read_dist(&lv2->container.mreg, bid, n, d);
-out:
-    STOP_PROFILING(export_read_block);
-
-    return status;
-}
 
 /* not used anymore
 int64_t export_write(export_t *e, fid_t fid, uint64_t off, uint32_t len) {
@@ -6650,13 +6757,19 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     lv2_entry_t *lv2 = NULL;
     int          sync = 0;
    lv2_entry_t *plv2 = NULL;
-   
+    uint16_t share = 0;
+       
     START_PROFILING(export_write_block);
 
     // Get the lv2 entry
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid)))
         goto out;
-
+#ifdef ROZOFS_DIR_STATS
+    /*
+    ** attempt to get the parent attribute to address the case of the asynchronous fast replication
+    */
+    plv2 = export_dir_get_parent(e,lv2);
+#endif
     /*
     ** check the case of the file mover
     */
@@ -6683,13 +6796,24 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	/*
 	** Get the parent i-node
 	*/
-	plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, lv2->attributes.s.pfid);        
+	
+	if (plv2 == NULL)
+	{
+	   plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, lv2->attributes.s.pfid); 
+	}
+	if (plv2!=NULL) share= plv2->attributes.s.attrs.cid;
 	/*
 	** update user and group quota
 	*/
 	rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,
-	                       (off + len - lv2->attributes.s.attrs.size),ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
+	                       (off + len - lv2->attributes.s.attrs.size),ROZOFS_QT_INC,share);
 
+#ifdef ROZOFS_DIR_STATS
+	  /*
+	  ** adjust the directory statistics
+	  */	  
+	  if (plv2) export_dir_adjust_child_size(plv2,(nbnew-nbold)*ROZOFS_BSIZE_BYTES(e->bsize),1,ROZOFS_BSIZE_BYTES(e->bsize));
+#endif
         if (export_update_blocks(e, nbnew, nbold) != 0)
             goto out;
 
@@ -6727,6 +6851,15 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	 }
       }
     }
+#ifdef ROZOFS_DIR_STATS
+    /*
+    ** adjust the directory statistics
+    */
+    if(plv2) 
+    {
+      export_dir_async_write(e,plv2);
+    }
+#endif
     /*
     ** write inode attributes on disk
     */
@@ -7097,6 +7230,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   if (S_ISDIR(lv2->attributes.s.attrs.mode)) {
     rozofs_dir0_sids_t byte_sid0;
     int backup_val;
+    ext_dir_mattr_t *ext_dir_mattr_p = (ext_dir_mattr_t*)lv2->attributes.s.attrs.sids;
     byte_sid0.byte = lv2->attributes.s.attrs.sids[0];
     backup_val = byte_sid0.s.backup;
     
@@ -7148,6 +7282,12 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
     DISPLAY_ATTR_ULONG("SIZE",lv2->attributes.s.attrs.size);
     DISPLAY_ATTR_ULONG("DELETED",lv2->attributes.s.hpc_reserved);
+    /*
+    ** display the directory statistics (update time & nb bytes)
+    */
+    ctime_r((const time_t *)&ext_dir_mattr_p->s.update_time,bufall);
+    DISPLAY_ATTR_TXT_NOCR("UTIME ", bufall);    
+    DISPLAY_ATTR_ULONG("TSIZE",ext_dir_mattr_p->s.nb_bytes);
    return (p-value);  
   }
 
@@ -8375,7 +8515,8 @@ int export_poll_file_lock(export_t *e, ep_lock_t * lock_requested, ep_client_inf
  */
 int export_setxattr(export_t *e, fid_t fid, char *name, const void *value, size_t size, int flags, epgw_setxattr_symlink_t *symlink) {
     int status = -1;
-    lv2_entry_t *lv2 = 0;
+    lv2_entry_t *lv2 = 0;    
+    int need_parent_update = 0;
 
     START_PROFILING(export_setxattr);
 
@@ -8410,6 +8551,7 @@ int export_setxattr(export_t *e, fid_t fid, char *name, const void *value, size_
 	 /*
 	 ** write child attributes on disk
 	 */
+	 need_parent_update = 1;
 	 export_attr_thread_submit(lv2,e->trk_tb_p, 0 /* No sync */);
        }
        if (ret == 0)
@@ -8432,10 +8574,23 @@ int export_setxattr(export_t *e, fid_t fid, char *name, const void *value, size_
           goto out;
       }
     }
-
+    need_parent_update = 1;
     status = 0;
 
 out:
+    if (need_parent_update)
+    {
+#ifdef ROZOFS_DIR_STATS
+      /*
+      ** Update the directory statistics
+      */
+      lv2_entry_t *plv2  = export_dir_get_parent(e,lv2);
+      if (plv2 != NULL)
+      {
+         export_dir_async_write(e,plv2);
+      }
+#endif
+    }    
     STOP_PROFILING(export_setxattr);
 
     return status;
@@ -8471,6 +8626,16 @@ int export_removexattr(export_t *e, fid_t fid, char *name) {
           goto out;
       }
     }
+#ifdef ROZOFS_DIR_STATS
+      /*
+      ** Update the directory statistics
+      */
+      lv2_entry_t *plv2  = export_dir_get_parent(e,lv2);
+      if (plv2 != NULL)
+      {
+         export_dir_async_write(e,plv2);
+      }
+#endif
 
     status = 0;
 out:

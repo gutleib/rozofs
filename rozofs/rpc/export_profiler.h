@@ -111,6 +111,9 @@ struct export_one_profiler_t {
   uint64_t quota_get[2];
   uint64_t quota_set[2];
   uint64_t quota_setinfo[2];
+  uint64_t dir_wr_on_time[2];  /**< dir write upon write_block/set_attr...  */ 
+  uint64_t dir_wr_on_check[2];  /**< dir write upon lookup or getattr        */
+  uint64_t dir_wr_on_lru[2];  /**< dir write upon lru remove        */
 };
 typedef struct export_one_profiler_t export_one_profiler_t;
 

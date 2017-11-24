@@ -1110,4 +1110,19 @@ static inline int export_metadata_device_full(export_t *e, uint64_t microsec) {
  */
 uint32_t lv2_hash(void *key);
 int lv2_cmp(void *k1, void *k2);
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+
+ check for Re-write the directory attributes if it is time to do so when the entry is removed from lv2 cache
+ 
+ @param dir: pointer to the directory i-node (cache structure)
+
+
+*/
+void export_dir_check_sync_write_on_lru(lv2_entry_t *dir);
+
 #endif

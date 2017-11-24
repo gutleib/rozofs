@@ -110,6 +110,10 @@ typedef struct _common_config_t {
   int32_t     thin_lv1_hash_tb_size;
   // Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning
   int32_t     expthin_guard_delay_sec;
+  // Guard delay associated with directory re-write used for tracking children changes within a directory 
+  int32_t     expdir_guard_delay_sec;
+  // Maximum number of entries that the export level 2 cache can contain (unit is KB) 
+  int32_t     level2_cache_max_entries_kb;
 
   /*
   ** client scope configuration parameters

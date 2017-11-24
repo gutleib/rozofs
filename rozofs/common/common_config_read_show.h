@@ -249,6 +249,18 @@ char * show_common_config_module_export(char * pChar) {
   pChar += rozofs_string_append(pChar,"// Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning\n");
   COMMON_CONFIG_SHOW_INT_OPT(expthin_guard_delay_sec,10,"1:600");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(expdir_guard_delay_sec,10);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Guard delay associated with directory re-write used for tracking children changes within a directory \n");
+  COMMON_CONFIG_SHOW_INT_OPT(expdir_guard_delay_sec,10,"1:7200");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(level2_cache_max_entries_kb,512);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Maximum number of entries that the export level 2 cache can contain (unit is KB) \n");
+  COMMON_CONFIG_SHOW_INT_OPT(level2_cache_max_entries_kb,512,"1:4096");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -658,6 +670,10 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(thin_lv1_hash_tb_size,10,6,128);
   // Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning 
   COMMON_CONFIG_READ_INT_MINMAX(expthin_guard_delay_sec,10,1,600);
+  // Guard delay associated with directory re-write used for tracking children changes within a directory  
+  COMMON_CONFIG_READ_INT_MINMAX(expdir_guard_delay_sec,10,1,7200);
+  // Maximum number of entries that the export level 2 cache can contain (unit is KB)  
+  COMMON_CONFIG_READ_INT_MINMAX(level2_cache_max_entries_kb,512,1,4096);
   /*
   ** client scope configuration parameters
   */

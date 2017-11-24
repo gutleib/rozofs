@@ -215,6 +215,8 @@ Number of files that the exportd can submit to storages to get the number of blo
 Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart)
 .SS expthin_guard_delay_sec
 Guard delay en seconds between two file scanning of a file that belongs to an export configured for thin provisioning. (default:10; maximum 600)
+.SS level2_cache_max_entries_kb
+Maximum number of i-node entries that the export level 2 cache can contain (unit is K). (default 512K)
 .SH EXAMPLE
 .PP
 .nf
@@ -222,7 +224,7 @@ Guard delay en seconds between two file scanning of a file that belongs to an ex
 # sample RozoFS common configuration file
 
 #
-# Collocalize when possible
+# Colocated when possible
 #
 numa_aware           = True;
 

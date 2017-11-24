@@ -181,3 +181,8 @@ INT	export 	thin_scan_file_per_run		1000
 INT	export 	thin_lv1_hash_tb_size		10 6:128
 // Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning
 INT   	export expthin_guard_delay_sec		10  1:600
+// Guard delay associated with directory re-write used for tracking children changes within a directory 
+INT   	export expdir_guard_delay_sec		10  1:7200
+// Maximum number of entries that the export level 2 cache can contain (unit is KB) 
+INT   	export level2_cache_max_entries_kb		512  1:4096
+
