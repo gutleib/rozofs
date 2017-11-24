@@ -1102,6 +1102,13 @@ static void *monitoring_thread_slave(void *v) {
     if (ts<10) {
       ts++;
     }
+    /*
+    ** check if the limit of the level2 cache has been change
+    */
+    if (cache.max != common_config.level2_cache_max_entries_kb*1024)
+    {
+      cache.max = common_config.level2_cache_max_entries_kb*1024;      
+    }
     
     do_monitor_slave();      
   }
@@ -1884,7 +1891,11 @@ static void on_stop() {
     ** flush the dirent write back cache on disk
     */
     dirent_wbcache_flush_on_stop();
-    
+    /*
+    ** release the level2 cache: it might be possible that some dirty directories have
+    ** to be written back on disk
+    */
+    lv2_cache_release(&cache);
     
     exportd_release();
     closelog();

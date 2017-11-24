@@ -189,3 +189,7 @@ INT     storcli min_rmda_size_KB                   64
 INT     storcli mojette_thread_count                4  1:4
 // number of Fuse threads
 INT     client reply_thread_count                2  1:4
+// Guard delay associated with directory re-write used for tracking children changes within a directory 
+INT   	export expdir_guard_delay_sec		10  1:7200
+// Maximum number of entries that the export level 2 cache can contain (unit is KB) 
+INT   	export level2_cache_max_entries_kb		512  1:4096

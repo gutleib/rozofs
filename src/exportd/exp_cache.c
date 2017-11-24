@@ -107,6 +107,16 @@ int lv2_cmp(void *k1, void *k2) {
 static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
 
   file_lock_remove_fid_locks(&entry->file_lock);
+#ifndef LIBROZO_FLAG
+  /*
+  ** check if the entry to remove is a directory, in such a case we need to check
+  ** if the entry is dirty and needs to be re-write on disk
+  */
+  if (S_ISDIR(entry->attributes.s.attrs.mode))
+  {
+     export_dir_check_sync_write_on_lru(entry);  
+  }
+#endif  
   mattr_release(&entry->attributes.s.attrs);
   /*
   ** check the presence of the extended attribute block and free it

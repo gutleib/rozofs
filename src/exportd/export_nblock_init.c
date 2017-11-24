@@ -236,6 +236,11 @@ char * show_profiler_one(char * pChar, uint32_t eid) {
     SHOW_PROFILER_PROBE(quota_set);
     SHOW_PROFILER_PROBE(quota_get);
     SHOW_PROFILER_PROBE(quota_setinfo);
+    if (short_display == 0) {
+      SHOW_PROFILER_PROBE(dir_wr_on_time);
+      SHOW_PROFILER_PROBE(dir_wr_on_check);
+      SHOW_PROFILER_PROBE(dir_wr_on_lru);
+    }  
     
     return pChar;
 }
