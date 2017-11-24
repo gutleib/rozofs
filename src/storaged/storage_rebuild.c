@@ -71,6 +71,7 @@
 #include "storaged_nblock_init.h"
 #include "rbs_sclient.h"
 #include "rbs_eclient.h"
+#include "storage_header.h"
 
 char    * rbs_status_root = NULL;
 
@@ -2271,8 +2272,6 @@ static int rbs_build_device_missing_list_one_cluster(int   monitorIdx,
   int            device_it;
   DIR           *dir1;
   struct dirent *file;
-  int            fd; 
-  size_t         nb_read;
   rozofs_stor_bins_file_hdr_t file_hdr; 
   rozofs_rebuild_entry_file_t file_entry;
   int            idx;
@@ -2336,6 +2335,8 @@ static int rbs_build_device_missing_list_one_cluster(int   monitorIdx,
       // Loop on header files in slice directory
       while ((file = readdir(dir1)) != NULL) {
         int i;
+        char * error;
+        fid_t   fid;
 
 	if (file->d_name[0] == '.') continue;
 
@@ -2344,22 +2345,19 @@ static int rbs_build_device_missing_list_one_cluster(int   monitorIdx,
 	pChar += rozofs_string_append(pChar,slicepath);
 	*pChar++ = '/';
 	pChar += rozofs_string_append(pChar,file->d_name);
+        rozofs_uuid_parse(file->d_name, fid);
 
-	fd = open(filepath, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
-	if (fd < 0) continue;
-
-        nb_read = pread(fd, &file_hdr, sizeof(file_hdr), 0);
-	close(fd);	    
-
-        // What to do with such an error ?
-	if (nb_read != sizeof(file_hdr)) continue;
+        error = rozofs_st_header_read(filepath, cid, sid, fid, &file_hdr);         
+        if (error != NULL) {
+           continue;
+        }
 
 	// When not in a relocation case, rewrite the file header on this device if it should
 	if (!parameter.relocate) {
           for (i=0; i < storage_to_rebuild->mapper_redundancy; i++) {
 	        int dev;
 
-            dev = storage_mapper_device(file_hdr.v0.fid,i,storage_to_rebuild->mapper_modulo);
+            dev = storage_mapper_device(file_hdr.fid,i,storage_to_rebuild->mapper_modulo);
 
  	    if (dev == device_to_rebuild) {
 	      // Let's re-write the header file  	      
@@ -2375,34 +2373,38 @@ static int rbs_build_device_missing_list_one_cluster(int   monitorIdx,
 
         // Check whether this file has some chunk of data on the device to rebuild
 	for (chunk=0; chunk<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk++) {
+            int dev;
+            dev = rozofs_st_header_get_chunk(&file_hdr,chunk);
 
-	    if (file_hdr.v0.device[chunk] == ROZOFS_EOF_CHUNK)  break;
+	    if (dev == ROZOFS_EOF_CHUNK)  break;
 
-            if (file_hdr.v0.device[chunk] != device_to_rebuild) continue;
+            if (dev != device_to_rebuild) continue;
 
             /*
 	    ** This file has a chunk on the device to rebuild
 	    ** Check whether this FID is already set in the list
 	    */
-	    if (rb_hash_table_search_chunk(file_hdr.v0.fid,chunk) == 0) {
-	      rb_hash_table_insert_chunk(file_hdr.v0.fid,chunk);	
+	    if (rb_hash_table_search_chunk(file_hdr.fid,chunk) == 0) {
+	      rb_hash_table_insert_chunk(file_hdr.fid,chunk);	
 	    }
 	    else {
 	      continue;
 	    }	      
 
-	    entry_size = rbs_entry_size_from_layout(file_hdr.v0.layout);
+	    entry_size = rbs_entry_size_from_layout(file_hdr.layout);
 
-	    memcpy(file_entry.fid,file_hdr.v0.fid, sizeof (fid_t));
-	    file_entry.bsize       = file_hdr.v0.bsize;
+	    memcpy(file_entry.fid,file_hdr.fid, sizeof (fid_t));
+	    file_entry.bsize       = file_hdr.bsize;
             file_entry.todo        = 1;     
 	    file_entry.relocate    = parameter.relocate;
-	    file_entry.block_start = chunk * ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.v0.bsize);  
-	    file_entry.block_end   = file_entry.block_start + ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.v0.bsize) -1;  
+	    file_entry.block_start = chunk * ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.bsize);  
+	    file_entry.block_end   = file_entry.block_start + ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.bsize) -1;  
             file_entry.error       = rozofs_rbs_error_none;
-	    file_entry.layout      = file_hdr.v0.layout;
-
-            memcpy(file_entry.dist_set_current, file_hdr.v0.dist_set_current, sizeof (sid_t) * ROZOFS_SAFE_MAX);	    
+	    file_entry.layout      = file_hdr.layout;
+            
+            int size2copy = sizeof(file_hdr.distrib);
+            memcpy(file_entry.dist_set_current, file_hdr.distrib, size2copy);	    
+            memset(&file_entry.dist_set_current[size2copy], 0,  sizeof(file_entry.dist_set_current)-size2copy);	    
 
             ret = write(cfgfd[current_file_index],&file_entry,entry_size); 
 	    if (ret != entry_size) {

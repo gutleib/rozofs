@@ -38,6 +38,7 @@
 #include <rozofs/rpc/sproto.h>
 
 #include "storio_device_mapping.h"
+#include "storage_header.h"
 
 
 /*
@@ -305,26 +306,6 @@ static inline storage_t *storaged_next(storage_t * st) {
     if (st < storaged_storages + storaged_nrstorages) return st;
     return NULL;
 }
-/**
- *  Header structure for one file bins
- */
-
-
-typedef struct rozofs_stor_bins_file_hdr {
-  struct {
-    uint8_t version; ///<  version of rozofs. (not used yet)
-    uint8_t layout; ///< layout used for this file.
-    uint8_t bsize;  ///< Block size as defined in enum ROZOFS_BSIZE_E
-    fid_t   fid;
-    sid_t   dist_set_current[ROZOFS_SAFE_MAX]; ///< currents sids of storage nodes target for this file.
-    uint8_t device[ROZOFS_STORAGE_MAX_CHUNK_PER_FILE]; // Device number that hold the chunk of projection
-    uint32_t crc32; ///< CRC32 . Set to 0 by default when no CRC32 is computed
-  } v0;
-  struct {  
-    cid_t   cid;
-    sid_t   sid;
-  } v1;
-} rozofs_stor_bins_file_hdr_t;
 
 
 
@@ -1495,6 +1476,18 @@ int rozofs_check_mountpath(const char * mntpoint);
 **_____________________________________________________________________________
 */
 int storage_size_file(storage_t * st, fid_t fid, uint8_t spare, uint32_t * nb_chunk, uint64_t * size_B, uint64_t * allocated_KB);
-
+/*________________________________________________________________________
+**  Read a header file
+**
+**  @param path        File path
+**  @param cid         cluster id
+**  @param sid         logical storage identifier
+**  @param fid         FID
+**  @param hdr         Where to store the read header
+**
+**  @retval An error string or NULL on success
+**________________________________________________________________________
+*/
+char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozofs_stor_bins_file_hdr_t * hdr) ;
 #endif
 

@@ -370,18 +370,23 @@ uint32_t crc32c(uint32_t crc, const void *buf, size_t len)
     @param initial_crc: Value to intializae the CRC to    
 
 */
-void storio_gen_header_crc32(rozofs_stor_bins_file_hdr_t * hdr, uint32_t initial_crc)
+void storio_gen_header_crc32(void * hdr, uint32_t initial_crc)
 {
-   uint32_t crc;
+   uint32_t   crc;
+   uint32_t   crc_size;
+   uint32_t * pCrc;
  
-   hdr->v0.crc32 = 0;
-   
    if (crc32c_generate_enable == 0) return;
 
+   crc_size = rozofs_st_get_header_file_crc(hdr, &pCrc);
+   if (crc_size < 0) return;
+   
+  *pCrc = 0;    
+
    crc = initial_crc;
-   crc = crc32c(crc,(char *) hdr, sizeof(rozofs_stor_bins_file_hdr_t));
+   crc = crc32c(crc,(char *) hdr, crc_size);
    if (crc == 0) crc = 1;
-   hdr->v0.crc32 = crc;
+   *pCrc = crc;
 }
 /*
 **__________________________________________________________________
@@ -395,11 +400,12 @@ void storio_gen_header_crc32(rozofs_stor_bins_file_hdr_t * hdr, uint32_t initial
     
     @retval 0 on success -1 on error
 */
-int storio_check_header_crc32(rozofs_stor_bins_file_hdr_t * hdr, uint64_t *crc_error_cnt_p, uint32_t initial_crc)
+int storio_check_header_crc32(void * hdr, uint32_t initial_crc)
 {
    uint32_t crc;
-   uint32_t cur_crc = hdr->v0.crc32;
+   uint32_t cur_crc;
    uint32_t crc_size;
+  uint32_t * pCrc;
 
 #if CRC32_PERFORMANCE_CHECK
    uint64_t encode_cycles_start;
@@ -408,48 +414,38 @@ int storio_check_header_crc32(rozofs_stor_bins_file_hdr_t * hdr, uint64_t *crc_e
 
    if (crc32c_check_enable == 0) return 0;
 
-   /*
-   ** check if crc has been generated on write
-   */
-   if (cur_crc == 0) return 0;
+  crc = initial_crc;
+  crc_size = rozofs_st_get_header_file_crc(hdr, &pCrc);
+  if (crc_size < 0) return -1;   
+  if (*pCrc == 0)   return 0;
 
 #if CRC32_PERFORMANCE_CHECK
    encode_cycles_start = rdtsc();
 #endif   
-
-   /*
-   **  compute the crc
-   */
-   hdr->v0.crc32 = 0;
-   crc = initial_crc;
-   if (hdr->v0.version == 0) {
-     crc_size = sizeof(hdr->v0);
-   }
-   else {
-     crc_size = sizeof(rozofs_stor_bins_file_hdr_t);
-   }
-   crc = crc32c(crc,(char *) hdr, crc_size);
-   if (crc==0) crc = 1;      
-
-
-
+  
+  cur_crc = *pCrc;
+  *pCrc   = 0;
+   
+  crc = crc32c(crc,(char *) hdr, crc_size);
+  if (crc==0) crc = 1;   
+   
 #if CRC32_PERFORMANCE_CHECK
    encode_cycles_stop = rdtsc();
         severe("FDL(%d) encode cycles %llu length %d count %d\n",crc32c_hw_supported,
 	       (unsigned long long int)(encode_cycles_stop - encode_cycles_start),prj_size,nb_proj);
 #endif
 
-   /*
-   ** control with the one stored in the header
-   */
-   hdr->v0.crc32 = cur_crc; // Restore CRC32 in header
-   if (cur_crc != crc) {
-     __atomic_fetch_add(crc_error_cnt_p,1,__ATOMIC_SEQ_CST);   
-     __atomic_fetch_add(&storio_crc_error,1,__ATOMIC_SEQ_CST);
-     return -1;
-   }
-   return 0;  
+  /*
+  ** control with the one stored in the header
+  */
+  *pCrc = cur_crc; // Restore CRC32 in header
+  if (cur_crc != crc) {
+    __atomic_fetch_add(&storio_crc_error,1,__ATOMIC_SEQ_CST);
+    return -1;
+  }
+  return 0;  
 }
+
 /*
 **__________________________________________________________________
 */
