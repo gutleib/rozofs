@@ -164,7 +164,7 @@ void rozofs_storcli_transform_update_headers(rozofs_storcli_projection_ctx_t *pr
 /**
 *
 */
-inline int rozofs_storcli_transform_inverse_check_timestamp_tb(rozofs_storcli_projection_ctx_t *prj_ctx_p,  
+static inline int rozofs_storcli_transform_inverse_check_timestamp_tb(rozofs_storcli_projection_ctx_t *prj_ctx_p,  
                                        uint8_t layout,
 				       uint8_t  bsize,
                                        uint32_t block_idx, 
@@ -339,7 +339,7 @@ inline int rozofs_storcli_transform_inverse_check_timestamp_tb(rozofs_storcli_pr
 /**
 *
 */
-inline int rozofs_storcli_transform_inverse_check(rozofs_storcli_projection_ctx_t *prj_ctx_p,  
+static inline int rozofs_storcli_transform_inverse_check(rozofs_storcli_projection_ctx_t *prj_ctx_p,  
                                        uint8_t layout,
 				       uint8_t bsize,
                                        uint32_t block_idx, 
