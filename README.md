@@ -1,4 +1,4 @@
-##ABOUT ROZOFS
+## ABOUT ROZOFS
 
 RozoFS is a scale-out NAS file system. RozoFS aims to provide an open source high performance and high availability scale out storage software appliance  for  intensive disk IO data center scenario. It comes as a free software, licensed under the GNU GPL v2. RozoFS provides an easy way to scale to petabytes storage but using erasure coding it was designed to provide very high availability levels with optimized raw capacity usage on heterogenous commodity hardwares.
 
@@ -6,7 +6,7 @@ RozoFS provide a native open source POSIX file system, build on top of a usual o
 
 **Note**: [xxx] means optional, \<xxx\> means required.
 
-##BUILDING AND INSTALLING FROM SOURCES
+## BUILDING AND INSTALLING FROM SOURCES
 
 ### Prerequisites
 
@@ -29,7 +29,7 @@ To build the RozoFS source code, it is necessary to install several libraries an
 -   `swig`
 -   `libnuma-dev`
 
-###Build
+### Build
 Using default values will compile RozoFS in Release mode and install it on `/usr/local`.
 ```
 # mkdir build
@@ -45,15 +45,15 @@ If you use default values, make will place the executables in `/usr/local/bin`, 
 ```
 # make edit_cache
 ```
-###Uninstall
+### Uninstall
 
 ```
 # make uninstall
 ```
 
-##SETTING UP ROZOFS
+## SETTING UP ROZOFS
 
-###Prerequisites
+### Prerequisites
 
 #### exportd prerequisites:
 
@@ -75,7 +75,7 @@ If you use default values, make will place the executables in `/usr/local/bin`, 
 -   `libfuse` (>= 2.9.0)
 -   `fuse-utils`
 
-###Start
+### Start
 
 1. install exportd on one host
 2. install storaged on multiple hosts
@@ -85,13 +85,13 @@ If you use default values, make will place the executables in `/usr/local/bin`, 
 6. `` # [sudo] storaged``
 7. wherever you want: `` # [sudo] rozofsmount -H [EXPORT_HOST] -E [EXPORT_PATH] -P [PASSWD] [MOUNTPOINT] ``
 
-###Stop
+### Stop
 1. ``# [sudo] umount [MOUNTPOINT]``
 2. ``# [sudo] killall exportd``
 3. ``# [sudo] killall storaged``
 
-##MORE INFO
+## MORE INFO
 See https://github.com/rozofs/rozofs/wiki.
 
-##BUGS
+## BUGS
 See https://github.com/rozofs/rozofs/issues.
