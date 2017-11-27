@@ -21,7 +21,7 @@ include_directories(${PTHREAD_INCLUDE_DIR})
 link_directories(${CMAKE_BINARY_DIR}/rozofs)
 
 
-if(INFINIBAND_FOUND AND RDMA_FOUND)
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   add_definitions(-DROZOFS_RDMA)
 endif()
 
@@ -139,7 +139,7 @@ add_executable(storio
     storio_crc32.h
 )
 
-if(INFINIBAND_FOUND AND RDMA_FOUND)
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   message(STATUS "Compiling storio with RDMA support")
   set(storio_rmda_sources
   # RDMA section
@@ -149,10 +149,10 @@ if(INFINIBAND_FOUND AND RDMA_FOUND)
   add_library(storio_rmda STATIC ${storio_rmda_sources})
   set_target_properties(storio_rmda PROPERTIES COMPILE_FLAGS "-fPIC")
   target_link_libraries(storio storio_rmda rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RDMA_LIBRARY} ${INFINIBAND_LIBRARY})
-else(INFINIBAND_FOUND AND RDMA_FOUND)
+else(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   message(STATUS "Compiling storio without RDMA support")
   target_link_libraries(storio rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
-endif(INFINIBAND_FOUND AND RDMA_FOUND)
+endif(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
 
 add_executable(rozodump
     rozodump.c
