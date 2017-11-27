@@ -87,6 +87,13 @@ int disk_tb_load_bitmap_file(disk_table_header_t *ctx_p)
      return -1;
    }
    bitmap_p = (disk_tb_bitmap_file_t*)ctx_p->file_btmap_p;
+
+   /*
+   ** Clear bitmap before reading from disk
+   */
+   memset(bitmap_p->bitmap,0,ctx_p->bitmap_size);
+   bitmap_p->dirty = 0;
+
    /*
    ** Clear bitmap before reading from disk
    */

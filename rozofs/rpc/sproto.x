@@ -376,6 +376,8 @@ program STORAGE_PROGRAM {
 	
 	sp_write_ret_t
         SP_WRITE_REPAIR2(sp_write_repair2_arg_t)        = 10;
+	sp_write_ret_t
+        SP_WRITE_REPAIR3(sp_write_repair3_arg_t)        = 11;
 
         sp_rdma_setup_ret_t
         SP_RDMA_SETUP(sp_rdma_setup_arg_t)  = 11;		

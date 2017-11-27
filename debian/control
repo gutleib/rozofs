@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Rozo Systems S.A.S <devel@rozofs.com>
 Build-Depends: 	debhelper (>= 9),
 				,dh-python
+				,dh-systemd
 				,cmake
 				,libfuse-dev (>= 2.9.0)
 				,libattr1-dev
@@ -98,7 +99,10 @@ Description: RozoFS filesystem (geo-replication software)
 
 Package: rozofs-rozodiag
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libreadline6, ${python:Depends}
+Depends: ${shlibs:Depends}
+		,${misc:Depends}
+		, libreadline6 | libreadline7
+		, ${python:Depends}
 Description: RozoFS filesystem (diagnostic tools)
  rozodiag allows deep audit of RozoFS filesystems.
  .

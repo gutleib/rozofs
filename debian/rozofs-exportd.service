@@ -9,7 +9,7 @@ Requires=rpcbind.service
 Type=forking
 PIDFile=/var/run/exportd.pid
 ExecStart=/usr/bin/exportd
-ExecReload=/usr/bin/kill -HUP $MAINPID
+ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]
 WantedBy=multi-user.target
