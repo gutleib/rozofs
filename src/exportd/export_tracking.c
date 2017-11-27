@@ -6506,6 +6506,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	       */
                export_unlink(e,npfid, newname,fake_fid,&fake_pattr);	    
 	    }
+            lv2_to_replace = 0;
         }
     } else {
         /*
