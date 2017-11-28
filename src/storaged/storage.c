@@ -2981,7 +2981,6 @@ void storage_rm_best_effort(storage_t * st, fid_t fid, uint8_t spare) {
   int  dev;
   uint32_t storage_slice;
   DIR           * dp = NULL;
-  struct dirent   ep;
   struct dirent * pep;  
   int             dirfd;
     
@@ -3002,34 +3001,34 @@ void storage_rm_best_effort(storage_t * st, fid_t fid, uint8_t spare) {
   for (dev=0; dev < st->mapper_redundancy ; dev++) {
 
     /*
-	** Get the slice path
-	*/
+    ** Get the slice path
+    */
     storage_build_slice_path(path, st->root, dev, spare, storage_slice);
 
-	dirfd = open(path,O_RDONLY);
+    dirfd = open(path,O_RDONLY);
     if (dirfd< 0) {
-	  warning("open(%s) %s",path, strerror(errno));
-	  continue; 
-	}
+      warning("open(%s) %s",path, strerror(errno));
+      continue; 
+    }
 		
-	dp = opendir(path);
-	if (dp) {
+    dp = opendir(path);
+    if (dp) {
 	
-	  // Readdir the slice content
-	  while (readdir_r(dp,&ep,&pep) == 0) {
+      // Readdir the slice content
+      while ((pep = readdir(dp)) != NULL) {
 
-    	// end of directory
-    	if (pep == NULL) break;
+        // end of directory
+        if (pep == NULL) break;
 
-    	// Check whether this is the expected file
-    	if (strncmp(pep->d_name,FID_string,36) != 0) continue;
+        // Check whether this is the expected file
+        if (strncmp(pep->d_name,FID_string,36) != 0) continue;
             
         unlinkat(dirfd,pep->d_name,0);
-		info("best effort %s%s", path, pep->d_name);
-	  }
-	}
-	closedir(dp);
-	close(dirfd);
+        info("best effort %s%s", path, pep->d_name);
+      }
+    }
+    closedir(dp);
+    close(dirfd);
   }    
 }
 /*_____________________________________________________________________________
@@ -3451,7 +3450,6 @@ void storage_enumerated_device_free(storage_enumerated_device_t * pDev) {
 int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDev) {
   DIR           * dp = NULL;
   int             ret;
-  struct dirent   ep;
   struct dirent * pep; 
   struct stat     buf;
   char            path[FILENAME_MAX];  
@@ -3537,7 +3535,7 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
   /*
   ** Look for some RozoFS mark file
   */
-  while (readdir_r(dp,&ep,&pep) == 0) {
+  while ((pep = readdir(dp)) != NULL) {
 
     /*
     ** end of directory

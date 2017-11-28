@@ -838,7 +838,7 @@ typedef struct _storcli_resize_rsp_t {
 } storcli_resize_rsp_t;
 
 
-inline int rozofs_storcli_get_file_size(rozofs_storcli_projection_ctx_t *prj_ctx_p,  
+static inline int rozofs_storcli_get_file_size(rozofs_storcli_projection_ctx_t *prj_ctx_p,  
                                        uint8_t    layout,
 				       uint32_t * nb_blocks_ret,
 				       uint32_t * last_block_size_ret)

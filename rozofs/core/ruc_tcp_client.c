@@ -133,7 +133,7 @@ ruc_tcp_client_t *ruc_tcp_clientgetObjRef(uint32_t ObjRef)
 uint32_t  ruc_tcp_client_rcvReadyCBK(void *opaque,int socketId)
 {
    ruc_tcp_client_t *pObj;
-   uint64_t  tcpClientCnxRef = (uint64_t) tcpClientCnxRef;
+   uint64_t  tcpClientCnxRef = (uint64_t)opaque;
    pObj = ruc_tcp_clientgetObjRef((uint32_t)tcpClientCnxRef);
    if (pObj == (ruc_tcp_client_t*)NULL)
    {

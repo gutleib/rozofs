@@ -3685,6 +3685,18 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     */
     fake_inode = (rozofs_inode_t*)ext_attrs.s.attrs.fid;
     p = e->trk_tb_p->tracking_table[fake_inode->s.key];
+#ifdef ROZOFS_DIR_STATS
+{
+   ext_dir_mattr_t *stats_attr_p;
+
+   stats_attr_p = (ext_dir_mattr_t *)&ext_attrs.s.attrs.sids[0];
+   /*
+   ** update the time only if it is not in the configured period
+   */
+   stats_attr_p->s.version = ROZOFS_DIR_VERSION_1;
+   stats_attr_p->s.update_time = ext_attrs.s.cr8time+common_config.expdir_guard_delay_sec;
+}
+#endif
     ret = exp_metadata_write_attributes(p,fake_inode,&ext_attrs,sizeof(ext_mattr_t), 1 /* sync */);
     if (ret < 0)
     { 
