@@ -61,7 +61,7 @@ char   tmp_output_file[128];
 **
 **----------------------------------------------------------------------------
 */
-void finish(code) {
+void finish(int code) {
 
   /*
   ** Remove temporary input file if any

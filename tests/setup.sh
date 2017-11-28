@@ -1634,7 +1634,7 @@ main ()
     EXPORT_HOST="${LOCAL_EXPORT_NAME_BASE}/192.168.36.15"
 
     ulimit -c unlimited
-    ${WORKING_DIR}/conf_local_addr.sh set $STORAGES_TOTAL eth0 > /dev/null 2>&1 
+    ${WORKING_DIR}/conf_local_addr.sh set $STORAGES_TOTAL lo > /dev/null 2>&1 
 
     if [ "$1" == "site" ]
     then    

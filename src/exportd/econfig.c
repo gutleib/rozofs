@@ -980,6 +980,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         const char *root;
         const char *name;
         const char *md5;
+        int thin;
         // Check version of libconfig
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
                || (LIBCONFIG_VER_MAJOR > 1))
@@ -987,13 +988,11 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         int vid; // Volume identifier
 	int bsize; // Block size
 	int layout; // Export layout
-        int thin;
 #else
         long int eid; // Export identifier
         long int vid; // Volume identifier
         long int bsize; // Block size
 	long int layout; // Export layout
-        long int thin;	
 #endif
         const char *str;
         uint64_t squota;
@@ -1060,7 +1059,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         ** Use default root path name
         */
         else {
-          sprintf(dafault_root_path,"%s/export_%d", EXPORTS_ROOT, eid);
+          sprintf(dafault_root_path,"%s/export_%d", EXPORTS_ROOT, (int) eid);
           root = dafault_root_path;
         }        
 

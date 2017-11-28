@@ -1181,7 +1181,6 @@ void stspare_scan_all_spare_files() {
   char            pathname[256];
   DIR *           sliceDir;
   int             slice;
-  struct dirent   ep;
   struct dirent * pep;  
   int             dev;
   fid_t           fid;
@@ -1215,7 +1214,7 @@ void stspare_scan_all_spare_files() {
         /*
 	** Loop on every file
 	*/
-        while (readdir_r(sliceDir,&ep,&pep) == 0) {
+        while ( (pep = readdir(sliceDir)) != NULL) {
 	  char * pChar;
 	  int    ret;
     	  /*

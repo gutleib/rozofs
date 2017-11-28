@@ -1341,7 +1341,7 @@ int rb_hash_table_search_chunk(fid_t fid,int chunk) {
   }
   return 0;
 }
-rb_fid_entries_t * rb_hash_table_new(idx) {
+rb_fid_entries_t * rb_hash_table_new(unsigned int idx) {
   rb_fid_entries_t * p;
     
   p = (rb_fid_entries_t*) malloc(sizeof(rb_fid_entries_t));
@@ -1351,7 +1351,7 @@ rb_fid_entries_t * rb_hash_table_new(idx) {
   
   return p;
 }
-rb_fid_entries_t * rb_hash_table_get(idx) {
+rb_fid_entries_t * rb_hash_table_get(unsigned int idx) {
   rb_fid_entries_t * p;
     
   p = rb_fid_table[idx];
