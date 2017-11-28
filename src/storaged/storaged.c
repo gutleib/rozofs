@@ -58,6 +58,7 @@
 #include <rozofs/core/rozofs_share_memory.h>
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/rozofs_timer_conf.h>
+#include <rozofs/core/rozofs_numa.h>
 
 #include "storio_crc32.h"
 
@@ -182,11 +183,6 @@ static void on_stop() {
         svc_destroy(storaged_monitoring_svc);
         storaged_monitoring_svc = NULL;
     }
-
-    /*
-    ** now kill every sub process
-    */
-    rozofs_session_leader_killer(300000);
 }
 /*
 **____________________________________________________
@@ -567,6 +563,37 @@ int main(int argc, char *argv[]) {
       }
     }
     
+    /*
+    **  set the numa node for storaged
+    */
+    if (storaged_config.numa_node_id != -1) {       
+        /*
+        ** Use the node id of the storage.conf 
+        */
+        rozofs_numa_allocate_node(storaged_config.numa_node_id,"storage.conf");
+    }
+    else {
+      /*
+      ** No node identifier set in storage.conf 
+      */ 
+      if (pHostArray[0] != NULL) {
+         /*
+         ** Use hostname to dispatch the storios on the nodes
+         ** This is a one node configuration
+         */
+         char *name;
+         name = pHostArray[0];
+         int instance;
+         int len = strlen(name);
+         instance = (int)name[len-1];
+         rozofs_numa_allocate_node(instance,"host name");
+      }
+      else {
+        /*
+        ** Let the storaged use whatever node
+        */
+      }
+    }
     
     /*
     ** init of the crc32c

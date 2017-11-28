@@ -56,21 +56,22 @@ uint8_t lowest1[0xFF];
 ** @param pChar where to format the display
 ** @retval The end of the display
 */
-#define DISPLAY_CACHE_FID_STAT(x) {\
-  pChar += rozofs_string_append(pChar,"cache ");\
+#define DISPLAY_CACHE_FID_STAT(x,end) {\
+  pChar += rozofs_string_append(pChar,"    \"");\
   pChar += rozofs_string_padded_append(pChar, 6, rozofs_left_alignment, #x);\
-  *pChar++ = ':';*pChar++ = ' ';\
+  pChar += rozofs_string_append(pChar,"\":");\
   pChar += rozofs_u64_append(pChar, storio_fid_cache_stat.x);\
-  pChar += rozofs_eol(pChar);\
+  pChar += rozofs_string_append(pChar,end);\
 }  
-
 char * display_cache_fid_stat(char * pChar) {
-  DISPLAY_CACHE_FID_STAT(count);
-  DISPLAY_CACHE_FID_STAT(hit);
-  DISPLAY_CACHE_FID_STAT(miss);
-  DISPLAY_CACHE_FID_STAT(bkts);
-  DISPLAY_CACHE_FID_STAT(mxbkt);
-  DISPLAY_CACHE_FID_STAT(mxcol)
+  pChar += rozofs_string_append(pChar,"  \"cache statistics\" : {\n");
+  DISPLAY_CACHE_FID_STAT(count,",\n");
+  DISPLAY_CACHE_FID_STAT(hit,",\n");
+  DISPLAY_CACHE_FID_STAT(miss,",\n");
+  DISPLAY_CACHE_FID_STAT(bkts,",\n");
+  DISPLAY_CACHE_FID_STAT(mxbkt,",\n");
+  DISPLAY_CACHE_FID_STAT(mxcol,"\n")
+  pChar += rozofs_string_append(pChar,"  }");
   *pChar = 0;
   return pChar;
 }  

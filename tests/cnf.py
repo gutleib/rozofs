@@ -85,6 +85,12 @@ def addExport(vol,layout=None):
 
     
 #_____________________________________ 
+
+# Set metadata device characteristics
+#rozofs.set_metadata_size(200)
+rozofs.set_min_metadata_inodes(1000)
+rozofs.set_min_metadata_MB(5)
+
 georep = False
 #georep = True
 
@@ -93,6 +99,8 @@ georep = False
 
 #rozofs.set_trace()
 
+# Trash rate
+#rozofs.set_trashed_file_per_run(1000)
 rozofs.set_alloc_mb(0);
 
 # Change number of core files
@@ -124,7 +132,7 @@ rozofs.set_self_healing(1)
 #rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
-#rozofs.set_ext4(100)
+rozofs.set_ext4(320)
 #rozofs.set_xfs(1000,None)
 #rozofs.set_xfs(1000,"4096")
 #rozofs.set_xfs(1000,"64K")
@@ -141,7 +149,7 @@ rozofs.set_self_healing(1)
 # Modify mojette threads threshold
 # rozofs.set_mojette_threads_threshold(32*1024)
 
-# Dual STORCLI
+# NB STORCLI
 rozofs.set_nb_storcli(4)
 
 # Disable POSIX lock

@@ -1,0 +1,50 @@
+.\" Process this file with
+.\" groff -man -Tascii rozo_rcmd_server.8
+.\"
+.TH rozo_rcmd_server 8 "MAY 2017" RozoFS "User Manuals"
+.SH NAME
+rozo_rcmd_server \- RozoFS remote command server
+.SH SYNOPSIS
+.B rozo_rcmd_server 
+.SH DESCRIPTION
+.B rozo_rcmd_server
+is a server process running on the export host, that provides RozoFS nodes the ability to execute remotly some commands on the export host. 
+
+The first target is the rebuild process, to make it access the meta-data in order to build the lists of files to rebuild, and to get back the result files without making use of ssh or scp commands.
+.SH PARAMS
+None
+.SH FILES
+.I /etc/rozofs/rozofs.conf
+.RS
+The RozoFS common confguration file.
+.RE
+.I /var/log/syslog
+.RS
+The log file. See
+.BR syslogd (8)
+and
+.BR syslog.conf (5)
+for further details.
+.\".SH ENVIRONMENT
+.\".SH DIAGNOSTICS
+.SH "REPORTING BUGS"
+Report bugs to <bugs@fizians.org>.
+.SH COPYRIGHT
+Copyright (c) 2013 Fizians SAS. <http://www.fizians.com>
+
+Rozofs is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published
+by the Free Software Foundation, version 2.
+
+Rozofs is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+.SH AUTHOR
+Fizians <http://www.fizians.org>
+.SH "SEE ALSO"
+.BR rozofs.conf (5)
+

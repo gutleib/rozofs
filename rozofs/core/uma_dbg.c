@@ -244,16 +244,27 @@ char * uma_dbg_thread_get_name(pthread_t tid){
 **  Display whether some syslog exists
 */
 #define UMA_DBG_DEFAULT_SYSLOG_LINES 40
-void show_uma_dbg_syslog_man(char * pt) {
-  pt += sprintf(pt,"Check for syslog of this module family of a given severity in\n");
-  pt += sprintf(pt,"/var/log/syslog or /var/log/messages.\n");  
-  pt += sprintf(pt,"usage : syslog [fatal|severe|warning|info] [nblines]\n");
-  pt += sprintf(pt,"  fatal   displays only fatal logs.\n");
-  pt += sprintf(pt,"  severe  displays only fatal & severe logs.\n");
-  pt += sprintf(pt,"  warning displays only fatal & severe & warning logs.\n");
-  pt += sprintf(pt,"  info    displays all logs.\n");
-  pt += sprintf(pt,"Default severity is severe.\n");
-  pt += sprintf(pt,"nbLines is the number of lines to be display (default is %d).\n",UMA_DBG_DEFAULT_SYSLOG_LINES);
+void show_uma_dbg_syslog_man(char * pChar) {
+  pChar += rozofs_string_append           (pChar,"Check for syslog of this module family of a given severity in\n");
+  pChar += rozofs_string_append_bold      (pChar,"/var/log/syslog");
+  pChar += rozofs_string_append           (pChar," or ");
+  pChar += rozofs_string_append_bold      (pChar,"/var/log/messages.\n"); 
+  pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");   
+  pChar += rozofs_string_append_bold      (pChar,"\tsyslog [fatal|severe|warning|info] [nblines]\n");
+  pChar += rozofs_string_append_bold      (pChar,"\t\tfatal");
+  pChar += rozofs_string_append           (pChar,"\tdisplays only fatal logs.\n");
+  pChar += rozofs_string_append_bold      (pChar,"\t\tsevere");
+  pChar += rozofs_string_append           (pChar,"\tdisplays fatal & severe logs.\n");
+  pChar += rozofs_string_append_bold      (pChar,"\t\twarning");
+  pChar += rozofs_string_append           (pChar,"\tdisplays fatal & severe & warning logs.\n");
+  pChar += rozofs_string_append_bold      (pChar,"\t\tinfo");
+  pChar += rozofs_string_append           (pChar,"\tdisplays all logs.\n");
+  pChar += rozofs_string_append           (pChar,"\t\tDefault severity is ");
+  pChar += rozofs_string_append_bold      (pChar,"severe.\n\n");
+  pChar += rozofs_string_append_bold      (pChar,"\t\tnbLines");
+  pChar += rozofs_string_append           (pChar," is the number of line to be displayed (default is ");
+  pChar += rozofs_u32_append              (pChar,  UMA_DBG_DEFAULT_SYSLOG_LINES);  
+  pChar += rozofs_string_append           (pChar,").\n");
    
 }
 /*__________________________________________________________________________
@@ -353,8 +364,11 @@ void uma_dbg_record_syslog_name(char * name) {
 /**
 *  Display whether some core files exist
 */
-void show_uma_dbg_core_files_man(char * pt) {
-  pt += sprintf(pt,"Check for the presence of a core file under %s\n",uma_dbg_core_file_path);
+void show_uma_dbg_core_files_man(char * pChar) {
+  pChar += rozofs_string_append           (pChar,"Check for the presence of core files under ");
+  pChar += rozofs_string_append_bold      (pChar,uma_dbg_core_file_path);
+  pChar += rozofs_string_append           (pChar,"\n");
+
 }
 void show_uma_dbg_core_files(char * argv[], uint32_t tcpRef, void *bufRef) {
   int    len;
@@ -448,8 +462,14 @@ void uma_dbg_system_cmd(char * argv[], uint32_t tcpRef, void *bufRef) {
 /**
 *  Display the system name if any has been set thanks to uma_dbg_set_name()
 */
-void uma_dbg_system_ps_man(char * pt) {
-  pt += sprintf(pt,"Display the list of threads of this process.\n");
+void uma_dbg_system_ps_man(char * pChar) {
+  pChar += rozofs_string_append           (pChar,"Display the list of threads of this process.\n");
+  pChar += rozofs_string_append           (pChar,"For each thread is displayed\n");
+  pChar += rozofs_string_append           (pChar,"- its name when one has been given,\n");
+  pChar += rozofs_string_append           (pChar,"- its core number,\n");
+  pChar += rozofs_string_append           (pChar,"- its \% of CPU usage,\n");
+  pChar += rozofs_string_append           (pChar,"- its total CPU consumption.\n");
+
 }
 void uma_dbg_system_ps(char * argv[], uint32_t tcpRef, void *bufRef) {
   int    len;
@@ -508,8 +528,8 @@ out:
 /**
 *  Display the system name if any has been set thanks to uma_dbg_set_name()
 */
-void uma_dbg_show_uptime_man(char * pt) {
-  pt += sprintf(pt, "Display the elapsed time since the module start up.\n");
+void uma_dbg_show_uptime_man(char * pChar) {
+  pChar += rozofs_string_append           (pChar,"Display the elapsed time since this module start up.\n");
 }
 void uma_dbg_show_uptime(char * argv[], uint32_t tcpRef, void *bufRef) {
     time_t elapse;
@@ -613,22 +633,22 @@ int uma_dbg_retrieve_topic(char * topic) {
 /**
 *  Display the system name if any has been set thanks to uma_dbg_set_name()
 */
-void uma_dbg_manual_man(char * pt) {  
-  pt += sprintf(pt,"Used to display rozodiag commands manual when one has been written.\n");
+void uma_dbg_manual_man(char * pChar) {  
+  pChar += rozofs_string_append           (pChar,"Used to display rozodiag commands manual when one has been written.\n");
 }
 void uma_dbg_manual(char * argv[], uint32_t tcpRef, void *bufRef) {  
   char * pt = uma_dbg_get_buffer();
   int    idx;
 
   if (argv[1] == NULL) {
-    pt += sprintf(pt, "Missing topic name\n");
+    pt += rozofs_string_append(pt, "Missing topic name\n");
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;    
   }
 
   idx = uma_dbg_retrieve_topic(argv[1]);
   if (idx == -1) {
-    pt += sprintf(pt, "Unknown topic\n");
+    pt += rozofs_string_append(pt, "Unknown topic\n");
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;    
 
@@ -640,12 +660,16 @@ void uma_dbg_manual(char * argv[], uint32_t tcpRef, void *bufRef) {
   }  
   
   if (uma_dbg_topic[idx].man == NULL) {   
-    pt += sprintf(pt, "No manual for %s\n",uma_dbg_topic[idx].name);
+    pt += rozofs_string_append(pt, "No manual for ");
+    pt += rozofs_string_append(pt, uma_dbg_topic[idx].name);
+    pt += rozofs_string_append(pt, "\n");
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 	return;
   }	
   
-  pt += sprintf(pt,"manual : %s\n--------------------------------------\n", uma_dbg_topic[idx].name);
+  pt += rozofs_string_append_underscore(pt,"\nmanual : ");
+  pt += rozofs_string_append_underscore(pt,uma_dbg_topic[idx].name);
+  pt += rozofs_string_append(pt,"\n\n");
   uma_dbg_topic[idx].man(pt);
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
@@ -654,8 +678,8 @@ void uma_dbg_manual(char * argv[], uint32_t tcpRef, void *bufRef) {
 /**
 *  Display the system name if any has been set thanks to uma_dbg_set_name()
 */
-void uma_dbg_show_name_man(char * pt) {  
-  pt += rozofs_string_append(pt,"Display the target system identifier.\n");    
+void uma_dbg_show_name_man(char * pChar) {  
+  pChar += rozofs_string_append           (pChar,"Display the target system identifier.\n");    
 }
 void uma_dbg_show_name(char * argv[], uint32_t tcpRef, void *bufRef) {  
   char * pt = uma_dbg_get_buffer();
@@ -676,8 +700,8 @@ void uma_dbg_show_name(char * argv[], uint32_t tcpRef, void *bufRef) {
 /**
 *  Display the version of the library 
 */
-void uma_dbg_show_version_man(char * pt) {  
-  pt += sprintf(pt,"Display the software release version.\n");
+void uma_dbg_show_version_man(char * pChar) {  
+  pChar += rozofs_string_append           (pChar,"Display the software release version.\n");
 }  
 void uma_dbg_show_version(char * argv[], uint32_t tcpRef, void *bufRef) {  
   char * pt = uma_dbg_get_buffer();
@@ -689,8 +713,8 @@ void uma_dbg_show_version(char * argv[], uint32_t tcpRef, void *bufRef) {
 /**
 *  Display the version of the library 
 */
-void uma_dbg_show_git_ref_man(char * pt) {  
-  pt += sprintf(pt,"Display the module complete build reference including the git tag.\n");
+void uma_dbg_show_git_ref_man(char * pChar) {  
+  pChar += rozofs_string_append           (pChar,"Display the module complete build reference including the git tag.\n");
 } 
 void uma_dbg_show_git_ref(char * argv[], uint32_t tcpRef, void *bufRef) {  
   char * pt = uma_dbg_get_buffer();
@@ -704,16 +728,20 @@ void uma_dbg_show_git_ref(char * argv[], uint32_t tcpRef, void *bufRef) {
 /**
 *  Reset every resetable command
 */
-void uma_dbg_counters_reset_man(char * pt) {
+void uma_dbg_counters_reset_man(char * pChar) {
   int topicNum;
   UMA_DBG_TOPIC_S *   p = uma_dbg_topic;
   
-  pt += sprintf(pt,"CLI used to reset a bunch of counters in a run.\n");
-  pt += sprintf(pt,"Running \"counter reset\" is equivallent to:\n");
+  pChar += rozofs_string_append           (pChar,"CLI used to reset a bunch of counters in a run.\n");
+  pChar += rozofs_string_append           (pChar,"Running ");
+  pChar += rozofs_string_append_bold      (pChar,"counter reset");
+  pChar += rozofs_string_append           (pChar," is equivallent to run:\n");
   
   for (topicNum=0; topicNum <uma_dbg_nb_topic; topicNum++,p++) {
     if (p->option & UMA_DBG_OPTION_RESET) {
-      pt += sprintf(pt,"  - %s reset\n",p->name);
+      pChar += rozofs_string_append_bold  (pChar," - ");
+      pChar += rozofs_string_append_bold  (pChar,p->name);
+      pChar += rozofs_string_append_bold  (pChar," reset\n");
     }  
   }
 }

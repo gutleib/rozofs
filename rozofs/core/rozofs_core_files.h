@@ -47,12 +47,4 @@ void rozofs_attach_crash_cbk(rozofs_attach_crash_cbk_t entryPoint) ;
   RETURN: none
   ==========================================================================*/
 void rozofs_attach_hgup_cbk(rozofs_attach_crash_cbk_t entryPoint) ;
-/*__________________________________________________________________________
-  Kill every process within the session when the calling process is
-  the session leader
-  ==========================================================================
-  @param usec          the maximmum delay to politly wait for the sub-processes 
-                       to obey to the SIGTERM before sending a SIGKILL
-  ==========================================================================*/
-void rozofs_session_leader_killer(int usec);
 #endif

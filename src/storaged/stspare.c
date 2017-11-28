@@ -60,6 +60,8 @@ static char   storaged_hostname_buffer[512];
 storage_t storaged_storages[STORAGES_MAX_BY_STORAGE_NODE] = { { 0 } };
 uint16_t  storaged_nrstorages = 0;
 
+int       spare_restore_read_throughput=0;
+
 /*
 ** Buffer for reading and analyzing spare files
 */
@@ -75,8 +77,10 @@ typedef struct _stspare_stat_t {
   uint64_t      number_of_run_done;
   uint64_t      rebuild_nominal_attempt;
   uint64_t      rebuild_nominal_success;
+  uint64_t      rebuild_nominal_failure;
   uint64_t      rebuild_spare_attempt;
   uint64_t      rebuild_spare_success;
+  uint64_t      rebuild_spare_failure;  
 } stspare_stat_t;
 stspare_stat_t stspare_stat={0};
 
@@ -95,6 +99,18 @@ uint64_t   cluster_bitmap[ROZOFS_CLUSTERS_MAX];
 #warning need to get local site number
 int        local_site = 0;
 int        seed=0;
+typedef struct _stspare_working_file_t {
+  cid_t      cid;
+  sid_t      sid;
+  uint8_t    chunk;
+  fid_t      fid;
+  uint8_t    prj;
+  uint64_t   start;
+  uint64_t   stop;
+  time_t     time;
+} stspare_working_file_t; 
+
+stspare_working_file_t stspare_current_working_file = {0}; 
   
 /*
 **____________________________________________________
@@ -174,7 +190,7 @@ void stspare_debug_stat(char * pChar) {
   STSPARE_DEBUG_STRING(spare_restore_enabled,common_config.spare_restore_enable?"Yes":"No");
   STSPARE_DEBUG_STRING(export_host_name_list,common_config.export_hosts);
   STSPARE_DEBUG_INT(spare_restore_loop_delay,common_config.spare_restore_loop_delay);
-  STSPARE_DEBUG_INT(read_throughput_MB,common_config.spare_restore_read_throughput);
+  STSPARE_DEBUG_INT(read_throughput_MB,spare_restore_read_throughput);
 
   pChar -= 2;
   pChar += sprintf(pChar,"\n  },\n");
@@ -193,12 +209,44 @@ void stspare_debug_stat(char * pChar) {
   }  
   STSPARE_DEBUG_STAT(rebuild_nominal_attempt);
   STSPARE_DEBUG_STAT(rebuild_nominal_success);
+  STSPARE_DEBUG_STAT(rebuild_nominal_failure);
   STSPARE_DEBUG_STAT(rebuild_spare_attempt);
   STSPARE_DEBUG_STAT(rebuild_spare_success);  
+  STSPARE_DEBUG_STAT(rebuild_spare_failure);  
   STSPARE_DEBUG_INT (pending_spare_file,stspare_fid_cache_stat.allocation-stspare_fid_cache_stat.release);
    
   pChar -= 2;
-  pChar += sprintf(pChar,"\n  }\n");
+  pChar += sprintf(pChar,"\n  },\n");
+
+  /*
+  ** Current working file
+  */
+  pChar += sprintf(pChar, "  \"current file\" : {\n"); 
+  if (stspare_current_working_file.cid!=0){ 
+    pChar += sprintf(pChar,"    \"cluster id\"\t: %u,\n",stspare_current_working_file.cid);
+    pChar += sprintf(pChar,"    \"storage id\"\t: %u,\n",stspare_current_working_file.sid);
+    pChar += rozofs_string_append(pChar,"    \"fid\"\t\t: \"");
+    pChar += rozofs_fid_append(pChar, stspare_current_working_file.fid);
+    pChar += rozofs_string_append(pChar,"\",\n");
+    pChar += sprintf(pChar,"    \"chunk number\"\t: %u,\n",stspare_current_working_file.chunk);
+    pChar += sprintf(pChar,"    \"duration\"\t\t: %llu,\n",(unsigned long long int)(time(NULL)-stspare_current_working_file.time));
+    
+    if (stspare_current_working_file.prj==0xFF) {
+      pChar += rozofs_string_append(pChar,"    \"projection\"\t: \"all\",\n");
+    }
+    else {
+      pChar += sprintf(pChar,"    \"projection\"\t: %u,\n",stspare_current_working_file.prj);
+    }  
+    if ((stspare_current_working_file.start==0) && (stspare_current_working_file.stop==0xFFFFFFFF)) {
+      pChar += rozofs_string_append(pChar,"    \"block interval\"\t: \"all\"\n");
+    }  
+    else {
+      pChar += sprintf(pChar,"    \"block interval\"\t: \"[%llu;%llu]\"\n",
+                       (unsigned long long int)stspare_current_working_file.start,
+                       (unsigned long long int)stspare_current_working_file.stop);    
+    }                       
+  }
+  pChar += sprintf(pChar,"  }\n");
 
   /*
   ** End
@@ -215,6 +263,49 @@ void stspare_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   stspare_debug_stat(uma_dbg_get_buffer());
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
 }
+/*
+**______________________________________________________________________________
+**
+** Spare restorer statistics diagnostic functions
+**____________________________________________________
+*/
+void stspare_set_throughput(char * argv[], uint32_t tcpRef, void *bufRef) {
+  int    val;
+  char * p = uma_dbg_get_buffer();
+
+  /*
+  ** Display current throughput value
+  */  
+  if (argv[1] == 0) {
+    goto display;
+  }
+  
+  /*
+  ** Read a new throughput value
+  */
+  if (sscanf(argv[1],"%d",&val)!=1) {
+    p += rozofs_string_append(p,"Unexpected value for throughput \"");
+    p += rozofs_string_append(p,argv[1]);      
+    p += rozofs_string_append(p,"\"\n");
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+    return;
+  }
+
+  
+  spare_restore_read_throughput = val;
+
+display:
+  p += rozofs_string_append(p,"{ \"read_throughput_MB\" : {\n");
+  p += rozofs_string_append(p,"         \"current\"    : ");
+  p += rozofs_u32_append(p,spare_restore_read_throughput);      
+  p += rozofs_string_append(p,",\n         \"configured\" : ");
+  p += rozofs_u32_append(p, common_config.spare_restore_read_throughput);      
+  p += rozofs_string_append(p,"\n  }\n}\n");
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+  return;
+        
+}
+
 /*
 **____________________________________________________
 **
@@ -303,6 +394,56 @@ uint64_t stspare_get_sid_bitmap(cid_t cid) {
 /*
 **____________________________________________________
 **
+** Compute the last block to rebuild from start at this 
+** speed in order to rebuild progressively the file 
+** in slots of 192 secondes (3min12)
+**
+** @param speedMB  The input speed
+** @param start    The rebuild starting block number
+** @param stop     The last block to rebuild
+**
+** @retval  the last block to rebuild from start in 
+**          a run
+**____________________________________________________
+*/
+static inline uint64_t stspare_restore_compute_last_block(uint64_t speedMB, uint64_t start, uint64_t stop) {
+  uint64_t nbBlocks;
+  uint64_t blocks256sec;
+  uint64_t blocks192sec;
+
+  /*
+  ** Speed limit
+  */
+  if (speedMB > 400) {
+    speedMB = 400;
+  }
+  
+  /*
+  ** number of block to rebuild
+  */   
+  nbBlocks = stop - start + 1;
+
+  /*
+  ** number of blocks during 256 seconds at this speed
+  */
+  blocks256sec = (256*speedMB*1024*1024)/4096;
+
+  /*
+  ** More blocks to rebuild ?
+  */
+  if (nbBlocks > blocks256sec) {
+    /*
+    ** Let's rebuild 3 min 12
+    */
+    blocks192sec = (192*speedMB*1024*1024)/4096;
+    stop = start + blocks192sec - 1;
+  }
+   
+  return stop;
+}
+/*
+**____________________________________________________
+**
 ** One spare file with only holes restoring
 **
 ** @param fidCtx       The FID cache context of the spare file
@@ -345,18 +486,29 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
     }
   }
 
+  stspare_current_working_file.cid   = fidCtx->data.key.cid;
+  stspare_current_working_file.chunk = fidCtx->data.key.chunk;
+  memcpy(stspare_current_working_file.fid,fidCtx->data.key.fid,sizeof(fid_t));
+
+  stspare_current_working_file.start = fidCtx->data.prj[0].start;
+  stspare_current_working_file.stop  = fidCtx->data.prj[0].stop;
+  
   /*
   ** One must rebuild every projections
   */
   for (idx=1; idx<=fwd; idx++) {
+    stspare_current_working_file.prj  = idx - 1;
+    stspare_current_working_file.sid  = fidCtx->data.dist[idx-1];
+    stspare_current_working_file.time = time(NULL); 
+    stspare_stat.rebuild_nominal_attempt++;
 
     /*
     ** Request for rebuilding
     ** prj[0]   describes the holes
     ** prj[idx] describes projection id (idx-1) that should be written in sid dist[idx-1] 
     */
-    sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-            common_config.spare_restore_read_throughput,
+    sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+            spare_restore_read_throughput,
 	    fidCtx->data.key.cid, fidCtx->data.dist[idx-1],  fidString,
 	    fidCtx->data.key.chunk, fidCtx->data.prj[0].start, fidCtx->data.prj[0].stop);	 		 
     ret    = system(cmd);
@@ -365,18 +517,25 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
     /*
     ** Update statistics
     */
-    stspare_stat.rebuild_nominal_attempt++;
     if (result==0) {
       stspare_stat.rebuild_nominal_success++;
-    }    
-    sleep(1);    
+    } 
+    else {
+      stspare_stat.rebuild_nominal_failure++;      
+    }   
+    usleep(100000);    
   } 
 
+  stspare_current_working_file.prj  = -1;
+  stspare_current_working_file.sid  = fidCtx->data.key.sid;
+  stspare_current_working_file.time = time(NULL); 
+  stspare_stat.rebuild_spare_attempt++;
+  
   /*
   ** Then let's rebuild the spare file it self hopping it will disappear
   */	
-  sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-          common_config.spare_restore_read_throughput,  
+  sprintf(cmd,"storage_rebuild --nolog  -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+          spare_restore_read_throughput,  
 	  fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
 	  fidCtx->data.key.chunk, fidCtx->data.prj[0].start, fidCtx->data.prj[0].stop);
   ret    = system(cmd);
@@ -385,11 +544,13 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
   /*
   ** Update statistics
   */    
-  stspare_stat.rebuild_spare_attempt++;
   if (result==0) {
     stspare_stat.rebuild_spare_success++;
   }     
-  sleep(1);
+  else {
+    stspare_stat.rebuild_spare_failure++;      
+  }   
+  usleep(100000); 
 
   /*
   ** Everything that could be done has been done
@@ -419,6 +580,7 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
   int                            ret;
   int                            result;
   uint8_t                        fwd;
+  uint64_t                       start,stop;
 
   /*
   ** Get the forward number of projection for this layout
@@ -426,6 +588,9 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
   fwd = rozofs_get_rozofs_forward(fidCtx->data.layout);
 
 
+  stspare_current_working_file.cid   = fidCtx->data.key.cid;
+  stspare_current_working_file.chunk = fidCtx->data.key.chunk;
+  memcpy(stspare_current_working_file.fid,fidCtx->data.key.fid,sizeof(fid_t));
   /*
   ** Some projections are present in the spare file. Try to rebuild them
   ** on the sid that should normaly have them.
@@ -435,41 +600,96 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
     /*
     ** Rebuild each sid whoes projections are present in the spare file
     */
-    if (fidCtx->data.prj_bitmap & (1 << idx)) { 
+    if ((fidCtx->data.prj_bitmap & (1 << idx)) == 0) {
+      continue;
+    } 
+
+    /*
+    ** Check that this sid is up
+    */
+    if ((sidBitMap & (1L<<fidCtx->data.dist[idx-1])) == 0) {
+      continue;
+    }
+    
+    /*
+    ** To update rozodiag "spare"
+    */
+    stspare_current_working_file.prj   = idx - 1;
+    stspare_current_working_file.sid   = fidCtx->data.dist[idx-1];
+    stspare_current_working_file.time = time(NULL); 
+    stspare_current_working_file.start = fidCtx->data.prj[idx].start;
+    stspare_current_working_file.stop  = fidCtx->data.prj[idx].stop;
+
+    stspare_stat.rebuild_nominal_attempt++;
+
+    /*
+    ** Split the rebuild in slots of 3/4 minutes
+    */
+    while (1) {
+
+      start = fidCtx->data.prj[idx].start;
+      if (start > fidCtx->data.prj[idx].stop) {
+        stspare_stat.rebuild_nominal_success++;      
+        /* 
+        ** This projection is done so clear the bit 
+        */
+	fidCtx->data.prj_bitmap &= ~(1 << idx);
+	fidCtx->data.nb_prj --;  
+        /*
+        ** a small sleep between each rebuild
+        */ 
+        usleep(100000);
+        /*
+        ** Next projection to rebuild
+        */
+        break;              
+      }
 
       /*
-      ** Check that this sid is up
+      ** Where to stop for a 3/4 minutes rebuild
       */
-      if ((sidBitMap & (1L<<fidCtx->data.dist[idx-1])) == 0) {
-	continue;
-      }
+      stop = stspare_restore_compute_last_block(spare_restore_read_throughput,
+                                        start, 
+                                        fidCtx->data.prj[idx].stop);
+      /*
+      ** To update rozodiag "spare"
+      */
+      stspare_current_working_file.start = start;
 
       /*
       ** Request for rebuilding
       ** prj[0]   describes the holes
       ** prj[idx] describes projection id (idx-1) that should be written in sid dist[idx-1] 
       */
-      sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-               common_config.spare_restore_read_throughput,
+      sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %llu --bstop %llu -l 1 -fg -q",
+               spare_restore_read_throughput,
 	       fidCtx->data.key.cid, fidCtx->data.dist[idx-1],  fidString,
-	       fidCtx->data.key.chunk, fidCtx->data.prj[idx].start, fidCtx->data.prj[idx].stop);
+	       fidCtx->data.key.chunk, (unsigned long long int)start, (unsigned long long int)stop);
       ret    = system(cmd);
       result = WEXITSTATUS(ret);
-      if (result == 0) {
-        /* This projection is done so clear the bit */
-	fidCtx->data.prj_bitmap &= ~(1 << idx);
-	fidCtx->data.nb_prj --;
-      } 
-      
+
       /*
-      ** Update statistics
+      ** Failure
       */      
-      stspare_stat.rebuild_nominal_attempt++;
-      if (result==0) {
-        stspare_stat.rebuild_nominal_success++;
-      }     		 
-      sleep(1);
-    } 
+      if (result!=0) {
+        stspare_stat.rebuild_nominal_failure++;
+        /*
+        ** a small sleep between each rebuild
+        */ 
+        usleep(100000);
+        break;
+      }
+
+      /*
+      ** Success
+      */
+      
+      /* 
+      ** Update starting point 
+      */
+      start = stop + 1;
+      fidCtx->data.prj[idx].start = start;
+    }
   }
   
   /*
@@ -496,12 +716,18 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
       return 1;
     }
   }
+  stspare_current_working_file.start = 0;
+  stspare_current_working_file.stop  = -1;
+  stspare_current_working_file.prj   = -1;
+  stspare_current_working_file.sid   = fidCtx->data.key.sid;
+  stspare_current_working_file.time  = time(NULL); 
+  stspare_stat.rebuild_spare_attempt++;
       
   /*
   ** Since every thing has been rebuilt, rebuild the spare file it self hopping it will disappear
   */	
-  sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-           common_config.spare_restore_read_throughput,
+  sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+           spare_restore_read_throughput,
 	   fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
 	   fidCtx->data.key.chunk, 0, -1);
   ret    = system(cmd);
@@ -511,11 +737,10 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
   /*
   ** Update statistics
   */      
-  stspare_stat.rebuild_spare_attempt++;
   if (result==0) {
     stspare_stat.rebuild_spare_success++;
   }     
-  sleep(1);
+  usleep(100000);
 
   /*
   ** Release context
@@ -537,6 +762,7 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
 int stspare_restore_one_file(stspare_fid_cache_t * fidCtx) {
   char                           fidString[64];
   uint64_t                       sidBitMap;
+  int                            ret;
    
   /*
   ** mtime is null which means that the spare file has to be read 
@@ -571,7 +797,9 @@ int stspare_restore_one_file(stspare_fid_cache_t * fidCtx) {
   ** No projection is present in the spare file : it contains only holes
   */
   if (fidCtx->data.nb_prj == 0) {
-    return stspare_restore_hole(fidCtx, sidBitMap, fidString);
+    ret =  stspare_restore_hole(fidCtx, sidBitMap, fidString);
+    stspare_current_working_file.cid = 0;
+    return ret;
   }
     
 
@@ -579,7 +807,9 @@ int stspare_restore_one_file(stspare_fid_cache_t * fidCtx) {
   ** Some projections are present in the spare file. Try to rebuild them
   ** on the sid that should normaly have them.
   */
-  return stspare_restore_projections(fidCtx, sidBitMap, fidString);
+  ret = stspare_restore_projections(fidCtx, sidBitMap, fidString);
+  stspare_current_working_file.cid = 0;
+  return ret;
 }
 /*
 **____________________________________________________
@@ -653,7 +883,35 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
   */
   fidCtx = stspare_fid_cache_search(st->cid, st->sid, fid, chunk);
 
+  /*
+  ** Get the file modification time
+  */
+  if (stat(pathname,&stats) < 0) {
+    /*
+    ** File may have been deleted in the meantime
+    */
+    if (errno != ENOENT) {
+      severe("fstat(%s) %s",pathname,strerror(errno));
+    }
+    /*
+    ** Release context when one was allocated 
+    */  
+    goto release;
+  }
 
+  /*
+  ** Only take care of the file when it is stable; not modified for a while
+  */
+  if (stats.st_mtime >= (now-(common_config.spare_restore_loop_delay*60))) {
+    /*
+    ** Release context when one was allocated 
+    */  
+    goto release;
+  }     
+  
+  /*
+  ** No FID context. Allocate one
+  */
   if (fidCtx == NULL) {
 
     rozofs_stor_bins_file_hdr_t   file_hdr;
@@ -702,31 +960,14 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     /*
     ** Save interresting information
     */
-    fidCtx->data.layout = file_hdr.v0.layout;
-    fidCtx->data.bsize  = file_hdr.v0.bsize;
-    memcpy(fidCtx->data.dist,file_hdr.v0.dist_set_current,sizeof(fidCtx->data.dist));
+    fidCtx->data.layout = file_hdr.layout;
+    fidCtx->data.bsize  = file_hdr.bsize;
+    int size2copy = sizeof(file_hdr.distrib);
+    memcpy(fidCtx->data.dist,file_hdr.distrib,size2copy);
+    memset(&fidCtx->data.dist[size2copy],0,sizeof(fidCtx->data.dist)-size2copy);
     fidCtx->data.mtime  = 0; /* This tells that the file not yet read */
   }        
 
-  
-  /*
-  ** Open file
-  */
-  fd = open(pathname, O_RDONLY, S_IRWXU | S_IROTH);
-  if (fd < 0) {
-    severe("open(%s) %s",pathname,strerror(errno));
-    goto release;
-  }
-
-  /*
-  ** Read mtime
-  */
-  if (fstat(fd,&stats) < 0) {
-    severe("fstat(%s) %s",pathname,strerror(errno));
-    goto release;
-  }
-  
-   
   /*
   ** When mtime has not changed, no need to reread the file
   */
@@ -740,17 +981,21 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
   /*
   ** File has to be (re-)read
   */
-  fidCtx->data.mtime = 0;
-
+  fidCtx->data.mtime = 0;  
+  
   /*
-  ** Only read the file when it is stable; not modified for a while
+  ** Open file
   */
-  if (stats.st_mtime >= (now-(common_config.spare_restore_loop_delay*60))) {
+  fd = open(pathname, O_RDONLY, S_IRWXU | S_IROTH);
+  if (fd < 0) {
     /*
-    ** Better wait the file is not written any more
+    ** File may have been deleted in the meantime
     */
-    goto wait;
-  }  
+    if (errno != ENOENT) {
+      severe("open(%s) %s",pathname,strerror(errno));
+    }
+    goto release;
+  }
 
   /*
   ** Let's read the file now
@@ -775,14 +1020,14 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
   ** Let's compute the time credit for each read loop
   */
   start = stspare_get_us(0);
-  if (common_config.spare_restore_read_throughput == 0) {
+  if (spare_restore_read_throughput == 0) {
     /*
     ** No throughput limitation
     */
     loop_delay_us = 0;
   }
   else {  
-    loop_delay_us = (1000000 * BUFFER_SIZE_MB)/common_config.spare_restore_read_throughput;
+    loop_delay_us = (1000000 * BUFFER_SIZE_MB)/spare_restore_read_throughput;
   }
   
   offset        = 0;
@@ -794,7 +1039,12 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     */        
     sizeRead = pread(fd,buffer,sizeRequested,offset);
     if (sizeRead < 0) {
-      severe("pread(%s) %s",pathname, strerror(errno));
+      /*
+      ** File may have been deleted in the meantime
+      */
+      if (errno != ENOENT) {
+        severe("pread(%s,size=%d,offset=%d) %s",pathname,sizeRequested,(int)offset,strerror(errno));
+      }
       goto release;
     }
 
@@ -876,39 +1126,27 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     }   
   }
   fidCtx->data.mtime = stats.st_mtime;
-  
-ok:
-  close(fd);
-  fd = -1;
-  return fidCtx;
+  goto ok;
 
-wait:
-  /*
-  ** Close the file when open
-  */
-  if (fd != -1) {
-    close(fd);
-    fd = -1;  
-  }
-  return NULL;
-    
+
+
 release:
-
-  /*
-  ** Close the file when open
-  */
-  if (fd != -1) {
-    close(fd);
-    fd = -1;  
-  }
   /*
   ** release fid context on error
   */
-  if (fidCtx) {
-    stspare_fid_cache_release(fidCtx);    
-    fidCtx = NULL;
+  stspare_fid_cache_release(fidCtx);    
+  fidCtx = NULL; 
+
+  
+ok:
+  /*
+  ** Close the file when open
+  */
+  if (fd != -1) {
+    close(fd);
+    fd = -1;  
   }
-  return NULL;
+  return fidCtx;
 }
 /*
 **____________________________________________________
@@ -943,7 +1181,6 @@ void stspare_scan_all_spare_files() {
   char            pathname[256];
   DIR *           sliceDir;
   int             slice;
-  struct dirent   ep;
   struct dirent * pep;  
   int             dev;
   fid_t           fid;
@@ -977,7 +1214,7 @@ void stspare_scan_all_spare_files() {
         /*
 	** Loop on every file
 	*/
-        while (readdir_r(sliceDir,&ep,&pep) == 0) {
+        while ( (pep = readdir(sliceDir)) != NULL) {
 	  char * pChar;
 	  int    ret;
     	  /*
@@ -1020,7 +1257,16 @@ void stspare_scan_all_spare_files() {
 	  }   	  
         }
 	closedir(sliceDir);
-      }        
+        /*
+        ** Next slice
+        */
+        usleep(100000);  
+      }
+      
+      /*
+      ** Next device
+      */
+      sleep(2);        
     }
   }    
 }
@@ -1097,6 +1343,11 @@ void *stspare_thread(void *arg) {
     stspare_stat.seconds_before_next_run = 0;
     
     /*
+    ** Load throughput value from config
+    */
+    spare_restore_read_throughput = common_config.spare_restore_read_throughput;
+     
+    /*
     ** Loop on disk to find out the new spare files and
     ** try to restore them when possible
     */
@@ -1132,11 +1383,12 @@ void *stspare_thread_launch() {
   ** Add a debug topic
   */
   uma_dbg_addTopic("spare", stspare_debug); 
+  uma_dbg_addTopic("throughput", stspare_set_throughput); 
 
   /*
   ** Initialize FID cache
   */
-  stspare_fid_cache_init();
+  stspare_fid_cache_init(common_config.spare_restore_spare_ctx);
   
   err = pthread_attr_init(&attr);
   if (err != 0) {
@@ -1457,7 +1709,8 @@ int main(int argc, char *argv[]) {
   
   // Read common config
   common_config_read(NULL);    
-
+  spare_restore_read_throughput = common_config.spare_restore_read_throughput;
+  
   while (1) {
 
     int option_index = 0;
@@ -1510,7 +1763,7 @@ int main(int argc, char *argv[]) {
   /*
   ** Start without deamonizing
   */
-  no_daemon_start("st_spare_restorer", common_config.nb_core_file, 
+  no_daemon_start("stspare", common_config.nb_core_file, 
                    pid_name, on_start, on_stop, NULL);
 
   closelog();

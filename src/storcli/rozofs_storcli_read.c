@@ -882,6 +882,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
     rozofs_safe    = rozofs_get_rozofs_safe(layout);
     rozofs_forward = rozofs_get_rozofs_forward(layout);
     rozofs_inverse = rozofs_get_rozofs_inverse(layout);
+
     /* 
     ** When more than invers SID tell ENOENT let's say the file does not exist
     */
@@ -1234,6 +1235,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
          STORCLI_ERR_PROF(read_prj_err);
        }       
        same_storage_retry_acceptable = 1;
+       rozofs_storcli_trace_response(working_ctx_p, projection_id,  errno);                  
        goto retry_attempt; 
     }
     storcli_lbg_cnx_sup_clear_tmo(lbg_id);
@@ -1364,6 +1366,9 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     */
     if (error)
     {
+
+       rozofs_storcli_trace_response(working_ctx_p, projection_id,  errno);                  
+
        /*
        ** there was an error on the remote storage while attempt to read the file
        ** try to read the projection on another storaged
@@ -1394,6 +1399,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
        goto retry_attempt;    	 
     }
 
+    rozofs_storcli_trace_response(working_ctx_p, projection_id,  0);                  
 
     /*
     ** set the pointer to the read context associated with the projection for which a response has
@@ -1527,6 +1533,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
 	fid = pCtx->fid;
         memcpy(fid,storcli_read_rq_p->fid,16);
 	pCtx->count = 1;
+        pCtx->time1rst = time(NULL);
 	storcli_fid_corrupted.nextIdx++;
 	if (storcli_fid_corrupted.nextIdx>=STORCLI_MAX_CORRUPTED_FID_NB) {
 	  storcli_fid_corrupted.nextIdx = 0;

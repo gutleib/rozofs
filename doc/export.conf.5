@@ -48,10 +48,15 @@ grammar.
                - must be an integer (between 1 and 255).
                - must be unique within a cluster.
 
+       rebalance: rebalance configuration file in case a rebalance process must be automaticaly and permanently launched for this volume. 
+               - must be a full path.
+               - file must exist.
+               - file format is described in rozo_rebalance.conf manual.
+               
        georep: (whether geo-replication must occur on this volume / optional)
                - must be a boolean.
                - Optional field (default value is False).
-
+ 
        host: (IP or hostname of the physical node that contains the storage)
                - must be a valid IPv4 address or a valid hostname.
                - must only be set in case of a volume without geo-replication.
@@ -101,12 +106,17 @@ rule. Incoming IP addresses for a given export are checked against the
 
  
 .SS exports
-   It's the list of rozo file system exported by the exportd daemon. Each
-   exported file system is identified by its eid. root is the directory path
-   where the metadata for this file system are stored. 
-   squota is the number of data blocks that can be stored on a file system
-   before being notified. hquota is the number maximum of data blocks that can
-   be stored on a file system. vid is the volume where the file data for this
+   It is the list of the file systems exported by the RozoFS exportd daemon. 
+   Each exported file system is identified by a unique integer : <eid>. 
+   <root> is the directory path where the metadata of this file system are stored
+   on the export nodes. When omitted a default <root> value is used : 
+   /srv/rozofs/exports/export_<eid>.
+   <name> is an administrative name of the exported file system. It must be unique
+   and is used for remotly mounting the file system. When no <name> is specified
+   in the configuration file, the <root> field is used instead.
+   <squota> is the number of data blocks that can be stored on a file system
+   before being notified. <hquota> is the number maximum of data blocks that can
+   be stored on a file system. <vid> is the volume where the file data for this
    exported filesystem will be stored.
 
        eid: (export identifier)
@@ -117,6 +127,11 @@ rule. Incoming IP addresses for a given export are checked against the
        root: (directory path where metadata for this filesystem will be stored)
                - must be an existing directory.
                - must be unique for each filesystem managed by this exportd.
+               - default directory is /srv/rozofs/exports/export_<eid>
+
+       name: (exported file system name)
+               - must be unique for each filesystem managed by this exportd.
+               - default name is the root field.
 
        filter: (IPv4 filter to apply to this export)
                - is optional (every IP is allowed when omitted).
@@ -144,6 +159,11 @@ rule. Incoming IP addresses for a given export are checked against the
                - must be an integer.
                - should exist in volume list.
                - several filesystem can use the same volume.
+
+       thin-provisionning: (whether accounting of allocated sectors per file must be done)
+               - must be a boolean.
+               - Optional field (default value is False).
+               - must only be set to True on very specific cases !
 
 .SH EXAMPLE
 .PP
@@ -257,16 +277,16 @@ filters =
 exports = ( # List of exported filesystem
 
     # exported file systems on volume 1
-    {eid = 1; root = "/path/to/foo1"; filter="vol1", squota="128G"; hquota="256G"; vid=1;},
-    {eid = 2; root = "/path/to/foo2"; filter="vol1", squota="256G"; hquota="512G"; vid=1;},
-    {eid = 3; root = "/path/to/foo3"; filter="vol1", vid=1;},
+    {eid = 1; name = "foo1"; filter="vol1", squota="128G"; hquota="256G"; vid=1;},
+    {eid = 2; name = "foo2"; filter="vol1", squota="256G"; hquota="512G"; vid=1;},
+    {eid = 3; name = "foo3"; filter="vol1", vid=1;},
 
     # exported file systems on volume 2
-    {eid = 4; root = "/path/to/bar1"; vid=2;}
-    {eid = 5; root = "/path/to/bar2"; vid=2;}
+    {eid = 4; name = "bar1"; vid=2;}
+    {eid = 5; name = "bar2"; vid=2;}
     
     # exported file systems on volume 3
-    {eid = 6; root = "/path/to/geo"; filter="vol3", vid=3;}
+    {eid = 6; name = "geo"; filter="vol3", vid=3;}
 
     # ...
 );

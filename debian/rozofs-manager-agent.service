@@ -1,0 +1,13 @@
+[Unit]
+Description=RozoFS filesystem (management daemon)
+Documentation=man:rozofs(8) man:rozo(1)
+Documentation=http://rozofs.github.io/rozofs/
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/rozo agent start -l exportd storaged rozofsmount
+PIDFile=/var/run/rozo-agent.pid
+
+[Install]
+WantedBy=multi-user.target

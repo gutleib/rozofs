@@ -59,19 +59,8 @@ static inline void reset_serialization_counters(void) {
 /*_______________________________________________________________________
 * Display opcode
 */
-char * serialize_opcode_string(int opcode) {
-  switch(opcode) {
-    case STORIO_DISK_THREAD_READ: return "read";
-    case STORIO_DISK_THREAD_WRITE: return "write";
-    case STORIO_DISK_THREAD_TRUNCATE: return "truncate";
-    case STORIO_DISK_THREAD_REMOVE: return "remove";
-    case STORIO_DISK_THREAD_REMOVE_CHUNK: return "remove_chunk";
-    case STORIO_DISK_THREAD_WRITE_REPAIR3: return "write repair";
-    case STORIO_DISK_THREAD_REBUILD_START: return "rebuild start";
-    case STORIO_DISK_THREAD_REBUILD_STOP: return "rebuild stop";
-    default: return "Unknown";
-  }
-}
+#include "storio_disk_thread_request_e2String.h"
+
 /*_______________________________________________________________________
 * Serialization debug function
 */
@@ -97,7 +86,7 @@ void display_serialization_counters (char * argv[], uint32_t tcpRef, void *bufRe
   p += rozofs_string_append(p, sep); 
   for (opcode=1; opcode<STORIO_DISK_THREAD_MAX_OPCODE; opcode++) {  
     *p++ = '|'; *p++ = ' ';
-    p += rozofs_string_padded_append(p,15,rozofs_left_alignment,serialize_opcode_string(opcode));
+    p += rozofs_string_padded_append(p,15,rozofs_left_alignment,storio_disk_thread_request_e2String(opcode));
     *p++ = '|'; 
     p += rozofs_u64_padded_append(p,17,rozofs_right_alignment,storage_direct_req[opcode]);
     *p++ = ' '; *p++ = '|';

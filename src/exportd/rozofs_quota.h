@@ -34,6 +34,24 @@
 #include <linux/quota.h>
 #include "rozofs_quota_intf.h"
 
+#undef MAXQUOTAS
+#define MAXQUOTAS 3
+#define SHRQUOTA 2
+#undef  INITQFNAMES
+#define INITQFNAMES { \
+	"user",    /* USRQUOTA */ \
+	"group",   /* GRPQUOTA */ \
+	"share", \
+	"undefined", \
+};
+
+#define ROZOFS_INITQFNAMES { \
+	"usr",    /* USRQUOTA */ \
+	"grp",   /* GRPQUOTA */ \
+	"shr", \
+	"und", \
+};
+
 
 /* Size of blocks in which are counted size limits in generic utility parts */
 #define ROZOFS_QUOTABLOCK_BITS 10

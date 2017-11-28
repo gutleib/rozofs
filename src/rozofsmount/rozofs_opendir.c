@@ -170,7 +170,7 @@ error:
     ** release the buffer if has been allocated
     */
 out:
-    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.nlink,trc_idx);
     STOP_PROFILING_NB(buffer_p,rozofs_ll_opendir);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
 
@@ -387,7 +387,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.nlink,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_opendir);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    

@@ -502,7 +502,7 @@ int rozofs_parse_dirfile(fuse_req_t req,dirbuf_t *db,uint64_t cookie_client,int 
      return 0;
 }	
 	   
-
+#define ROZOFS_READDIR2_BUFSIZE (64*1024)
 
 /**
 *  Call back function call upon a success rpc, timeout or any other rpc failure
@@ -548,7 +548,7 @@ void rozofs_ll_readdir2_cbk(void *this,void *param)
     db = &dir_p->db;
     if (db->p == NULL)
     {
-      db->p = xmalloc(1024*64);
+      db->p = xmalloc(ROZOFS_READDIR2_BUFSIZE);
     }
     db->size = 0;    
     /*
@@ -618,6 +618,13 @@ void rozofs_ll_readdir2_cbk(void *this,void *param)
        xdr_free(decode_proc, (char *) &ret);
        goto error;
     }   
+    
+    if (ret.status_gw.ep_readdir2_ret_t_u.reply.value.value_len > ROZOFS_READDIR2_BUFSIZE) {
+      severe("rozofs_ll_readdir2_cbk receive %d while expecting %d max",
+              ret.status_gw.ep_readdir2_ret_t_u.reply.value.value_len,
+              ROZOFS_READDIR2_BUFSIZE);
+    }
+    
     if (ret.status_gw.status == EP_FAILURE) {
         errno = ret.status_gw.ep_readdir2_ret_t_u.error;
         ret.status_gw.ep_readdir2_ret_t_u.reply.value.value_val = NULL;

@@ -164,8 +164,10 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_clusterstats
 %{_bindir}/rozo_scan_by_criteria
 %{_bindir}/rozo_rebalance
+%{_bindir}/rozo_rcmd_server
 %{_bindir}/rozo_buildfid_list
 %{_bindir}/rozo_rbsList
+%{_bindir}/rozo_trashd
 %{_bindir}/rozo_geoRepList
 %{_bindir}/rozo_geoReplicationReinitialize
 %config(noreplace) %{_sysconfdir}/rozofs/export.conf
@@ -184,6 +186,9 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_mandir}/man8/rozo_setquota.8.gz
 %{_mandir}/man8/rozo_repquota.8.gz
 %{_mandir}/man8/rozo_rebalance.8.gz
+%{_mandir}/man8/rozo_rcmd_server.8.gz
+%{_mandir}/man8/rozo_trashd.8.gz
+%{_mandir}/man5/rozo_trashd.conf.5.gz
 
 %files storaged
 %defattr(-,root,root)
@@ -193,7 +198,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/storage_rebuild
 %{_bindir}/storage_list_rebuilder
 %{_bindir}/rozodump
-%{_bindir}/rozo_make_rebuild_lists
+%{_bindir}/rozo_storage_fid2pathname
 %config(noreplace) %{_sysconfdir}/rozofs/storage.conf
 %{_sysconfdir}/rozofs/storage.conf.sample
 %if 0%{?rhel} >= 7
@@ -214,6 +219,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_mount_repquota
 %{_bindir}/rozo_mount_cleanup
 %{_bindir}/rozo_distribution_check
+%{_bindir}/rozo_trash
 %{_bindir}/rozofsmount_wrapper
 %if 0%{?rhel} >= 7
 %{_unitdir}/rozofs-rozofsmount.service
@@ -223,6 +229,7 @@ mkdir -p %{buildroot}%{_initrddir}
 #%{_initrddir}/rozofs-rozofsmount
 #%endif
 %{_mandir}/man8/rozofsmount.8.gz
+%{_mandir}/man8/rozo_trash.8.gz
 
 %files rozodiag
 %defattr(-,root,root)

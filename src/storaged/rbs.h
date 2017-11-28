@@ -35,8 +35,8 @@
 
 #define DEFAULT_REBUILD_RELOOP           4  
 
-#define REBUILD_MSG(fmt, ...) { logmsg(EINFO, fmt, ##__VA_ARGS__); if (!quiet) printf(fmt"\n", ##__VA_ARGS__); }
-#define REBUILD_FAILED(fmt, ...) { REBUILD_MSG("storage_rebuild failed !!!"); REBUILD_MSG(fmt, ##__VA_ARGS__); }
+#define REBUILD_MSG(fmt, ...) { if (!nolog) logmsg(EINFO, fmt, ##__VA_ARGS__); if (!quiet) printf(fmt"\n", ##__VA_ARGS__); }
+#define REBUILD_FAILED(fmt, ...) { REBUILD_MSG("storage_rebuild failed !!!"); REBUILD_MSG(fmt, ##__VA_ARGS__); rbs_monitor_update("failed",NULL);}
 
 /* Timeout in seconds for exportd requests */
 #define RBS_TIMEOUT_EPROTO_REQUESTS 25

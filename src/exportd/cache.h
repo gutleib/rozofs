@@ -39,8 +39,8 @@ typedef struct _rozofs_file_lock_t {
 } rozofs_file_lock_t;
 
 
-void                 lv2_cache_free_file_lock(rozofs_file_lock_t * lock) ;
-rozofs_file_lock_t * lv2_cache_allocate_file_lock(ep_lock_t * lock, ep_client_info_t * info) ;
+void                 lv2_cache_free_file_lock(uint32_t eid,rozofs_file_lock_t * lock) ;
+rozofs_file_lock_t * lv2_cache_allocate_file_lock(uint32_t eid, ep_lock_t * lock, ep_client_info_t * info) ;
 
 /** API lv2 cache management functions.
  *
@@ -163,7 +163,7 @@ void file_lock_remove_fid_locks(list_t * lock_list);
 * @param client_ref reference of the client to remove
 *___________________________________________________________________
 */
-void file_lock_remove_client(uint64_t client_ref) ;
+void file_lock_remove_client(uint32_t eid, uint64_t client_ref) ;
 /*
 *___________________________________________________________________
 * Receive a poll request from a client
@@ -171,7 +171,7 @@ void file_lock_remove_client(uint64_t client_ref) ;
 * @param client_ref reference of the client to remove
 *___________________________________________________________________
 */
-void file_lock_poll_client(uint64_t client_ref, ep_client_info_t * info) ;
+void file_lock_poll_client(uint32_t eid, uint64_t client_ref, ep_client_info_t * info) ;
 /*
 *___________________________________________________________________
 * Check whether two lock2 must free or update lock1
@@ -183,7 +183,7 @@ void file_lock_poll_client(uint64_t client_ref, ep_client_info_t * info) ;
 * @retval 1 when locks are compatible, 0 else
 *___________________________________________________________________
 */
-int must_file_lock_be_removed(uint8_t bsize, struct ep_lock_t * lock_free, struct ep_lock_t * lock_set, rozofs_file_lock_t ** new_lock_ctx, ep_client_info_t * info) ;
+int must_file_lock_be_removed(uint32_t eid,uint8_t bsize, struct ep_lock_t * lock_free, struct ep_lock_t * lock_set, rozofs_file_lock_t ** new_lock_ctx, ep_client_info_t * info) ;
 /*
 *___________________________________________________________________
 * Check whether two locks are compatible in oreder to set a new one.
@@ -220,6 +220,13 @@ int are_file_locks_overlapping(struct ep_lock_t * lock1, struct ep_lock_t * lock
 *___________________________________________________________________
 */
 int try_file_locks_concatenate(uint8_t bsize, struct ep_lock_t * lock1, struct ep_lock_t * lock2);
+/*
+*___________________________________________________________________
+* To be called after a relaod in order to clean up deleted export
+*
+*___________________________________________________________________
+*/
+void file_lock_reload();
 
 char * display_file_lock(char * pChar) ;
 char * display_file_lock_clients(char * pChar);

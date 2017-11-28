@@ -32,7 +32,7 @@
 // Older core files are kept while newest are removed.	
 INT 	global 	nb_core_file		        1 0:8
 // Directory where the core files are stored.
-STRING 	global 	core_file_directory		"/var/run/rozofs_core"
+STRING 	global 	core_file_directory		""
 // Enables to take into account the NUMA architecture of the board in 
 // order to collocate some RozoFS modules on the same node for memory
 // access efficiency.
@@ -82,7 +82,7 @@ INT	storage disk_read_threshold  		0
 // Over which device write delay threashold should the STORIO log the event. 
 INT	storage disk_write_threshold  		0
 // Number of STORIO receive buffer.
-INT	storage storio_buf_cnt			128 64:1024
+INT	storage storio_buf_cnt			128 32:1024
 // Number of block to which the chunk files should be truncated on storage 
 // node at the time it is recycled.
 INT	storage recycle_truncate_blocks         0
@@ -119,12 +119,6 @@ BOOL	export mkdir_ok_instead_of_eexist	False
 // To activate workaround that make mknod respond OK instead of EEXIST
 // when the file is already created  
 BOOL	export mknod_ok_instead_of_eexist	False
-// Port to be used for ssh or scp 
-INT     storage ssh_port 	0
-// User name to be used for ssh or scp 
-STRING  storage ssh_user 	"root"
-// Other ssh/scp parameter (such as key location) 
-STRING  storage ssh_param 	""
 // To activate fast reconnect from client to exportd
 BOOL	client client_fast_reconnect	        False
 // delay is minutes after which a file is considered as an archived file (unit is minute)
@@ -158,19 +152,37 @@ INT     export deletion_delay 	30
 // Spare file restoring : whether the service is active or not
 BOOL    storage spare_restore_enable                True	
 // Spare file restoring : how often the process runs  
-INT     storage spare_restore_loop_delay            120  
+INT     storage spare_restore_loop_delay            240  
 // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s
 // 0 means no limit
-INT     storage spare_restore_read_throughput       5
+INT     storage spare_restore_read_throughput       2
+// Storio number of FID context in 1K unit
+INT     storage storio_fidctx_ctx                256      
 // When that flag is asserted, the rozofsmount client can cache the extended attributes
 BOOL 	client 	client_xattr_cache	            False
 // When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode
 BOOL 	client 	async_setattr	            False
 // statfs period in seconds. minimum is 0.
 INT     client statfs_period 	10 
+// Spare file restoring : Number of spare file context in 1K unit
+INT     storage spare_restore_spare_ctx 16
 // Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation
 INT     export min_metadata_inodes             262144
 // Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation
 INT     export min_metadata_MB                   2048
 // Number of trash threads that work in parallel
 INT     export nb_trash_thread                   2    1:8
+// Number of thin provisioning threads that work in parallel
+INT     export nb_thin_thread                   2    1:4
+// Max number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run.
+// A new run occurs every 2 seconds.
+INT	export 	thin_scan_file_per_run		1000
+// Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart) 
+INT	export 	thin_lv1_hash_tb_size		10 6:128
+// Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning
+INT   	export expthin_guard_delay_sec		10  1:600
+// Guard delay associated with directory re-write used for tracking children changes within a directory 
+INT   	export expdir_guard_delay_sec		10  1:7200
+// Maximum number of entries that the export level 2 cache can contain (unit is KB) 
+INT   	export level2_cache_max_entries_kb		512  1:4096
+

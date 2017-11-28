@@ -72,7 +72,7 @@ typedef struct _rozo_balancing_ctx_t
   int64_t scanned_file_cpt;
   int64_t current_scanned_file_cpt;
   uint64_t cur_move_size;            /**< current size to move           */
-  
+  char   * rebalanceConfigFile;
 } rozo_balancing_ctx_t;
 
 extern int rozo_balance_non_blocking_thread_started;

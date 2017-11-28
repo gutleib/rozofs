@@ -29,6 +29,7 @@
 #include "cache.h"
 #include "export.h"
 #include "rozofs_exp_mover.h"
+#include "export_thin_prov_api.h"
 
 #include <rozofs/common/export_track.h>
 
@@ -51,7 +52,7 @@ export_tracking_table_t * export_tracking_table[EXPGW_EID_MAX_IDX+1] = { 0 };
 /**
  * hashing function used to find lv2 entry in the cache
  */
-static inline uint32_t lv2_hash(void *key) {
+uint32_t lv2_hash(void *key) {
     uint32_t       hash = 0;
     uint8_t       *c;
     int            i;
@@ -77,7 +78,7 @@ static inline uint32_t lv2_hash(void *key) {
     return hash;
 }
 
-static inline int lv2_cmp(void *k1, void *k2) {
+int lv2_cmp(void *k1, void *k2) {
     rozofs_inode_t fake_inode1;
     rozofs_inode_t fake_inode2;  
       
@@ -106,6 +107,16 @@ static inline int lv2_cmp(void *k1, void *k2) {
 static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
 
   file_lock_remove_fid_locks(&entry->file_lock);
+#ifndef LIBROZO_FLAG
+  /*
+  ** check if the entry to remove is a directory, in such a case we need to check
+  ** if the entry is dirty and needs to be re-write on disk
+  */
+  if (S_ISDIR(entry->attributes.s.attrs.mode))
+  {
+     export_dir_check_sync_write_on_lru(entry);  
+  }
+#endif  
   mattr_release(&entry->attributes.s.attrs);
   /*
   ** check the presence of the extended attribute block and free it
@@ -124,7 +135,14 @@ static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
   /*
   ** remove from the move_list
   */
-  list_remove(&entry->move_list);  
+  list_remove(&entry->move_list); 
+  /*
+  ** check if there was a thin-provisioning context. If it the case we should release the
+  ** entry
+  */
+#ifndef LIBROZO_FLAG
+  expthin_remove_entry(entry);
+#endif   
   free(entry);
   cache->size--;  
 }
@@ -548,6 +566,21 @@ lv2_entry_t *export_lookup_fid_internal(export_tracking_table_t *trk_tb_p,lv2_ca
        */
        fid->s.key = ROZOFS_REG;
     }
+    /*
+    ** check the case of @rozofs-trash@ directory: need to set the type to directory for doing the
+    ** lookup.
+    */
+    if (fid->s.key == ROZOFS_TRASH)
+    {
+       /*
+       ** switch back to the ROZOFS_REG type for the lookup
+       */
+       fid->s.key = ROZOFS_DIR;
+    }
+    /*
+    ** clear the delete pending bit from the fid
+    */
+    fid->s.del = 0;
     /*
     ** get the slice of the fid :extracted from the upper part 
     */

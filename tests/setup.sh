@@ -26,7 +26,7 @@ BS16K=2
 BS32K=3
 REBUILD_LOOP=2
     
-COREDIR="/var/run/rozofs_core"
+COREDIR="/var/run/rozofs/core"
 LOCAL_SIMU="${WORKING_DIR}/simulation"
 # $1 is the site number
 create_site() {
@@ -1634,7 +1634,7 @@ main ()
     EXPORT_HOST="${LOCAL_EXPORT_NAME_BASE}/192.168.36.15"
 
     ulimit -c unlimited
-    ${WORKING_DIR}/conf_local_addr.sh set $STORAGES_TOTAL eth0 > /dev/null 2>&1 
+    ${WORKING_DIR}/conf_local_addr.sh set $STORAGES_TOTAL lo > /dev/null 2>&1 
 
     if [ "$1" == "site" ]
     then    

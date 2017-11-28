@@ -30,6 +30,7 @@ set (librozofs_sources
     common/export_track_change.h
     common/export_track_change.c
     common/common_config.c    
+    common/common_config_extra_checks.c    
     common/common_config.h
     rpc/eproto.h
     rpc/eprotoxdr.c

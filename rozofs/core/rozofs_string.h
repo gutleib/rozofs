@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <uuid/uuid.h>
+#include <sys/stat.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -278,6 +279,101 @@ static inline int rozofs_string_append(char * pChar, char * new_string) {
 }
 /*
 **___________________________________________________________
+** Set display in underscore
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_underscore(char * pChar) {
+  return rozofs_string_append(pChar,"\033[4m");
+}
+/*
+**___________________________________________________________
+** Set display in bold
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_bold(char * pChar) {
+  return rozofs_string_append(pChar,"\033[1m");
+}
+/*
+**___________________________________________________________
+** Set display with inverse effect
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_inverse(char * pChar) {
+  return rozofs_string_append(pChar,"\033[7m");
+}
+/*
+**___________________________________________________________
+** Set display with default effects
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_default(char * pChar) {
+  return rozofs_string_append(pChar,"\033[0m");
+}
+/*
+**___________________________________________________________
+** Append a bold string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_bold(char * pChar, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_bold(&pChar[len]);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
+** Append an underscored string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_underscore(char * pChar, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_underscore(&pChar[len]);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
+** Append an inversed string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_inverse(char * pChar, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_inverse(&pChar[len]);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
 ** Append a string, padd with ' ' on a given size
 ** and add a 0 at the end
 **
@@ -341,7 +437,31 @@ static inline int rozofs_string_padded_append(char * pChar, int size, rozofs_ali
   *pChar = 0;
   return size;
 }
-
+/*
+**___________________________________________________________
+** Append a string, padd with ' ' on a given size
+** and add a 0 at the end
+**
+**     sprintf(pChar,"%-12s",new_string) 
+**  -> rozofs_string_padded_append(pChar, 12, rozofs_right_alignment,new_string)
+**
+**     sprintf(pChar,"%16s",new_string)
+**  -> rozofs_string_padded_append(pChar, 16, rozofs_left_alignment,new_string)
+**
+** @param pChar       The string that is being built
+** @param size        The total size to write to the built string
+** @param alignment   Left/right alignment
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the string
+*/
+static inline int rozofs_string_padded_append_bold(char * pChar, int size, rozofs_alignment_e alignment, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_bold(&pChar[len]);
+  len += rozofs_string_padded_append(&pChar[len],size,alignment,new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}  
 /*
 **___________________________________________________________
 ** Append an end of line and a 0 at the end
@@ -1163,6 +1283,50 @@ out:
   }
   return size;  
   
+}
+
+
+
+/*
+** ===================== FS MODE ==================================
+*/
+
+
+#define rozofs_add_mode_right(right, letter)\
+  if ((mode & right) == right) *pChar = letter;\
+  else                         *pChar = '-';\
+  pChar++;
+  
+static inline int rozofs_mode2String(char * buffer, int mode) {
+  char * pChar = buffer;
+  
+  // Put octal value
+  pChar += sprintf(pChar, "0%o ",mode); 
+  
+  // Translate type to string
+  if (S_ISLNK(mode))  pChar += rozofs_string_append(pChar,"LINK ");
+  if (S_ISREG(mode))  pChar += rozofs_string_append(pChar,"REG ");
+  if (S_ISDIR(mode))  pChar += rozofs_string_append(pChar,"DIR ");
+  if (S_ISCHR(mode))  pChar += rozofs_string_append(pChar,"CHR ");
+  if (S_ISBLK(mode))  pChar += rozofs_string_append(pChar,"BLK ");
+  if (S_ISFIFO(mode)) pChar += rozofs_string_append(pChar,"FIFO ");
+  if (S_ISSOCK(mode)) pChar += rozofs_string_append(pChar,"SOCK ");
+
+  // Display rigths
+  
+  rozofs_add_mode_right(S_IRUSR,'r');
+  rozofs_add_mode_right(S_IWUSR,'w');
+  rozofs_add_mode_right(S_IXUSR,'x');
+
+  rozofs_add_mode_right(S_IRGRP,'r');
+  rozofs_add_mode_right(S_IRGRP,'w');
+  rozofs_add_mode_right(S_IXGRP,'x');
+
+  rozofs_add_mode_right(S_IROTH,'r');
+  rozofs_add_mode_right(S_IWOTH,'w');
+  rozofs_add_mode_right(S_IXOTH,'x');
+  
+  return (pChar-buffer);
 }
 #ifdef __cplusplus
 }

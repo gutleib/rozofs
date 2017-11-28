@@ -16,7 +16,9 @@
 #include "exp_cache.h"
 #include "mdirent.h"
 
-
+int rozofs_no_site_file = 0;
+econfig_t exportd_config;
+char * configFileName = EXPORTD_DEFAULT_CONFIG;
 lv2_cache_t            cache;
 mdirents_name_entry_t  bufferName;
 
@@ -31,7 +33,8 @@ typedef enum _scan_criterie_e {
   SCAN_CRITERIA_NLINK, 
   SCAN_CRITERIA_CHILDREN, 
   SCAN_CRITERIA_PFID,
-  SCAN_CRITERIA_FNAME       
+  SCAN_CRITERIA_FNAME,       
+  SCAN_CRITERIA_UPDATE     /**< directory update time */      
 } SCAN_CRITERIA_E;
 
 SCAN_CRITERIA_E scan_criteria = SCAN_CRITERIA_NONE;
@@ -51,6 +54,14 @@ uint64_t    cr8_lower  = -1;
 uint64_t    cr8_bigger = -1;
 uint64_t    cr8_equal  = -1;
 uint64_t    cr8_diff  = -1;
+
+/*
+** directory update time 
+*/
+uint64_t    update_lower  = -1;
+uint64_t    update_bigger = -1;
+uint64_t    update_equal  = -1;
+uint64_t    update_diff  = -1;
 
 /*
 ** Size
@@ -123,6 +134,13 @@ int         has_xattr=-1;
 */
 int         exclude_symlink=1;
 int         exclude_regular=0;
+
+/*
+** Whether to scan all tracking files or only those whose
+** creation and modification time match the research date
+** criteria
+*/
+int scan_all_tracking_files = 0; // Only those matching research criteria
 
 /*
 **__________________________________________________________________
@@ -570,7 +588,51 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }
   }
    
-  
+  if (S_ISDIR(inode_p->s.attrs.mode)) 
+  {
+    ext_dir_mattr_t *stats_attr_p;
+    stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
+    
+    if (stats_attr_p->s.version >=  ROZOFS_DIR_VERSION_1)
+    {
+    
+      /*
+      ** Must have a modification time bigger than update_bigger
+      */ 
+      if (update_bigger != -1) {
+	if (stats_attr_p->s.update_time < update_bigger) {
+	  return 0;
+	}
+      }  
+
+      /*
+      ** Must have a modification time lower than update_lower
+      */    
+      if (update_lower != -1) {
+	if (stats_attr_p->s.update_time > update_lower) {
+	  return 0;
+	}
+      }     
+
+      /*
+      ** Must have a modification time equal to update_equal
+      */    
+      if (update_equal != -1) {
+	if (stats_attr_p->s.update_time != update_equal) {
+	  return 0;
+	}
+      } 
+
+      /*
+      ** Must have a modification time different from update_diff
+      */    
+      if (update_diff != -1) {
+	if (stats_attr_p->s.update_time == update_diff) {
+	  return 0;
+	}
+      }
+    }
+  }     
   /*
   ** Must have a size bigger than size_bigger
   */ 
@@ -754,7 +816,15 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** This inode is valid
   */
-  pChar = rozo_get_full_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
+  if (exp_metadata_inode_is_del_pending(inode_p->s.attrs.fid))
+  {
+    pChar = rozolib_get_relative_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
+  }
+  else
+  {
+    pChar = rozo_get_full_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
+  } 
+
   if (pChar) {
     printf("%s\n",pChar);
   }  
@@ -770,9 +840,11 @@ static void usage() {
     printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan_by_criteria <MANDATORY> [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
     printf("\n\033[1mMANDATORY:\033[0m\n");
     printf("\t\033[1m-p,--path <export_root_path>\033[0m\t\texportd root path.\n");
+    printf("or\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier.\n");
     printf("\n\033[1mOPTIONS:\033[0m\n");
     printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
     printf("\t\033[1m-h,--help\033[0m\t\tprint this message and exit.\n");
+    printf("\t\033[1m-a,--all\033[0m\t\tScan all tracking files and not only those matching time criteria.\n");
     printf("\n\033[1mCRITERIA:\033[0m\n");
     printf("\t\033[1m-x,--xattr\033[0m\t\twith xattribute.\n");
     printf("\t\033[1m-X,--noxattr\033[0m\t\twithout xattribute.\n");    
@@ -782,12 +854,13 @@ static void usage() {
     printf("\n\033[1mFIELD:\033[0m\n");
     printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
     printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
+    printf("\t\033[1m-r,--update\033[0m\t\tdirectory update date.\n"); 
     printf("\t\033[1m-s,--size\033[0m\t\tfile size.\n"); 
     printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
     printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
     printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (1).\n"); 
     printf("\t\033[1m-l,--link\033[0m\t\tnumber of link.\n"); 
-    printf("\t\033[1m-e,--children\033[0m\t\tnumber of children.\n"); 
+    printf("\t\033[1m-b,--children\033[0m\t\tnumber of children.\n"); 
     printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
     printf("\t\033[1m-n,--name\033[0m\t\tfile name (3).\n");
     printf("(1) only --eq or --ne conditions are supported.\n");
@@ -805,19 +878,19 @@ static void usage() {
     printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --xattr --size --ge 76000 --le 76100\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --xattr --size --ge 76000 --le 76100\033[0m\n");
     printf("Searching files with a modification date in february 2017 but created before 2017.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
     printf("Searching files created by user 4501 on 2015 January the 10th in the afternoon.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
     printf("Searching files owned by group 4321 in directory 00000000-0000-4000-1800-000000000018.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
     printf("Searching files whoes name constains captainNemo.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --name --ge captainNemo\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --name --ge captainNemo\033[0m\n");
     printf("Searching directories with more than 100K entries.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --dir --children --ge 100000\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --dir --children --ge 100000\033[0m\n");
     printf("Searching all symbolic links.\n");
-    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --slink --noreg\033[0m\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --slink --noreg\033[0m\n");
      
 };
 /*
@@ -859,6 +932,7 @@ static inline time_t rozofs_date_in_seconds(int year, int month, int day, int ho
   if (sec > 60) return -1;
   mytime.tm_sec = sec;  
   t = mktime(&mytime); 
+//  printf("%d-%2d-%2d %2d:%2d:%2d -> %d", year,month,day,hour,minute,sec,t);
   return t;
 }
 /*
@@ -918,6 +992,128 @@ static inline uint64_t rozofs_scan_u64(char * str) {
 }
 /*
 **_______________________________________________________________________
+*/
+/** Find out the export root path from its eid reading the configuration file
+*   
+    @param  eid : eport identifier
+    
+    @retval -the root path or null when no such eid
+*/
+char * get_export_root_path(uint8_t eid) {
+  list_t          * e;
+  export_config_t * econfig;
+
+  list_for_each_forward(e, &exportd_config.exports) {
+
+    econfig = list_entry(e, export_config_t, list);
+    if (econfig->eid == eid) return econfig->root;   
+  }
+  return NULL;
+}
+#if 1
+#define dbg(fmt,...)
+#define dbgsuccess(big,small) 
+#define dbgfailed(small,big)  
+#else
+#define dbg(fmt,...) printf(fmt,__VA_ARGS__)
+#define dbgsuccess(big,small) printf("  Success "#big" %llu later or equal "#small" %llu\n",(long long unsigned int)big, (long long unsigned int)small)
+#define dbgfailed(small,big)  printf("  Failed "#small" %llu later "#big" %llu\n",(long long unsigned int)small, (long long unsigned int)big)
+#endif
+
+#define docheck(big,small) \
+  if (small>big) { \
+    dbgfailed(small,big);\
+    return 0;\
+  }\
+  else {\
+    dbgsuccess(big,small);\
+  }  
+
+/*
+**_______________________________________________________________________
+** Check whether the tracking file c an match the given date criteria
+**   
+**  @param  eid : eport identifier
+**    
+**  @retval 0 = do not read this file / 1 = read this file
+*/
+int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
+  ext_mattr_t * inode_p = inode;
+
+  dbg("- rozofs_check_trk_file_date cr8 %llu modif %llu\n", (long long unsigned int)inode_p->s.cr8time,(long long unsigned int)inode_p->s.attrs.mtime);
+
+  /*
+  ** Must have a creation time bigger than cr8_bigger
+  */ 
+  if (cr8_bigger != -1) {
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime,cr8_bigger);
+  }  
+
+  /*
+  ** Must have a creation time lower than cr8_lower
+  */    
+  if (cr8_lower != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(cr8_lower,inode_p->s.cr8time);
+  }  
+
+  /*
+  ** Must have a creation time equal to cr8_equal
+  */    
+  if (cr8_equal != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(cr8_equal,inode_p->s.cr8time) ;
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime,cr8_equal);
+  } 
+  
+   
+  /*
+  ** Must have a modification time bigger than mod_bigger
+  */ 
+  if (mod_bigger != -1) {
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime, mod_bigger);
+  }  
+
+  /*
+  ** Must have a modification time lower than mod_lower
+  */    
+  if (mod_lower != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(mod_lower,inode_p->s.cr8time);
+  }     
+
+  /*
+  ** Must have a modification time equal to mod_equal
+  */    
+  if (mod_equal != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(mod_equal,inode_p->s.cr8time);
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime,mod_equal);
+  } 
+  return 1; 
+}
+/*
+**_______________________________________________________________________
 **
 **  M A I N
 */
@@ -936,14 +1132,19 @@ int main(int argc, char *argv[]) {
     int   c;
     void *rozofs_export_p;
     char *root_path=NULL;
+    int   eid = -1;
     int   verbose = 0;
     char  crit=0;
     char *comp;
     int   expect_comparator = 0;
-    
+    int   date_criteria_is_set = 0;
+    check_inode_pf_t date_criteria_cbk;
+     
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"path", required_argument, 0, 'p'},
+        {"eid", required_argument, 0, 'e'},
+        {"config", required_argument, 0, 'k'},
         {"verbose", no_argument, 0, 'v'},
         {"cr8", no_argument, 0, 'c'},
         {"mod", no_argument, 0, 'm'},
@@ -952,7 +1153,7 @@ int main(int argc, char *argv[]) {
         {"gid", no_argument, 0, 'g'},        
         {"cid", no_argument, 0, 'C'},        
         {"link", no_argument, 0, 'l'},        
-        {"children", no_argument, 0, 'e'},        
+        {"children", no_argument, 0, 'b'},        
         {"pfid", no_argument, 0, 'f'},        
         {"name", no_argument, 0, 'n'},        
         {"xattr", no_argument, 0, 'x'}, 
@@ -966,9 +1167,12 @@ int main(int argc, char *argv[]) {
         {"eq", required_argument, 0, '='},
         {"ne", required_argument, 0, '!'},
         {"dir", no_argument, 0, 'd'},
+        {"all", no_argument, 0, 'a'},
+        {"update", no_argument, 0, 'r'},
         {0, 0, 0, 0}
     };
     
+
     for (c=0; c<argc; c++) {
       if (strcmp(argv[c],"-ge")==0) {
         printf("Argument %d is %s. Don't you mean --ge ?\n",c,argv[c]);
@@ -999,7 +1203,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:hvcmsguClxXdefnSR", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSRar", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1010,17 +1214,37 @@ int main(int argc, char *argv[]) {
               usage();
               exit(EXIT_SUCCESS);
               break;
+          case 'a':
+              scan_all_tracking_files = 1; // scan all tracking files
+              break;
           case 'p':
               root_path = optarg;
               break;
+          case 'k':
+              configFileName = optarg;
+              break;			  	                        
+          case 'e':
+              eid = rozofs_scan_u64(optarg);
+              if (eid==-1) {
+                printf("\nBad format for --eid \"%s\"\n",optarg);     
+                usage();
+                exit(EXIT_FAILURE);
+              }
+              break;    
           case 'v':
               verbose = 1;
               break;
           case 'c':
               NEW_CRITERIA(SCAN_CRITERIA_CR8);
+              date_criteria_is_set = 1;
               break;
           case 'm':
               NEW_CRITERIA(SCAN_CRITERIA_MOD);
+              date_criteria_is_set = 1;
+              break;
+          case 'r':
+              NEW_CRITERIA(SCAN_CRITERIA_UPDATE);
+              date_criteria_is_set = 1;
               break;
           case 's':
               NEW_CRITERIA(SCAN_CRITERIA_SIZE);
@@ -1037,7 +1261,7 @@ int main(int argc, char *argv[]) {
           case 'l':
               NEW_CRITERIA(SCAN_CRITERIA_NLINK);
               break;                
-          case 'e':
+          case 'b':
               NEW_CRITERIA(SCAN_CRITERIA_CHILDREN);
               break;                
           case 'f':
@@ -1078,6 +1302,15 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_MOD:
                   mod_lower = rozofs_date2time(optarg);
                   if (mod_lower==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }    
+                  break; 
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_lower = rozofs_date2time(optarg);
+                  if (update_lower==-1) {
                     printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
                     usage();
                     exit(EXIT_FAILURE);
@@ -1153,6 +1386,16 @@ int main(int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                   }
                   mod_lower--;    
+                  break;  
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_lower = rozofs_date2time(optarg);
+                  if (update_lower==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }
+                  update_lower--;    
                   break;  
                   
                 case SCAN_CRITERIA_SIZE:
@@ -1241,6 +1484,15 @@ int main(int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                   }    
                   break; 
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_bigger = rozofs_date2time(optarg);
+                  if (update_bigger==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }    
+                  break;
                   
                 case SCAN_CRITERIA_SIZE:
                   size_bigger = rozofs_scan_u64(optarg);
@@ -1315,7 +1567,16 @@ int main(int argc, char *argv[]) {
                   } 
                   mod_bigger++;  
                   break;
-                  
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_bigger = rozofs_date2time(optarg);
+                  if (update_bigger==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  } 
+                  update_bigger++;  
+                  break;                  
                 case SCAN_CRITERIA_SIZE:
                   size_bigger = rozofs_scan_u64(optarg);
                   if (size_bigger==-1) {
@@ -1388,6 +1649,14 @@ int main(int argc, char *argv[]) {
                   }                   
                   break;  
                   
+                case SCAN_CRITERIA_UPDATE:
+                  update_equal = rozofs_date2time(optarg);
+                  if (update_equal==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }                   
+                  break;  
                 case SCAN_CRITERIA_SIZE:
                   size_equal = rozofs_scan_u64(optarg);
                   if (size_equal==-1) {
@@ -1486,6 +1755,15 @@ int main(int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                   }                   
                   break; 
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_diff = rozofs_date2time(optarg);
+                  if (update_diff==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }                   
+                  break; 
                    
                 case SCAN_CRITERIA_SIZE:
                   size_diff = rozofs_scan_u64(optarg);
@@ -1572,6 +1850,32 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }                     
 
+  /*
+  ** Search for the given eid in configuration file
+  ** in case one is given as input
+  */
+  if (eid!=-1) {
+    /*
+    ** Read configuration file
+    */
+    if (econfig_initialize(&exportd_config) != 0) {
+      printf("can't initialize exportd config %s.\n",strerror(errno));
+      exit(EXIT_FAILURE);  
+    }    
+    if (econfig_read(&exportd_config, configFileName) != 0) {
+      printf("failed to parse configuration file %s %s.\n",configFileName,strerror(errno));
+      exit(EXIT_FAILURE);  
+    }              	 
+    /*
+    ** Find the export root path
+    */
+    root_path = get_export_root_path(eid);
+    if (root_path==NULL) {
+      printf("eid %d is not configured\n",eid);       
+      exit(EXIT_FAILURE);
+    }
+  }
+
   if (root_path == NULL) 
   {
        usage();
@@ -1594,11 +1898,21 @@ int main(int argc, char *argv[]) {
   */
   lv2_cache_initialize(&cache);
   rz_set_verbose_mode(verbose);
+  
+  /*
+  ** Use call back to reject a whole attribute file when date criteria is set
+  */
+  date_criteria_cbk = NULL;
+  if (!scan_all_tracking_files && date_criteria_is_set) {
+    date_criteria_cbk = rozofs_check_trk_file_date;
+  }
+
+  
   if (search_dir) {
-    rz_scan_all_inodes(rozofs_export_p,ROZOFS_DIR,1,rozofs_visit,NULL,NULL,NULL);
+    rz_scan_all_inodes(rozofs_export_p,ROZOFS_DIR,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
   else {
-    rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,NULL,NULL);
+    rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
   
   exit(EXIT_SUCCESS);  

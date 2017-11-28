@@ -31,6 +31,7 @@
 #include "sproto_nb.h"
 
 extern void * decoded_rpc_buffer_pool;
+extern int    decoded_rpc_buffer_size;
 /*
 **__________________________________________________________________________
 */

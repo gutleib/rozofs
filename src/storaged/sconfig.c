@@ -49,6 +49,7 @@
 #define SIOLISTEN   "listen"
 #define SIOADDR     "addr"
 #define SIOPORT     "port"
+#define SNODEID     "nodeid"
 
 #define SSPARE_MARK     "spare-mark"
 #define SDEV_TOTAL      "device-total"
@@ -118,11 +119,10 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
                || (LIBCONFIG_VER_MAJOR > 1))
     int port;
-    int devices, mapper, redundancy;
-    
+    int devices, mapper, redundancy, nodeid;
 #else
     long int port;
-    long int devices, mapper, redundancy;
+    long int devices, mapper, redundancy, nodeid;
 #endif      
     DEBUG_FUNCTION;
 
@@ -134,6 +134,17 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
                 config_error_line(&cfg));
         goto out;
     }
+    
+    /*
+    ** Check for node identifier for NUMA
+    */
+    if (config_lookup_int(&cfg, SNODEID, &nodeid) == CONFIG_FALSE) {
+        config->numa_node_id = -1;
+    }    
+    else {
+        config->numa_node_id = nodeid;
+    }    
+
 
     /*
     ** Check whether self-healing is configured 
@@ -369,7 +380,53 @@ out:
     config_destroy(&cfg);
     return status;
 }
+/*____________________________________________________
+**
+** Check listening IP addresses are configured 
+** It loops for 10 minutes until the IP address is configured.
+** After 10 minutes loop it failes
+*/
+int storaged_wait_ip_address_is_configured(uint32_t ipAddr) {
+  int warning_count = 0;
 
+  /*
+  ** INADDR_ANY is a perfect address
+  */
+  if (ipAddr == INADDR_ANY) return 1;
+  
+  /*
+  ** Wait until the IP address is configured
+  */
+  while (1) {
+  
+    if (is_this_ipV4_configured(ipAddr)) {
+      if (warning_count != 0) {
+        warning("%u.%u.%u.%u addresses is configured now",(ipAddr>>24)&0xFF,(ipAddr>>16)&0xFF,(ipAddr>>8)&0xFF,ipAddr&0xFF);
+      }
+      return 1;
+    }
+
+    /* 
+    ** Raise a warning every minute 
+    */  
+    if (warning_count > 600) {
+      severe("%u.%u.%u.%u addresses is NOT configured !!!",(ipAddr>>24)&0xFF,(ipAddr>>16)&0xFF,(ipAddr>>8)&0xFF,ipAddr&0xFF);
+      return 0;
+    }
+    if ((warning_count%20)==0) {	
+      warning("%u.%u.%u.%u addresses is not yet configured",(ipAddr>>24)&0xFF,(ipAddr>>16)&0xFF,(ipAddr>>8)&0xFF,ipAddr&0xFF);
+    }	
+    warning_count++;
+    sleep(1);
+  }
+}
+/*____________________________________________________
+**
+** Validate storag.conf configuration
+**
+** @param config The configuration read from the file in internal
+**               RozoFS structure.
+*/  
 int sconfig_validate(sconfig_t *config) {
     int status = -1;
     int i = -1;
@@ -390,6 +447,14 @@ int sconfig_validate(sconfig_t *config) {
             goto out;
         }
 
+        /*
+        ** Check that the given listening IP address is configured
+        */
+        if (!storaged_wait_ip_address_is_configured(config->io_addr[i].ipv4)) {
+          errno = EADDRNOTAVAIL;
+          goto out;
+        }
+        
         for (j = i + 1; j < config->io_addr_nb; j++) {
 
             if ((config->io_addr[i].ipv4 == config->io_addr[j].ipv4)

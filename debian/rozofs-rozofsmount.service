@@ -1,0 +1,17 @@
+[Unit]
+Description=RozoFS filesystem (mount service)
+Documentation=man:rozofs(8) man:rozofsmount(8) man:rozofs.conf(5)
+Documentation=http://rozofs.github.io/rozofs/
+
+Requires=network.target
+After=network.target rozofs-exportd.service rozofs-storaged.service corosync.service pacemaker.service
+
+[Service]
+#Environment=WAITROZOFSMOUNT=yes
+Type=forking
+TimeoutStartSec=1000000
+ExecStart=/usr/bin/rozofsmount_wrapper start
+ExecStop=/usr/bin/rozofsmount_wrapper stop
+
+[Install]
+WantedBy=multi-user.target

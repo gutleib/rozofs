@@ -100,6 +100,56 @@ xdr_mp_sstat_t (XDR *xdrs, mp_sstat_t *objp)
 }
 
 bool_t
+xdr_mp_size_rsp_t (XDR *xdrs, mp_size_rsp_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_uint64_t (xdrs, &objp->file_size_in_blocks))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->allocated_sectors))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->nb_chunk))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_mp_size_ret_t (XDR *xdrs, mp_size_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_mp_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case MP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->mp_size_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		 if (!xdr_mp_size_rsp_t (xdrs, &objp->mp_size_ret_t_u.rsp))
+			 return FALSE;
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_mp_size_arg_t (XDR *xdrs, mp_size_arg_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_uint16_t (xdrs, &objp->cid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->spare))
+		 return FALSE;
+	 if (!xdr_mp_uuid_t (xdrs, objp->fid))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_mp_stat_ret_t (XDR *xdrs, mp_stat_ret_t *objp)
 {
 	//register int32_t *buf;

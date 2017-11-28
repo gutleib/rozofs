@@ -45,6 +45,8 @@ typedef enum rozofs_service_port_range_e {
   ROZOFS_SERVICE_PORT_GEOMGR_DIAG,
   ROZOFS_SERVICE_PORT_REBALANCE_DIAG,
   ROZOFS_SERVICE_PORT_STSPARE_DIAG,
+  ROZOFS_SERVICE_PORT_EXPORT_RCMD,
+  ROZOFS_SERVICE_PORT_EXPORT_RCMD_DIAG,
 
   ROZOFS_SERVICE_PORT_MAX
   
@@ -105,6 +107,12 @@ static inline uint16_t rozofs_get_service_port_export_master_eproto(void) {
 static inline uint16_t rozofs_get_service_port_export_master_geo_replica(void) {
   return rozofs_get_service_port(ROZOFS_SERVICE_PORT_EXPORT_GEO_REPLICA);
 }
+static inline uint16_t rozofs_get_service_port_export_rcmd(void) {
+  return rozofs_get_service_port(ROZOFS_SERVICE_PORT_EXPORT_RCMD);
+}
+static inline uint16_t rozofs_get_service_port_export_rcmd_diag(void) {
+  return rozofs_get_service_port(ROZOFS_SERVICE_PORT_EXPORT_RCMD_DIAG);
+}
 /*
 ** Export slave ports
 */
@@ -140,7 +148,7 @@ static inline uint16_t rozofs_get_service_port_stspare_diag(void) {
 /*
 ** Storio ports
 */
-static inline uint16_t rozofs_get_service_port_storio_diag(idx) {
+static inline uint16_t rozofs_get_service_port_storio_diag(int idx) {
   if (idx == 0) idx = 1;
   return rozofs_get_service_port_storaged_diag()+idx;
 }

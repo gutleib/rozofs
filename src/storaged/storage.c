@@ -157,7 +157,7 @@ typedef struct _storio_device_error_log_record_t {
 /*
 ** Dimensionning factor of the log
 */
-#define STORIO_DEVICE_ERROR_LOG_MAX_RECORD      128
+#define STORIO_DEVICE_ERROR_LOG_MAX_RECORD      256
 
 typedef struct _storio_device_error_log {
   pthread_rwlock_t                  lock; 
@@ -496,54 +496,71 @@ static inline void storage_get_projid_size(uint8_t spare,
 
 
 
-/*
- ** Write a header/mapper file on a device
-
-  @param path : pointer to the bdirectory where to write the header file
-  @param hdr : header to write in the file
-  
-  @retval 0 on sucess. -1 on failure
-  
- */
-int storage_write_header_file(storage_t * st,int dev, char * path, rozofs_stor_bins_file_hdr_t * hdr) {
+/*_________________________________________________________________________
+**  Write a header file on disk and eventually truncate it when the file is longer
+**  on disk
+**
+**  @param st           The logical storage context
+**  @param dev          The device number to write on (for trace only)
+**  @param path         The full path of the device
+**  @param hdr          The header file content to write
+**  
+**  @retval 0 on sucess. -1 on failure
+**_________________________________________________________________________
+*/
+int storage_write_header_file(storage_t * st, int dev, char * path, rozofs_stor_bins_file_hdr_t * hdr) {
   size_t                    nb_write;
   int                       fd;
   char                      my_path[FILENAME_MAX];
   char                     *pChar;
- 
+  struct stat               buf;
+  int                       size2write;
+     
   /*
   ** Create directory when needed */
   if (storage_create_dir(path) < 0) {   
-    storio_hdr_error(hdr->v0.fid,dev,"create dir");
+    storio_hdr_error(hdr->fid,dev,"create dir");
     storage_error_on_device(st,dev);
     return -1;
-  }   
-
-   
+  }      
       
   strcpy(my_path,path); // Not to modify input path
   pChar = my_path;
   pChar += strlen(my_path);
-  rozofs_uuid_unparse_no_recycle(hdr->v0.fid, pChar);
+  rozofs_uuid_unparse_no_recycle(hdr->fid, pChar);
 
+  size2write = rozofs_st_get_header_file_size(hdr);
+  if (size2write < 0) {
+    severe("rozofs_st_get_header_file_size version %d",hdr->version);
+    return -1;
+  }  
+ 
   
   // Open bins file
   fd = open(my_path, ROZOFS_ST_BINS_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
   if (fd < 0) {	
-    storio_hdr_error(hdr->v0.fid, dev,"open hdr write");
+    storio_hdr_error(hdr->fid, dev,"open hdr write");
     storage_error_on_device(st,dev);    
     return -1;
   }      
 
+  
   // Write the header for this bins file
-  nb_write = pwrite(fd, hdr, sizeof (*hdr), 0);
-  close(fd);
-
-  if (nb_write != sizeof (*hdr)) {
-    storio_hdr_error(hdr->v0.fid, dev,"write hdr");
+  nb_write = pwrite(fd, hdr, size2write, 0);
+  if (nb_write != size2write) {
+    storio_hdr_error(hdr->fid, dev,"write hdr");
     storage_error_on_device(st,dev);  
+    close(fd);
     return -1;
   }
+  
+  // Truncate the file to the right size when it is too long
+  if (fstat(fd, &buf) == 0) {
+    if (buf.st_size > size2write) {
+      if (ftruncate(fd,size2write)<0) {};
+    }
+  }
+  close(fd);
   return 0;
 }  
 /*
@@ -586,30 +603,7 @@ int storage_write_all_header_files(storage_t * st, fid_t fid, uint8_t spare, roz
   }  
   return result;
 } 
-/*
-** Make a header file version 1 from a header file version 0
-** and rewrite it on disk
-*/
-static inline int update_header_file_version(storage_t * st, fid_t fid, uint8_t spare, rozofs_stor_bins_file_hdr_t * hdr) {
-
-  /*
-  ** If header file is in version 1 nothing to do
-  */
-  if (hdr->v0.version != 0) return 0;
-  
-  /*
-  ** Update header with version1 information
-  */
-  hdr->v0.version = 1;
-  hdr->v1.cid = st->cid;
-  hdr->v1.sid = st->sid;
-  
-  /*
-  ** Rewite header file
-  */
-  storage_write_all_header_files(st, fid, spare, hdr);
-  return 1;
-}    
+   
 /*
 ** API to be called when an error occurs on a device
  *
@@ -642,7 +636,7 @@ int storage_error_on_device(storage_t * st, uint8_t device_nb) {
   @retval  -1 on error
   
 */  
-int storage_truncate_recycle(storage_t * st, uint8_t * device, int storage_slice,uint8_t spare, fid_t fid,rozofs_stor_bins_file_hdr_t *file_hdr) {
+int storage_truncate_recycle(storage_t * st, int storage_slice,uint8_t spare, fid_t fid,rozofs_stor_bins_file_hdr_t *file_hdr) {
     int status = -1;
     char path[FILENAME_MAX];
     int fd = -1;
@@ -650,25 +644,28 @@ int storage_truncate_recycle(storage_t * st, uint8_t * device, int storage_slice
     int chunk;
     int result;
     int chunk_idx;
+    int dev;
 
 
     open_flags = ROZOFS_ST_BINS_FILE_FLAG;     
     // Build the chunk file name for chunk 0
     chunk = 0;
+    dev   = rozofs_st_header_get_chunk(file_hdr, chunk);
+    
     /*
     ** A valid device is given as input, so use it
     */
-    if ((device[chunk] != ROZOFS_EOF_CHUNK)&&(device[chunk] != ROZOFS_EMPTY_CHUNK)&&(device[chunk] != ROZOFS_UNKNOWN_CHUNK)) {
+    if ((dev != ROZOFS_EOF_CHUNK)&&(dev != ROZOFS_EMPTY_CHUNK)&&(dev != ROZOFS_UNKNOWN_CHUNK)) {
       /*
       ** Build the chunk file name using the valid device id given in the device array
       */
-      storage_build_chunk_full_path(path, st->root, device[chunk], spare, storage_slice, fid, chunk);
+      storage_build_chunk_full_path(path, st->root, dev, spare, storage_slice, fid, chunk);
 
       // Open bins file
       fd = open(path, open_flags, ROZOFS_ST_BINS_FILE_MODE);
       if (fd < 0) {
-          storio_fid_error(fid, device[chunk], chunk, 0, 0,"open truncate"); 		        
-	  storage_error_on_device(st,file_hdr->v0.device[chunk]);  				    
+          storio_fid_error(fid, dev, chunk, 0, 0,"open truncate"); 		        
+          storage_error_on_device(st,dev);  				    
           severe("open failed (%s) : %s", path, strerror(errno));
           goto out;
       }
@@ -685,17 +682,17 @@ int storage_truncate_recycle(storage_t * st, uint8_t * device, int storage_slice
       ** Find out the projection identifier for this sid
       */
       uint8_t  prj_id  = 0;
-      uint8_t  forward = rozofs_get_rozofs_forward(file_hdr->v0.layout);
+      uint8_t  forward = rozofs_get_rozofs_forward(file_hdr->layout);
       uint16_t rozofs_msg_psize=0, rozofs_disk_psize=0;
 
       for (prj_id=0; prj_id< forward; prj_id++) {
-        if (file_hdr->v0.dist_set_current[prj_id] == file_hdr->v1.sid) break;
+        if (file_hdr->distrib[prj_id] == file_hdr->sid) break;
       }
 
       /*
       ** Retrieve the projection size on disk
       */      
-      storage_get_projid_size(spare, prj_id, file_hdr->v0.layout, file_hdr->v0.bsize,
+      storage_get_projid_size(spare, prj_id, file_hdr->layout, file_hdr->bsize,
                               &rozofs_msg_psize, &rozofs_disk_psize);
       /*
       ** compute the truncate size
@@ -721,20 +718,27 @@ next_chunks:
     /*
     ** Remove the extra chunks
     */
-    for (chunk_idx=(chunk+1); chunk_idx<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk_idx++) {
+    for (chunk_idx=(chunk+1); chunk_idx<file_hdr->nbChunks; chunk_idx++) {
 
-      if (file_hdr->v0.device[chunk_idx] == ROZOFS_EOF_CHUNK) {
+      dev = rozofs_st_header_get_chunk(file_hdr, chunk_idx);
+
+      if (dev == ROZOFS_EOF_CHUNK) {
+        break;
+      }
+      
+      if (dev == ROZOFS_EMPTY_CHUNK) {
+        rozofs_st_header_set_chunk(file_hdr, chunk_idx, ROZOFS_EOF_CHUNK);
         continue;
       }
       
-      if (file_hdr->v0.device[chunk_idx] == ROZOFS_EMPTY_CHUNK) {
-        file_hdr->v0.device[chunk_idx] = ROZOFS_EOF_CHUNK;
-	continue;
-      }
-      
-      storage_rm_data_chunk(st, file_hdr->v0.device[chunk_idx], fid, spare, chunk_idx,1/*errlog*/);
-      file_hdr->v0.device[chunk_idx] = ROZOFS_EOF_CHUNK;
-    }     
+      storage_rm_data_chunk(st, dev, fid, spare, chunk_idx,1/*errlog*/);
+      rozofs_st_header_set_chunk(file_hdr, chunk_idx, ROZOFS_EOF_CHUNK);
+    }    
+    /*
+    ** Update number of chunks within the file header
+    */
+    file_hdr->nbChunks = rozofs_st_header_roundup_chunk_number(chunk+1);  
+    
     /* 
     ** Rewrite file header on disk
     */   
@@ -742,10 +746,7 @@ next_chunks:
     /*
     ** Failure on every write operation
     */ 
-    if (result == 0) goto out;
-      
-    memcpy(device,file_hdr->v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
-       
+    if (result == 0) goto out;       
     status = 0;
 out:
 
@@ -753,7 +754,104 @@ out:
     
     return status;
 }
+/*________________________________________________________________________
+**  Read a header file
+**
+**  @param path        File path
+**  @param cid         cluster id
+**  @param sid         logical storage identifier
+**  @param fid         FID
+**  @param hdr         Where to store the read header
+**
+**  @retval An error string or NULL on success
+**________________________________________________________________________
+*/
+char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozofs_stor_bins_file_hdr_t * hdr) {
+  int                 fd;
+  int                 nb_read;
+  
+  /*
+  ** Open hdr file
+  */
+  fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
+  if (fd < 0) {
+    return "open hdr read";       
+  }
 
+  nb_read = pread(fd, hdr, sizeof(rozofs_stor_bins_file_hdr_vall_t), 0); 
+  close(fd);
+
+  if (nb_read < 0) {
+    return "read hdr";       
+  }    
+
+  errno = ENODATA; 
+  if (nb_read <= 1) {
+    return "read hdr";       
+  }
+
+  /*
+  ** File can not be read completly 
+  */    
+  if (hdr->version == 0) {
+    if (nb_read < sizeof(rozofs_stor_bins_file_hdr_v0_t)) {
+      return "hdr0 size";       
+    }
+  }  
+  else if (hdr->version == 1) {
+    if (nb_read < sizeof(rozofs_stor_bins_file_hdr_v1_t)) {
+      return "hdr1 size";       
+    }
+  }
+  else if (hdr->version == 2) {
+    if ((hdr->nbChunks<8) || (hdr->nbChunks>ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) || (nb_read < rozofs_st_get_header_file_size(hdr))) {
+      return "hdr2 size";       
+    }
+    /*
+    ** Fullfill v2 chunk 2 device array with EOF marks
+    */
+    memset(&hdr->devFromChunk[hdr->nbChunks], ROZOFS_EOF_CHUNK, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-hdr->nbChunks);
+  }
+  else {
+    return "hdr vers";         
+  } 
+
+  /*
+  ** check CRC32
+  */
+  uint32_t crc32 = fid2crc32((uint32_t *)fid);
+  if (storio_check_header_crc32(hdr, crc32) != 0) {
+    errno = 0;
+    return "crc32 hdr";     
+  } 
+
+  /*
+  ** Transform v0 header to v1 header
+  */
+  if (hdr->version == 0) {
+    rozofs_stor_bins_file_hdr_vall_t * vall = (rozofs_stor_bins_file_hdr_vall_t*) hdr;
+    vall->v1.cid     = cid;
+    vall->v1.sid     = sid;
+    vall->v1.version = 1;
+  }
+  /*
+  ** Transform v1 header to v2 header
+  */
+  if (hdr->version == 1) {
+    rozofs_stor_bins_file_hdr_t v2; 
+    rozofs_st_header_from_v1_to_v2((rozofs_stor_bins_file_hdr_v1_t *)hdr, &v2);
+    int v2size = rozofs_st_get_header_file_size(&v2);        
+    memcpy(hdr,&v2,v2size);
+  }
+
+  /*
+  ** check the recycle case : not the same recycling value
+  */
+  if (memcmp(hdr->fid,fid,sizeof(fid_t)) != 0) {
+    return "recycle";   
+  }  
+  return NULL;
+}
 /*
  ** Read a header/mapper file
     This function looks for a header file of the given FID on every
@@ -786,18 +884,17 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
   int  absoluteIdx;
   char path[FILENAME_MAX];
   int  storage_slice;
-  int  fd;
-  int  nb_read;
   int       nb_devices=0;
   struct stat buf;
   int       idx;
   int       ret;
   uint64_t  to_repair=0;
   char     *pChar;
-  int                       nbMapper=0;
-  int                       orderedIdx[STORAGE_MAX_DEVICE_NB];
-  rozofs_storage_dev_info_t devinfo[STORAGE_MAX_DEVICE_NB];
-  rozofs_storage_dev_info_t * pdevinfo;
+  int                           nbMapper=0;
+  int                           orderedIdx[STORAGE_MAX_DEVICE_NB];
+  rozofs_storage_dev_info_t     devinfo[STORAGE_MAX_DEVICE_NB];
+  rozofs_storage_dev_info_t   * pdevinfo;
+  char                        * error;
   
   memset(orderedIdx,0,sizeof(orderedIdx));
   memset(devinfo,0,sizeof(devinfo));
@@ -831,13 +928,7 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
     ** Check that this directory already exists, otherwise it will be create
     */
     if (storage_create_dir(path) < 0) {
-      /*
-      ** Log error in memory log
-      */
       storio_hdr_error(fid, absoluteIdx,"create dir");   
-      /*
-      ** Consider the device is in fault
-      */
       storage_error_on_device(st,absoluteIdx);
       continue;
     }   
@@ -867,7 +958,7 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
     ** File is not completly written. 
     ** Should be rewritten
     */
-    if (buf.st_size < sizeof(hdr->v0)) {
+    if (buf.st_size < (sizeof(rozofs_stor_bins_file_hdr_v2_t)-ROZOFS_STORAGE_MAX_CHUNK_PER_FILE)) {
       to_repair |= (1ULL<<fidRelativeIdx);
       pdevinfo->result = ENODATA;
       continue;
@@ -960,152 +1051,70 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
     absoluteIdx    = devinfo[fidRelativeIdx].absoluteIdx;
     storage_build_hdr_file_path(path, st->root, absoluteIdx, spare, storage_slice, fid);
 
-    /*
-    ** Open hdr file
-    */
-    fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
-    if (fd < 0) {
-      /*
-      ** Log error in memory log
-      */
-      storio_hdr_error(fid, absoluteIdx,"open hdr read");       
-      /*
-      ** Consider the device is in fault
-      */	
-      storage_error_on_device(st,absoluteIdx);
-      continue;
-    }
+    error = rozofs_st_header_read(path, st->cid, st->sid, fid, hdr);    
+    if (error == NULL) break;
     
-    nb_read = pread(fd, hdr, sizeof (*hdr), 0);    
-    if (nb_read < 0) {
-      /*
-      ** Should be rewritten
-      */      
-      to_repair |= (1ULL<<fidRelativeIdx);
-      /*
-      ** Log error in memory log
-      */
-      storio_hdr_error(fid, absoluteIdx, "read hdr");       
-      /*
-      ** Consider the device is in fault
-      */	
-      storage_error_on_device(st,absoluteIdx);
-      
-      close(fd);
-      continue;
-    }
-
-    close(fd);
-    
-    /*
-    ** File can not be read completly 
-    */
-    if (nb_read < sizeof(hdr->v0)) {
-      /*
-      ** Should be rewritten
-      */      
-      to_repair |= (1ULL<<fidRelativeIdx);
-      /*
-      ** Log error in memory log
-      */
-      errno = ENODATA;
-      storio_hdr_error(fid, absoluteIdx, "read hdr");       
-      /*
-      ** Consider the device is in fault
-      */	
-      storage_error_on_device(st,absoluteIdx);
-      continue;
-    }
-        
-    /*
-    ** check CRC32
-    */
-    uint32_t crc32 = fid2crc32((uint32_t *)fid);
-    if (storio_check_header_crc32(hdr,&st->crc_error, crc32) != 0) {
-      /*
-      ** Should be rewritten
-      */      
-      to_repair |= (1ULL<<fidRelativeIdx);
-      /*
-      ** Log error in memory log
-      */
-      errno = 0;
-      storio_hdr_error(fid, absoluteIdx,"crc32 hdr");  
-      /*
-      ** Consider the device is in fault
-      */	                 
-      storage_error_on_device(st,absoluteIdx);   
-      continue;      
-    } 
-     
-    /*
-    ** check the recycle case : not the same recycling value
-    */
-    if (memcmp(hdr->v0.fid,fid,sizeof(fid_t))!= 0)
-    {
+    if (strcmp(error,"recycle")==0) {
       /*
       ** need to update the value of the fid in hdr
       */
       if (update_recycle) {
-	memcpy(hdr->v0.fid,fid,sizeof(fid_t));
-	storage_truncate_recycle(st,hdr->v0.device,storage_slice,spare,fid,hdr);
-	return STORAGE_READ_HDR_OK;
+        memcpy(hdr->fid,fid,sizeof(fid_t));
+        storage_truncate_recycle(st,storage_slice,spare,fid,hdr);
+        return STORAGE_READ_HDR_OK;
       }
       /*
       ** This not the same FID, so the file we are looking for does not exist
       */
-      else {
-        return STORAGE_READ_HDR_OTHER_RECYCLING_COUNTER;
-      }	    
-    }
-    
-    /*
-    ** Check whether header file is in version 1
-    */
-    if (update_header_file_version(st, fid, spare, hdr) == 1) {
-      /* header file was in version 0 and has been update to version 1 */
-      return STORAGE_READ_HDR_OK;
-    }
-    
-    /*
-    ** Header file has been read successfully. 
-    ** Check whether some header files need to be repaired
-    */
-    if (to_repair!=0) {
-      for (fidRelativeIdx=0; fidRelativeIdx < nbMapper; fidRelativeIdx++) {
-        if (to_repair & (1ULL<<fidRelativeIdx)) {
-	  /*
-	  ** Rewrite corrupted header file
-	  */
-          absoluteIdx = devinfo[fidRelativeIdx].absoluteIdx;
-	  storage_build_hdr_path(path, st->root, absoluteIdx, spare, storage_slice);
-	  if (storage_write_header_file(st,absoluteIdx, path, hdr)==0) {
-            /*
-            ** Log reparation in memory log
-            */
-            errno = 0;
-            storio_hdr_error(fid, absoluteIdx,"hdr repaired");            
-          }
-	}
-      }
+      return STORAGE_READ_HDR_OTHER_RECYCLING_COUNTER;	    
     }
 
-    return STORAGE_READ_HDR_OK;	
+    if (strcmp(error,"crc32 hdr")==0) {
+       __atomic_fetch_add(&st->crc_error,1,__ATOMIC_SEQ_CST);
+    }
+
+    to_repair |= (1ULL<<fidRelativeIdx);
+    storio_hdr_error(fid, absoluteIdx, error);       
+    storage_error_on_device(st, absoluteIdx);
   }  
   
-  /*
+  /*       
   ** All devices have problems
   */
-  return STORAGE_READ_HDR_ERRORS;
+  if (idx == nb_devices) {
+    return STORAGE_READ_HDR_ERRORS;
+  }
+      
+  /*
+  ** Header file has been read successfully. 
+  ** Check whether some header files need to be repaired
+  */
+  if (to_repair!=0) {
+    for (fidRelativeIdx=0; fidRelativeIdx < nbMapper; fidRelativeIdx++) {
+      if (to_repair & (1ULL<<fidRelativeIdx)) {
+	/*
+	** Rewrite corrupted header file
+	*/
+        absoluteIdx = devinfo[fidRelativeIdx].absoluteIdx;
+	storage_build_hdr_path(path, st->root, absoluteIdx, spare, storage_slice);
+        if (storage_write_header_file(st, absoluteIdx, path, hdr) == 0) {
+          /*
+          ** Log reparation in memory log
+          */
+          errno = 0;
+          storio_hdr_error(fid, absoluteIdx,"hdr repaired");            
+        }
+      }
+    }
+  }
+  return STORAGE_READ_HDR_OK;	
 }
-
-
-
 /*
  ** Find the name of the chunk file.
     
   @param st        : storage we are looking on
-  @param device_id : the device_id the file resides on or -1 when unknown
+  @param fidCtx    : the FID mapping context
+  @param dev       : the device number from the fidCtx
   @param chunk     : chunk number to write
   @param fid       : FID of the file to write
   @param layout    : layout to use
@@ -1135,12 +1144,13 @@ typedef enum {
 	  
 static inline storage_dev_map_distribution_write_ret_e
     storage_dev_map_distribution_write(  storage_t * st, 
-					 uint8_t * device,
+                                         storio_device_mapping_t * fidCtx,
+                                         uint8_t                 * dev,
 					 uint8_t chunk,
 					 uint32_t bsize, 
 					 fid_t fid, 
 					 uint8_t layout,
-                                	 sid_t dist_set[ROZOFS_SAFE_MAX], 
+                                	 sid_t * dist_set, 
 					 uint8_t spare, 
 					 char *path, 
 					 int version,
@@ -1148,16 +1158,16 @@ static inline storage_dev_map_distribution_write_ret_e
     int                         result;
     STORAGE_READ_HDR_RESULT_E   read_hdr_res;
     int                         storage_slice = rozofs_storage_fid_slice(fid); 
-    uint8_t                     dev;       
+    
 
     /*
     ** A valid device is given as input, so use it
     */
-    if ((device[chunk] != ROZOFS_EOF_CHUNK)&&(device[chunk] != ROZOFS_EMPTY_CHUNK)&&(device[chunk] != ROZOFS_UNKNOWN_CHUNK)) {
+    if ((*dev != ROZOFS_EOF_CHUNK)&&(*dev != ROZOFS_EMPTY_CHUNK)&&(*dev != ROZOFS_UNKNOWN_CHUNK)) {
       /*
       ** Build the chunk file name using the valid device id given in the device array
       */
-      storage_build_chunk_full_path(path, st->root, device[chunk], spare, storage_slice, fid, chunk);
+      storage_build_chunk_full_path(path, st->root, *dev, spare, storage_slice, fid, chunk);
       return MAP_OK;  
     }   
 
@@ -1184,72 +1194,49 @@ static inline storage_dev_map_distribution_write_ret_e
     */
     if (read_hdr_res == STORAGE_READ_HDR_OK) {
        
-      dev = file_hdr->v0.device[chunk];
+      *dev = rozofs_st_header_get_chunk(file_hdr,chunk);
       
       /*
       ** A device is already allocated for this chunk.
       */
-      if ((dev != ROZOFS_EOF_CHUNK)&&(dev != ROZOFS_EMPTY_CHUNK)) {
+      if ((*dev != ROZOFS_EOF_CHUNK)&&(*dev != ROZOFS_EMPTY_CHUNK)) {
       
 	 /*
 	 ** Build the chunk file name using the device id read from the header file
 	 */
-	 storage_build_chunk_full_path(path, st->root, dev, spare, storage_slice, fid, chunk);
+	 storage_build_chunk_full_path(path, st->root, *dev, spare, storage_slice, fid, chunk);
 	 
          /*
 	 ** Update input device array from the read header file
 	 */
-         memcpy(device,file_hdr->v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
-	 
+         storio_store_to_ctx(fidCtx, file_hdr->nbChunks, file_hdr->devFromChunk);	 
 	 return MAP_OK;
       }   
-      
-      /*
-      ** We are extending the file
-      */
-      if (dev == ROZOFS_EOF_CHUNK) {
-        /*
-	** All previous chunks that where said EOF must be said EMPTY
-	*/
-        int idx;
-	for (idx=0; idx <= chunk; idx++) {
-	  if (file_hdr->v0.device[idx] == ROZOFS_EOF_CHUNK) {
-	    file_hdr->v0.device[idx] = ROZOFS_EMPTY_CHUNK;
-	  }
-	}
-      } 
-      
+         
     }    
       
     /*
     ** Header file does not exist. This is a brand new file
     */    
     if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) {
-      int idx;
-      /*
+     /*
       ** Prepare file header
       */
-      memcpy(file_hdr->v0.dist_set_current, dist_set, ROZOFS_SAFE_MAX * sizeof (sid_t));
-      file_hdr->v0.layout = layout;
-      file_hdr->v0.bsize  = bsize;
-      file_hdr->v0.version = 1;
-      file_hdr->v1.cid = st->cid;
-      file_hdr->v1.sid = st->sid;
-      memcpy(file_hdr->v0.fid, fid,sizeof(fid_t)); 
-      for (idx=0; idx <= chunk; idx++) {
-	file_hdr->v0.device[idx] = ROZOFS_EMPTY_CHUNK;
-      }
-      for (;idx<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; idx++) {
-	file_hdr->v0.device[idx] = ROZOFS_EOF_CHUNK;      
-      }        
+      rozofs_st_header_init(file_hdr);
+      memcpy(file_hdr->distrib, dist_set, ROZOFS_ST_HEADER_MAX_DISTRIB * sizeof (sid_t));
+      file_hdr->layout = layout;
+      file_hdr->bsize  = bsize;
+      file_hdr->cid = st->cid;
+      file_hdr->sid = st->sid;
+      memcpy(file_hdr->fid, fid,sizeof(fid_t)); 
     }
     
       
     /*
     ** Allocate a device for this newly written chunk
     */
-    dev = storio_device_mapping_allocate_device(st);
-    file_hdr->v0.device[chunk] = dev; 
+    *dev = storio_device_mapping_allocate_device(st);
+    rozofs_st_header_set_chunk(file_hdr,chunk,*dev);     
         
     /*
     ** (re)Write the header files on disk 
@@ -1274,7 +1261,7 @@ static inline storage_dev_map_distribution_write_ret_e
     /*
     ** Build the chunk file name using the newly allocated device id
     */
-    storage_build_chunk_full_path(path, st->root, dev, spare, storage_slice, fid, chunk);
+    storage_build_chunk_full_path(path, st->root, *dev, spare, storage_slice, fid, chunk);
     
     /*
     ** Update input device array from header file
@@ -1507,7 +1494,7 @@ void storage_release(storage_t * st) {
 uint64_t buf_ts_storage_write[STORIO_CACHE_BCOUNT];
 
 
-int storage_relocate_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t spare, 
+int storage_relocate_chunk(storage_t * st, storio_device_mapping_t * fidCtx,fid_t fid, uint8_t spare, 
                            uint8_t chunk, uint8_t * old_device) {
     STORAGE_READ_HDR_RESULT_E      read_hdr_res;  
     rozofs_stor_bins_file_hdr_t    file_hdr;
@@ -1535,7 +1522,7 @@ int storage_relocate_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t s
     ** Header file does not exist! This is a brand new file
     */    
     if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) { 
-      memset(device,ROZOFS_UNKNOWN_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+      storio_free_dev_mapping(fidCtx);
       *old_device = ROZOFS_EMPTY_CHUNK;
       return 0;
     }
@@ -1545,29 +1532,29 @@ int storage_relocate_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t s
     */
     
     /* Save the previous chunk location and then release it */
-    *old_device = file_hdr.v0.device[chunk];
+    *old_device = rozofs_st_header_get_chunk(&file_hdr,chunk);
     
     /* Last chunk ? */
     if (chunk == (ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-1)) {
-      file_hdr.v0.device[chunk] = ROZOFS_EOF_CHUNK;
+      rozofs_st_header_set_chunk(&file_hdr, chunk, ROZOFS_EOF_CHUNK);
     }
     /* End of file ? */
-    else if (file_hdr.v0.device[chunk+1] == ROZOFS_EOF_CHUNK) {
+    else if (rozofs_st_header_get_chunk(&file_hdr, chunk+1) == ROZOFS_EOF_CHUNK) {
       int idx;
-      file_hdr.v0.device[chunk] = ROZOFS_EOF_CHUNK;
+      rozofs_st_header_set_chunk(&file_hdr, chunk, ROZOFS_EOF_CHUNK);
       idx = chunk-1;
       /* Previous empty chunk is now end of file */
       while (idx>=0) {
-        if (file_hdr.v0.device[idx] != ROZOFS_EMPTY_CHUNK) break;
-	file_hdr.v0.device[idx] = ROZOFS_EOF_CHUNK;
-	idx--;
+        if (rozofs_st_header_get_chunk(&file_hdr,idx) != ROZOFS_EMPTY_CHUNK) break;
+        rozofs_st_header_set_chunk(&file_hdr,idx, ROZOFS_EOF_CHUNK);
+	    idx--;
       }
     }
     /* Inside the file */
     else {
-      file_hdr.v0.device[chunk] = ROZOFS_EMPTY_CHUNK;
+      rozofs_st_header_set_chunk(&file_hdr,chunk,ROZOFS_EMPTY_CHUNK);
     }  
-    memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+    storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);
 
     /* 
     ** Rewrite file header on disk
@@ -1592,11 +1579,12 @@ int storage_rm_data_chunk(storage_t * st, uint8_t device, fid_t fid, uint8_t spa
   }
   return ret;  
 } 
-int storage_restore_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t spare, 
+int storage_restore_chunk(storage_t * st, storio_device_mapping_t * fidCtx, fid_t fid, uint8_t spare, 
                            uint8_t chunk, uint8_t old_device) {
     STORAGE_READ_HDR_RESULT_E      read_hdr_res;  
     rozofs_stor_bins_file_hdr_t    file_hdr;
-    int                            result;       
+    int                            result;  
+    int                            idx;     
    
     /*
     ** Let's read the header file 
@@ -1620,7 +1608,7 @@ int storage_restore_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t sp
     ** Header file does not exist! This is a brand new file
     */    
     if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) { 
-      memset(device,ROZOFS_UNKNOWN_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+      storio_free_dev_mapping(fidCtx);
       return 0;
     }
 
@@ -1640,36 +1628,45 @@ int storage_restore_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t sp
     /*
     ** Remove new data file which rebuild has failed 
     */
-    storage_rm_data_chunk(st, file_hdr.v0.device[chunk], fid, spare, chunk,0/* No errlog*/);        
+    int dev = rozofs_st_header_get_chunk(&file_hdr,chunk);
+    storage_rm_data_chunk(st, dev , fid, spare, chunk,0/* No errlog*/);        
     
     /*
     ** Restore device in header file
     */
-    file_hdr.v0.device[chunk] = old_device;
+    rozofs_st_header_set_chunk(&file_hdr, chunk, old_device);
+    
     if (old_device==ROZOFS_EOF_CHUNK) {
       /* not the last chunk */
       if ((chunk != (ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-1))
-      &&  (file_hdr.v0.device[chunk+1] != ROZOFS_EOF_CHUNK)) {
-	file_hdr.v0.device[chunk] = ROZOFS_EMPTY_CHUNK;
+      &&  (rozofs_st_header_get_chunk(&file_hdr,chunk+1) != ROZOFS_EOF_CHUNK)) {
+         rozofs_st_header_set_chunk(&file_hdr,chunk,ROZOFS_EMPTY_CHUNK);
       }
     }
     else if (old_device==ROZOFS_EMPTY_CHUNK) {  
       /* Last chunk */
       if ((chunk == (ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-1))
-      ||  (file_hdr.v0.device[chunk+1] != ROZOFS_EOF_CHUNK)) {
-	file_hdr.v0.device[chunk] = ROZOFS_EOF_CHUNK;
-      }   
+      ||  (rozofs_st_header_get_chunk(&file_hdr,chunk+1) == ROZOFS_EOF_CHUNK)) {
+        rozofs_st_header_set_chunk(&file_hdr,chunk,ROZOFS_EOF_CHUNK);
+      } 
     }
-    if (file_hdr.v0.device[chunk] == ROZOFS_EOF_CHUNK) {
-      int idx = chunk-1;
+    if (rozofs_st_header_get_chunk(&file_hdr,chunk) == ROZOFS_EOF_CHUNK) {
+      idx = chunk-1;
       /* Previous empty chunk is now end of file */
       while (idx>=0) {
-        if (file_hdr.v0.device[idx] != ROZOFS_EMPTY_CHUNK) break;
-	file_hdr.v0.device[idx] = ROZOFS_EOF_CHUNK;
-	idx--;
+        if (rozofs_st_header_get_chunk(&file_hdr,idx) != ROZOFS_EMPTY_CHUNK) break;
+        rozofs_st_header_set_chunk(&file_hdr,idx,ROZOFS_EOF_CHUNK);
+	    idx--;
       }      
-    }     
-    memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+    }    
+    
+    for (idx=0; idx < ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; idx++) {
+      if (rozofs_st_header_get_chunk(&file_hdr,idx) == ROZOFS_EOF_CHUNK) {
+        break;
+      }
+    }
+    file_hdr.nbChunks = rozofs_st_header_roundup_chunk_number(idx);    
+    storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);
 
     /* 
     ** Rewrite file header on disk
@@ -1697,17 +1694,18 @@ int storage_write_chunk(storage_t * st, storio_device_mapping_t * fidCtx, uint8_
     int    device_id_is_given;
     rozofs_stor_bins_file_hdr_t file_hdr;
     storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
-    uint8_t * device = fidCtx->device;
+    uint8_t   dev = storio_get_dev(fidCtx, chunk);
 
     // No specific fault on this FID detected
     *is_fid_faulty = 0; 
 
     dbg("%d/%d Write chunk %d : ", st->cid, st->sid, chunk);
    
-open:    
+  
     // If the device id is given as input, that proves that the file
     // has been existing with that name on this device sometimes ago. 
-    if ((device[chunk] != ROZOFS_EOF_CHUNK)&&(device[chunk] != ROZOFS_EMPTY_CHUNK)&&(device[chunk] != ROZOFS_UNKNOWN_CHUNK)) {
+open:  
+    if ((dev != ROZOFS_EOF_CHUNK)&&(dev != ROZOFS_EMPTY_CHUNK)&&(dev != ROZOFS_UNKNOWN_CHUNK)) {
       device_id_is_given = 1;
       open_flags = ROZOFS_ST_NO_CREATE_FILE_FLAG;
     }
@@ -1718,7 +1716,7 @@ open:
     }        
  
     // Build the chunk file name 
-    map_result = storage_dev_map_distribution_write(st, device, chunk, bsize, 
+    map_result = storage_dev_map_distribution_write(st, fidCtx, &dev, chunk, bsize, 
                                         	    fid, layout, dist_set, 
 						    spare, path, 0, &file_hdr);
     if (map_result == MAP_FAILURE) {
@@ -1731,23 +1729,23 @@ open:
     
         // Something definitively wrong on device
         if (errno != ENOENT) {
-          storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"open write");	
-	  storage_error_on_device(st,device[chunk]); 
+          storio_fid_error(fid, dev, chunk, bid, nb_proj,"open write");	
+	  storage_error_on_device(st,dev); 
 	  goto out;
 	}
 	
         // If device id was not given as input, the file path has been deduced from 
 	// the header files or should have been allocated. This is a definitive error !!!
 	if (device_id_is_given == 0) {
-          storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"open write");
-	  storage_error_on_device(st,device[chunk]); 
+          storio_fid_error(fid, dev, chunk, bid, nb_proj,"open write");
+	  storage_error_on_device(st,dev); 
 	  goto out;
 	}
 	
 	// The device id was given as input so the file did exist some day,
 	// but the file may have been deleted without storio being aware of it.
 	// Let's try to find the file again without using the given device id.
-	device[chunk] = ROZOFS_EOF_CHUNK;
+	dev = ROZOFS_EOF_CHUNK;
 	goto open;    
     }
 
@@ -1816,7 +1814,7 @@ open:
     if (nb_write != length_to_write) {
 	
         if (errno==0) errno = ENOSPC;
-	storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"write");
+	storio_fid_error(fid, dev, chunk, bid, nb_proj,"write");
         
 	/*
 	** Only few bytes written since no space left on device 
@@ -1825,7 +1823,7 @@ open:
 	  errno = ENOSPC;
 	  goto out;
         }
-	storage_error_on_device(st,device[chunk]);
+	storage_error_on_device(st,dev);
 	// A fault probably localized to this FID is detected   
 	*is_fid_faulty = 1;  
         severe("pwrite(%s) size %llu expecting %llu offset %llu : %s",
@@ -1862,12 +1860,12 @@ out:
     ** Update device array in FID cache from header file
     */    
     if (map_result == MAP_COPY2CACHE) {
-      memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);    
+      storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);    
     }
         
     return status;
 }
-char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+char * storage_write_repair3_chunk(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
         uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, sp_b2rep_t * blk2repair, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty) {
     char path[FILENAME_MAX];
@@ -1880,6 +1878,7 @@ char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t lay
     struct stat sb;
     rozofs_stor_bins_file_hdr_t file_hdr;
     storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
+    uint8_t   dev;
 
     char *data_p = NULL;
     int block_idx;
@@ -1892,20 +1891,20 @@ char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t lay
     *is_fid_faulty = 0; 
 
     dbg("%d/%d repair chunk %d : ", st->cid, st->sid, chunk);
- 
-           
+    dev = storio_get_dev(fidCtx, chunk); 
+        
     /*
     ** This is a repair, so the blocks to repair have been read and the CRC32 
     ** was incorrect, so the chunk must exist.
     */
-    if ((device[chunk] == ROZOFS_EOF_CHUNK)||(device[chunk] == ROZOFS_EMPTY_CHUNK)||(device[chunk] == ROZOFS_UNKNOWN_CHUNK)) {
+    if ((dev == ROZOFS_EOF_CHUNK)||(dev == ROZOFS_EMPTY_CHUNK)||(dev == ROZOFS_UNKNOWN_CHUNK)) {
       errno = EADDRNOTAVAIL;
       storio_repair_stat.file_error++;
       goto out;
     }   
  
     // Build the chunk file name
-    map_result = storage_dev_map_distribution_write(st, device, chunk, bsize, 
+    map_result = storage_dev_map_distribution_write(st, fidCtx, &dev, chunk, bsize, 
                                         	    fid, layout, dist_set, 
 						    spare, path, 0, &file_hdr);
     if (map_result == MAP_FAILURE) {
@@ -1916,10 +1915,10 @@ char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t lay
     // Open bins file
     fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
     if (fd < 0) {
-      storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"open repair"); 		
-      storage_error_on_device(st,device[chunk]); 
-      storio_repair_stat.file_error++;
-      goto out;
+      storio_fid_error(fid, dev, chunk, bid, nb_proj,"open repair"); 		
+      storage_error_on_device(st,dev); 
+      storio_repair_stat.file_error++; 
+     goto out;
     }
 
     /*
@@ -1989,26 +1988,27 @@ char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t lay
          /*
          ** Trace CRC32 repair in sgorio log
          */
-         storio_fid_error(fid, device[chunk], chunk, block_idx, 1,"crc32 repaired"); 	
+         storio_fid_error(fid, dev, chunk, block_idx, 1,"crc32 repaired");         
          storio_repair_stat.nb_blocks_success++;
          continue;	     
        }       
 
        /*
-       ** Trace error 
-       */
-       storio_fid_error(fid, device[chunk], chunk, block_idx, 1,"write repair");
-       storage_error_on_device(st,device[chunk]);
-
-       /*
        ** Only few bytes written since no space left on device 
        */
        if ((errno==0)||(errno==ENOSPC)) {
-	 errno = ENOSPC;
+         errno = ENOSPC;
        }
        else {
          severe("pwrite failed: %s", strerror(errno));
        } 
+
+       /*
+       ** Trace error 
+       */
+       storio_fid_error(fid, dev, chunk, block_idx, 1,"write repair");
+       storage_error_on_device(st,dev); 
+
     }    
 
 out:
@@ -2049,7 +2049,7 @@ int storage_read_chunk(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t
     int                       storage_slice;
     struct iovec vector[ROZOFS_MAX_BLOCK_PER_MSG*2];
     uint64_t    crc32_errors[3]; 
-    uint8_t * device = fidCtx->device;
+    uint8_t     dev;
     int result;
     
     dbg("%d/%d Read chunk %d : ", st->cid, st->sid, chunk);
@@ -2057,11 +2057,12 @@ int storage_read_chunk(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t
     // No specific fault on this FID detected
     *is_fid_faulty = 0;  
     path[0]=0;
+    dev = storio_get_dev(fidCtx, chunk); 
     
     /*
     ** When device array is not given, one has to read the header file on disk
     */
-    if (device[0] == ROZOFS_UNKNOWN_CHUNK) {
+    if (dev == ROZOFS_UNKNOWN_CHUNK) {
       device_id_is_given = 0;    
     }
 
@@ -2113,11 +2114,11 @@ retry:
       */      
       if (read_hdr_res == STORAGE_READ_HDR_OTHER_RECYCLING_COUNTER) {
         /*
-	** Update the FID context in order to make it fit with the disk content
-	** Copy recycling counter value as well as chunk distribution
-	*/
-	fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.v0.fid);
-	memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+        ** Update the FID context in order to make it fit with the disk content
+        ** Copy recycling counter value as well as chunk distribution
+        */
+        fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.fid);
+        storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);
         errno = ENOENT;
         goto out;  
       } 
@@ -2125,22 +2126,22 @@ retry:
       /*
       ** Update recycle counter in FID context when relevant
       */
-      if (fidCtx->recycle_cpt != rozofs_get_recycle_from_fid(file_hdr.v0.fid)) {
-        fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.v0.fid); 
+      if (fidCtx->recycle_cpt != rozofs_get_recycle_from_fid(file_hdr.fid)) {
+        fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.fid); 
       } 
 
       /* 
       ** The header file has been read
       */
-      memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
-      
+      storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);
+      dev = storio_get_dev(fidCtx, chunk); 
     } 
     
          
     /*
     ** We are trying to read after the end of file
     */				     
-    if (device[chunk] == ROZOFS_EOF_CHUNK) {
+    if (dev == ROZOFS_EOF_CHUNK) {
       *len_read = 0;
       status = nb_proj * rozofs_msg_psize;
       goto out;
@@ -2149,7 +2150,7 @@ retry:
     /*
     ** We are trying to read inside a whole. Return 0 on the requested size
     */      
-    if(device[chunk] == ROZOFS_EMPTY_CHUNK) {
+    if(dev == ROZOFS_EMPTY_CHUNK) {
       *len_read = nb_proj * rozofs_msg_psize;
       memset(bins,0,* len_read);
       status = *len_read;
@@ -2158,7 +2159,7 @@ retry:
     
   
     storage_slice = rozofs_storage_fid_slice(fid);
-    storage_build_chunk_full_path(path, st->root, device[chunk], spare, storage_slice, fid,chunk);
+    storage_build_chunk_full_path(path, st->root, dev, spare, storage_slice, fid,chunk);
 
     // Open bins file
     fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE_RO);
@@ -2166,18 +2167,18 @@ retry:
     
         // Something definitively wrong on device
         if (errno != ENOENT) {
-          storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"open read"); 		
-	  storage_error_on_device(st,device[chunk]); 
+          storio_fid_error(fid, dev, chunk, bid, nb_proj,"open read"); 		
+	  storage_error_on_device(st,dev); 
 	  goto out;
 	}
 	
         // If device id was not given as input, the file path has been deduced from 
 	// the header files and so should exist. This is an error !!!
 	if (device_id_is_given == 0) {
-          storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"open read"); 			  
+          storio_fid_error(fid, dev, chunk, bid, nb_proj,"open read"); 			  
 	  errno = EIO; // Data file is missing !!!
 	  *is_fid_faulty = 1;
-	  storage_error_on_device(st,device[chunk]); 
+	  storage_error_on_device(st,dev); 
 	  goto out;
 	}
 	
@@ -2195,7 +2196,7 @@ retry:
     length_to_read   = nb_proj * rozofs_disk_psize;
 
     //dbg("read %s bid %d nb %d",path,bid,nb_proj);
-    
+  
     /*
     ** Reading the projection directly as they will be sent in message
     */
@@ -2227,9 +2228,9 @@ retry:
     
     // Check error
     if (nb_read == -1) {
-        storio_fid_error(fid, device[chunk], chunk, bid, nb_proj,"read"); 			
+        storio_fid_error(fid, dev, chunk, bid, nb_proj,"read"); 			
         severe("pread failed: %s", strerror(errno));
-	storage_error_on_device(st,device[chunk]);  
+	storage_error_on_device(st,dev);  
 	// A fault probably localized to this FID is detected   
 	*is_fid_faulty = 1;   		
         goto out;
@@ -2283,18 +2284,17 @@ retry:
 				       crc32,
 				       crc32_errors);      
     }
-    
     if (result!=0) { 
       int i;
       errno = 0;
       for (i = 0; i < nb_proj_effective ; i++) {
         if (crc32_errors[i/64] & (1ULL<<(i%64))) {
-          storio_fid_error(fid, device[chunk], chunk, bid+i, 1,"crc32"); 		     
+          storio_fid_error(fid, dev, chunk, bid+i, 1,"crc32"); 		     
           result--;
           if(result==0) break;
         }
       }  
-    }
+    }	  
 
     // Update the length read
     *len_read = (nb_read/rozofs_disk_psize)*rozofs_msg_psize;
@@ -2322,7 +2322,7 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
     uint16_t rozofs_disk_psize;
     int                       storage_slice;
     uint64_t    crc32_errors[3]; 
-    uint8_t * device = fidCtx->device;
+    uint8_t     dev;
     int result;
     int chunk;
     struct stat buf; 
@@ -2343,10 +2343,12 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
     storage_get_projection_size(spare, st->sid, layout, bsize, dist_set,
                                 &rozofs_msg_psize, &rozofs_disk_psize); 
     
+    dev = storio_get_dev(fidCtx,0);
+    
     /*
     ** When device array is not given, one has to read the header file on disk
     */
-    if (device[0] == ROZOFS_UNKNOWN_CHUNK) {
+    if (dev == ROZOFS_UNKNOWN_CHUNK) {
       rozofs_stor_bins_file_hdr_t file_hdr;
       STORAGE_READ_HDR_RESULT_E read_hdr_res;  
       
@@ -2381,11 +2383,11 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
       */      
       if (read_hdr_res == STORAGE_READ_HDR_OTHER_RECYCLING_COUNTER) {
         /*
-	** Update the FID context in order to make it fit with the disk content
-	** Copy recycling counter value as well as chunk distribution
-	*/
-	fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.v0.fid);
-	memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+        ** Update the FID context in order to make it fit with the disk content
+        ** Copy recycling counter value as well as chunk distribution
+        */
+        fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.fid);
+        storio_store_to_ctx(fidCtx,file_hdr.nbChunks, file_hdr.devFromChunk);
         errno = ENOENT;
         goto out;  
       } 
@@ -2393,36 +2395,31 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
       /*
       ** Update recycle counter in FID context when relevant
       */
-      if (fidCtx->recycle_cpt != rozofs_get_recycle_from_fid(file_hdr.v0.fid)) {
-        fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.v0.fid); 
+      if (fidCtx->recycle_cpt != rozofs_get_recycle_from_fid(file_hdr.fid)) {
+        fidCtx->recycle_cpt = rozofs_get_recycle_from_fid(file_hdr.fid); 
       } 
 
       /* 
       ** The header file has been read
       */
-      memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);  
+      storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);
     }
     
     /* 
     ** Get the last chunk number
     */
-    for (chunk = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-1; chunk>=0; chunk--) {
-      if (device[chunk] == ROZOFS_EOF_CHUNK)     continue;
-      if (device[chunk] == ROZOFS_UNKNOWN_CHUNK) continue;
-      if (device[chunk] == ROZOFS_EMPTY_CHUNK)   continue;
-      break;
-    }
-    
+    chunk = storio_get_last_chunk(fidCtx,&dev);
     if (chunk < 0) {
       errno = ENOENT;
       goto out;  
     } 
+    dev = storio_get_dev(fidCtx,chunk);
      
     /*
     ** Build the chunk full path
     */
     storage_slice = rozofs_storage_fid_slice(fid);
-    storage_build_chunk_full_path(path, st->root, device[chunk], spare, storage_slice, fid,chunk);
+    storage_build_chunk_full_path(path, st->root, dev, spare, storage_slice, fid,chunk);
 
     // Open bins file
     fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE_RO);
@@ -2430,27 +2427,27 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
     
         // Something definitively wrong on device
         if (errno != ENOENT) {
-          storio_fid_error(fid, device[chunk], chunk, 0, 0,"open resize"); 		
-	  storage_error_on_device(st,device[chunk]); 
+          storio_fid_error(fid, dev, chunk, 0, 0,"open resize"); 		
+	  storage_error_on_device(st,dev); 
 	  goto out;
 	}
 	
         // If device id was not given as input, the file path has been deduced from 
 	// the header files and so should exist. This is an error !!!
-        storio_fid_error(fid, device[chunk], chunk, 0, 0,"open resize"); 			  
+        storio_fid_error(fid, dev, chunk, 0, 0,"open resize"); 			  
 	errno = EIO; // Data file is missing !!!
 	*is_fid_faulty = 1;
-	storage_error_on_device(st,device[chunk]); 
+	storage_error_on_device(st,dev); 
 	goto out;
     }	
 
 	       
     // Compute the offset and length to write
     if (fstat(fd, &buf)<0) {
-       storio_fid_error(fid, device[chunk], chunk, 0, 0,"open resize"); 			  
+       storio_fid_error(fid, dev, chunk, 0, 0,"open resize"); 			  
        errno = EIO; // Data file is missing !!!
        *is_fid_faulty = 1;
-       storage_error_on_device(st,device[chunk]);
+       storage_error_on_device(st,dev);
        goto out;        
     }
 
@@ -2474,9 +2471,9 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
     
     // Check error
     if (nb_read == -1) {
-        storio_fid_error(fid, device[chunk], chunk, *nb_blocks, 1,"resize"); 			
+        storio_fid_error(fid, dev, chunk, *nb_blocks, 1,"resize"); 			
         severe("pread failed: %s", strerror(errno));
-	storage_error_on_device(st,device[chunk]);  
+	storage_error_on_device(st,dev);  
 	// A fault probably localized to this FID is detected   
 	*is_fid_faulty = 1;   		
         goto out;
@@ -2504,11 +2501,11 @@ int storage_resize(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t lay
 				crc32,
 				crc32_errors);
     if (result!=0) { 
-      storio_fid_error(fid, device[chunk], chunk, (*nb_blocks), result,"read crc32"); 		     
-      if (result>1) storage_error_on_device(st,device[chunk]); 
+      storio_fid_error(fid, dev, chunk, (*nb_blocks), result,"read crc32"); 		     
+      if (result>1) storage_error_on_device(st,dev); 
        errno = EIO; // Data file is missing !!!
        *is_fid_faulty = 1;
-       storage_error_on_device(st,device[chunk]);
+       storage_error_on_device(st,dev);
        goto out;       
     }	  
 
@@ -2551,44 +2548,38 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
     rozofs_stor_bins_file_hdr_t file_hdr;
     int                         rewrite_file_hdr = 0;
     storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
-    uint8_t * device;
+    uint8_t   dev;
 
     if (chunk>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) { 
       errno = EFBIG;
       return -1;
     } 
+    dev = storio_get_dev(fidCtx,chunk);
     
     // No specific fault on this FID detected
     *is_fid_faulty = 0;  
 
     /*
-    ** device is in this procedure the device filed of the file_hdr local
-    ** working variable. The FID context will be update at the end of the
-    ** procedure
+    ** Prepare a v2 file header
     */
-    device = file_hdr.v0.device;
-
-    /*
-    ** Prepare file header
-    */
-    memcpy(file_hdr.v0.dist_set_current, dist_set, ROZOFS_SAFE_MAX * sizeof (sid_t));
-    file_hdr.v0.layout  = layout;
-    file_hdr.v0.bsize   = bsize;
-    file_hdr.v0.version = 1;
-    file_hdr.v1.cid     = st->cid;
-    file_hdr.v1.sid     = st->sid;	
-    memcpy(file_hdr.v0.fid, fid, sizeof(fid_t)); 
+    rozofs_st_header_init(&file_hdr);
+    memcpy(file_hdr.distrib, dist_set, ROZOFS_ST_HEADER_MAX_DISTRIB * sizeof (sid_t));
+    file_hdr.layout  = layout;
+    file_hdr.bsize   = bsize;
+    file_hdr.cid     = st->cid;
+    file_hdr.sid     = st->sid;	
+    memcpy(file_hdr.fid, fid, sizeof(fid_t)); 
 
 
     /*
     ** Valid FID context. Do not re read disk but use FID ctx information.
     */
-    if (fidCtx->device[0] != ROZOFS_UNKNOWN_CHUNK) {
+    if (dev != ROZOFS_UNKNOWN_CHUNK) {
     
       /*
       ** FID context contains valid distribution. Use it.
       */
-      memcpy(device,fidCtx->device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);   
+      storio_read_from_ctx(fidCtx, &file_hdr.nbChunks, file_hdr.devFromChunk);
       
       /*
       ** Process to the recycling when needed
@@ -2602,7 +2593,7 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
 	** Update disk
 	*/	
 	int storage_slice = rozofs_storage_fid_slice(fid);
-	storage_truncate_recycle(st,device,storage_slice,spare,fid,&file_hdr);
+	storage_truncate_recycle(st,storage_slice,spare,fid,&file_hdr);
       }   
    
     }
@@ -2629,10 +2620,6 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
       */    
       if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) {
 	rewrite_file_hdr = 1; // Header files will have to be written back to disk
-	/*
-	** Initialize chunk distribution
-	*/
-	memset(device,ROZOFS_EMPTY_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
       }
       
       /*
@@ -2645,28 +2632,25 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
     ** Let's process to the truncate at the requested size 
     ** using information read from disk
     */  
-   
-    /*
-    ** In case of a file expension through truncate, let's set the previous 
-    ** chunks to empty when they where EOF
-    */
-    for (chunk_idx=0; chunk_idx<chunk; chunk_idx++) {
-      if (device[chunk_idx] == ROZOFS_EOF_CHUNK) {
-        rewrite_file_hdr = 1;// Header files will have to be re-written to disk
-        device[chunk_idx] = ROZOFS_EMPTY_CHUNK;
-      }
-    }
-     
+    dev = rozofs_st_header_get_chunk(&file_hdr, chunk);
+
     /*
     ** We may allocate a device for the current truncated chunk
     */ 
-    if ((device[chunk] == ROZOFS_EOF_CHUNK)||(device[chunk] == ROZOFS_EMPTY_CHUNK)) {
-      rewrite_file_hdr = 1;// Header files will have to be re-written to disk    
-      device[chunk] = storio_device_mapping_allocate_device(st);
+    if ((dev == ROZOFS_EOF_CHUNK)||(dev == ROZOFS_EMPTY_CHUNK)) {
+      rewrite_file_hdr = 1;// Header files will have to be re-written to disk   
+      /*
+      ** Aloocate a device
+      */ 
+      dev = storio_device_mapping_allocate_device(st);
+      /*
+      ** Store the devic e in the file header
+      */
+      rozofs_st_header_set_chunk(&file_hdr, chunk, dev);
     }
     
     // Build the chunk file name
-    map_result = storage_dev_map_distribution_write(st, device, chunk, bsize, 
+    map_result = storage_dev_map_distribution_write(st, fidCtx, &dev, chunk, bsize, 
                                         	    fid, layout, dist_set, 
 						    spare, path, 0, &file_hdr);
     if (map_result == MAP_FAILURE) {
@@ -2676,8 +2660,8 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
     // Open bins file
     fd = open(path, ROZOFS_ST_BINS_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
     if (fd < 0) {	
-      storio_fid_error(fid, device[chunk], chunk, bid, last_seg,"open truncate"); 		        
-      storage_error_on_device(st,device[chunk]);  				    
+      storio_fid_error(fid, dev, chunk, bid, last_seg,"open truncate"); 		        
+      storage_error_on_device(st,dev);  				    
       severe("open failed (%s) : %s", path, strerror(errno));
       goto out;
     }
@@ -2726,9 +2710,9 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
 	nb_write = pwrite(fd, data, length_to_write, bins_file_offset);
 	if (nb_write != length_to_write) {
             status = -1;
-            storio_fid_error(fid, device[chunk], chunk, bid, last_seg,"write truncate"); 		    
+            storio_fid_error(fid, dev, chunk, bid, last_seg,"write truncate"); 		    
             severe("pwrite failed on last segment: %s", strerror(errno));
-	    storage_error_on_device(st,device[chunk]); 
+	    storage_error_on_device(st,dev); 
 	    // A fault probably localized to this FID is detected   
 	    *is_fid_faulty = 1;  	     				    
             goto out;
@@ -2747,9 +2731,9 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
 
 	nb_write = pwrite(fd, &bins_hdr, sizeof(bins_hdr), bins_file_offset);
 	if (nb_write != sizeof(bins_hdr)) {
-            storio_fid_error(fid, device[chunk], chunk, bid, last_seg,"write hdr truncate"); 	
+            storio_fid_error(fid, dev, chunk, bid, last_seg,"write hdr truncate"); 	
             severe("pwrite failed on last segment header : %s", strerror(errno));
-	    storage_error_on_device(st,device[chunk]); 
+	    storage_error_on_device(st,dev); 
 	    // A fault probably localized to this FID is detected   
 	    *is_fid_faulty = 1;  	     				    
             goto out;
@@ -2760,9 +2744,9 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
 	        + rozofs_get_psizes(layout,bsize,proj_id) * sizeof (bin_t));
 	nb_write = pwrite(fd, &last_timestamp, sizeof(last_timestamp), bins_file_offset);
 	if (nb_write != sizeof(last_timestamp)) {
-            storio_fid_error(fid, device[chunk], chunk, bid, last_seg,"write foot truncate"); 	
+            storio_fid_error(fid, dev, chunk, bid, last_seg,"write foot truncate"); 	
             severe("pwrite failed on last segment footer : %s", strerror(errno));
-	    storage_error_on_device(st,device[chunk]);  				    
+	    storage_error_on_device(st,dev);  				    
 	    // A fault probably localized to this FID is detected   
 	    *is_fid_faulty = 1;  
             goto out;
@@ -2774,21 +2758,25 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
     /*
     ** Remove the extra chunks
     */
+    file_hdr.nbChunks = rozofs_st_header_roundup_chunk_number(chunk+1);
     for (chunk_idx=(chunk+1); chunk_idx<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk_idx++) {
 
-      if (device[chunk_idx] == ROZOFS_EOF_CHUNK) {
+      dev = rozofs_st_header_get_chunk(&file_hdr, chunk_idx);
+      if (dev == ROZOFS_EOF_CHUNK) {
         continue;
       }
-      
-      if (device[chunk_idx] == ROZOFS_EMPTY_CHUNK) {
-        rewrite_file_hdr = 1;      
-        device[chunk_idx] = ROZOFS_EOF_CHUNK;
-	continue;
+
+      rewrite_file_hdr = 1;                  
+      if (dev != ROZOFS_EMPTY_CHUNK) {
+        /*
+        ** Remove the chunk
+        */
+        storage_rm_data_chunk(st, dev, fid, spare, chunk_idx,1/*errlog*/);
       }
-      
-      storage_rm_data_chunk(st, device[chunk_idx], fid, spare, chunk_idx,1/*errlog*/);
-      rewrite_file_hdr = 1;            
-      device[chunk_idx] = ROZOFS_EOF_CHUNK;
+      /*
+      ** Update the header file
+      */
+      rozofs_st_header_set_chunk(&file_hdr,chunk_idx,ROZOFS_EOF_CHUNK);
     } 
     
     /* 
@@ -2806,7 +2794,7 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
     /*
     ** Update device array in FID cache from header file
     */ 
-    memcpy(fidCtx->device,device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+    storio_store_to_ctx(fidCtx,file_hdr.nbChunks, file_hdr.devFromChunk);
     status = 0;
     
 out:
@@ -2815,11 +2803,12 @@ out:
     return status;
 }
 
-int storage_rm_chunk(storage_t * st, uint8_t * device, 
+int storage_rm_chunk(storage_t * st, storio_device_mapping_t * fidCtx, 
                      uint8_t layout, uint8_t bsize, uint8_t spare, 
 		     sid_t * dist_set, fid_t fid, 
 		     uint8_t chunk, int * is_fid_faulty) {
     rozofs_stor_bins_file_hdr_t file_hdr;
+    uint8_t                     dev;
 
     dbg("%d/%d rm chunk %d : ", st->cid, st->sid, chunk);
 
@@ -2829,7 +2818,7 @@ int storage_rm_chunk(storage_t * st, uint8_t * device,
     /*
     ** When device array is not given, one has to read the header file on disk
     */
-    if (device[0] == ROZOFS_UNKNOWN_CHUNK) {
+    if (storio_get_dev(fidCtx,0) == ROZOFS_UNKNOWN_CHUNK) {
       STORAGE_READ_HDR_RESULT_E read_hdr_res;  
       
       read_hdr_res = storage_read_header_file(
@@ -2858,70 +2847,78 @@ int storage_rm_chunk(storage_t * st, uint8_t * device,
       /* 
       ** The header file has been read
       */
-      memcpy(device,file_hdr.v0.device,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
-    } 
+      storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);
+   } 
     else {
-      file_hdr.v0.layout = layout;
-      file_hdr.v0.bsize  = bsize;  ///< Block size as defined in enum ROZOFS_BSIZE_E
-      memcpy(file_hdr.v0.fid, fid, sizeof(fid_t));
-      memcpy(file_hdr.v0.dist_set_current, dist_set, sizeof(sid_t)*ROZOFS_SAFE_MAX);
+      /*
+      ** Prepare a v2 file header
+      */
+      rozofs_st_header_init(&file_hdr);
+      memcpy(file_hdr.distrib, dist_set, ROZOFS_ST_HEADER_MAX_DISTRIB * sizeof (sid_t));
+      file_hdr.layout  = layout;
+      file_hdr.bsize   = bsize;
+      file_hdr.cid     = st->cid;
+      file_hdr.sid     = st->sid;	
+      memcpy(file_hdr.fid, fid, sizeof(fid_t)); 
+      storio_read_from_ctx(fidCtx, &file_hdr.nbChunks, file_hdr.devFromChunk);      
     }
-    
+             
+    dev = storio_get_dev(fidCtx,chunk);
          
     /*
     ** We are trying to read after the end of file
     */				     
-    if (device[chunk] == ROZOFS_EOF_CHUNK) {
+    if (dev == ROZOFS_EOF_CHUNK) {
       return 0;
     }
 
     /*
     ** This chunk is a whole
     */      
-    if(device[chunk] == ROZOFS_EMPTY_CHUNK) {
+    if(dev == ROZOFS_EMPTY_CHUNK) {
       return 0;
     }
     
     /*
     ** Remove data chunk
     */
-    storage_rm_data_chunk(st, device[chunk], fid, spare, chunk, 0 /* No errlog*/) ;
+    storage_rm_data_chunk(st, dev, fid, spare, chunk, 0 /* No errlog*/) ;
     
     // Last chunk
     if ((chunk+1) >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) {
-      device[chunk] = ROZOFS_EOF_CHUNK;
+      rozofs_st_header_set_chunk(&file_hdr, chunk, ROZOFS_EOF_CHUNK);
     }
     // Next chunk is end of file
-    else if (device[chunk+1] == ROZOFS_EOF_CHUNK) {  
-      device[chunk] = ROZOFS_EOF_CHUNK;
+    else if (storio_get_dev(fidCtx,chunk+1) == ROZOFS_EOF_CHUNK) {  
+      rozofs_st_header_set_chunk(&file_hdr, chunk, ROZOFS_EOF_CHUNK);
     }
     // Next chunk is not end of file
     else {
-      device[chunk] = ROZOFS_EMPTY_CHUNK;
+      rozofs_st_header_set_chunk(&file_hdr, chunk, ROZOFS_EMPTY_CHUNK);
     }
     
     /*
     ** Chunk is now EOF. Are the previous chunks empty ?
     */ 
-    while (device[chunk] == ROZOFS_EOF_CHUNK) {
+    while (rozofs_st_header_get_chunk(&file_hdr,chunk) == ROZOFS_EOF_CHUNK) {
       /*
       ** The file is totaly empty
       */
       if (chunk == 0) {
         storage_dev_map_distribution_remove(st, fid, spare);
-	return 0;
+	    return 0;
       }
       
       chunk--;
-      if (device[chunk] == ROZOFS_EMPTY_CHUNK) {
-        device[chunk] = ROZOFS_EOF_CHUNK;
+      if (rozofs_st_header_get_chunk(&file_hdr,chunk) == ROZOFS_EMPTY_CHUNK) {
+        rozofs_st_header_set_chunk(&file_hdr, chunk, ROZOFS_EOF_CHUNK);
       }
     }
     
     /*
     ** Re-write distibution
     */
-    memcpy(file_hdr.v0.device,device,sizeof(file_hdr.v0.device));
+    storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);
     storage_write_all_header_files(st, fid, spare, &file_hdr);        
     return 0;
 }
@@ -2954,18 +2951,20 @@ int storage_rm_file(storage_t * st, fid_t fid) {
       
       for (chunk=0; chunk<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk++) {
       
-        if (file_hdr.v0.device[chunk] == ROZOFS_EOF_CHUNK) {
-	  break;
-	}
-	
-	if (file_hdr.v0.device[chunk] == ROZOFS_EMPTY_CHUNK) {
-	  continue;
-	}
+        int dev = rozofs_st_header_get_chunk(&file_hdr,chunk);
 
-	/*
-	** Remove data chunk
-	*/
-	storage_rm_data_chunk(st, file_hdr.v0.device[chunk], fid, spare, chunk, 0 /* No errlog*/);
+        if (dev == ROZOFS_EOF_CHUNK) {
+	       break;
+        }
+	
+	    if (dev == ROZOFS_EMPTY_CHUNK) {
+          continue;
+        }
+
+        /*
+        ** Remove data chunk
+        */
+        storage_rm_data_chunk(st, dev, fid, spare, chunk, 0 /* No errlog*/);
       }
 
       // It's not possible for one storage to store one bins file
@@ -2982,7 +2981,6 @@ void storage_rm_best_effort(storage_t * st, fid_t fid, uint8_t spare) {
   int  dev;
   uint32_t storage_slice;
   DIR           * dp = NULL;
-  struct dirent   ep;
   struct dirent * pep;  
   int             dirfd;
     
@@ -3003,41 +3001,154 @@ void storage_rm_best_effort(storage_t * st, fid_t fid, uint8_t spare) {
   for (dev=0; dev < st->mapper_redundancy ; dev++) {
 
     /*
-	** Get the slice path
-	*/
+    ** Get the slice path
+    */
     storage_build_slice_path(path, st->root, dev, spare, storage_slice);
 
-	dirfd = open(path,O_RDONLY);
+    dirfd = open(path,O_RDONLY);
     if (dirfd< 0) {
-	  warning("open(%s) %s",path, strerror(errno));
-	  continue; 
-	}
+      warning("open(%s) %s",path, strerror(errno));
+      continue; 
+    }
 		
-	dp = opendir(path);
-	if (dp) {
+    dp = opendir(path);
+    if (dp) {
 	
-	  // Readdir the slice content
-	  while (readdir_r(dp,&ep,&pep) == 0) {
+      // Readdir the slice content
+      while ((pep = readdir(dp)) != NULL) {
 
-    	// end of directory
-    	if (pep == NULL) break;
+        // end of directory
+        if (pep == NULL) break;
 
-    	// Check whether this is the expected file
-    	if (strncmp(pep->d_name,FID_string,36) != 0) continue;
+        // Check whether this is the expected file
+        if (strncmp(pep->d_name,FID_string,36) != 0) continue;
             
         unlinkat(dirfd,pep->d_name,0);
-		info("best effort %s%s", path, pep->d_name);
-	  }
-	}
-	closedir(dp);
-	close(dirfd);
+        info("best effort %s%s", path, pep->d_name);
+      }
+    }
+    closedir(dp);
+    close(dirfd);
   }    
 }
+/*_____________________________________________________________________________
+** Compute the size of a file as well as the number of allocated sectors
+** from  stat() on every projection file.
+**
+** @param st                  The logical storage context
+** @param fid                 The FID of the target file
+** @param spare               Whether this storage is spare for this file
+** @param nb_chunk            returned number of created chunk
+** @param file_size_in_blocks returned nfile size in blocks
+** @param allocated_sectors   returned allocated sectors of projections
+**
+** @retval 0 on success. -1 on error (errno is set)
+**_____________________________________________________________________________
+*/
+int storage_size_file(storage_t * st, fid_t fid, uint8_t spare, uint32_t * nb_chunk, 
+                      uint64_t * file_size_in_blocks, uint64_t * allocated_sectors) {
+  STORAGE_READ_HDR_RESULT_E   read_hdr_res;
+  int                         chunk;
+  rozofs_stor_bins_file_hdr_t file_hdr;
+  int32_t                     storage_slice;
+  char                        path[FILENAME_MAX];
+  uint8_t                     dev;
+  struct stat                 buf;
+  uint16_t                    rozofs_msg_psize;
+  uint16_t                    rozofs_disk_psize;
+  
+  
+  *file_size_in_blocks = 0;
+  *allocated_sectors   = 0;
+  *nb_chunk            = 0;
+
+  /*
+  ** Let's read the header file 
+  */      
+  read_hdr_res = storage_read_header_file(
+          st,       // cid/sid context
+          fid,      // FID we are looking for
+	  spare,    // Whether the storage is spare for this FID
+	  &file_hdr,// Returned header file content
+          0 );      // Update header file when not the same recycling value
+
+
+  if (read_hdr_res == STORAGE_READ_HDR_ERRORS) {
+    /*
+    ** No header file is correct....
+    */
+    errno = EIO;
+    return -1;
+  }
+  
+  if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) {
+    /*
+    ** File does nor exist
+    */
+    errno = ENOENT;
+    return -1;
+  }
+  
+  /*
+  ** Compute the storage slice from the FID
+  */
+  storage_slice = rozofs_storage_fid_slice(fid);    
+
+  /*
+  ** Retrieve the projection size in the message 
+  ** and the projection size on disk
+  */
+  storage_get_projection_size(spare, st->sid, file_hdr.layout, file_hdr.bsize, file_hdr.distrib,
+                              &rozofs_msg_psize, &rozofs_disk_psize); 
+
+  /*
+  ** stat every chunk
+  */
+  for (chunk=0; chunk<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk++) {
+
+    dev = rozofs_st_header_get_chunk(&file_hdr,chunk);
+
+    /*
+    ** No more chunk
+    */
+    if (dev == ROZOFS_EOF_CHUNK) {
+      break;
+    }
+
+    /*
+    ** This chunk is empty
+    */
+    if (dev == ROZOFS_EMPTY_CHUNK) {
+      continue;
+    }
+
+    /*
+    ** stat this chunk
+    */
+    storage_build_chunk_full_path(path, st->root, dev, spare, storage_slice, fid, chunk);
+    if (stat(path,&buf) == 0) {
+      *file_size_in_blocks = buf.st_size;
+      *allocated_sectors  += buf.st_blocks;
+      *nb_chunk           += 1;
+    }
+  }
+  
+  if (chunk) {
+    *file_size_in_blocks /= rozofs_disk_psize;
+    *file_size_in_blocks += ((chunk-1)*ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.bsize));
+  }
+  
+  //info("%d chunks %llu blocks %llu sectors",*nb_chunk,*file_size_in_blocks, *allocated_sectors)
+  
+  return 0;               
+} 
+
 int storage_rm2_file(storage_t * st, fid_t fid, uint8_t spare) {
  STORAGE_READ_HDR_RESULT_E read_hdr_res;
  int chunk;
  rozofs_stor_bins_file_hdr_t file_hdr;
-
+ int dev;
+ 
   /*
   ** Let's read the header file 
   */      
@@ -3071,18 +3182,20 @@ int storage_rm2_file(storage_t * st, fid_t fid, uint8_t spare) {
   */
   for (chunk=0; chunk<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk++) {
 
-    if (file_hdr.v0.device[chunk] == ROZOFS_EOF_CHUNK) {
+    dev = rozofs_st_header_get_chunk(&file_hdr,chunk);
+
+    if (dev == ROZOFS_EOF_CHUNK) {
       break;
     }
 
-    if (file_hdr.v0.device[chunk] == ROZOFS_EMPTY_CHUNK) {
+    if (dev == ROZOFS_EMPTY_CHUNK) {
       continue;
     }
 
     /*
     ** Remove data chunk
     */
-    storage_rm_data_chunk(st, file_hdr.v0.device[chunk], fid, spare, chunk, 0 /* No errlog*/);
+    storage_rm_data_chunk(st, dev, fid, spare, chunk, 0 /* No errlog*/);
   }
 
   storage_dev_map_distribution_remove(st, fid, spare);
@@ -3099,8 +3212,6 @@ bins_file_rebuild_t ** storage_list_bins_file(storage_t * st, sid_t sid, uint8_t
     struct dirent *ep = NULL;
     bins_file_rebuild_t **iterator = children;
     rozofs_stor_bins_file_hdr_t file_hdr;
-    int                         fd;
-    int                         nb_read;
     int                         sid_idx;
     int                         safe;
 
@@ -3130,34 +3241,27 @@ bins_file_rebuild_t ** storage_list_bins_file(storage_t * st, sid_t sid, uint8_t
 
     // Readdir the next entries
     while (ep && i < MAX_REBUILD_ENTRIES) {
+        fid_t   fid;
     
         if ((strcmp(ep->d_name,".") != 0) && (strcmp(ep->d_name,"..") != 0)) {      
-
+            char * error;
+            
             // Read the file
             storage_build_hdr_path(path, st->root, device_id, spare, slice);
             strcat(path,ep->d_name);
 
-	    fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
-	    if (fd < 0) {
-	       severe("open(%s) %s", path, strerror(errno));
+            rozofs_uuid_parse(ep->d_name,fid);
+            error = rozofs_st_header_read(path, st->cid, st->sid, fid, &file_hdr);         
+            if (error != NULL) {
                // Readdir for next entry
                ep = readdir(dp);	       
 	       continue;
             }
-            nb_read = pread(fd, &file_hdr, sizeof(file_hdr), 0);
-	    close(fd);	    
 
-            // What to do with such an error ?
-	    if (nb_read != sizeof(file_hdr)) {
-	       severe("nb_read %d vs %d %s", nb_read, (int) sizeof(file_hdr), path);
-               // Readdir for next entry
-               ep = readdir(dp);     
-	       continue;
-            }
 	    // Check the requested sid is in the distribution
-	    safe = rozofs_get_rozofs_safe(file_hdr.v0.layout);
+	    safe = rozofs_get_rozofs_safe(file_hdr.layout);
 	    for (sid_idx=0; sid_idx<safe; sid_idx++) {
-	      if (file_hdr.v0.dist_set_current[sid_idx] == sid) break;
+	      if (file_hdr.distrib[sid_idx] == sid) break;
 	    }
 	    if (sid_idx == safe) {
                // Readdir for next entry
@@ -3169,13 +3273,14 @@ bins_file_rebuild_t ** storage_list_bins_file(storage_t * st, sid_t sid, uint8_t
             *iterator = xmalloc(sizeof (bins_file_rebuild_t)); // XXX FREE ?
             // Copy FID
             //rozofs_uuid_parse(ep->d_name, (*iterator)->fid);
-	    memcpy((*iterator)->fid,file_hdr.v0.fid,sizeof(fid_t));
+            memcpy((*iterator)->fid,file_hdr.fid,sizeof(fid_t));
             // Copy current dist_set
-            memcpy((*iterator)->dist_set_current, file_hdr.v0.dist_set_current,
-                    sizeof (sid_t) * ROZOFS_SAFE_MAX);
+            int size2copy = sizeof(file_hdr.distrib);
+            memcpy((*iterator)->dist_set_current, file_hdr.distrib,size2copy);
+            memset(&(*iterator)->dist_set_current[size2copy], 0, sizeof ((*iterator)->dist_set_current)-size2copy);
             // Copy layout
-            (*iterator)->layout = file_hdr.v0.layout;
-            (*iterator)->bsize = file_hdr.v0.bsize;
+            (*iterator)->layout = file_hdr.layout;
+            (*iterator)->bsize = file_hdr.bsize;
 
             // Go to next entry
             iterator = &(*iterator)->next;
@@ -3345,7 +3450,6 @@ void storage_enumerated_device_free(storage_enumerated_device_t * pDev) {
 int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDev) {
   DIR           * dp = NULL;
   int             ret;
-  struct dirent   ep;
   struct dirent * pep; 
   struct stat     buf;
   char            path[FILENAME_MAX];  
@@ -3431,7 +3535,7 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
   /*
   ** Look for some RozoFS mark file
   */
-  while (readdir_r(dp,&ep,&pep) == 0) {
+  while ((pep = readdir(dp)) != NULL) {
 
     /*
     ** end of directory

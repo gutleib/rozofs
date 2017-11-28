@@ -20,6 +20,7 @@ include_directories(${CMAKE_SOURCE_DIR}) # for librozofs headers
 include_directories(${PTHREAD_INCLUDE_DIR})
 link_directories(${CMAKE_BINARY_DIR}/rozofs)
 
+
 add_executable(storaged
     mproto.c
     mprotosvc.h
@@ -40,6 +41,11 @@ add_executable(storaged
     storaged_sub_thread_intf.h    
 )
 target_link_libraries(storaged rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+
+add_executable(rozo_storage_fid2pathname
+    rozo_storage_fid2pathname.c
+)
+target_link_libraries(rozo_storage_fid2pathname rozofs ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 add_executable(stspare
     sconfig.h
@@ -143,6 +149,12 @@ target_link_libraries(rozodump rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFI
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT storage)
 
+install(TARGETS rozo_storage_fid2pathname
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_storage_fid2pathname
+)
 install(TARGETS stspare
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
@@ -179,6 +191,6 @@ install(TARGETS rozodump
     ARCHIVE DESTINATION lib
     COMPONENT rozodump
 )
+
 install(FILES storage.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
 install(FILES storage.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
-install(PROGRAMS rozo_make_rebuild_lists DESTINATION bin)

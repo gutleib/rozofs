@@ -554,8 +554,11 @@ reloop:
     ** OK, so now finish by starting the guard timer
     */
     if (opcode == EP_STATFS) {
+      uint32_t tmr_val;
       /* df must give a response (even negative) in less than 2 seconds !!! */
-      rozofs_tx_start_timer(rozofs_tx_ctx_p, 2);    
+      tmr_val = ROZOFS_TMR_GET(TMR_EXPORT_PROGRAM);
+      if (tmr_val > 2) tmr_val = 2; 
+      rozofs_tx_start_timer(rozofs_tx_ctx_p, tmr_val);    
     }
     else {
       rozofs_tx_start_timer(rozofs_tx_ctx_p, ROZOFS_TMR_GET(TMR_EXPORT_PROGRAM));

@@ -29,7 +29,8 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/wait.h>
-
+#include <stdarg.h>
+ 
 //#define LAUNCHER_TRACE 1
 
 #ifdef LAUNCHER_TRACE
@@ -98,12 +99,14 @@ void rozolauncher_catch_sigpipe(int s){
   * Try to read the process id in the gieven pid file and sends it a SIGTERM
   *
   * @param pid_file The name of the pid file
+  * @timer          Time in ms to wait for the process to dy
  */
-int rozolauncher_stop(char * pid_file) {
+int rozolauncher_stop(char * pid_file, int timer) {
   int   fd;
   char  process_id_string[64];
   int   ret;   
   int   pid;
+  struct timespec ts;
 
   
   fd = open(pid_file,O_RDONLY, 0640);
@@ -125,7 +128,30 @@ int rozolauncher_stop(char * pid_file) {
   info("killing process %d %s",pid,pid_file);
 #endif 
   
-  return kill(pid,SIGTERM);
+  kill(pid,SIGTERM);
+  
+  while (timer) {
+  
+    /*
+    ** pid file has been removed
+    */      
+    if (access(pid_file,R_OK)!=0) return 0;
+    
+    /*
+    ** pid file not yet removed. 
+    ** Let's wait...
+    */
+    timer--;
+    ts.tv_sec  = 0;
+    ts.tv_nsec = 1000000;
+    nanosleep(&ts,NULL);      
+  }  
+
+#ifdef LAUNCHER_TRACE
+  info("File %s not yet removed !!!",pid_file);
+#endif   
+
+  return 0;
 }
 
 /*
@@ -194,17 +220,31 @@ void rozolauncher_write_pid_file(char * pid_file) {
 /*
  *_______________________________________________________________________
  */
-void usage(char * msg) {
-
-  if (msg) {
-    fprintf(stderr, "\n%s\n\n", msg);
+void usage(char * fmt, ...) {
+  va_list   args;
+  char      error_buffer[512];
+  
+  /*
+  ** Display optionnal error message if any
+  */
+  if (fmt) {
+    va_start(args,fmt);
+    vsprintf(error_buffer, fmt, args);
+    va_end(args);   
+#ifdef LAUNCHER_TRACE
+    severe("%s",error_buffer);
+#endif   
+    printf("%s\n",error_buffer);
   }
+  
   
   fprintf(stderr, "Usage: \n");
   fprintf(stderr, "  rozolauncher start <pid file> <command line>\n");
   fprintf(stderr, "     This command launches a process that runs the command defined\n");
   fprintf(stderr, "     in <command line> and relaunches it when it fails. The process\n");  
   fprintf(stderr, "     saves its pid in <pid file>.\n");
+  fprintf(stderr, "  rozolauncher deamon <pid file> <command line>\n");
+  fprintf(stderr, "     Identical to start but daemonize.\n");
   fprintf(stderr, "  rozolauncher stop <pid file>\n");
   fprintf(stderr, "     This command kill the process whose pid is in <pid file>\n");
   fprintf(stderr, "  rozolauncher reload <pid file>\n");
@@ -215,12 +255,13 @@ void usage(char * msg) {
 /*
  *_______________________________________________________________________
 ** argv[0] is rozolauncher
-** argv[1] is either start or stop
+** argv[1] is either start, daemon, stop or reload
 ** argv[2] pid file name
-** argv[3...  the command line to rin in case of a start command
+** argv[3...  the command line to run in case of a start or daemon command
  */
 int main(int argc, char *argv[]) {
   time_t   last_start = 0;
+  int      deamonize;
 
 #ifdef LAUNCHER_TRACE
   openlog("launcher", LOG_PID, LOG_DAEMON);
@@ -230,23 +271,19 @@ int main(int argc, char *argv[]) {
   /*
   ** Change local directory to "/"
   */
-  if (chdir("/")!=0) {
-#ifdef LAUNCHER_TRACE  
-    warning("chir(/) %s",strerror(errno));
-#endif    
-  }
+  if (chdir("/")!=0) {}
 
   /*
   ** Check the number of arguments
   */
-  if (argc < 3) usage("rozolauncher requires at least 3 arguments");
+  if (argc < 3) usage("rozolauncher requires at least 3 arguments but only %d are provided",argc);
 
 
   /*
   ** Stop
   */
   if (strcmp(argv[1],"stop")==0) {
-    return rozolauncher_stop(argv[2]);
+    return rozolauncher_stop(argv[2],50);
   }
   /*
   ** Reload
@@ -256,50 +293,48 @@ int main(int argc, char *argv[]) {
   }
 
   /*
-  ** Start
+  ** Start/deamon
   */
-  if (strcmp(argv[1],"start")!=0) {
-    usage("rozolauncher 1rst argument must be within <start|stop>"); 
-#ifdef LAUNCHER_TRACE
-    info("Neither start or stop"); 
-#endif
+  deamonize = 0;
+  if (strcmp(argv[1],"start")!=0){
+  
+    if (strcmp(argv[1],"deamon")==0){
+      deamonize = 1;
+    }  
+    else {
+      usage("rozolauncher 1rst argument \"%s\" should be within <start|stop|reload|daemon>",argv[1]); 
+    }  
   }
      
   /*
   ** Check the number of arguments
   */
-  if (argc < 4) {
-#ifdef LAUNCHER_TRACE
-    info("only %d args",argc); 
-#endif  
-    usage("rozolauncher start requires at least 4 arguments");
+  if (argc < 4) { 
+    usage("rozolauncher <start|daemon> requires at least 4 arguments but only %d are provided",argc);
   }  
   
   /*
   ** Kill previous process if any
   */
-  if (rozolauncher_stop(argv[2]) == 0) {
-    /*
-    ** Someone is dead. 1 ms of silence
-    */
-    struct timespec ts;
-  
-    ts.tv_sec  = 0;
-    ts.tv_nsec = 1000000;
-    nanosleep(&ts,NULL);
-  }
+  rozolauncher_stop(argv[2],100);
  
-#if 1
-  /*
-  ** Let's daemonize (only for storaged daemon)
-  */
 
   char *daemon_name;
   char exe_path[1024];
   strcpy(exe_path, argv[3]);
   daemon_name = basename(exe_path);
 
+  /*
+  ** daemonize storaged
+  */
   if ( strcmp(daemon_name, "storaged") == 0) {
+    deamonize = 1;
+  }
+  
+  /*
+  ** Let's daemonize 
+  */
+  if (deamonize) {
     #ifdef LAUNCHER_TRACE
         info("daemonize launcher");
     #endif
@@ -310,7 +345,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
   }
-#endif
+
   
   /*
   ** Write pid file

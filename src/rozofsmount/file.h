@@ -192,18 +192,22 @@ static inline void * _rozofs_write_in_buffer(char * file, int line, file_t * f, 
   ** Check the writen size not to exceed the buffer
   */
   if (f->chekWord != FILE_CHECK_WORD) {
+    severe("%s:%d Bad checkword",file,line);
     goto error;
   }  
   if (f->buffer == NULL) {
+    severe("%s:%d Null buffer",file,line);
     goto error;
   }  
   if (to < f->buffer) {
+    severe("%s:%d write before buffer",file,line);
     goto error;
   }
   
   size = to - f->buffer;
   size += len;
   if (size > exportclt.bufsize) {
+    severe("%s:%d write after buffer",file,line);
     goto error;
   }
   
@@ -212,13 +216,14 @@ static inline void * _rozofs_write_in_buffer(char * file, int line, file_t * f, 
 error:
 
   rozofs_uuid_unparse(f->fid,fidString);
-  severe("%s:%d to %p from %p len %d @rozofs_uuid@%s checkWord %x", file, line, to, from, len,fidString,f->chekWord);
+  severe("to %p from %p len %d @rozofs_uuid@%s checkWord %x", to, from, len,fidString,f->chekWord);
   severe("buffer %p read_pos %llx read_from %llx write_pos %llx write_from %llx", 
          f->buffer,
 	 (long long unsigned int)f->read_pos, 
 	 (long long unsigned int)f->read_from, 
 	 (long long unsigned int)f->write_pos, 
 	 (long long unsigned int)f->write_from);
+  fatal("corruption");       
   return NULL;       
 } 
 /**

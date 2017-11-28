@@ -1002,9 +1002,6 @@ extern  epgw_rename_ret_t * ep_rename_1_svc(epgw_rename_arg_t *, struct svc_req 
 #define EP_READDIR 15
 extern  epgw_readdir_ret_t * ep_readdir_1(epgw_readdir_arg_t *, CLIENT *);
 extern  epgw_readdir_ret_t * ep_readdir_1_svc(epgw_readdir_arg_t *, struct svc_req *);
-#define EP_READ_BLOCK 16
-extern  epgw_read_block_ret_t * ep_read_block_1(epgw_io_arg_t *, CLIENT *);
-extern  epgw_read_block_ret_t * ep_read_block_1_svc(epgw_io_arg_t *, struct svc_req *);
 #define EP_WRITE_BLOCK 17
 extern  epgw_mattr_ret_t * ep_write_block_1(epgw_write_block_arg_t *, CLIENT *);
 extern  epgw_mattr_ret_t * ep_write_block_1_svc(epgw_write_block_arg_t *, struct svc_req *);
@@ -1116,9 +1113,6 @@ extern  epgw_rename_ret_t * ep_rename_1_svc();
 #define EP_READDIR 15
 extern  epgw_readdir_ret_t * ep_readdir_1();
 extern  epgw_readdir_ret_t * ep_readdir_1_svc();
-#define EP_READ_BLOCK 16
-extern  epgw_read_block_ret_t * ep_read_block_1();
-extern  epgw_read_block_ret_t * ep_read_block_1_svc();
 #define EP_WRITE_BLOCK 17
 extern  epgw_mattr_ret_t * ep_write_block_1();
 extern  epgw_mattr_ret_t * ep_write_block_1_svc();

@@ -145,6 +145,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
     sp_display_probe(gprofiler, ports);
     sp_display_probe(gprofiler, remove);
     sp_display_probe(gprofiler, list_bins_files);
+    sp_display_probe(gprofiler, size);
     if (argv[1] != NULL) {
 
         if (strcmp(argv[1], "reset") == 0) {
@@ -153,6 +154,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
             sp_clear_probe(gprofiler, ports);
             sp_clear_probe(gprofiler, remove);
             sp_clear_probe(gprofiler, list_bins_files);
+            sp_clear_probe(gprofiler, size);
 	    pChar += sprintf(pChar,"Reset Done\n");  
 	    gprofiler->uptime = this_time;  	      
         }
@@ -388,9 +390,11 @@ static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void
     int                   device;
     storage_share_t     * share;
     uint32_t              period;
+    char                  link[PATH_MAX];
+    char                  majmin[64];
     
     
-    pChar += sprintf(pChar, "{ \"devices\" : [\n");
+    pChar += sprintf(pChar, "{ \"devices\" : [  \n");
     
     while((st = storaged_next(st)) != NULL) {
       /* 
@@ -403,12 +407,23 @@ static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void
       if (share != NULL) {
 	for (device=0; device < st->device_number; device++) {
 	  storage_device_info_t *pdev = &share->dev[device];
+          
+          /*
+          ** Get device location
+          */
+          sprintf(majmin,"/sys/dev/block/%u:%u",pdev->major, pdev->minor); 
+          if (realpath(majmin, link) == NULL) {
+            link[0] = 0;
+          }
 	  
-	  pChar += sprintf(pChar, "    { \"cid\" : %3d, \"sid\" : %2d, \"device\" : %2d, "
-                                        "\"name\" : \"%s\", \"mount-path\" : \"%s/%d\", "
-                                        "\"status\" : \"%s\", \"free\" : %llu, \"total\" : %llu },\n",
-	                          st->cid, st->sid, device, 
-                                  pdev->devName, st->root, device, 
+	  pChar += sprintf(pChar, "    { \"cid\" : %d, \"sid\" : %d, \"device\" : %d, \"mount-path\" : \"%s/%d\", \n"
+                                  "      \"name\" : \"%s\", \"location\": \"%s\",\n"
+                                  "      \"major\" : %u, \"minor\" : %u,\n"
+                                  "      \"status\" : \"%s\", \"free\" : %llu, \"total\" : %llu\n"
+                                  "    },\n",
+	                          st->cid, st->sid, device, st->root, device,
+                                  pdev->devName,  link,
+                                  pdev->major, pdev->minor,
                                   storage_device_status2string(pdev->status),
 			          (long long unsigned int)pdev->free ,(long long unsigned int)pdev->size);   
 	}
@@ -612,6 +627,7 @@ int storaged_start_nb_th(void *args) {
     size = sizeof(mp_remove2_arg_t);
     if (size < sizeof(mp_remove_arg_t)) size = sizeof(mp_remove_arg_t);  
     if (size < sizeof(mp_list_bins_files_arg_t)) size = sizeof(mp_list_bins_files_arg_t);
+    if (size < sizeof(mp_size_arg_t)) size = sizeof(mp_size_arg_t);
     
     storaged_decoded_rpc_buffer_pool = ruc_buf_poolCreate(STORAGED_BUF_RECV_CNT,size);
     if (storaged_decoded_rpc_buffer_pool == NULL) {

@@ -357,7 +357,6 @@ static inline int storio_device_get_major_and_minor(storage_t * st, int dev) {
 int storio_check_expcted_mounted_device(storage_t   * st, int dev) {
   char            path[FILENAME_MAX];
   DIR           * dp = NULL;
-  struct dirent   ep;
   struct dirent * pep;
   int             status = 0;   
   int             cid,sid,device; 
@@ -378,7 +377,7 @@ int storio_check_expcted_mounted_device(storage_t   * st, int dev) {
   }
 
   // Readdir to find out the file identifying the device
-  while (readdir_r(dp,&ep,&pep) == 0) {
+  while ((pep = readdir(dp)) != NULL) {
     
     // end of directory
     if (pep == NULL) goto out;
@@ -520,7 +519,7 @@ static inline int storio_device_monitor_get_free_space(storage_t   * st,
   /*
   ** Check whether the device contains a rebuild mark
   */
-  rozofs_string_append(pChar, STORAGE_DEVICE_REBUILD_REQUIRED_MARK);
+  rozofs_string_append(pChar, "/"STORAGE_DEVICE_REBUILD_REQUIRED_MARK);
   if (access(path,F_OK) == 0) {
     *diagnostic = DEV_DIAG_REBUILD_REQUIRED;
   }  
@@ -807,15 +806,9 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 
 	/*
 	** Device In Service. No fault up to now
-	*/  
+	*/ 
+        case storage_device_status_rebuilding: 
         case storage_device_status_is:	
-	  /*
-	  ** When some errors have occured the device goes to degraded
-	  ** which is equivallent to IS but with some errors
-	  */
-	  if (st->device_errors.total[dev] != 0 ) {
-	    pDev->status = storage_device_status_degraded;
-	  }
 
 	  /*
 	  ** When disk spin down is allowed, do not try to access the disks
@@ -834,39 +827,14 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	    */
 	    pDev->status = storage_device_status_failed;
 	  }
-	  break;
-
-	case storage_device_status_degraded:
-
-	  /*
-	  ** When some errors have occured the device goes to degraded
-	  ** which is equivallent to IS but with some errors
-	  */
-	  if (st->device_errors.total[dev] == 0 ) {
-	    pDev->status = storage_device_status_is;
-	  }
-	  
-	  /*
-	  ** When disk spin down is allowed, do not try to access the disks
-	  ** to update the status if no access has occured on the disk.
-	  */
-	  if (allow_disk_spin_down) {
-	    if (activity==0) {
-              sameStatus = 1;
-	      break;
+          else {
+            if (pDev->diagnostic == DEV_DIAG_REBUILD_REQUIRED) {
+              pDev->status = storage_device_status_rebuilding;
             }
-	  } 	
-	   
-	  /*
-	  ** Check whether the access to the device is still granted
-	  ** and get the number of free blocks
-	  */
-	  if (storio_device_monitor_get_free_space(st, dev, &bfree, &bmax, &bsz, &pDev->diagnostic, &rebuild_required) != 0) {
-	    /*
-	    ** The device is failing !
-	    */
-	    pDev->status = storage_device_status_failed;
-	  }
+            else {
+              pDev->status = storage_device_status_is;
+            }
+          }    
 	  break;
 
 	/*
@@ -933,7 +901,6 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 
 
 	case storage_device_status_relocating:
-	case storage_device_status_rebuilding:  
 	  break;
 
 	case storage_device_status_oos:

@@ -36,7 +36,6 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		epgw_symlink_arg_t ep_symlink_1_arg;
 		epgw_rename_arg_t ep_rename_1_arg;
 		epgw_readdir_arg_t ep_readdir_1_arg;
-		epgw_io_arg_t ep_read_block_1_arg;
 		epgw_write_block_arg_t ep_write_block_1_arg;
 		epgw_link_arg_t ep_link_1_arg;
 		epgw_setxattr_arg_t ep_setxattr_1_arg;
@@ -151,12 +150,6 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_argument = (xdrproc_t) xdr_epgw_readdir_arg_t;
 		_xdr_result = (xdrproc_t) xdr_epgw_readdir_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) ep_readdir_1_svc;
-		break;
-
-	case EP_READ_BLOCK:
-		_xdr_argument = (xdrproc_t) xdr_epgw_io_arg_t;
-		_xdr_result = (xdrproc_t) xdr_epgw_read_block_ret_t;
-		local = (char *(*)(char *, struct svc_req *)) ep_read_block_1_svc;
 		break;
 
 	case EP_WRITE_BLOCK:

@@ -68,13 +68,16 @@ typedef struct lv2_entry {
     char        *symlink_target; ///< symbolic link target name (only for symlink) */
 
     list_t list;        ///< list used by cache    
+#if 0
     union {
         mreg_t mreg;    ///< regular file
         mdir_t mdir;    ///< directory
         mslnk_t mslnk;  ///< symlink
     } container;
+#endif
     int          locked_in_cache:1;  /**< assert to 1 to lock the entry in the lv2 cache                    */
-    int          filler:31;          /**< for future usage                                                  */
+    int          dirty_bit:1;          /**< that bit is intended to be used by attributes related to directory to deal with per directory byte count   */
+    int          filler:30;          /**< for future usage                                                  */
     /*
     ** File mover
     */
@@ -88,6 +91,7 @@ typedef struct lv2_entry {
     int            nb_locks;    ///< Number of locks on the FID
     list_t         file_lock;   ///< List of the lock on the FID
     list_t         move_list;   ///< pending fist of the file waiting for move validation
+    void           *thin_provisioning_ctx_p;   /**< pointer to the thin provisioning context (for exportd with thin provisioning option) */
 } lv2_entry_t;
 
 /** lv2 cache

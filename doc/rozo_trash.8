@@ -1,0 +1,167 @@
+.\" Process this file with
+.\" groff -man -Tascii rozo_trash.8
+.\"
+.TH rozo_trash 8 "MARCH 2017" RozoFS "User Manuals"
+.SH NAME
+rozo_trash \- RozoFS Trash Utility
+.SH SYNOPSIS
+.B rozo_trash 
+<enable|recursive|disable> [pathname]
+
+.B rozo_trash 
+root <enable|disable> [pathname]
+
+.B rozo_trash 
+status [pathname]
+
+.B rozo_trash 
+help
+
+.B
+.SH DESCRIPTION
+RozoFS provides the ability to associate a trash with each directory thanks rozo_trash utility.
+This should happen after the directory creation. The trash can be either added or removed at any time.
+
+The trash can be associated with a directory in a recursive mode or not. When the recursive mode is selected, every
+sub directory inherits the trash recursive mode from its parent at its creation time.
+When the mode is not recursive, only the target directory has a trash.
+
+
+The trash applies to regular file and directory only. Upon the deletion of either a file or directory,
+rather than definitively removing the object, it is moved to the trash of its parent directory. The directory trash is referenced thanks the following pseudo directory name
+.B @rozofs-trash@.
+
+By default, the name of that pseudo directory is never displayed thanks command such as 
+.B 'ls'
+
+RozoFS provides a way to make it appear while indexing within a directory by defining a root trash for a directory. Only the directory that are marked with the root trash capability
+makes the 
+.B @rozofs-trash@
+appears while indexing in the directory.
+
+
+
+When a file is moved to the trash, RozoFS appends the date and hour at which the deletion takes place.
+For a given file, RozoFS keeps only one copy in the trash. The periodicity is 
+.B one hour.
+RozoFS keeps in
+the trash the first file that has been deleted in the period. 
+
+Files/directories in the trashes are automatically  definitively removed from the storage thanks a RozoFS purge process (
+.B rozo_trashd
+)
+
+The format of a file that resides in the trash is the following:
+.B @YYYY-MM-DD-HH@@<filename>
+
+The period does not apply for directory, each time a directory is deleted, RozoFS add an extra index
+in the directory name found under the trash:
+.B @YYYY-MM-DD-HH@<index>@<dirname>
+
+Once a file or directory has been deleted, it still remains under the quota of the user. Purging or deletion of
+files/directory move to trash is always under the control of the user. There no automatic deletion triggerred
+by RozoFS.
+
+
+.SH OPTIONS
+.IP "help"
+.RS
+Print help.
+.RE
+.IP "enable|recursive|disable"
+.RS
+Enable/disable trash on directory pathname. When recursive is selected, the trash is enabled in recursive mode (default pathname is "
+.B .
+").
+.RE
+
+.IP "root enable|disable"
+.RS
+Enable/disable root trash on directory pathname. When the root trash is enable, the 
+.B @rozofs-trash@
+will be display while indexing the directory (default pathname is "
+.B .
+").
+.RE
+
+.IP "status"
+.RS
+Display the current trash status of a directory
+will be display while indexing the directory (default pathname is "
+.B .
+").
+.RE
+.SH EXAMPLES
+
+.IP "-Searching for all the files that have been moved in the trash of dir3:"
+
+.B root@debian:/mnt1_1_g0/dir3# cd @rozofs-trash@
+
+.B root@debian:/mnt1_1_g0/dir3/@rozofs-trash@# ls -ls
+
+total 7
+
+.B 1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file1
+.EX
+1 -r--r--r-- 1 root root 9 mars   7 15:09 @2017-03-07-15@@dir11file10
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file2
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file3
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file4
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file5
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file6
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file7
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file8
+1 -r--r--r-- 1 root root 8 mars   7 15:09 @2017-03-07-15@@dir11file9
+.B 1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file1
+1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file2
+1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file3
+1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file4
+.EE
+
+
+.IP "- Searching for the list of the files that have been trashed at a given date:"
+
+root@debian:/mnt1_1_g0/dir3# 
+.B rozo_trash ls
+"2017-03-08*"
+
+.EX
+1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file1
+1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file2
+1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file3
+1 -r--r--r-- 1 root root 5 mars   8 10:38 @2017-03-08-10@@dir11file4
+.EE
+
+.IP "- Restore a file from the trash:"
+
+root@debian:/mnt1_1_g0/dir3# 
+.B rozo_trash restore 
+@2017-03-08-10@@dir11file1 dir11file1
+
+
+.\".SH ENVIRONMENT
+.\".SH DIAGNOSTICS
+.SH "REPORTING BUGS" 
+Report bugs to <bugs@fizians.org>.
+.SH COPYRIGHT
+Copyright (c) 2016 Rozo Systems SAS. <http://www.rozosystem.com>
+
+Rozofs is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published
+by the Free Software Foundation, version 2.
+
+Rozofs is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+.SH AUTHOR
+Rozo Systems <http://www.rozosystem.com>
+.SH "SEE ALSO"
+.BR rozofs (7),
+.BR rozo_trashd (8),
+.BR rozo_trashd.conf (5)
+
+

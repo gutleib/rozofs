@@ -42,26 +42,19 @@ extern "C" {
 #include <rozofs/common/profile.h>
 #include <rozofs/common/mattr.h>
 #include <rozofs/core/ruc_list.h>
+#include <rozofs/common/list.h>
 #include <rozofs/core/rozofs_string.h>
 
 #include "storio_fid_cache.h"
+#include "storage_header.h"
 
-//__Specific values in the chunk to device array
-// Used in the interface When the FID is not inserted in the cache and so the
-// header file will have to be read from disk.
-#define ROZOFS_UNKNOWN_CHUNK  255
-// Used in the device per chunk array when no device has been allocated 
-// because the chunk is after the end of file
-#define ROZOFS_EOF_CHUNK      254
-// Used in the device per chunk array when no device has been allocated 
-// because it is included in a whole of the file
-#define ROZOFS_EMPTY_CHUNK    253
+
 
 /**
 * Attributes cache constants
 */
 #define STORIO_DEVICE_MAPPING_LVL0_SZ_POWER_OF_2  12
-#define STORIO_DEVICE_MAPPING_MAX_ENTRIES  (128*1024)
+extern int STORIO_DEVICE_MAPPING_MAX_ENTRIES;
 
 #define STORIO_DEVICE_MAPPING_LVL0_SZ  (1 << STORIO_DEVICE_MAPPING_LVL0_SZ_POWER_OF_2) 
 #define STORIO_DEVICE_MAPPING_LVL0_MASK  (STORIO_DEVICE_MAPPING_LVL0_SZ-1)
@@ -113,9 +106,6 @@ typedef union storio_rebuild_ref_u {
   uint64_t    u64;
 } STORIO_REBUILD_REF_U;
 
-#define    STORIO_FID_FREE     0
-#define    STORIO_FID_RUNNING  1
-#define    STORIO_FID_INACTIVE 2
 typedef struct _storio_device_mapping_key_t
 {
   fid_t                fid;
@@ -123,23 +113,245 @@ typedef struct _storio_device_mapping_key_t
   uint8_t              sid;
 } storio_device_mapping_key_t;
   
+  
+/*
+** Depending on small_device_array field in storio_device_mapping_t
+** 1 only the very first devices are stored in the context
+** 0 a pointer to a big list of ROZOFS_STORAGE_MAX_CHUNK_PER_FILE devices is stored
+*/ 
+#define ROZOFS_MAX_SMALL_ARRAY_CHUNK  7 // Maximum chunk number in the small list
+typedef union _storio_device_u {
+    uint8_t * ptr;                                    // Pointer to a big array of ROZOFS_STORAGE_MAX_CHUNK_PER_FILE devices
+    uint8_t   small[ROZOFS_MAX_SMALL_ARRAY_CHUNK+1];  // A small array of the first (ROZOFS_MAX_SMALL_ARRAY_CHUNK+1) devices
+} storio_device_u;
 typedef struct _storio_device_mapping_t
 {
-  ruc_obj_desc_t       link;  
-  uint32_t             status:8;
+  list_t               link;  
+  uint32_t             padding:4;
+  uint32_t             recycle_cpt:2;
+  uint32_t             small_device_array:1;    // how to read device union
+  uint32_t             device_unknown:1;        // Set to 1 when device distr. is unknown
   uint32_t             index:24;
   storio_device_mapping_key_t key;
-  uint32_t             recycle_cpt;
-  uint8_t              device[ROZOFS_STORAGE_MAX_CHUNK_PER_FILE];   /**< Device number to write the data on        */
+  storio_device_u      device;                  // List of devices per chunk number
   list_t               running_request;
   list_t               waiting_request;
 //  uint64_t             consistency;
   STORIO_REBUILD_REF_U storio_rebuild_ref;
 } storio_device_mapping_t;
 
-storio_device_mapping_t * storio_device_mapping_ctx_free_list;
-ruc_obj_desc_t            storio_device_mapping_ctx_running_list;
-ruc_obj_desc_t            storio_device_mapping_ctx_inactive_list;
+list_distributor_t storio_device_mapping_ctx_distributor;
+list_t             storio_device_mapping_ctx_initialized_list;
+
+
+
+/*
+**_______________________________________________________________________
+** Free the device mapping in the FID ctx
+**
+** @param p       The device mapping context
+**
+*/
+static inline void storio_free_dev_mapping(storio_device_mapping_t * p) {
+  uint8_t  * ptr = NULL;;
+
+  /*
+  ** Save big array pointer to release it later
+  */    
+  if (!p->device_unknown && !p->small_device_array) {
+    ptr = p->device.ptr;
+  }  
+  
+  p->device_unknown     = 1;
+  p->small_device_array = 1;
+  p->device.ptr         = NULL;  
+
+  /*
+  ** Free big array 
+  */
+  if (ptr) {
+    xfree(ptr);
+    ptr = NULL;
+  }  
+}
+/*
+**_______________________________________________________________________
+** Get the device number stored in the mapping context for a given chunk
+**
+** @param p       The device mapping context
+** @param chunk   The chunk for which we are looking for the device
+**
+** @retval the device of this chunk
+*/
+static inline uint8_t storio_get_dev(storio_device_mapping_t * p, int chunk) {
+ 
+  /*
+  ** Distribution is unkown yet
+  */
+  if (p->device_unknown) return ROZOFS_UNKNOWN_CHUNK;
+  if (chunk<0)           return ROZOFS_UNKNOWN_CHUNK;
+ 
+  /*
+  ** Distribution is known and is stored in a small device list
+  */
+  if (p->small_device_array) {
+    if (chunk > ROZOFS_MAX_SMALL_ARRAY_CHUNK) return ROZOFS_EOF_CHUNK;
+    return p->device.small[chunk];
+  }
+
+  /*
+  ** Distribution is know and is stored in a big device list
+  */
+  if (chunk >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) return ROZOFS_EOF_CHUNK;
+  return p->device.ptr[chunk];  
+}
+/*
+**_______________________________________________________________________
+** Get the last significant chunk number 
+**
+** @param p       The device mapping context
+** @param dev     The device of the last chunk when chunk is valid
+**
+** @retval the last valid chunk
+*/
+static inline int storio_get_last_chunk(storio_device_mapping_t * p,
+                                        uint8_t                 * dev) {
+  int        chunk;
+  uint8_t * pDev;
+  
+  /*
+  ** Distribution is unkown yet
+  */
+  if (p->device_unknown) return -1;
+  
+  /*
+  ** Distribution is known and is stored in a small device list
+  */  
+  if (p->small_device_array) {
+    chunk = ROZOFS_MAX_SMALL_ARRAY_CHUNK;
+    pDev  = p->device.small;
+  }
+  /*
+  ** Distribution is known and is stored in a big device list
+  */  
+  else {
+    chunk = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-1;
+    pDev  = p->device.ptr;
+  }
+  while (chunk>=0) {
+    if (pDev[chunk] != ROZOFS_EOF_CHUNK) break;
+    chunk--;
+  }
+  if (chunk>=0) {
+    *dev = pDev[chunk];
+  }  
+  return chunk;
+}
+/*
+**_______________________________________________________________________
+** Store distribution from disk into the FID mapping context
+**
+** @param p           The device mapping context
+** @param devices     The device array from disk
+**
+** @retval the last valid chunk
+*/
+static inline void storio_store_to_ctx(storio_device_mapping_t * p, uint32_t nbChunks, uint8_t * devices) {
+  uint8_t  * ptr = NULL;
+    
+  
+  /*
+  ** Few valid chunks
+  */
+  if (nbChunks <= (ROZOFS_MAX_SMALL_ARRAY_CHUNK+1)) {
+
+    /*
+    ** Save big array pointer to release it later
+    */    
+    if (!p->device_unknown && !p->small_device_array) {
+      ptr = p->device.ptr;
+      p->device_unknown = 1;
+    }
+
+    /*
+    ** Save localy the chunk distribution
+    */
+    p->small_device_array = 1;
+    memcpy(p->device.small, devices, ROZOFS_MAX_SMALL_ARRAY_CHUNK+1);
+    p->device_unknown = 0;
+       
+    /*
+    ** Free big array 
+    */
+    if (ptr) {
+      xfree(ptr);
+      ptr = NULL;
+    }  
+    return;
+  }
+ 
+  /*
+  ** Need a big array
+  */  
+  if (!p->device_unknown && !p->small_device_array) {
+    ptr = p->device.ptr;
+  }
+  else {  
+    ptr = xmalloc(ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+  }
+  /*
+  ** Copy the device distribution
+  */
+  memcpy(ptr, devices, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+  p->small_device_array = 0;
+  p->device.ptr        = ptr;
+  p->device_unknown = 0;
+}
+/*
+**_______________________________________________________________________
+** Store distribution from FID mapping context to a big device array
+**
+** @param p           The device mapping context
+** @param devices     The device array from disk
+**
+** @retval the last valid chunk
+*/
+static inline void storio_read_from_ctx(storio_device_mapping_t * p, uint8_t * nbChunk, uint8_t * devices) {
+  int idx;
+  /*
+  ** Distribution is unknown
+  */
+  if (p->device_unknown) {
+    memset(devices,ROZOFS_EOF_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+    * nbChunk = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
+    return;
+  } 
+  
+  /*
+  ** Few valid chunks
+  */
+  if (p->small_device_array) {
+    * nbChunk = rozofs_st_header_roundup_chunk_number(ROZOFS_MAX_SMALL_ARRAY_CHUNK+1);
+    memcpy(devices, p->device.small, ROZOFS_MAX_SMALL_ARRAY_CHUNK+1);
+    memset(&devices[ROZOFS_MAX_SMALL_ARRAY_CHUNK+1], ROZOFS_EOF_CHUNK, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-ROZOFS_MAX_SMALL_ARRAY_CHUNK-1);
+    return;
+  }
+  
+  /*
+  ** Copy devices until EOF
+  */
+  for (idx = 0; idx < ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; idx ++) {
+    devices[idx] = p->device.ptr[idx];
+    if (devices[idx] == ROZOFS_EOF_CHUNK) {
+      break;
+    }
+  }
+  * nbChunk = rozofs_st_header_roundup_chunk_number(idx);
+  /*
+  ** Set rest of array to EOF
+  */
+  memset(&devices[idx], ROZOFS_EOF_CHUNK, (ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-idx));
+}
 
 
 typedef struct _storio_device_mapping_stat_t
@@ -209,57 +421,6 @@ static inline int storio_device_mapping_ctx_check_running(storio_device_mapping_
   return 0;  
 }
 
-/*
-**______________________________________________________________________________
-*/
-/**
-* Put the FID context in the correct list
-*
-* @param idx The context index
-*
-* @return the rebuild context address or NULL
-*/
-static inline void storio_device_mapping_ctx_evaluate(storio_device_mapping_t * p) {
-   
-  if (p == NULL) return;
-  
-   
-  /*
-  ** The context was not running. Check whether it is running now
-  */
-  if (p->status == STORIO_FID_INACTIVE) { 
- 
-    /*
-    ** Is there any running requests
-    */
-    if (storio_device_mapping_ctx_check_running(p)) {
-      p->status = STORIO_FID_RUNNING;
-      storio_device_mapping_stat.inactive--;
-      storio_device_mapping_stat.running++; 
-      ruc_objRemove(&p->link);        
-      ruc_objInsertTail(&storio_device_mapping_ctx_running_list,&p->link); 
-    }
-    return;
-  }
-  
-  /*
-  ** The context was running. Check whether it is still running
-  */
-  if (p->status == STORIO_FID_RUNNING) { 
- 
-    /*
-    ** Is there any running requests
-    */
-    if (!storio_device_mapping_ctx_check_running(p)) {
-      p->status = STORIO_FID_INACTIVE;
-      storio_device_mapping_stat.inactive++;
-      storio_device_mapping_stat.running--; 
-      ruc_objRemove(&p->link);        
-      ruc_objInsertTail(&storio_device_mapping_ctx_inactive_list,&p->link); 
-    }
-    return;
-  }   
-}
 
 /*
 **______________________________________________________________________________
@@ -274,14 +435,27 @@ static inline void storio_device_mapping_ctx_reset(storio_device_mapping_t * p) 
 
   
   memset(&p->key,0,sizeof(storio_device_mapping_key_t));
-  memset(p->device,ROZOFS_UNKNOWN_CHUNK,ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);
+  p->device_unknown     = 1;
+  p->small_device_array = 1;
+  p->device.ptr         = NULL;
 //  p->consistency   = storio_device_mapping_stat.consistency;
   list_init(&p->running_request);
   list_init(&p->waiting_request);
 
   p->storio_rebuild_ref.u64 = 0xFFFFFFFFFFFFFFFF;
 }
+/*
+**______________________________________________________________________________
+*/
+/**
+* Refresh context in the list of allocated context when used
 
+  @param p : pointer to the user cache entry   
+*/
+static inline void storio_device_mapping_refresh(storio_device_mapping_t *p) {
+  list_remove(&p->link);        
+  list_push_back(&storio_device_mapping_ctx_initialized_list,&p->link);   
+}
 /*
 **______________________________________________________________________________
 */
@@ -308,33 +482,23 @@ static inline void storio_device_mapping_release_entry(storio_device_mapping_t *
   if (storio_device_mapping_ctx_check_running(p)) {
     severe("storio_device_mapping_ctx_free but ctx is running");
   }
-   
-  /*
-  ** The context was not running. Check whether it is running now
-  */
-  if (p->status == STORIO_FID_INACTIVE) { 
-    storio_device_mapping_stat.inactive--;
-  }
-  
-  /*
-  ** The context was running. Check whether it is still running
-  */
-  else if (p->status == STORIO_FID_RUNNING) { 
-    storio_device_mapping_stat.running--;
-  }
-   
 
-  storio_device_mapping_stat.free++;  
 
+
+   
   /*
   ** Unchain the context
   */
-  ruc_objRemove(&p->link);  
-    
+  list_remove(&p->link);  
+   /*
+  ** Free pointer to the devices if any
+  */
+  storio_free_dev_mapping(p);
+   
   /*
   ** Put it in the free list
   */    
-  ruc_objInsert(&storio_device_mapping_ctx_free_list->link,&p->link);
+  list_push_front(&storio_device_mapping_ctx_distributor.list,&p->link);
 } 
 
 /*
@@ -350,33 +514,29 @@ static inline storio_device_mapping_t * storio_device_mapping_ctx_allocate() {
   storio_device_mapping_t * p;
   
   /*
-  ** Get first free context
+  ** No free context
   */
-  p = (storio_device_mapping_t*) ruc_objGetFirst(&storio_device_mapping_ctx_free_list->link);
-  if (p == NULL) {
+  if (list_empty(&storio_device_mapping_ctx_distributor.list)) {
     /*
     ** No more free context. Let's recycle an unused one
     */
-    p = (storio_device_mapping_t*) ruc_objGetFirst(&storio_device_mapping_ctx_inactive_list);
-    if (p == NULL) {
+    if (list_empty(&storio_device_mapping_ctx_initialized_list)) {
       storio_device_mapping_stat.out_of_ctx++;
       return NULL;
     }
-
+    p = list_first_entry(&storio_device_mapping_ctx_initialized_list,storio_device_mapping_t, link);
     storio_device_mapping_release_entry(p);
   }    
 
+  p = list_first_entry(&storio_device_mapping_ctx_distributor.list,storio_device_mapping_t, link);
   storio_device_mapping_ctx_reset(p);
 
+  storio_device_mapping_stat.allocation++;
+  
   /*
   ** Default is to create the context in running mode
   */
-  p->status  = STORIO_FID_RUNNING;   
-  storio_device_mapping_stat.free--;
-  storio_device_mapping_stat.running++; 
-  storio_device_mapping_stat.allocation++;
-  ruc_objRemove(&p->link);        
-  ruc_objInsertTail(&storio_device_mapping_ctx_running_list,&p->link);   
+  storio_device_mapping_refresh(p);
   return p;
 }
 /*
@@ -391,12 +551,11 @@ static inline storio_device_mapping_t * storio_device_mapping_ctx_allocate() {
 */
 static inline storio_device_mapping_t * storio_device_mapping_ctx_retrieve(int idx) {
   storio_device_mapping_t * p;
- 
-  if (idx>=STORIO_DEVICE_MAPPING_MAX_ENTRIES) {
-    return NULL;
-  }  
 
-  p = (storio_device_mapping_t*) ruc_objGetRefFromIdx(&storio_device_mapping_ctx_free_list->link,idx);  
+  p = (storio_device_mapping_t*) list_distributor_get(&storio_device_mapping_ctx_distributor,idx);  
+  if (p == NULL) {
+    warning("Bad device mapping context index %d/%d",idx,storio_device_mapping_ctx_distributor.nb_ctx);
+  }  
   return p;  
 }
 
@@ -410,39 +569,33 @@ static inline storio_device_mapping_t * storio_device_mapping_ctx_retrieve(int i
  retval 0 on success
  retval < 0 on error
 */
-static inline void storio_device_mapping_ctx_distributor_init() {
-  int                       nbCtx = STORIO_DEVICE_MAPPING_MAX_ENTRIES;
+static inline void storio_device_mapping_ctx_distributor_init(int nbCtx) {
   storio_device_mapping_t * p;
   int                       idx;
+
+
+  STORIO_DEVICE_MAPPING_MAX_ENTRIES = nbCtx * 1024;
 
   /*
   ** Init list heads
   */
-  ruc_listHdrInit(&storio_device_mapping_ctx_running_list);
-  ruc_listHdrInit(&storio_device_mapping_ctx_inactive_list);
+  list_init(&storio_device_mapping_ctx_initialized_list);
   
   /*
   ** Reset stattistics 
   */
   memset(&storio_device_mapping_stat, 0, sizeof(storio_device_mapping_stat));
-  storio_device_mapping_stat.free = nbCtx;
-  
   /*
   ** Allocate memory
   */
-  storio_device_mapping_ctx_free_list = (storio_device_mapping_t*) ruc_listCreate(nbCtx,sizeof(storio_device_mapping_t));
-  if (storio_device_mapping_ctx_free_list == NULL) {
-    /*
-    ** error on distributor creation
-    */
-    fatal( "ruc_listCreate(%d,%d)", STORIO_DEVICE_MAPPING_MAX_ENTRIES,(int)sizeof(storio_device_mapping_t) );
-  }
+  list_distributor_create((&storio_device_mapping_ctx_distributor), 
+                          STORIO_DEVICE_MAPPING_MAX_ENTRIES, 
+                          storio_device_mapping_t, 
+                          link);  
   
-  
-  for (idx=0; idx<nbCtx; idx++) {
+  for (idx=0; idx<STORIO_DEVICE_MAPPING_MAX_ENTRIES; idx++) {
     p = storio_device_mapping_ctx_retrieve(idx);
     p->index  = idx;
-    p->status = STORIO_FID_FREE;
     storio_device_mapping_ctx_reset(p);
   }  
 }

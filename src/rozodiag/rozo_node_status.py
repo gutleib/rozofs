@@ -664,15 +664,13 @@ class storage(rozofs_module):
       free= int(words[7]) 
       try:diag= words[15].split()[0]
       except:diag=""
-      if status != "IS" and status != "DEG":
+      if status == "REBUILD":
+	self.WARNING("Device %s of %s is in REBUILD"%(dev, string),"device")
+      elif status != "IS":
         error_list.append("cid%s/sid%s"%(cid,sid))
 	self.ERROR("Device %s of cid%s/sid%s is %s"%(dev, cid, sid, status),"device") 
         self.failed = True 
-      elif diag == "REBUILD":
-	error_list.append("cid%s/sid%s"%(cid,sid))
-	self.ERROR("Device %s of cid%s/sid%s is to rebuild"%(dev, cid, sid),"device") 
-	self.failed = True                       
-      elif free <= int(20):
+      if free <= int(20):
 	self.WARNING("Device %s of cid%s/sid%s has only %s%s free space"%(dev, cid, sid, free,'%'),"device")  
 
     # More than 1 error per CID/SID is critical
@@ -868,6 +866,10 @@ class client(rozofs_module):
       self.check_core_files()
     #self.check_tcp_info()
     
+    try:
+      int(self.nbstorcli)
+    except:
+      return  
     for idx in range (1,int(self.nbstorcli)+1):
       try:
         storcli_port=int(self.port)+int(idx)

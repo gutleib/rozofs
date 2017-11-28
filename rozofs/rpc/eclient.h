@@ -159,6 +159,11 @@ int exportclt_close(exportclt_t * clt, fid_t fid);
 */
 int rozofs_get_msite(void);
 /**______________________________________________________________________________
+*  Whether thin provisionning is configured 
+*/
+int rozofs_get_thin_provisioning(void) ;
+
+/**______________________________________________________________________________
 *  Get a storage address from the storage direct access table 
 */
 mstorage_t * storage_direct_get(cid_t cid, sid_t sid);

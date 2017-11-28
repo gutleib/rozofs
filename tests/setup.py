@@ -13,6 +13,15 @@ from adaptative_tbl import *
 import syslog
 
 
+#___________________________________________________
+# Messages and logs
+#___________________________________________________
+def log(string): syslog.syslog(string)
+def console(string): print string
+def report(string): 
+  console(string)
+  log(string)
+  
 # Read configuratino file
 #import * from setup.config
 
@@ -55,7 +64,6 @@ class host_class:
     for h in hosts:
       if h.number == val: return h
     return None
-   
   def get_sid(self,val):
     for s in self.sid:
       if s.sid == val: return s
@@ -114,7 +122,7 @@ class host_class:
   def start(self):
     if self.admin == False: return
     self.add_if() 
-    os.system("rozolauncher start /var/run/launcher_storaged_%s.pid storaged -c %s -H %s &"%(self.number,self.get_config_name(),self.addr))
+    os.system("rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s -H %s &"%(self.number,self.get_config_name(),self.addr))
 
   def stop(self):
     os.system("rozolauncher stop /var/run/launcher_storaged_%s.pid storaged"%(self.number))
@@ -168,7 +176,7 @@ class host_class:
       if not "storaged" in line: continue
       if not "storage_%s.conf"%(self.number) in line: continue
       pid=line.split()[1]
-      print "\n_______________STORAGE localhost%s"%(self.number)     
+      console("\n_______________STORAGE localhost%s"%(self.number))    
       os.system("pstree %s %s"%(opt,pid))
     return
     
@@ -201,7 +209,7 @@ class sid_class:
       h = host_class(name,site)
     else:
       if site != h.site:
-        print "host localhost%s is used on site %s as well as site %s"%(h.number,h.site,site)
+        report("host localhost%s is used on site %s as well as site %s"%(h.number,h.site,site))
 	sys.exit(1)
     self.host.append(h)
     h.add_sid(self)    
@@ -258,17 +266,17 @@ class sid_class:
           for dir in subdirs:
               try:
                 shutil.rmtree(dir)
-                syslog.syslog("%s deleted" % (dir))
+                log("%s deleted" % (dir))
               except:
-                syslog.syslog("%s delete failed" % (dir))      
+                log("%s delete failed" % (dir))      
                 pass
           return
 
       try: 
         shutil.rmtree(path)
-        syslog.syslog("%s deleted"%(path))      
+        log("%s deleted"%(path))      
       except: 
-        syslog.syslog("%s delete failed"%(path))      
+        log("%s delete failed"%(path))      
         pass 
     
   def get_device_file_path(self,site): 
@@ -294,7 +302,7 @@ class sid_class:
     output, error = cmd.communicate()
     if output != "":
       loop=output.split(':')[0]  
-      print "%s%s \t-> %s \t-> %s/%s"%(path,dev,loop,self.get_root_path(h.number),dev)
+      log("%s%s \t-> %s \t-> %s/%s"%(path,dev,loop,self.get_root_path(h.number),dev))
       if rozofs.fstype == "ext4":
         os.system("mount -t ext4 %s %s/%s"%(loop,self.get_root_path(h.number),dev))
       else:
@@ -303,7 +311,7 @@ class sid_class:
 	else:
           os.system("mount -t xfs -o allocsize=%s %s %s/%s"%(rozofs.allocsize,loop,self.get_root_path(h.number),dev))      	
     else:
-      print "No /dev/loop for %s%s"%(path,dev)  
+      report("No /dev/loop for %s%s"%(path,dev))  
     return
      	  
   def umount_device_file(self,dev, h):
@@ -392,6 +400,12 @@ class sid_class:
 #____________________________________
 # Class cid
 #____________________________________
+def get_cid(cid):
+  global cids 
+  for c in cids:
+    if c.cid == cid: return c
+  return None  
+
 class cid_class:
 
   def __init__(self, volume, dev_total, dev_mapper, dev_red, dev_size):
@@ -424,7 +438,7 @@ class cid_class:
     if self.georep == None:  self.georep = georep
     else:
       if self.georep != georep:
-        print "gereplication inconsistency on cid %s"%(self.cid)
+        report( "gereplication inconsistency on cid %s"%(self.cid))
 	sys.exit(1)
 	    
   def add_sid_on_host(self, host0, site0=0, host1=None, site1=1):
@@ -446,7 +460,8 @@ class cid_class:
     for s in self.sid: s.delete_path()     
 
   def nb_sid(self): return len(self.sid)
-       
+  
+
 
 
 #____________________________________
@@ -457,6 +472,7 @@ class mount_point_class:
   def __init__(self, eid, layout, site=0):
     global mount_points
     instance = len(mount_points)
+    self.numanode=instance+1
     # When more than 2 storcli, use one rozofsmount instance upon 2
     if rozofs.nb_storcli > 2 : instance = 2 * instance       
     self.instance = instance
@@ -464,7 +480,26 @@ class mount_point_class:
     self.site= site    
     self.layout = layout
     self.nfs_path="/mnt/nfs-%s"%(self.instance) 
+    # Timers
+    if rozofs.client_fast_reconnect != 0:
+      self.set_spare_tmr_ms(rozofs.client_fast_reconnect*1000/2)
+      self.rozofsexporttimeout  = rozofs.client_fast_reconnect
+      self.rozofsstoragetimeout = rozofs.client_fast_reconnect
+      self.rozofsstorclitimeout = rozofs.client_fast_reconnect
+    else:
+      self.set_spare_tmr_ms(6000)
+      self.rozofsexporttimeout  = None
+      self.rozofsstoragetimeout = None
+      self.rozofsstorclitimeout = None
+      self.spare_tmr_ms         = 6000
     mount_points.append(self)
+
+  def set_fast_reconnect(self):  
+
+        
+    rozofs.set_client_fast_reconnect()
+    
+  def set_spare_tmr_ms(self,tmr): self.spare_tmr_ms=tmr
 
   def info(self):
     print "instance = %s"%(self.instance)
@@ -537,23 +572,25 @@ class mount_point_class:
                
   def start(self):
     global rozofs
-    options="-o rozofsexporttimeout=60"
-    options += " -o rozofsstoragetimeout=25"
-    options += " -o rozofsstorclitimeout=35" 
+    options=""
     options += " -o rozofsnbstorcli=%s"%(rozofs.nb_storcli)
-    options += " -o rozofsbufsize=256" 
-    options += " -o rozofsrotate=3"
-    options += " -o rozofsattrtimeout=1,rozofsentrytimeout=1"
+    options += " -o rozofssparestoragems=%s"%(self.spare_tmr_ms)
+    if self.rozofsexporttimeout != None: 
+      options += " -o rozofsexporttimeout=%s"%(self.rozofsexporttimeout)
+    if self.rozofsstoragetimeout != None: 
+      options += " -o rozofsstoragetimeout=%s"%(self.rozofsstoragetimeout)
+    if self.rozofsstorclitimeout != None: 
+      options += " -o rozofsstorclitimeout=%s"%(self.rozofsstorclitimeout)      
     options += " -o auto_unmount"
-#    options += "-o noReadFaultTolerant"
-  
+    options += " -o suid"
+    options += " -o numanode=%s"%(self.numanode)
     options += " -o site=%s"%(self.site)
     if self.instance != 0: options += " -o instance=%s"%(self.instance)
     if rozofs.read_mojette_threads == True: options += " -o mojThreadRead=1"
     if rozofs.write_mojette_threads == False: options += " -o mojThreadWrite=0"
     if rozofs.mojette_threads_threshold != None: options += " -o mojThreadThreshold=%s"%(rozofs.mojette_threads_threshold)
 
-    os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_root_path(),self.get_mount_path(),options))
+    os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_name(),self.get_mount_path(),options))
     os.system("chmod 0777 %s"%(self.get_mount_path()))
           
   def stop(self):
@@ -643,7 +680,7 @@ class mount_point_class:
     for line in cmd.stdout:
       if not "instance=%s"%(self.instance) in line: continue
       pid=line.split()[1]
-      print "\n_______________FS %s eid %s vid %s %s"%(self.instance,self.eid.eid,self.eid.volume.vid,self.get_mount_path())     
+      console("\n_______________FS %s eid %s vid %s %s"%(self.instance,self.eid.eid,self.eid.volume.vid,self.get_mount_path()))     
       os.system("pstree %s %s"%(opt,pid))
     return    
     
@@ -668,6 +705,7 @@ class export_class:
     self.eid   = eid_nb
     self.bsize = bsize
     self.volume= volume
+    self.thin = False
     if layout == None:
       self.layout = volume.layout
     else:
@@ -683,11 +721,17 @@ class export_class:
   def set_hquota(self,quota):
     self.hquota= quota
     
+  def set_thin(self):
+    self.thin = True
+    
   def set_squota(self,quota):
     self.squota= quota            
 
   def get_root_path(self):
-    return "%s/export_%s"%(rozofs.get_config_path(),self.eid)  
+    return "%s/export/export_%s"%(rozofs.get_config_path(),self.eid)  
+
+  def get_name(self):
+    return "eid%s"%(self.eid)  
      
   def add_mount(self,site=0):
     m = mount_point_class(self,self.layout,site)
@@ -736,7 +780,7 @@ class volume_class:
     for c in self.cid:
       if georep == None: georep = c.georep
       elif c.georep != georep:
-	  print "inconsistent georeplication on volume %s"%(v.vid)
+	  report("inconsistent georeplication on volume %s"%(v.vid))
 	  exit(1)
     return georep
      
@@ -755,7 +799,26 @@ class volume_class:
 
   def nb_cid(self): return len(self.cid)
   def nb_eid(self): return len(self.eid)
-     
+
+  def get_rebalance_config_name(self): return "%s/rebalance_vol%d.conf"%(rozofs.get_config_path(),self.vid)
+                              
+  def display_rebalance_config(self):        
+    display_config_int("free_avg_tolerance",5)
+    display_config_int("free_low_threshold",70)
+    display_config_int("frequency",25)
+    display_config_int("movecnt",12)
+    display_config_string("movesz","100M")
+    display_config_long("older",1)
+    display_config_int("throughput",2)
+    
+
+  def create_rebalance_config(self):
+    save_stdout = sys.stdout
+    sys.stdout = open(self.get_rebalance_config_name(),"w")
+    self.display_rebalance_config()
+    sys.stdout.close()
+    sys.stdout = save_stdout      
+
   def display(self):
     d = adaptative_tbl(2,"Volumes") 
     d.new_center_line()
@@ -796,6 +859,7 @@ class exportd_class:
     self.display_config()
     sys.stdout.close()
     sys.stdout = save_stdout
+#    for v in volumes: v.create_rebalance_config()
        
   def pid(self):
     string="ps -fC exportd"
@@ -810,7 +874,7 @@ class exportd_class:
   def start(self):
     pid=self.pid()
     if pid != 0: 
-      print "exportd is already started as process %s"%(pid)
+      report("exportd is already started as process %s"%(pid))
       return
     os.system("exportd -c %s"%(self.get_config_name()))    
     
@@ -834,7 +898,7 @@ class exportd_class:
   def process(self,opt):
     pid = self.pid()
     if pid != 0: 
-      print "\n_______________EXPORTD"    
+      console("\n_______________EXPORTD" )  
       os.system("pstree %s %s"%(opt,pid))
      
   def display_config (self):  
@@ -849,6 +913,7 @@ class exportd_class:
       print "    vid = %s;"%(v.vid)
       print "    layout = %s;"%(v.layout)
       print "    georep = %s;"%(v.georep())
+#      print "    rebalance = \"%s\";"%(v.get_rebalance_config_name())
       print "    cids = "
       print "    ("
       nextc=" "
@@ -888,7 +953,8 @@ class exportd_class:
         print "      { ip4subnet=\"127.0.0.0/28\",     rule=\"forbid\"},"
         print "      { ip4subnet=\"127.0.0.16/28\",    rule=\"forbid\"},"
         print "      { ip4subnet=\"127.0.0.1/32\",     rule=\"allow\"},"
-        print "      { ip4subnet=\"127.0.0.17/32\",    rule=\"allow\"}"
+        print "      { ip4subnet=\"127.0.0.17/32\",    rule=\"allow\"},"
+        print "      { ip4subnet=\"192.168.10.0/24\",  rule=\"allow\"}"
         print "    );"
         print "  }"
     print ");"
@@ -903,13 +969,15 @@ class exportd_class:
         else             : squota="squota=\"%s\";"%(e.squota)
         if e.hquota == "": hquota=""
         else             : hquota="hquota=\"%s\";"%(e.hquota)
-	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; filter=\"flt_%d\"; %s%s vid=%s; layout=%s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout))
+        if e.thin == True: thin = ", thin-provisionning = True"
+        else             : thin=""
+	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s %s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout),thin)
 	nexte=","	
     print ");"
 
   def display(self): 
-    print "EXPORTD:"
-    print "  . %-12s : %s"%("Hosts",self.export_host)    
+    console("EXPORTD:")
+    console("  . %-12s : %s"%("Hosts",self.export_host))    
 
 #____________________________________
 # Class geomgr_class
@@ -917,8 +985,8 @@ class exportd_class:
 class geomgr_class:
 
   def display(self):
-    print "- %s"%(self.number)
-    for s in self.sid: print "    cid %s sid %s"%(s.cid.cid,s.sid)
+    console("- %s"%(self.number))
+    for s in self.sid: console("    cid %s sid %s"%(s.cid.cid,s.sid))
 
   def get_config_name(self): return "%s/geomgr.conf"%(rozofs.get_config_path())
   def get_saved_config_name(self): return "%s/geomgr.conf"%(os.getcwd())
@@ -997,7 +1065,7 @@ class geomgr_class:
     for line in cmd.stdout:
       if not "geomgr" in line: continue
       pid=line.split()[1]
-      print "\n_______________GEOMGR"
+      console("\n_______________GEOMGR")
       os.system("pstree %s %s"%(opt,pid))
     return
   
@@ -1006,6 +1074,9 @@ def display_config_string(name,val):
     
 def display_config_int(name,val):        
   if val != None: print "%-27s = %d;"%(name,int(val))
+
+def display_config_long(name,val):        
+  if val != None: print "%-27s = %ld;"%(name,long(val))
 
 def display_config_true(name): print "%-27s = True;"%(name)
   
@@ -1023,13 +1094,13 @@ class rozofs_class:
 
   def __init__(self):
     self.threads = 0
-    self.nb_core_file = 2
+    self.nb_core_file = 8
     self.crc32 = True
     self.device_selfhealing_mode  = "relocate"
     self.device_selfhealing_delay = 1
     self.nb_listen=1;
     self.storio_mode="multiple";
-    self.interface = "eth0"
+    self.interface = "lo"
     self.read_mojette_threads = False
     self.write_mojette_threads = True
     self.mojette_threads_threshold = None
@@ -1045,10 +1116,19 @@ class rozofs_class:
     self.storaged_start_script = None
     self.device_automount = False
     self.site_number = 1
-    self.client_fast_reconnect = False
+    self.client_fast_reconnect = 0
     self.deletion_delay = None
-
-  def set_site_number(self,number): self.site_number = number      
+    self.trashed_file_per_run = 100
+    self.spare_restore_loop_delay = 15
+    self.metadata_size = None;
+    self.min_metadata_inodes = None
+    self.min_metadata_MB = None
+    
+  def set_min_metadata_inodes(self,val): self.min_metadata_inodes = val
+  def set_min_metadata_MB(self,val): self.min_metadata_MB = val
+  def set_metadata_size(self,size): self.metadata_size = size;
+  def set_set_spare_restore_loop_delay(self,number): self.spare_restore_loop_delay = number  
+  def set_site_number(self,number): self.site_number    
   def set_device_automount(self): 
     self.device_automount = True
     self.device_selfhealing_mode = "spareOnly"
@@ -1075,10 +1155,13 @@ class rozofs_class:
   def set_nb_storcli(self,nb=1): 
     self.nb_storcli = nb
     # Must have enough share memry size
+    new = int(13107200) * int(nb)
     with open("/proc/sys/kernel/shmmax") as f: val=f.readlines()
-    if int(val[0]) < int(52428800): os.system("echo 52428800 > /proc/sys/kernel/shmmax")  
+    if int(val[0]) < int(new): os.system("echo %s > /proc/sys/kernel/shmmax"%(new))  
   def set_file_distribution(self,val): self.file_distribution = val
-  def set_client_fast_reconnect(self): self.client_fast_reconnect = True
+  def set_client_fast_reconnect(self,val=2): 
+    self.client_fast_reconnect = val
+    
   def set_xfs(self,mb,allocsize=None):
     self.fstype       = "xfs"
     self.disk_size_mb = mb
@@ -1092,10 +1175,20 @@ class rozofs_class:
       
   def get_config_path(self):
     path = "%s/SIMU"%(os.getcwd())
-    if not os.path.exists(path): os.makedirs(path)
+    if not os.path.exists(path): 
+      os.makedirs(path)
+    if not os.path.exists("%s/export"%(path)):  
+      os.makedirs("%s/export"%(path))
+    if not os.path.exists("%s/devices"%(path)):    
+      os.makedirs("%s/devices"%(path))      
     return path
     
-  def core_dir(self)        : return "/var/run/rozofs_core"  
+  def core_dir(self)        :
+    if not os.path.exists("/var/run/rozofs"): 
+      os.mkdir("/var/run/rozofs") 
+    if not os.path.exists("/var/run/rozofs/core"):  
+      os.mkdir("/var/run/rozofs/core") 
+    return "/var/run/rozofs/core"  
   def layout_2_3_4(self)    : return 0
   def layout_4_6_8(self)    : return 1
   def layout_8_12_16(self)  : return 2
@@ -1145,16 +1238,16 @@ class rozofs_class:
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output = cmd.communicate()
     if len(output) < 1:
-      syslog.syslog( "Can not find /dev/loop for %s %s"%(path,mark))
+      log( "Can not find /dev/loop for %s %s"%(path,mark))
       return
     loop=output[0].split('\n')[0]
     if content == None:
-      print "%s %s %s"%(loop,path,mark)
+      report("%sMB %-12s %s %s"%(rozofs.disk_size_mb,loop,path,mark))
     else:
-      print "%s %s %s(%s)"%(loop,path,mark,content)
+      report("%sMB %-12s %s %s(%s)"%(rozofs.disk_size_mb,loop,path,mark,content))
       
     # Create the file with the given path
-    os.system("dd if=/dev/zero of=%s bs=1MB count=%s > /dev/null 2>&1"%(path,rozofs.disk_size_mb))
+    os.system("truncate -s %s %s 2>&1"%(rozofs.disk_size_mb*1024*1024, path))
     
     # Bind the loop back device to the file    
     string="losetup %s %s "%(loop,path)
@@ -1162,7 +1255,7 @@ class rozofs_class:
     
     # Format it and mount it on the working directory
     if rozofs.fstype == "ext4" :
-      os.system("mkfs.ext4 -q %s"%(loop))
+      os.system("mkfs.ext4 -m 0 -q %s"%(loop))
       os.system("mount -t ext4 %s %s"%(loop,tmpdir))
     else:  
       os.system("mkfs.xfs -f -q %s"%(loop))
@@ -1178,6 +1271,39 @@ class rozofs_class:
     os.system("umount -f %s  > /dev/null 2>&1"%(tmpdir))
     syslog.syslog("Created %s -> %s -> %s"%(path,loop,mark))	  
     return  	 
+
+  def create_export_loopback_device(self,path,mount,sizeMB):  
+    if sizeMB == None: return
+    
+    # Need a working directory
+    os.system("umount -f %s  > /dev/null 2>&1"%(mount))
+    os.system("mkdir -p %s "%(mount))
+
+    # Find out a free loop back device to map on it
+    string="losetup -f "
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output = cmd.communicate()
+    if len(output) < 1:
+      log( "Can not find /dev/loop for %s"%(path))
+      return
+    loop=output[0].split('\n')[0]
+    report("%sMB %-12s %s -> %s"%(sizeMB,loop,path,mount))
+      
+    # Create the file with the given path
+    os.system("dd if=/dev/zero of=%s bs=1MB count=%s > /dev/null 2>&1"%(path,sizeMB))
+    
+    # Bind the loop back device to the file    
+    string="losetup %s %s "%(loop,path)
+    os.system(string)
+    
+    # Format it and mount it on the working directory
+    os.system("mkfs.ext4 -m 0 -q %s"%(loop))
+    os.system("mount -t ext4 %s %s"%(loop,mount))
+    syslog.syslog("Created %s -> %s -> %s"%(path,loop,mount))
+    time.sleep(2)	  
+    return  	     
+
     
   def delete_loopback_device(self,path):  
     devFile = ""
@@ -1201,7 +1327,7 @@ class rozofs_class:
       devFile = devFile.replace('(','')
       devFile = devFile.replace(')','')   
       os.remove(devFile)
-      syslog.syslog("%s Deleted -> %s"%(path,devFile))	
+      log("%s Deleted -> %s"%(path,devFile))	
     except: pass 
   
   def newspare(self,mark=None):
@@ -1211,7 +1337,7 @@ class rozofs_class:
       if not os.path.exists(path):
         rozofs.create_loopback_device(path,"rozofs_spare",mark)            
         return
-    print "No free spare number for spare device file"	
+    report("No free spare number for spare device file")
                
   def display_common_config(self):        
     display_config_int("nb_disk_thread",rozofs.threads)
@@ -1220,7 +1346,7 @@ class rozofs_class:
     display_config_bool("crc32c_generate",rozofs.crc32)
     display_config_true("crc32c_hw_forced")
     display_config_int("storio_slice_number",rozofs.storio_slice)
-    display_config_bool("numa_axare",True)
+    display_config_bool("numa_aware",True)
     if self.storio_mode == "multiple": display_config_true("storio_multiple_mode")
     else:                              display_config_false("storio_multiple_mode")
     display_config_bool("allow_disk_spin_down", rozofs.spin_down_allowed)
@@ -1231,7 +1357,7 @@ class rozofs_class:
     display_config_int("alloc_estimated_mb",self.alloc_mb)
     display_config_string("storaged_start_script",self.storaged_start_script)
     display_config_bool("device_automount",self.device_automount)
-    display_config_int("device_self_healing_process",2)
+    #display_config_int("device_self_healing_process",2)
     display_config_int("device_selfhealing_delay",rozofs.device_selfhealing_delay)
     display_config_string("device_selfhealing_mode",rozofs.device_selfhealing_mode)
     display_config_string("export_hosts",exportd.export_host)
@@ -1239,7 +1365,18 @@ class rozofs_class:
     display_config_bool("async_setattr",True)
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
-    if self.client_fast_reconnect == True: display_config_bool("client_fast_reconnect",True)
+    if self.client_fast_reconnect != 0: display_config_bool("client_fast_reconnect",True)
+    display_config_int("storio_buf_cnt",32)
+    display_config_int("export_buf_cnt",32)
+    display_config_int("spare_restore_spare_ctx",1)
+    display_config_int("spare_restore_loop_delay",rozofs.spare_restore_loop_delay);
+    display_config_int("storio_fidctx_ctx",1)   
+    display_config_int("trashed_file_per_run",rozofs.trashed_file_per_run)
+    if rozofs.min_metadata_inodes != None:
+      display_config_int("min_metadata_inodes",rozofs.min_metadata_inodes)
+    if rozofs.min_metadata_MB != None:
+      display_config_int("min_metadata_MB",rozofs.min_metadata_MB)
+    display_config_int("nb_trash_thread",8)
     
   def create_common_config(self):
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
@@ -1263,35 +1400,38 @@ class rozofs_class:
   def delete_config(self):
     global hosts
     exportd.delete_config()
+    mount="%s/export"%(rozofs.get_config_path())    
+    os.system("umount -f %s > /dev/null 2>&1"%(mount))  
     for h in hosts: h.delete_config()
     geomgr.delete_config()
+      
 
   def display(self):
     exportd.display()
-    print "STORCLI:" 
-    print "  . %-12s : %s "%("Nb",self.nb_storcli)
-    print "  * Mojette threads"
-    print "    . %-10s : %s"%("Read",self.read_mojette_threads)
-    print "    . %-10s : %s"%("Write",self.write_mojette_threads)
+    console("STORCLI:") 
+    console("  . %-12s : %s "%("Nb",self.nb_storcli))
+    console("  * Mojette threads")
+    console("    . %-10s : %s"%("Read",self.read_mojette_threads))
+    console("    . %-10s : %s"%("Write",self.write_mojette_threads))
     if self.mojette_threads_threshold == None:
-      print "    . %-10s : %s"%("Threshold","default")    
+      console("    . %-10s : %s"%("Threshold","default"))    
     else:  
-      print "    . %-10s : %s bytes"%("Threshold",self.mojette_threads_threshold)
-    print "STORAGE:"
-    print "  . %-12s : %s"%("Mode",self.storio_mode)
-    print "  . %-12s : %s"%("CRC32",self.crc32)
-    print "  . %-12s : %s"%("Self healing mode",self.device_selfhealing_mode)
-    print "  . %-12s : %s minutes"%("Self healing delay",self.device_selfhealing_delay)
-    print "  . %-12s : %s ports"%("Listen",self.nb_listen)
-    print "  . %-12s : %s "%("Threads",self.threads)
+      console("    . %-10s : %s bytes"%("Threshold",self.mojette_threads_threshold))
+    console("STORAGE:")
+    console("  . %-12s : %s"%("Mode",self.storio_mode))
+    console("  . %-12s : %s"%("CRC32",self.crc32))
+    console("  . %-12s : %s"%("Self healing mode",self.device_selfhealing_mode))
+    console("  . %-12s : %s minutes"%("Self healing delay",self.device_selfhealing_delay))
+    console("  . %-12s : %s ports"%("Listen",self.nb_listen))
+    console("  . %-12s : %s "%("Threads",self.threads))
     if self.device_automount == True:
-      print "  . %-12s : %s "%("Automount","YES")
+      console("  . %-12s : %s "%("Automount","YES"))
     else:  
-      print "  . %-12s : %s "%("Automount","no")    
+      console("  . %-12s : %s "%("Automount","no"))  
     if self.disk_size_mb == None:
-      print "  . %-12s : %s "%("Device size","no limit")
+      console("  . %-12s : %s "%("Device size","no limit"))
     else:
-      print "  . %-12s : %s MB (%s)"%("Device size",self.disk_size_mb,self.fstype)
+      console("  . %-12s : %s MB (%s)"%("Device size",self.disk_size_mb,self.fstype))
         
     if len(volumes) != int(0):
       volumes[0].display()
@@ -1321,6 +1461,11 @@ class rozofs_class:
     geomgr.start()
 
   def configure(self):
+    # Case of a loop device for metadata
+    if rozofs.metadata_size != None:
+      path="%s/devices/exportd"%(rozofs.get_config_path())
+      mount="%s/export"%(rozofs.get_config_path())
+      rozofs.create_export_loopback_device(path,mount,rozofs.metadata_size)  
     self.create_path()
     self.create_config()   
        
@@ -1334,8 +1479,9 @@ class rozofs_class:
     for m in mount_points: m.stop()
     for h in hosts: h.stop()
     exportd.stop() 
-    time.sleep(1)
-    os.system("killall rozolauncher 2>/dev/null")
+    
+#    time.sleep(1)
+#    os.system("killall rozolauncher 2>/dev/null")
 #    self.delete_config()
 
   def stop(self):
@@ -1352,15 +1498,15 @@ class rozofs_class:
 
   def cou(self,f):
     if not os.path.exists(f):
-      print "%s does not exist"%(f)
+      console( "%s does not exist"%(f))
       exit(1) 
     string="attr -R -g rozofs %s"%(f)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    print " ___________ %s ___________"%(f)   
+    console(" ___________ %s ___________"%(f)) 
     for line in cmd.stdout:  
       line=line.split('\n')[0]
-      print line
+      console(line)
       words=line.split()
       if len(words) < int(3): continue      
       if words[0] =="MODE": 
@@ -1388,13 +1534,13 @@ class rozofs_class:
 
     SID_LIST=dist.split('-')
     
-    c = cids[int(cid)-1]
+    c = get_cid(int(cid))
     
     for site in range(0,2):
     
-      print "__________________Site %s"%(site) 
+      console("__________________Site %s"%(site)) 
       for sid in SID_LIST:
-        print ""
+        console("")
         s = c.sid[int(sid)-1]
 	path = s.get_site_root_path(site)
         string="find %s -name \"%s*\""%(path,st_name)
@@ -1404,12 +1550,14 @@ class rozofs_class:
 	  fname=line.split('\n')[0]
 	  sz=os.path.getsize(fname) 
           tm=datetime.datetime.fromtimestamp(os.path.getmtime(fname))
-          print "%10s  %s  %s"%(sz,tm,fname)	
+          console("%10s  %s  %s"%(sz,tm,fname))	
 
   def exe_from_core_dir(self,dir):
     if dir == "storio": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
+    if dir == "stspare": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
     if dir == "export_slave": return "%s/build/src/%s/%s"%(os.getcwd(),"exportd","exportd")
     if dir == "geomgr" : return "%s/build/src/%s/%s"%(os.getcwd(),"geocli",dir)    
+    if dir == "rozo_rebalance" : return "%s/build/src/%s/%s"%(os.getcwd(),"exportd",dir)    
     return "%s/build/src/%s/%s"%(os.getcwd(),dir,dir)
 
   def do_monitor_cfg (self): 
@@ -1429,16 +1577,20 @@ class rozofs_class:
     os.system("./monitor.py 5 -c monitor.cfg")
 
   def core(self,argv):
-    if len(argv) == 2:
+    if argv == None or len(argv) == 2:
+      nocore=True
       for d in os.listdir(self.core_dir()):
         if os.path.isdir(os.path.join(self.core_dir(), d)):
           exe=self.exe_from_core_dir(d)
 	  for f in os.listdir(os.path.join(self.core_dir(), d)):
 	    name=os.path.join(self.core_dir(), d, f)
+            if nocore == True:
+              nocore = False
+              console("Some core files exist:")
             if os.path.getmtime(name) < os.path.getmtime(exe):
-	      print "(OLD) %s/%s"%(d,f)
+	      console("  (OLD) %s/%s"%(d,f))
 	    else:
-	      print "(NEW) %s/%s"%(d,f)  
+	      console("  (NEW) %s/%s"%(d,f)) 
       return  
     if argv[2] == "remove":
       if len(argv) == 3: return
@@ -1463,7 +1615,7 @@ class rozofs_class:
 #___________________________________________  
 def cmd_returncode (string):
   global rozofs
-  if rozofs.trace: print string
+  if rozofs.trace: console(string)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   cmd.wait()
@@ -1480,86 +1632,86 @@ def cmd_silent (string):
 def check_build ():
   sucess=True
   if not os.path.exists("./build/src/exportd/exportd"):
-    print "export is not built"
+    report("export is not built")
     sucess=False
   if not os.path.exists("./build/src/storaged/storaged"):
-    print "storaged is not built"
+    report("storaged is not built")
     sucess=False
   if not os.path.exists("./build/src/storaged/storio"):
-    print "storio is not built"
+    report("storio is not built")
     sucess=False
   if not os.path.exists("./build/src/storaged/storage_rebuild"):
-    print "storage_rebuild is not built"
+    report("storage_rebuild is not built")
   if not os.path.exists("./build/src/storaged/storage_list_rebuilder"):
-    print "storage_list_rebuilder is not built"
+    report("storage_list_rebuilder is not built")
   if not os.path.exists("./build/src/rozofsmount/rozofsmount"):
-    print "rozofsmount is not built"
+    report("rozofsmount is not built")
     sucess=False
   if not os.path.exists("./build/src/storcli/storcli"):
-    print "storcli is not built"
+    report("storcli is not built")
     sucess=False
   if not os.path.exists("./build/src/rozodiag/rozodiag"):
-    print "rozodiag is not built"
+    report("rozodiag is not built")
     sucess=False
   if not os.path.exists("./build/src/geocli/geocli"):
-    print "geocli is not built"
+    report("geocli is not built")
     sucess=False
   if not os.path.exists("./build/src/geocli/geomgr"):
-    print "geomgr is not built"
+    report("geomgr is not built")
     sucess=False
   if not os.path.exists("./build/src/launcher/rozolauncher"):
-    print "geomgr is not built"
+    report("geomgr is not built")
     sucess=False
   if sucess==False: sys.exit(-1)
 #_____________________________________________  
 def syntax_export() :
-  print  "./setup.py \texportd  \t{start|stop|reset|pid|reload}"    
+  console("./setup.py \texportd  \t{start|stop|reset|pid|reload}") 
 
 #_____________________________________________  
 def syntax_geomgr() :
-  print  "./setup.py \tgeomgr \t{start|stop|reset|pid|modify|reinit}"
+  console("./setup.py \tgeomgr \t{start|stop|reset|pid|modify|reinit}")
          
 #_____________________________________________  
 def syntax_mount() :
-  print  "./setup.py \tmount   \t{all|<instance>} {start|stop|reset|pid|info}"
-  print  "./setup.py \tmount   \t{all|<instance>} nfs {on|off}"
+  console("./setup.py \tmount   \t{all|<instance>} {start|stop|reset|pid|info}")
+  console("./setup.py \tmount   \t{all|<instance>} nfs {on|off}")
 #_____________________________________________  
 def syntax_storage() :
-  print  "./setup.py \tstorage \t{all|<host idx>} {start|stop|reset|rebuild|pid}"
-  print  "./setup.py \tstorage \t{all|<host idx>} {ifup|ifdown <#if>}"
+  console("./setup.py \tstorage \t{all|<host idx>} {start|stop|reset|rebuild|pid}")
+  console("./setup.py \tstorage \t{all|<host idx>} {ifup|ifdown <#if>}")
   
 #_____________________________________________  
 def syntax_cou() :
-  print  "./setup.py \tcou     \t<fileName>"
+  console("./setup.py \tcou     \t<fileName>")
 #_____________________________________________  
 def syntax_config() :
-  print  "./setup.py \tconfig  \t<confFileName>"  
+  console("./setup.py \tconfig  \t<confFileName>")  
 #_____________________________________________  
 def syntax_sid() :
-  print  "./setup.py \tsid     \t<cid> <sid>\tdevice-delete {all|<#device>} [<site>]"
-  print  "./setup.py \tsid     \t<cid> <sid>\tdevice-create {all|<#device>} [<site>]"
-  print  "./setup.py \tsid     \t<cid> <sid>\tdevice-clear  {all|<#device>} [<site>]"
-  print  "./setup.py \tsid     \t<cid> <sid>\trebuild..."
-  print  "./setup.py \tsid     \t<cid> <sid>\tinfo"
+  console("./setup.py \tsid     \t<cid> <sid>\tdevice-delete {all|<#device>} [<site>]")
+  console("./setup.py \tsid     \t<cid> <sid>\tdevice-create {all|<#device>} [<site>]")
+  console("./setup.py \tsid     \t<cid> <sid>\tdevice-clear  {all|<#device>} [<site>]")
+  console("./setup.py \tsid     \t<cid> <sid>\trebuild...")
+  console("./setup.py \tsid     \t<cid> <sid>\tinfo")
 #_____________________________________________  
 def syntax_if() :
-  print  "./setup.py \tifup|ifdown  \t<#if>"    
+  console("./setup.py \tifup|ifdown  \t<#if>")
 #_____________________________________________  
 def syntax_monitor() :
-  print  "./setup.py \tmonitor"  
+  console("./setup.py \tmonitor") 
 #_____________________________________________  
 def syntax_debug() :
-  print  "./setup.py \tcore    \tremove {all|<coredir>/<corefile>}"
-  print  "./setup.py \tcore    \t[<coredir>/<corefile>]"
+  console("./setup.py \tcore    \tremove {all|<coredir>/<corefile>}")
+  console("./setup.py \tcore    \t[<coredir>/<corefile>]")
   
 #_____________________________________________  
 def syntax_all() :
-  print  "Usage:"
-  #print  "./setup.py \tsite    \t<0|1>"
-  print  "./setup.py \tdisplay\t\t[conf. file]"
-  print  "./setup.py \t{start|stop}"
-  print  "./setup.py \t{configure|pause|resume}"
-  print  "./setup.py \tcmd <command to be executed in the setup context>"
+  console("Usage:")
+  #console("./setup.py \tsite    \t<0|1>"
+  console("./setup.py \tdisplay\t\t[conf. file]")
+  console("./setup.py \t{start|stop}")
+  console("./setup.py \t{configure|pause|resume}")
+  console("./setup.py \tcmd <command to be executed in the setup context>")
 
   syntax_monitor()
     
@@ -1572,15 +1724,15 @@ def syntax_all() :
   syntax_config()  
   syntax_if()
   syntax_debug()
-  print  "./setup.py \tprocess \t[pid]"
-  print  "./setup.py \tvnr ..."
-  print  "./setup.py \t{build|rebuild|clean}"
+  console("./setup.py \tprocess \t[pid]")
+  console("./setup.py \tvnr ...")
+  console("./setup.py \t{build|rebuild|clean}")
   sys.exit(-1)   
           
 #_____________________________________________  
 def syntax(string=None,topic=None) :
 
-  if string != None: print "!!! %s !!!\n"%(string)
+  if string != None: console("!!! %s !!!\n"%(string))
 
   if topic == None: syntax_all()
   
@@ -1652,6 +1804,7 @@ def test_parse(command, argv):
   elif command == "rebuild"            : rebuild()
   elif command == "clean"              : clean()
   elif command == "monitor"            : rozofs.monitor()
+  elif command == "rozofs.conf"        : rozofs.create_common_config()
 
   elif command == "spare"              : 
     try: 
@@ -1682,7 +1835,7 @@ def test_parse(command, argv):
         i+=1
 	try:mount = mount_points[int(argv[i])]
 	except:
-	  print "-mount without valid mount point instance !!!"
+	  console("-mount without valid mount point instance !!!")
 	  sys.exit(1)
       elif argv[i] == "-nfs":
         param += " --nfs -e %s"%(mount.nfs_path)
@@ -1770,7 +1923,7 @@ def test_parse(command, argv):
        rozofs.cou(argv[2]) 
 
   elif command == "get_nb_vol"         : 
-       print "%d"%(len(volumes)) 
+       console("%d"%(len(volumes)))
 
   elif command == "sid" : 
        if len(argv) <= 4: syntax("sid requires cid+sid numbers","sid")
@@ -1779,8 +1932,7 @@ def test_parse(command, argv):
        except:  syntax("get_cid_sid requires an integer for cluster id","sid") 
        if cid == 0: syntax("No such cluster id","sid")  
        if (len(cids)) < int(cid): syntax("No such cluster id","sid")
-       cid-=1            
-       c = cids[cid]
+       c = get_cid(int(cid))
 
        try:     sid = int(argv[3])
        except:  syntax("get_cid_sid requires an integer for storage id","sid") 
@@ -1798,7 +1950,7 @@ def test_parse(command, argv):
 	     h = s.host[hnum]
 	     s.delete_device(argv[5],h)
 	   except:
-	     print "unexpected site number %s"%(argv[6])
+	     console("unexpected site number %s"%(argv[6]))
 	     sys.exit(-1) 	
 
        if argv[4] == "device-create" : 
@@ -1810,7 +1962,7 @@ def test_parse(command, argv):
 	     h = s.host[hnum]
 	     s.create_device(argv[5],h)
 	   except:
-	     print "unexpected site number %s"%(argv[6])
+	     console("unexpected site number %s"%(argv[6]))
 	     sys.exit(-1) 
 
        if argv[4] == "device-clear" : 
@@ -1823,7 +1975,7 @@ def test_parse(command, argv):
 	     h = s.host[hnum]
 	     s.clear_device(argv[5],h)
 	   except:
-	     print "unexpected site number %s"%(argv[6])
+	     console("unexpected site number %s"%(argv[6]))
 	     sys.exit(-1) 
 	     	 
        if argv[4] == "rebuild":
@@ -1841,7 +1993,7 @@ def test_parse(command, argv):
        v = volumes[idx]
        string=""
        for c in v.cid: string += " %s"%(c.cid)
-       print string
+       console(string)
 
   elif command == "get_cluster_sid_nb" : 
        if len(argv) <= 2: syntax("get_cluster_sid requires a cluster number")
@@ -1849,9 +2001,8 @@ def test_parse(command, argv):
        except:  syntax("get_cluster_sid requires an integer for cluster number") 
        if idx == 0: syntax("No such cluster number")  
        if (len(cids)) < int(idx): syntax("No such cluster number")
-       idx-=1            
-       c = cids[idx]
-       print "%s"%(c.nb_sid())
+       c = get_cid(idx)
+       console("%s"%(c.nb_sid()))
 
   else                                 : syntax("Unexpected command \"%s\n"%(command))
 
@@ -1862,7 +2013,7 @@ def test_init():
   global geomgr
   
   rozofs  = rozofs_class()
-  exportd = exportd_class()
+  exportd = exportd_class("localhost1/localhost2")
   geomgr  = geomgr_class()
   
 
@@ -1903,6 +2054,6 @@ else:
 # Parse the command and execute it 
 cmd=""
 for arg in sys.argv: cmd=cmd+" "+arg
-syslog.syslog(cmd)
+log(cmd)
  
 test_parse(command,sys.argv)

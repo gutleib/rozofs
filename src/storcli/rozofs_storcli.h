@@ -198,6 +198,31 @@ static inline uint8_t ROZOFS_IDX_IN_CLUSTER(uint8_t idx,uint8_t base)
   return data;
 
 }
+
+/*
+** READ/WRITE trace stuff
+*/
+#define ROZOFS_STORCLI_TRACE_BUFFER_SIZE   (ROZOFS_SAFE_MAX_STORCLI*2)
+typedef struct _rozofs_storcli_trc_t {
+  uint16_t    req:1;  // 1 request / 0 response
+  uint16_t    prj:4;  // prj context id 
+  uint16_t    ns:11;// code
+} rozofs_storcli_trc_t;
+
+typedef struct _rozofs_storcli_trc_req_t {
+  uint16_t    req:1;  // 1 request / 0 response
+  uint16_t    prj:4;  // prj context id 
+  uint16_t    sid:8;  // sid 
+  uint16_t    ns:3;
+} rozofs_storcli_trc_req_t;
+
+typedef struct _rozofs_storcli_trc_rsp_t {
+  uint16_t    req:1;  // 1 request / 0 response
+  uint16_t    prj:4;  // prj context id 
+  uint16_t    result:11;
+} rozofs_storcli_trc_rsp_t;
+
+
 /**
 * common context for read and write
 */
@@ -269,9 +294,34 @@ typedef struct _rozofs_storcli_ctx_t
   ** working variables for delete
   */
   storcli_delete_arg_t storcli_delete_arg;  /**< delete parameter of the request */
-
+  /*
+  ** Trace buffer 
+  */
+  int                  traceSize;
+  rozofs_storcli_trc_t traceBuffer[ROZOFS_STORCLI_TRACE_BUFFER_SIZE];
 } rozofs_storcli_ctx_t;
 
+static inline void rozofs_storcli_trace_request(void * ctx, uint8_t prj, uint8_t sid) {
+  rozofs_storcli_ctx_t * p = (rozofs_storcli_ctx_t*) ctx;
+  if (p->traceSize >= ROZOFS_STORCLI_TRACE_BUFFER_SIZE) return;
+  rozofs_storcli_trc_req_t * trc;
+    
+  trc = (rozofs_storcli_trc_req_t*)&p->traceBuffer[p->traceSize++];  
+  trc->req = 1;
+  trc->prj = prj;
+  trc->sid = sid;
+  trc->ns  = 0;
+}
+static inline void rozofs_storcli_trace_response(void * ctx, uint8_t prj, uint32_t result) {
+  rozofs_storcli_ctx_t * p = (rozofs_storcli_ctx_t*) ctx;
+  if (p->traceSize >= ROZOFS_STORCLI_TRACE_BUFFER_SIZE) return;
+  rozofs_storcli_trc_rsp_t * trc;
+    
+  trc = (rozofs_storcli_trc_rsp_t*) &p->traceBuffer[p->traceSize++];  
+  trc->req    = 0;
+  trc->prj    = prj;
+  trc->result = result;
+}
 /*
 ** common structure for Mojette transform KPI
 */
@@ -478,6 +528,7 @@ typedef struct storcli_conf {
     unsigned mojThreadThreshold; 
     unsigned localPreference;
     unsigned noReadFaultTolerant;
+    unsigned numanode;
 } storcli_conf;
 
 extern storcli_conf conf;
@@ -1609,6 +1660,7 @@ extern int noReadFaultTolerant;
 typedef struct _storcli_one_corrupted_fid_ctx {
   fid_t            fid;
   uint64_t         count;
+  time_t           time1rst;
 } storcli_one_corrupted_fid_ctx;
 
 /*
@@ -1639,8 +1691,11 @@ typedef struct _storcli_rw_error_record_t {
   int         size;     /**< Size of the operation */
   fid_t       fid;      /**< File id on which the operation took place */
   uint16_t    opcode;   /**< Operation */ 
+  uint8_t     cid;      /**< CID*/ 
+  uint8_t     dist_set[ROZOFS_SAFE_MAX];  
   char        lbg[ROZOFS_SAFE_MAX+1];   
-  char        prj[(ROZOFS_SAFE_MAX*2)+1]; 
+  int                  traceSize;
+  rozofs_storcli_trc_t traceBuffer[ROZOFS_STORCLI_TRACE_BUFFER_SIZE];
 } storcli_rw_error_record_t; 
 
 #define ROZOFS_STORCLI_ERROR_RECORD_NB 64
@@ -1658,13 +1713,21 @@ static inline void storcli_trace_lbg_status(char * pChar, uint8_t rozofs_safe,ro
   for (projection_id = 0; projection_id <rozofs_safe; projection_id++) {
     switch (working_ctx_p->lbg_assoc_tb[projection_id].state) {
       case NORTH_LBG_DEPENDENCY:      *pChar++ = '-'; break;
-      case NORTH_LBG_UP:              *pChar++ = 'U'; break;
+      case NORTH_LBG_UP:  
+        if (storcli_lbg_cnx_sup_is_selectable(working_ctx_p->lbg_assoc_tb[projection_id].lbg_id)) {
+          *pChar++ = 'S'; 
+        }
+        else {             
+          *pChar++ = 'u'; 
+        }  
+        break;
       case NORTH_LBG_DOWN:            *pChar++ = 'D'; break;
-      case NORTH_LBG_SHUTTING_DOWN:   *pChar++ = 'S'; break;
+      case NORTH_LBG_SHUTTING_DOWN:   *pChar++ = 'x'; break;
       default: pChar += rozofs_i32_append(pChar, working_ctx_p->lbg_assoc_tb[projection_id].state);break;
     }
   }       
 }
+#if 0
 static inline void storcli_trace_prj_status(char * pChar, uint8_t rozofs_safe,rozofs_storcli_ctx_t * working_ctx_p) {
   int projection_id;
   
@@ -1680,6 +1743,7 @@ static inline void storcli_trace_prj_status(char * pChar, uint8_t rozofs_safe,ro
     }
   }       
 }
+#endif
 /*
 ** Trace an error in the memory buffer
 */
@@ -1709,6 +1773,8 @@ static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t
       storcli_read_arg_t * storcli_read_rq_p = (storcli_read_arg_t*)&working_ctx_p->storcli_read_arg;
       rec->offset = storcli_read_rq_p->bid;
       rec->size   = storcli_read_rq_p->nb_proj;
+      rec->cid    = storcli_read_rq_p->cid;
+      memcpy(rec->dist_set,storcli_read_rq_p->dist_set,sizeof(rec->dist_set));
       rozofs_safe = rozofs_get_rozofs_safe(storcli_read_rq_p->layout);
     }  
     break;
@@ -1718,6 +1784,8 @@ static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t
       storcli_write_arg_no_data_t *storcli_write_rq_p = (storcli_write_arg_no_data_t*)&working_ctx_p->storcli_write_arg;
       rec->offset = storcli_write_rq_p->off;
       rec->size   = storcli_write_rq_p->len;
+      rec->cid    = storcli_write_rq_p->cid;
+      memcpy(rec->dist_set,storcli_write_rq_p->dist_set,sizeof(rec->dist_set));
       rozofs_safe = rozofs_get_rozofs_safe(storcli_write_rq_p->layout);
     }       
     break;
@@ -1727,6 +1795,8 @@ static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t
       storcli_truncate_arg_t *storcli_truncate_rq_p = (storcli_truncate_arg_t *) &working_ctx_p->storcli_truncate_arg;
       rec->offset = storcli_truncate_rq_p->bid;
       rec->size   = storcli_truncate_rq_p->last_seg;
+      rec->cid    = storcli_truncate_rq_p->cid;
+      memcpy(rec->dist_set,storcli_truncate_rq_p->dist_set,sizeof(rec->dist_set));
       rozofs_safe = rozofs_get_rozofs_safe(storcli_truncate_rq_p->layout);
     }
     break;
@@ -1739,7 +1809,8 @@ static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t
   rec->opcode =  working_ctx_p->opcode_key; 
   rec->ts = now;
   storcli_trace_lbg_status(&rec->lbg[0], rozofs_safe, working_ctx_p);
-  storcli_trace_prj_status(&rec->prj[0], rozofs_safe, working_ctx_p);
+  rec->traceSize = working_ctx_p->traceSize;
+  memcpy(rec->traceBuffer, working_ctx_p->traceBuffer, sizeof(rec->traceBuffer));
 }
 /*_________________________________________________________________
 ** Allocate a south buffer first in the small pool when possible

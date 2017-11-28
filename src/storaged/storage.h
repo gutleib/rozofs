@@ -38,6 +38,7 @@
 #include <rozofs/rpc/sproto.h>
 
 #include "storio_device_mapping.h"
+#include "storage_header.h"
 
 
 /*
@@ -133,9 +134,9 @@ typedef enum _storage_device_status_e {
   storage_device_status_undeclared=0,
   storage_device_status_init,
   storage_device_status_is,
-  storage_device_status_degraded,
-  storage_device_status_relocating,
   storage_device_status_rebuilding,
+  
+  storage_device_status_relocating,
   storage_device_status_failed,
   storage_device_status_oos
 } storage_device_status_e;
@@ -144,15 +145,9 @@ static inline char * storage_device_status2string(storage_device_status_e status
   switch(status) {
     case storage_device_status_undeclared: return "NONE";
     case storage_device_status_init:       return "INIT";
-    
-    case storage_device_status_degraded:   
-#ifdef SHOW_DEGRADED_STATE    
-                                           return "DEG";
-#endif  
-    case storage_device_status_is:         return "IS";
-    
-    case storage_device_status_relocating: return "RELOC";
     case storage_device_status_rebuilding: return "REBUILD";
+    case storage_device_status_is:         return "IS";
+    case storage_device_status_relocating: return "RELOC";
     case storage_device_status_failed:     return "FAILED";
     case storage_device_status_oos:        return "OOS";
     default:                               return "???";
@@ -179,7 +174,7 @@ static inline char * storage_device_diagnostic2String(storage_device_diagnostic_
     case DEV_DIAG_INODE_DEPLETION: return "INODE DEPLETION";
     case DEV_DIAG_BLOCK_DEPLETION: return "BLOCK DEPLETION";
     case DEV_DIAG_INVERTED_DISK: return "INVERTED DISK";
-    case DEV_DIAG_REBUILD_REQUIRED: return "REBUILD REQUIRED";
+    case DEV_DIAG_REBUILD_REQUIRED: return "REBUILDING";
     default: return "??";
   }  
 }  
@@ -311,26 +306,6 @@ static inline storage_t *storaged_next(storage_t * st) {
     if (st < storaged_storages + storaged_nrstorages) return st;
     return NULL;
 }
-/**
- *  Header structure for one file bins
- */
-
-
-typedef struct rozofs_stor_bins_file_hdr {
-  struct {
-    uint8_t version; ///<  version of rozofs. (not used yet)
-    uint8_t layout; ///< layout used for this file.
-    uint8_t bsize;  ///< Block size as defined in enum ROZOFS_BSIZE_E
-    fid_t   fid;
-    sid_t   dist_set_current[ROZOFS_SAFE_MAX]; ///< currents sids of storage nodes target for this file.
-    uint8_t device[ROZOFS_STORAGE_MAX_CHUNK_PER_FILE]; // Device number that hold the chunk of projection
-    uint32_t crc32; ///< CRC32 . Set to 0 by default when no CRC32 is computed
-  } v0;
-  struct {  
-    cid_t   cid;
-    sid_t   sid;
-  } v1;
-} rozofs_stor_bins_file_hdr_t;
 
 
 
@@ -421,26 +396,53 @@ storage_t *storaged_next(storage_t * st);
 int storage_error_on_device(storage_t * st, uint8_t device_nb);
 
 
-static inline char * trace_device(uint8_t * device, char * pChar) {
-  int  idx;
-      
-  for (idx=0; idx<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;idx++) {
-    if (device[idx] == ROZOFS_UNKNOWN_CHUNK) {
+static inline char * trace_device(char * pChar, storio_device_mapping_t * p) {
+  int       idx;
+  int       chunk;
+  uint8_t * pDev;
+       
+  /*
+  ** Distribution is unkown yet
+  */
+  if (p->device_unknown){
+    *pChar++ = '?';
+    *pChar = 0;        
+    return pChar;
+  }
+  
+  /*
+  ** Distribution is known and is stored in a small device list
+  */  
+  if (p->small_device_array) {
+    chunk = ROZOFS_MAX_SMALL_ARRAY_CHUNK;
+    pDev  = p->device.small;
+  }
+  /*
+  ** Distribution is known and is stored in a big device list
+  */  
+  else {
+    chunk = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-1;
+    pDev  = p->device.ptr;
+  }
+
+  for (idx=0; idx<=chunk;idx++) {
+    uint8_t dev = pDev[idx];
+    if (dev == ROZOFS_UNKNOWN_CHUNK) {
       *pChar++ = '?';
       break; 
     }   
-    if (device[idx] == ROZOFS_EOF_CHUNK) break;
+    if (dev == ROZOFS_EOF_CHUNK) break;
 
-    *pChar++ = '/';    
-    if (device[idx] == ROZOFS_EMPTY_CHUNK) {
+    if (dev == ROZOFS_EMPTY_CHUNK) {
       *pChar++ = 'E';
+      *pChar++ = '/';          
     }  
     else {
-      pChar += rozofs_u32_append(pChar,device[idx]);
+      pChar += rozofs_u32_append(pChar,dev);
+      *pChar++ = '/';          
     }
-    if (idx%32==31) pChar += rozofs_eol(pChar);  
   }
-  *pChar++ = '/';  
+  *pChar = 0; 
   return pChar;
 } 
 
@@ -692,13 +694,13 @@ int storage_rm_data_chunk(storage_t * st, uint8_t device, fid_t fid, uint8_t spa
 /** Restore a chunk of data as it was before the relocation attempt 
  *
  * @param st: the storage where the data file resides
- * @param device: device where the data file resides
+ * @param fidCtx: FID mapping context
  * @param fid: the fid of the file 
  * @param spare: wheteher this is a spare file
  * @param chunk: The chunk number that has to be removed
  * @param old_device: previous device to be restored
  */
-int storage_restore_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t spare, 
+int storage_restore_chunk(storage_t * st, storio_device_mapping_t * fidCtx, fid_t fid, uint8_t spare, 
                            uint8_t chunk, uint8_t old_device);
 /** Compute the 
  *
@@ -899,11 +901,11 @@ static inline int storage_write(storage_t * st, storio_device_mapping_t * fidCtx
 #else
 #define repairdbg(fmt,...) info(fmt,__VA_ARGS__)
 #endif
-char * storage_write_repair3_chunk(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+char * storage_write_repair3_chunk(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
         uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, sp_b2rep_t * blk2repair, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty);
 
-static inline int storage_write_repair3(storage_t * st, uint8_t * device, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+static inline int storage_write_repair3(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
         uint8_t spare, fid_t fid, bid_t input_bid, uint32_t input_nb_proj, sp_b2rep_t * blk2repair, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty) {
     bid_t      bid;
@@ -953,7 +955,7 @@ static inline int storage_write_repair3(storage_t * st, uint8_t * device, uint8_
       /*
       ** Every block can be written in one time in the same chunk
       */
-      pBins = storage_write_repair3_chunk(st, device, layout, bsize, dist_set,
+      pBins = storage_write_repair3_chunk(st, fidCtx, layout, bsize, dist_set,
         			 spare, fid, chunk, bid, input_nb_proj, &blk2repair[0], version,
         			 file_size, bins, is_fid_faulty);
       if (pBins == NULL) {
@@ -985,7 +987,7 @@ static inline int storage_write_repair3(storage_t * st, uint8_t * device, uint8_
     pBins = (char *) bins; 
         
     if (first_block2repair_in_2nd_chunk) {
-      pBins = storage_write_repair3_chunk(st, device, layout, bsize, dist_set,
+      pBins = storage_write_repair3_chunk(st, fidCtx, layout, bsize, dist_set,
         			   spare, fid, chunk, bid, first_block2repair_in_2nd_chunk, &blk2repair[0], version,
         			   file_size, (bin_t*)pBins, is_fid_faulty);    
       if (pBins == NULL) {
@@ -1010,7 +1012,7 @@ static inline int storage_write_repair3(storage_t * st, uint8_t * device, uint8_
     repairdbg("2nd chunk : bid %d repair %d blocks",(int)bid, input_nb_proj-first_block2repair_in_2nd_chunk);
     
     
-    pBins = storage_write_repair3_chunk(st, device, layout, bsize, dist_set,
+    pBins = storage_write_repair3_chunk(st, fidCtx, layout, bsize, dist_set,
         			 spare, fid, chunk, bid, input_nb_proj-first_block2repair_in_2nd_chunk, &blk2repair[first_block2repair_in_2nd_chunk], version,
         			 file_size, (bin_t*)pBins, is_fid_faulty);    
     if (pBins == NULL) {
@@ -1080,7 +1082,7 @@ static inline int storage_read(storage_t * st, storio_device_mapping_t * fidCtx,
       if (*len_read < ret1) {
         chunk++;
         if (chunk<ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) {          
-          if (fidCtx->device[chunk] != ROZOFS_EOF_CHUNK) {
+          if (storio_get_dev(fidCtx, chunk) != ROZOFS_EOF_CHUNK) {
 	    pBins += *len_read;
 	    memset(pBins,0,ret1-*len_read);
 	    *len_read = ret1;
@@ -1119,7 +1121,7 @@ static inline int storage_read(storage_t * st, storio_device_mapping_t * fidCtx,
       return 0;	
     }
     
-    if (fidCtx->device[chunk] == ROZOFS_EOF_CHUNK) {
+    if (storio_get_dev(fidCtx, chunk) == ROZOFS_EOF_CHUNK) {
       *len_read = len_read1;
       dbg("read success len %d",*len_read);			           	
       return 0;	
@@ -1161,7 +1163,7 @@ static inline int storage_read(storage_t * st, storio_device_mapping_t * fidCtx,
       return 0;	
     }
     
-    if (fidCtx->device[chunk] == ROZOFS_EOF_CHUNK) {
+    if (storio_get_dev(fidCtx, chunk) == ROZOFS_EOF_CHUNK) {
       *len_read = len_read1 + len_read2;
       dbg("read success len %d",*len_read);			           	
       return 0;	
@@ -1187,7 +1189,7 @@ static inline int storage_read(storage_t * st, storio_device_mapping_t * fidCtx,
  *  able to restore it later when the rebuild fails...
  * 
  * @param st: the storage to use.
- * @param device: Array of device allocated for the 128 chunks
+ * @param fidCtx: FID mapping context
  * @param fid: unique file id.
  * @param spare: indicator on the status of the projection.
  * @param chunk: the chunk that is to be rebuilt with relocate
@@ -1195,7 +1197,7 @@ static inline int storage_read(storage_t * st, storio_device_mapping_t * fidCtx,
  * 
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int storage_relocate_chunk(storage_t * st, uint8_t * device,fid_t fid, uint8_t spare, 
+int storage_relocate_chunk(storage_t * st, storio_device_mapping_t * fidCtx,fid_t fid, uint8_t spare, 
                            uint8_t chunk, uint8_t * old_device);
 			   
 /** Truncate a bins file (not used yet)
@@ -1352,7 +1354,7 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
 						   
 						   
 
-int storage_rm_chunk(storage_t * st, uint8_t * device, 
+int storage_rm_chunk(storage_t * st, storio_device_mapping_t * fidCtx, 
                      uint8_t layout, uint8_t bsize, uint8_t spare, 
 		     sid_t * dist_set, fid_t fid, 
 		     uint8_t chunk, int * is_fid_faulty);
@@ -1459,5 +1461,33 @@ char * rozofs_get_device_mountpath(const char * dev) ;
  * @return: 1 when mounted else 0
  */
 int rozofs_check_mountpath(const char * mntpoint);
+/*_____________________________________________________________________________
+** Compute the size of a file as well as the number of allocated sectors
+** from  stat() on every projection file.
+**
+** @param st            The logical storage context
+** @param fid           The FID of the target file
+** @param spare         Whether this storage is spare for this file
+** @param nb_chunk      returned number of chunk
+** @param size_B        returned size of projections
+** @param allocated_KB  returned allocated sectors of projections
+**
+** @retval 0 on success. -1 on error (errno is set)
+**_____________________________________________________________________________
+*/
+int storage_size_file(storage_t * st, fid_t fid, uint8_t spare, uint32_t * nb_chunk, uint64_t * size_B, uint64_t * allocated_KB);
+/*________________________________________________________________________
+**  Read a header file
+**
+**  @param path        File path
+**  @param cid         cluster id
+**  @param sid         logical storage identifier
+**  @param fid         FID
+**  @param hdr         Where to store the read header
+**
+**  @retval An error string or NULL on success
+**________________________________________________________________________
+*/
+char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozofs_stor_bins_file_hdr_t * hdr) ;
 #endif
 

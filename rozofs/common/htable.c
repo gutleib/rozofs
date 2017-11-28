@@ -24,12 +24,6 @@
 #include "htable.h"
 
 
-typedef struct hash_entry {
-    void *key;
-    void *value;
-    list_t list;
-} hash_entry_t;
-
 inline void htable_initialize(htable_t * h, uint32_t size, uint32_t(*hash) (void *),
                        int (*cmp) (void *, void *)) {
     list_t *it;

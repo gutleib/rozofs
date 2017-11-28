@@ -873,10 +873,10 @@ program EXPORT_PROGRAM {
 
         epgw_readdir_ret_t
         EP_READDIR(epgw_readdir_arg_t)            = 15;
-
+/*
         epgw_read_block_ret_t
         EP_READ_BLOCK(epgw_io_arg_t)              = 16;
-
+*/
         epgw_mattr_ret_t
         EP_WRITE_BLOCK(epgw_write_block_arg_t)    = 17;
 

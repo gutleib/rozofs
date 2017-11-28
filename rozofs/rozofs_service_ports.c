@@ -41,6 +41,21 @@ ROZOFS_SERVICE_PORT_RANGE_DESC_T rozofs_service_port_range[ROZOFS_SERVICE_PORT_M
     .name         = "rozofs_export_geo_replica",
     .service      = "Export master geo-replication",
   },
+
+  [ROZOFS_SERVICE_PORT_EXPORT_RCMD] = {
+    .defaultValue = 53030,
+    .rangeSize    = 1,
+    .name         = "rozofs_export_rcmd",
+    .service      = "Export remote command server",
+  },
+
+  [ROZOFS_SERVICE_PORT_EXPORT_RCMD_DIAG] = {
+    .defaultValue = 53031,
+    .rangeSize    = 1,
+    .name         = "rozofs_export_rcmd_diag",
+    .service      = "Export remote command server diagnostic",
+  },
+    
   [ROZOFS_SERVICE_PORT_REBALANCE_DIAG] = {
     .defaultValue = 53020,
     .rangeSize    = NB_REBALANCING+1,
@@ -56,7 +71,7 @@ ROZOFS_SERVICE_PORT_RANGE_DESC_T rozofs_service_port_range[ROZOFS_SERVICE_PORT_M
   },
   
   [ROZOFS_SERVICE_PORT_STORAGED_DIAG] = {
-    .defaultValue = 50027,
+    .defaultValue = 50200,
     .rangeSize    = NB_STORIO+1,
     .name         = "rozofs_storaged_diag",
     .service      = "Storaged & storio diagnostic",

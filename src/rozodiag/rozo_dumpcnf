@@ -175,9 +175,6 @@ do_dump() {
   # Interafce statistics
   dump_interfaces
 
-  # Add core files to the result tar file
-  add_tarlist "/var/run/rozofs_core"
-
   # Add rozofs run files
   add_tarlist "/var/run/rozofs"
 
@@ -185,7 +182,7 @@ do_dump() {
   tar cfz ${RESULT}.tgz ${TARLIST} > /dev/null 2>&1
 
   # Remove dumped core files
-  for core in `tar -tf ${RESULT}.tgz | awk -F'/' '{if (($3=="rozofs_core")&&($5!="")) print $0;}'`
+  for core in `tar -tf ${RESULT}.tgz | awk -F'/' '{if (($3=="rozofs/core")&&($5!="")) print $0;}'`
   do
     echo ${core}
     rm -f /${core}

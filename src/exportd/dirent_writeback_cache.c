@@ -299,7 +299,6 @@ int dirent_wbcache_diskflush(dirent_writeback_entry_t  *cache_p)
        severe("bad write returned value for %s (len %d): error %s",cache_p->pathname,cache_p->size,strerror(errno));
        goto error;        
      } 
-  //   info("FDL write header %s offset %llu len %u",cache_p->pathname,0,cache_p->size);
      dirent_wb_cache_th_write_bytes_count+= cache_p->size;
      dirent_wb_write_th_count++;
    }
@@ -329,7 +328,7 @@ int dirent_wbcache_diskflush(dirent_writeback_entry_t  *cache_p)
    cache_p->wr_cpt = 0;
    status = 0;
 
-error:
+out:
   if(fd != -1) close(fd);
   if ((errno = pthread_rwlock_unlock(&cache_p->lock)) != 0) {
       severe("can't lock writeback cache entry: %s", strerror(errno));
@@ -337,6 +336,15 @@ error:
   } 
   return status;   
 
+error:
+  /*
+  ** Here we release the cache entry otherwise the flush thread will try forever to flush the cache 
+  ** entry: the source is either on file open or write
+  */
+   chunk_p = &cache_p->chunk[0];
+   for (i = 0; i < DIRENT_CACHE_MAX_CHUNK; i++,chunk_p++) chunk_p->wr_cpt = 0; 
+   cache_p->wr_cpt = 0;
+   goto out;
 }
 /*
  *_______________________________________________________________________

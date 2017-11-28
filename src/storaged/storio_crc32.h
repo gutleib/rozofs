@@ -116,7 +116,7 @@ int  storio_check_crc32_vect(struct iovec * vector,
     @param initial_crc: Value to intializae the CRC to    
 
 */
-void storio_gen_header_crc32(rozofs_stor_bins_file_hdr_t * hdr, uint32_t initial_crc);
+void storio_gen_header_crc32(void * hdr, uint32_t initial_crc);
 /*
 **__________________________________________________________________
 */
@@ -124,10 +124,9 @@ void storio_gen_header_crc32(rozofs_stor_bins_file_hdr_t * hdr, uint32_t initial
 **  Check the CRC32 on the content of the header file.
 
     @param hdr: the header file structure
-    @param crc_errorcnt_p: pointer to the crc error counter of the storage (cid/sid).
     @param initial_crc: Value to intializae the CRC to    
     
     @retval 0 on success -1 on error
 */
-int storio_check_header_crc32(rozofs_stor_bins_file_hdr_t * hdr, uint64_t *crc_error_cnt_p, uint32_t initial_crc);
+int storio_check_header_crc32(void * hdr, uint32_t initial_crc);
 #endif

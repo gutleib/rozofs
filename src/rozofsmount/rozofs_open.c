@@ -25,6 +25,8 @@
 #include <rozofs/core/rozofs_string.h>
 #include <rozofs/common/xmalloc.h>
 #include "rozofs_kpi.h"
+#include "rozofs_cachetrack.h"
+
 DECLARE_PROFILING(mpp_profiler_t);
 
 /**
@@ -114,6 +116,10 @@ void rozofs_ll_open_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
       */
       rzkpi_file_stat_update(ie->pfid,(int)0,RZKPI_OPEN);
       /*
+      ** Take care of the file caching cache for hybrid SSD/HDD configuration
+      */
+      rzcachetrack_file(ie->pfid,ie->attrs.size,ie->attrs.mtime);
+      /*
       ** send back response to fuse
       */
       fuse_reply_open(req, fi);
@@ -180,6 +186,10 @@ short_cut:
 	** update the statistics
 	*/
 	rzkpi_file_stat_update(ie->pfid,(int)0,RZKPI_OPEN);
+	/*
+	** Take care of the file caching cache for hybrid SSD/HDD configuration
+	*/
+	rzcachetrack_file(ie->pfid,ie->attrs.size,ie->attrs.mtime);
 	/*
 	** send back response to fuse
 	*/
@@ -419,6 +429,10 @@ void rozofs_ll_open_cbk(void *this,void *param)
     ** update the statistics
     */
     rzkpi_file_stat_update(ie->pfid,(int)0,RZKPI_OPEN);
+    /*
+    ** Take care of the file caching cache for hybrid SSD/HDD configuration
+    */
+    rzcachetrack_file(ie->pfid,ie->attrs.size,ie->attrs.mtime);    
     
     fuse_reply_open(req, fi);
     goto out;

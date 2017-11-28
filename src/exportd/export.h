@@ -98,6 +98,7 @@ typedef struct export_fstat {
     uint64_t blocks;
     uint64_t files;
     uint64_t file_per_size[ROZOFS_MAX_BLOCK_BITS];
+    uint64_t blocks_thin;  /**< number of blocks for thin provisioning */
 } export_fstat_t;
 
 
@@ -203,7 +204,13 @@ typedef struct export {
     volume_t *volume; ///< the volume export relies on
     uint32_t bsize; ///< the block size from enum ROZOFS_BSIZE_E
     char root[PATH_MAX]; ///< absolute path of the storage root
+    char name[PATH_MAX]; ///< Export name
     uint8_t layout; ///< layout
+    
+    /*  Some options */
+    uint8_t thin:1;  //< Thin provisionning */
+    uint8_t backup:1;  //< backupflag needed for asynchronous replication */
+
     /*
     ** To check metadat device resources
     */
@@ -315,15 +322,17 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  * @param lv2_cache: pointer to the cache to use
  * @param eid: id of this export
  * @param root: path to root directory
+ * @param name:export name
  * @param md5: password
  * @param squota: soft quotas
  * @param: hard quotas
  * @param: IPv4 filter name
+ * @param: thin whether thin provisionning is used
  * @return 0 on success -1 otherwise (errno is set)
  */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
-        lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name);
+        lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *name, const char *md5,
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin);
 
 /** initialize an export.
  *
@@ -361,10 +370,11 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t * attrs, mattr_t 
  * @param e: the export managing the file
  * @param fid: the id of the file
  * @param attrs: attributes to fill.
+ * @param pattrs: parent attributes to fill.
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_getattr(export_t *e, fid_t fid, mattr_t * attrs);
+int export_getattr(export_t *e, fid_t fid, mattr_t * attrs, mattr_t * pattrs);
 
 /** set attributes of a managed file
  *
@@ -1094,4 +1104,25 @@ static inline int export_metadata_device_full(export_t *e, uint64_t microsec) {
   pRes->next_microsec = microsec + (ONE_SECOND_TICK_CREDIT/2);   
   return 0;
 }   
+
+/**
+ * hashing function used to find lv2 entry in the cache
+ */
+uint32_t lv2_hash(void *key);
+int lv2_cmp(void *k1, void *k2);
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+
+ check for Re-write the directory attributes if it is time to do so when the entry is removed from lv2 cache
+ 
+ @param dir: pointer to the directory i-node (cache structure)
+
+
+*/
+void export_dir_check_sync_write_on_lru(lv2_entry_t *dir);
+
 #endif

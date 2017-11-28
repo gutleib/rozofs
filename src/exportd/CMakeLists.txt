@@ -108,6 +108,8 @@ add_executable(exportd
     rozofs_exp_mover.c
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h
+    
+    export_thin_prov.c
 )
 target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -138,6 +140,15 @@ target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG
 #target_link_libraries(expgateway rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 
+add_executable(zoro_compute_hashes
+    zoro_compute_hashes.c       
+)
+target_link_libraries(zoro_compute_hashes rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+
+add_executable(zoro_read_dirent_file
+    zoro_read_dirent_file.c       
+)
+target_link_libraries(zoro_read_dirent_file rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 add_executable(rozo_repquota
     rozofs_quota.h
@@ -212,10 +223,9 @@ set (librozo_inode_sources
        test_mdirent_stub.c
        rozo_inode_lib.c
        rozo_inode_lib.h
-
 )
 add_library(rozofs_inode STATIC ${librozo_inode_sources})
-set_target_properties(rozofs_inode PROPERTIES COMPILE_FLAGS "-fPIC")
+set_target_properties(rozofs_inode PROPERTIES COMPILE_FLAGS "-fPIC -DLIBROZO_FLAG")
 
 
 #add_executable(rzsave
@@ -245,6 +255,9 @@ target_link_libraries(rozo_clusterstats rozofs_inode rozofs ${PTHREAD_LIBRARY} $
 #________________________________________________________
 add_executable(rozo_scan_by_criteria
     rozo_scan_by_criteria.c  
+    econfig.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h 
 )
 target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 #________________________________________________________
@@ -256,8 +269,31 @@ add_executable(rozo_rebalance
     rozofs_ip4_flt.h        
     rozofs_mover.c  
     rozofs_mover.h
+    rebalance_config.c
+    rebalance_config.h
+    rebalance_config_read_show.h
 )
 target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+#________________________________________________________
+add_executable(rozo_rcmd_server
+    rozofs_rcmd_server.c 
+    ../../rozofs/core/rozofs_rcmd.h     
+)
+target_link_libraries(rozo_rcmd_server rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
+
+#________________________________________________________
+add_executable(rozo_trashd
+    rozo_trash_process.c  
+    rozo_trash_process.h  
+#    rozo_rtrash_nblock_init.c
+    econfig.c     
+    trash_process_config.c
+    trash_process_config.h
+    trash_process_config_read_show.h
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h   
+)
+target_link_libraries(rozo_trashd rozofs_inode rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 
 #________________________________________________________
@@ -294,6 +330,15 @@ add_executable(rozo_geoRepList
 )
 target_link_libraries(rozo_geoRepList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
+
+add_executable(rozo_du
+    rozo_du_scan.c
+    econfig.c      
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h   
+    rozofs_du.c  
+)
+target_link_libraries(rozo_du rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT export)
@@ -349,6 +394,7 @@ install(TARGETS rozo_scan_by_criteria
     ARCHIVE DESTINATION lib
     COMPONENT rozo_scan_by_criteria
 )
+
 install(TARGETS rozo_buildfid_list
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
@@ -376,6 +422,21 @@ install(TARGETS rozo_rebalance
     ARCHIVE DESTINATION lib
     COMPONENT rozo_rebalance
 )
+
+install(TARGETS rozo_rcmd_server
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_rcmd_server
+)
+
+install(TARGETS rozo_trashd
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_trashd
+)
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)
+

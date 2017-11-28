@@ -109,6 +109,13 @@ void mproto_sub_thread(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p, rozofs_rpc_call_hdr
       local = mp_subthread_remove2;
       size = sizeof(mp_remove2_arg_t);
       break;
+      
+    case MP_SIZE:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_mp_size_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_mp_size_ret_t;
+      local = mp_subthread_size;
+      size = sizeof(mp_size_arg_t);
+      break;
     
 
     default:
@@ -174,6 +181,7 @@ static void mproto_svc(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p, rozofs_rpc_call_hdr
       mp_remove_arg_t           remove;
       mp_list_bins_files_arg_t  list_bins_file;
       mp_remove2_arg_t          remove2;      
+      mp_size_arg_t             size;      
     } mproto_request;
 
     union {
@@ -181,6 +189,7 @@ static void mproto_svc(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p, rozofs_rpc_call_hdr
       mp_stat_ret_t             stat;
       mp_ports_ret_t            ports;
       mp_list_bins_files_ret_t  list_bins_file;
+      mp_size_ret_t             size;
     } mproto_response;
     
     
@@ -203,35 +212,14 @@ static void mproto_svc(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p, rozofs_rpc_call_hdr
       local = mp_stat_1_svc_nb;
       size = sizeof(mp_stat_arg_t);
       break;
-#if 0      
-    case MP_REMOVE:
-      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_mp_remove_arg_t;
-      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_mp_status_ret_t;
-      local = mp_remove_1_svc_nb;
-      size = sizeof(mp_remove_arg_t);
-      break;
-#endif      
+   
     case MP_PORTS:
       rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) NULL;
       rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_mp_ports_ret_t;
       local = mp_ports_1_svc_nb;
       size = 0;
       break;
-#if 0      
-    case MP_LIST_BINS_FILES:
-      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_mp_list_bins_files_arg_t;
-      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_mp_list_bins_files_ret_t;
-      local = mp_list_bins_files_1_svc_nb;
-      size = sizeof(mp_list_bins_files_arg_t);
-      break;
-
-    case MP_REMOVE2:
-      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_mp_remove2_arg_t;
-      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_mp_status_ret_t;
-      local = mp_remove2_1_svc_nb;
-      size = sizeof(mp_remove2_arg_t);
-      break;
-#endif      
+     
     default:
       rozorpc_srv_ctx_p->xdr_result =(xdrproc_t) xdr_mp_status_ret_t;
       mproto_response.status.mp_status_ret_t_u.error = EPROTO;        
@@ -340,6 +328,7 @@ void storaged_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf
 	  case MP_REMOVE2:
 	  case MP_REMOVE:
 	  case MP_LIST_BINS_FILES:
+	  case MP_SIZE:
 	    mproto_sub_thread(rozorpc_srv_ctx_p, &hdr);
 	    break;
 	    

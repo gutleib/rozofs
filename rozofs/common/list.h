@@ -181,5 +181,62 @@ static inline void list_sort(list_t * head,
 #define list_for_each_backward_safe(pos, n, head)\
     for (pos = (head)->prev, n = pos->prev; pos != (head); \
     	pos = n, n = pos->prev)
-	
+
+
+/*
+** Distributor of contexts
+*/
+typedef struct _list_distributor_t {
+  list_t    list;
+  uint32_t  nb_ctx;
+  uint32_t  ctx_size;
+  void *    first_ctx;
+} list_distributor_t;
+
+#define list_distributor_create( pDist, nbElements, structure, member) { \
+  uint32_t       alloc_size; \
+  structure    * pCtx;\
+  uint8_t      * pByte;\
+  int            i;\
+\
+  list_init(&(pDist->list));\
+\
+  alloc_size = sizeof(structure);\
+  if ((alloc_size & 0x3) != 0) {\
+     alloc_size = ((alloc_size & (~0x3)) + 4 );\
+  }\
+  pDist->ctx_size = alloc_size;\
+  pDist->nb_ctx   = nbElements;\
+  alloc_size *= nbElements;\
+\
+  pDist->first_ctx = xmalloc (alloc_size); \
+  if (pDist->first_ctx == NULL) { \
+    fatal("Out of memeory. Size %llu",(long long unsigned int)alloc_size);\
+  }\
+\
+  pByte = pDist->first_ctx;\
+  for (i = 0; i < nbElements; i++, pByte += pDist->ctx_size) {\
+    pCtx = (structure*) pByte;\
+    list_init(&pCtx->member);\
+    list_push_back(&(pDist->list),&pCtx->member);\
+  }\
+} 
+
+static inline void * list_distributor_get(list_distributor_t * dist, uint32_t idx) {
+  uint8_t        * pByte;
+
+  /*
+  **  get the max number of element of the list
+  */
+  if (idx >= dist->nb_ctx) {
+    return NULL;
+  }
+  /*
+  ** all is fine, get the pointer to the head of the list
+  ** and compute the real address of the object
+  */
+  pByte = (uint8_t*) dist->first_ctx;
+  pByte += (dist->ctx_size*idx);
+  return pByte;
+}
 #endif

@@ -48,7 +48,104 @@ static inline int rozofs_has_xattr(uint32_t mode)
  {
     return (mode&ROZOFS_HAS_XATTRIBUTES)?0:1; 
  }
+/**
+**__________________________________________
+*  Directory sids[0] remapping
+**__________________________________________
+*/
+/*
+** SIDS[0] remapping
+*/
+typedef union 
+{
+  uint8_t byte;
+  struct _internal {
+   uint8_t filler:3;       /**< for future usage */
+   uint8_t trash:2;       /**< when asserted it indicates that the directory has a trash            */
+   uint8_t root_trash:1;  /**< when asserted it indicates that the directory is a root for trash: make @rozofs-trash@ display in readdir */
+   uint8_t backup:2;      /**< when asserted it indicates that the directory is candidate for backup */  
+  } s;
+} rozofs_dir0_sids_t;
+
+#define ROZOFS_DIR_BACKUP_RECURSIVE 2      /**< when asserted it indicates that the backup state must be propagated to children */
+#define ROZOFS_DIR_TRASH_RECURSIVE 2      /**< when asserted it indicates that the trash state must be propagated to children */
+
+/**
+*  extra metadata associated with a directory
+*/
+#define ROZOFS_DIR_VERSION_1 1
+typedef union
+{
+  sid_t sids[ROZOFS_SAFE_MAX];
+  struct {
+    rozofs_dir0_sids_t  sid0; /**< see structure above      */
+    uint8_t  version;      /**< i-node version       */
+    uint8_t  layout;       /**< bit 7:(0:no layout/1: layout defined); bit 6-0: layout value */
+    uint8_t  filler1[5];   /**< 40 bits for future usage   */
+    uint64_t update_time;  /**< current time of last change of a directory's child */
+    uint64_t nb_bytes;     /**< number of bytes in that directory */
+    uint16_t profile_id;   /**< profile associated with the directory    */
+    uint8_t filler2[8];    /**< for future usage */ 
+  } s;            
+} ext_dir_mattr_t;
+/*
+**__________________________________________________________________
+*/
+/**
+*  Check if directory has a trash
+
+   @param sids_p: pointer to the byte that contains the trash bit
+   
+   @retval 1: trash is active
+   @retval 0: no trash
+*/
+static inline int rozofs_has_trash(uint8_t *sids_p)
+{
+  rozofs_dir0_sids_t *p = (rozofs_dir0_sids_t*)sids_p;
+  if (p->s.trash) return 1;
+  else return 0;
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+*  set trash flag on directory
+
+   @param sids_p: pointer to the byte that contains the trash bit
+   
+   @retval none
+*/
+static inline void rozofs_set_trash_sid0(uint8_t *sids_p)
+{
+  rozofs_dir0_sids_t *p = (rozofs_dir0_sids_t*)sids_p;
+  p->s.trash = 1;
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+*  Check if directory has is a root trash
+
+   @param sids_p: pointer to the byte that contains the root  trash bit
+   
+   @retval 1: trash is active
+   @retval 0: no trash
+*/
+static inline int rozofs_has_root_trash(uint8_t *sids_p)
+{
+  rozofs_dir0_sids_t *p = (rozofs_dir0_sids_t*)sids_p;
+  if (p->s.root_trash) return 1;
+  else return 0;
+}
+/*
+** SIDS[1..34] are reserved for future usage
+*/
  
+/**
+*  inode Generic structure
+*/ 
  typedef struct mattr {
     fid_t fid;                      /**< unique file id */
     sid_t sids[ROZOFS_SAFE_MAX];    /**< sid of storage nodes target (regular file only)*/

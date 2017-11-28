@@ -19,8 +19,9 @@
 cmake_minimum_required(VERSION 2.6)
 project(rozofs C)
 set(MAJOR "2")
-set(MINOR "1")
-set(REVISION "46")
+set(MINOR "2")
+set(REVISION "0")
+
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
 # cmake_get.sh enables to populate some CMAKE variables
@@ -79,6 +80,8 @@ endif(NOT SYSCONFDIR)
 set(ROZOFS_CONFIG_DIR "${SYSCONFDIR}/rozofs")
 
 set(EXPORTD_DEFAULT_CONFIG "${ROZOFS_CONFIG_DIR}/export.conf")
+
+set(TRASHD_DEFAULT_CONFIG "${ROZOFS_CONFIG_DIR}/rozo_trashd.conf")
 
 set(GEOMGR_DEFAULT_CONFIG "${ROZOFS_CONFIG_DIR}/geomgr.conf")
 

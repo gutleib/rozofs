@@ -1,0 +1,91 @@
+.\" Process this file with
+.\" groff -man -Tascii rozo_rebalance.conf.5
+.\"
+.TH rozo_rebalance.conf 5 "APRIL 2015" RozoFS "User Manuals"
+.SH NAME
+rozo_rebalance.conf \- RozoFS volume reblancer configuration file
+.SH DESCRIPTION
+.B "rozo_rebalance.conf"
+is managed thanks to 
+.B libconfig
+<http://www.hyperrealm.com/libconfig/> and thus complies to the
+.B libconfig
+grammar.
+
+Boolean values must be set to either
+.B
+True
+or
+.B
+False.
+
+String values must enclosed into double quotes.
+
+One of such file should be created per volume, and referenced in exportd.conf, 
+although several volumes could use the same configuration file.
+
+.SS free_avg_tolerance
+This parameter defines the threshold in percentage around the average 
+storage occupancy to which the balancing applies. Typically, the balancing 
+stops when all the storages (sid) are included in the window defined by that 
+threshold. 
+See the -t parameter of the CLI.
+
+.SS free_low_threshold
+This parameter defines the free space threshold in percentage before 
+triggering a storage balancing. If the free available space on sid is higher 
+than that threshold, the balancing process stops. 
+See the -a parameter of the CLI.
+
+.SS frequency
+This option defines the scanning frequency in seconds of the storage balancing 
+proce.SS 
+See the --frequency parameter of the CLI.
+.SS older
+Exclude files that are more recent than the specified delay. 
+The delay is defined in minutes.
+See the --olderm parameter of the CLI.
+.SS newer
+Exclude files that are older than the specified delay. 
+The delay is defined in minutes.
+See the --newerm parameter of the CLI.
+.SS movecnt
+That option defines the file count threshold before triggering
+an effective file move 
+See the --movecnt parameter of the CLI.
+.SS movesz
+That option defines the file count threshold before triggering
+an effective file move 
+See the --movesz parameter of the CLI.
+.SS throughput
+That option defines the maximun bandwidth in MB/s allocated to
+the file mover.
+See the --throughput parameter of the CLI.
+.SS mode
+That option indicates the access mode used by the storage balancer for moving the file:
+- rel: use relative mode (parent/child)
+- abs: use full pathname mode
+- fid: use i-node mode 
+.SS verbose
+That option indicates the access mode used by the storage balancer for moving the file:
+- rel: use relative mode (parent/child)
+- abs: use full pathname mode
+See --verbose parameter of the CLI.
+.SH EXAMPLE
+.PP
+.nf
+.ta +3i
+free_avg_tolerance                                 = 5; 	
+free_low_threshold                                 = 70; 	
+frequency                                          = 60;
+throughput                                         = 2;
+.SH FILES
+.I /etc/rozofs/rozo_rebalance.conf (/usr/local/etc/rozofs/rozo_rebalance.conf)
+.RS
+.\".SH ENVIRONMENT
+.\".SH DIAGNOSTICS
+.\".SH BUGS
+.SH AUTHOR
+Fizians <http://www.fizians.com>
+.SH "SEE ALSO"
+.BR exportd.conf (5), rozofs (7)

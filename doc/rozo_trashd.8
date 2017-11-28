@@ -1,0 +1,168 @@
+.\" Process this file with
+.\" groff -man -Tascii rozo_trashd.8
+.\"
+.TH rozo_trashd 8 "MARCH 2017" RozoFS "User Manuals"
+.SH NAME
+rozo_trashd \- RozoFS trash daemon
+.SH SYNOPSIS
+.B rozo_trashd 
+[
+.I PARAMS
+] [
+.I OPTIONS
+]
+.B
+.SH DESCRIPTION
+RozoFS provides the ability to associate a local trash for each created directory. When a file is deleted, rather than removing the file from the current RozoFS filesystem, the file is moved towards the trash of its parent directory. 
+
+At any moment, a user can restore a file/directory that has been moved in its parent trash.
+However, the system cannot keep indefinitely files in the trashes and for that purpose, RozoFS provides for each export a trash process whose job is to remove
+files/directories that are older than a configured retention delay.
+
+The 
+.B rozo_trashd 
+daemon can operates either in one shot mode or background mode. 
+
+When it operates in one shot mode, once all the files/directories are been scanned
+searching for file/directories to delete, it stops, and needs to be restarted manunally for a next run.
+When it operates in background mode, once a full scanning has been done, it sleeps waiting for the next period of activation defined by the user.
+
+During the deletion process, the rozo_trashd process periodically provides statistics concerning the progess of the deletion. The information provided are:
+
+.RS 
+- the number of files/directories scanned,
+.RE
+.RS 
+- the number failures while attempting to delete  files/directories.
+.RE
+.RS 
+- the total amount of bytes that have been successfully deleted. 
+.RE
+
+These statistics are found in the following files:
+.I /var/run/rozo_trashd/result_trash_<eid>
+or
+.I /var/run/rozo_trashd/result_trash_<eid>.json
+where 
+.I <eid> 
+designates the export for which 
+.B rozo_trashd
+is run.
+
+
+There is one  
+.B rozo_trashd 
+process per RozoFS exported filesystem. The 
+.B rozo_trashd 
+daemon MUST be run on server that supports the active exportd.
+.B rozo_trashd
+RozoFS storage rebalancer. The goal of the rebalancer is to move files within a RozoFS Volume in order to balance the storage. The process MUST run on the same node as the exportd where the volume is defined. It can be started either as a background process or in one shot mode. When it is started in the one shot mode, the process ends when the balance criteria are met.
+.SH PARAMS
+.IP "-e, --exportd eid"
+.RS
+Use 
+.I eid
+as the exportd identifier as defined in the export configuration file: 
+.I /etc/rozofs/export.conf
+(or
+.I /usr/local/etc/rozofs/export.conf
+according to install options)
+.RE
+.SH OPTIONS
+.IP "-h, --help"
+.RS
+Print help.
+.RE
+.IP "-f,--frequency hours"
+.RS
+This option defines the delay in hours between two activation of the rozo_trashd process. (default 12 h).
+.RE
+.IP "-c,--config file"
+.RS
+Use 
+.I file
+as configuration file default is
+.I /etc/rozofs/export.conf
+(or
+.I /usr/local/etc/rozofs/export.conf
+according to install options)
+.RE
+.IP "--older days"
+.RS
+that option defines the retention time of files/directories in the trashes. The information is given in days unit.
+.RE
+.IP "--cont"
+.RS
+that option when set, indicates that the 
+.B rozo_trashd 
+process operates in continuous mode.
+.RE
+.IP "--verbose"
+.RS
+that option sets the 
+.B rozo_trashd 
+process in verbose mode.
+.RE
+.IP "-rate count"
+.RS
+that option defines the maximum deletion rate per second applied to files and directories (default:10).
+.RE
+.IP "--scan count"
+.RS
+that option defines the maximun i-node scanning rate per second.  (default: none).
+.RE
+.IP "--cfg <trashd.conf>"
+.RS
+When that option is provided, the frequency , deletion rate, scanning rate and verbose mode are read from that configuration file. When it is provided
+.B rozo_trashd 
+operates automatically in continous mode  (default: none).
+.RE
+.SH FILES
+.I /var/run/rozo_trashd/result_trash_<eid>
+,
+.I /var/run/rozo_trashd/result_trash_<eid>.json
+.RS
+The current result files associated with  exportd <eid>. 
+.RE
+.I /etc/rozofs/export.conf
+or
+.I /usr/local/etc/rozofs/export.conf
+.RS
+The system wide configuration file. See
+.BR export.conf (5)
+for further details.
+.RE
+.I /var/log/syslog
+.RS
+The log file. See
+.BR syslogd (8)
+and
+.BR syslog.conf (5)
+for further details.
+.RE
+
+.\".SH ENVIRONMENT
+.\".SH DIAGNOSTICS
+.SH "REPORTING BUGS"
+Report bugs to <bugs@fizians.org>.
+.SH COPYRIGHT
+Copyright (c) 2016 Rozo Systems. <http://www.rozofs.com>
+
+Rozofs is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published
+by the Free Software Foundation, version 2.
+
+Rozofs is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+.SH AUTHOR
+Rozo Systems <http://www.rozofs.com>
+.SH "SEE ALSO"
+.BR rozofs (7),
+.BR export.conf (5),
+.BR rozo_trashd.conf (5),
+.BR exportd (8)

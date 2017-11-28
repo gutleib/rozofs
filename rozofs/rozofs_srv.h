@@ -342,4 +342,66 @@ static inline char * rozofs_display_size(char * p, uint8_t layout, uint32_t bsiz
   }
   return p;
 }
+/**
+  Get the redundancy coefficinet for a given  layout and block size 
+  
+  @param layout : layout association with the file
+  
+  @retval projection size
+ */
+static inline char * rozofs_display_prjsize(char * p, uint8_t layout, uint32_t bsize) {
+  rozofs_conf_layout_t * pLayout;
+  int                    prj_id;
+
+  if (bsize > ROZOFS_BSIZE_MAX) { 
+    p += sprintf(p,"Unknown block size value %d !!!\n",bsize);
+    return p;
+  }      
+
+
+  switch (layout) {
+    case LAYOUT_2_3_4:
+        p += sprintf(p,"{\n  \"layout\"     : 0,");
+        p += sprintf(p,"\n  \"inverse\"    : 2,");
+        p += sprintf(p,"\n  \"forward\"    : 3,");
+        p += sprintf(p,"\n  \"safe\"       : 4,");
+        break;
+    case LAYOUT_4_6_8:
+        p += sprintf(p,"{\n  \"layout\"     : 1,");
+        p += sprintf(p,"\n  \"inverse\"    : 4,");
+        p += sprintf(p,"\n  \"forward\"    : 6,");
+        p += sprintf(p,"\n  \"safe\"       : 8,");
+        
+        break;
+    case LAYOUT_8_12_16:
+        p += sprintf(p,"{\n  \"layout\"     : 2,");
+        p += sprintf(p,"\n  \"inverse\"    : 8,");
+        p += sprintf(p,"\n  \"forward\"    : 12,");
+        p += sprintf(p,"\n  \"safe\"       : 16,");
+        break;
+    default:
+        p += sprintf(p,"Unknown layout value %d !!!\n",layout);
+	return p;
+  }
+  
+
+  pLayout = &rozofs_conf_layout_table[layout];
+  
+  p += sprintf(p,"\n  \"projections\": [\n");  
+  for (prj_id=0; prj_id < pLayout->rozofs_forward; prj_id++) {
+    if (prj_id != 0) p += sprintf(p,",\n");
+    p += sprintf(p,"    { \"id\":%2d, \"p\":%3d, \"q\":%3d, \"disk size\":%5d }", 
+                prj_id,
+		pLayout->rozofs_angles[prj_id].p,
+		pLayout->rozofs_angles[prj_id].q,
+		rozofs_get_psizes_on_disk(layout, bsize, prj_id));
+  }
+  p += sprintf(p,"\n  ],");
+
+  p += sprintf(p,"\n  \"block size\" : %d,", ROZOFS_BSIZE_BYTES(bsize));    
+  p += sprintf(p,"\n  \"coefficient\": %1.2f\n}\n",  
+               pLayout->sizes[bsize].redundancyCoeff_128);
+  
+  return p;
+}
 #endif

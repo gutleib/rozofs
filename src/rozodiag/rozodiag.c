@@ -92,6 +92,7 @@ void syntax_display() {
   printf("                     geocli[:<geocli instance>]           for a geo-replication client\n");
   printf("                     geocli[:<geocli instance>[:<1|2>]]   for a storcli of a geo-replication client\n");    
   printf("                     rebalancer[:<instance>]              for rebalancer instance <instance>\n");    
+  printf("                     rcmd                                 for remote command server\n");    
   printf(" At least one -p or -m value must be given.\n");
   printf("\nOptionnaly a list of command to run can be specified:\n");
   printf("  [-c <cmd|all>]...\n"); 
@@ -573,6 +574,9 @@ char *argv[];
           port32 = rozofs_get_service_port_rebalancing_diag(port32);
 	}
       }                
+      else if (strncasecmp(pt,"rcmd",strlen("rcmd"))==0) {
+        port32 = rozofs_get_service_port_export_rcmd_diag();
+      }    
       else {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);       
       }

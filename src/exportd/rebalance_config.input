@@ -1,0 +1,91 @@
+#_______________________________________________________________________________________
+# 
+# Call ../../tools/rebalance_config.py to generate rebalance_config.h as well as rebalance_config.c
+#
+#_______________________________________________________________________________________
+# Syntax is as follow:
+# 
+# ......................................................
+# // one or more...
+# // ... comment lines
+# <type> <scope> <name> <default> {<option>]
+# ......................................................
+#
+# Where
+#   //          is the begining of a comment line for the following parameter
+#   <type>      is the parameter type within 
+#               - INT   : at least 32 bits signed integer
+#               - LONG  : 64 bits signed integer
+#               - STRING: character string
+#               - BOOL  ; boolean True or False
+#   <scope>     is any string you want to classify the different parameters in groups
+#   <name>      is any parameter name
+#   <default>   is the default parameter value. (STRING must be quoted).
+#   <option>    is an option of the parameter dependant on the <type>
+#               - INT and LONG option: 
+#                 min:max : minimum and maximum (included) of the integer
+#
+#_______________________________________________________________________________________
+
+
+// This parameter defines the threshold in percentage around the average 
+// storage occupancy to which the balancing applies. Typically, the balancing 
+// stops when all the storages (sid) are included in the window defined by that 
+// threshold. 
+// See the -t parameter of the CLI.
+INT 	global 	free_avg_tolerance     10 0:100
+
+
+// This parameter defines the free space threshold in percentage before 
+// triggering a storage balancing. If the free available space on sid is higher 
+// than that threshold, the balancing process stops. 
+// See the -a parameter of the CLI.
+INT   global 	free_low_threshold     40 0:100
+
+
+// This option defines the scanning frequency in seconds of the storage balancing 
+// process.
+// See the --frequency parameter of the CLI.
+INT   global frequency          30 
+
+
+// Exclude files that are more recent than the specified delay. 
+// The delay is defined in minutes.
+// See the --olderm parameter of the CLI.
+LONG global older              -1
+
+
+// Exclude files that are older than the specified delay. 
+// The delay is defined in minutes.
+// See the --newerm parameter of the CLI.
+LONG global newer              -1
+
+
+// That option defines the file count threshold before triggering
+// an effective file move 
+// See the --movecnt parameter of the CLI.
+INT   global movecnt            10
+
+
+// That option defines the file count threshold before triggering
+// an effective file move 
+// See the --movesz parameter of the CLI.
+STRING global movesz            "1G"
+
+
+// That option defines the maximun bandwidth in MB/s allocated to
+// the file mover.
+// See the --throughput parameter of the CLI.
+INT   global throughput         10
+
+
+// That option indicates the access mode used by the storage balancer for moving the file:
+// - rel: use relative mode (parent/child)
+// - abs: use full pathname mode
+// - fid: use i-node mode 
+STRING global mode             "fid"
+
+
+// That option when asserted sets the process in verbose mode
+// See --verbose parameter of the CLI.
+BOOL   global verbose           False

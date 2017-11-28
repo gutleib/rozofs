@@ -28,6 +28,8 @@
 #include "rozofs_fuse.h"
 #include "rozofs_fuse_thread_intf.h"
 #include "rozofs_kpi.h"
+#include "rozofs_cachetrack.h"
+
 // For trace purpose
 struct timeval Global_timeDay;
 unsigned long long Global_timeBefore, Global_timeAfter;
@@ -255,6 +257,36 @@ uint32_t ruc_init(uint32_t test, uint16_t debug_port,uint16_t export_listening_p
     return ret;
 }
 /*_______________________________________________________________________
+* throughput manual
+*
+* @param pChar    Where to format the ouput
+*/
+#define PCHAR_STRING_BLD(x) pChar += rozofs_string_append_bold(pChar,x)
+#define PCHAR_STRING(x)     pChar += rozofs_string_append(pChar,x)
+static inline void man_throughput (char * pChar) {
+  PCHAR_STRING    ("Display rozofsmount throughput history.\n");
+  PCHAR_STRING_BLD(" throughput [read|write] [col <#col>] [avg] [s|m|h|a]\n");
+  PCHAR_STRING_BLD("    read         ");
+  PCHAR_STRING    (" only display read counters.\n");
+  PCHAR_STRING_BLD("    write        ");
+  PCHAR_STRING    (" only display write counters.\n");
+  PCHAR_STRING    ("      when neither read nor write are set all counters are displayed.\n");
+  PCHAR_STRING_BLD("    [col <#col>] ");
+  PCHAR_STRING    (" request the display history on ");
+  PCHAR_STRING_BLD("<#col>");
+  PCHAR_STRING    (" columns [1..6].\n");
+  PCHAR_STRING_BLD("    [avg]        ");
+  PCHAR_STRING    (" display an average at the end of each column.\n");    
+  PCHAR_STRING_BLD("    s            ");
+  PCHAR_STRING    (" display last 60 seconds history (default)\n");    
+  PCHAR_STRING_BLD("    m            ");
+  PCHAR_STRING    (" display last 60 minutes history\n");  
+  PCHAR_STRING_BLD("    h            ");
+  PCHAR_STRING    (" display last 60 hours   history\n");  
+  PCHAR_STRING_BLD("    a            ");
+  PCHAR_STRING    (" display hour, minute and second history\n");  
+}
+/*_______________________________________________________________________
 * Display throughput counters
 *
 * @param pChar    Where to format the ouput
@@ -263,6 +295,7 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
   char * pChar = uma_dbg_get_buffer();
   int ret,val,what=0;
   int avg=0;
+  rozofs_thr_unit_e unit = rozofs_thr_unit_second;
 
   int i=1;
   while (argv[i] != NULL) {
@@ -302,7 +335,31 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
       what |= 2;
       continue;
     }
+
+    if (strcasecmp(argv[i],"s")==0) {       
+      i++;
+      unit = rozofs_thr_unit_second;
+      continue;
+    }  
+
+    if (strcasecmp(argv[i],"m")==0) {       
+      i++;
+      unit = rozofs_thr_unit_minute;
+      continue;
+    }      
     
+    if (strcasecmp(argv[i],"h")==0) {       
+      i++;
+      unit = rozofs_thr_unit_hour;
+      continue;
+    }  
+
+    if (strcasecmp(argv[i],"a")==0) {       
+      i++;
+      unit = rozofs_thr_unit_all;
+      continue;
+    }  
+        
     pChar += rozofs_string_append(pChar,"\nunexpected parameter ");
     pChar += rozofs_string_append(pChar,argv[i]);       
     pChar += rozofs_string_append(pChar,"\nthroughput [read|write|col <#col>|avg]\n");   
@@ -314,15 +371,15 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
      
   switch (what) {
     case 1:
-      pChar = rozofs_thr_display(pChar, &rozofs_thr_counter[ROZOFS_READ_THR_E],1);
+      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFS_READ_THR_E],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     case 2:
-      pChar = rozofs_thr_display(pChar, &rozofs_thr_counter[ROZOFS_WRITE_THR_E],1);
+      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFS_WRITE_THR_E],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     default:
-      pChar = rozofs_thr_display(pChar, rozofs_thr_counter, 2);
+      pChar = rozofs_thr_display_unit(pChar, rozofs_thr_counter, 2, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer()); 
       return; 
   }                  
@@ -344,7 +401,8 @@ void rozofs_throughput_counter_init(void) {
   /*
   ** Register the diagnostic function
   */
-  uma_dbg_addTopic("throughput", display_throughput); 
+  uma_dbg_addTopicAndMan("throughput", display_throughput,man_throughput,0); 
+
 }
 
 /*
@@ -467,12 +525,15 @@ int rozofs_stat_start(void *args) {
    ** start the file KPI service
    */
    rzkpi_file_service_init();
-
+   /*
+   ** File caching init service
+   */
+   rzcachetrack_file_service_init();
     /*
     ** create the fuse threads
     */
     info("FDL RozoFs Instance %d",args_p->instance);
-    ret = rozofs_fuse_thread_intf_create("localhost",args_p->instance,3);
+    ret = rozofs_fuse_thread_intf_create("localhost",args_p->instance,4);
     if (ret < 0)
     {
        fatal("Cannot create fuse threads");

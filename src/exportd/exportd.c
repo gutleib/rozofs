@@ -67,6 +67,8 @@
 #include "export_internal_channel.h"
 #include "export_share.h"
 #include "geo_profiler.h"
+#include "export_thin_prov_api.h"
+
 #define EXPORTD_PID_FILE "exportd.pid"
 /* Maximum open file descriptor number for exportd daemon */
 #define EXPORTD_MAX_OPEN_FILES 5000
@@ -144,6 +146,19 @@ char *export_get_config_file_path()
  *_______________________________________________________________________
  */
 /**
+*   export slave launcher pid file
+
+   @param slaveid: slave identifier 
+  
+   @retval none
+*/
+static inline void export_slave_launcher_pid_file(char * pidfile, int slaveid) {
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_exportd_slave_%d.pid",slaveid);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
 *   kill of a slave exportd process
 
   @param instance: instance id of the exportd process
@@ -154,7 +169,7 @@ void export_kill_one_export_slave(int instance) {
     int ret = -1;
     char pidfile[128];
     
-    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
+    export_slave_launcher_pid_file(pidfile,instance);
     	  
     // Launch exportd slave
     ret = rozo_launcher_stop(pidfile);
@@ -190,7 +205,7 @@ void export_start_one_export_slave(int instance) {
 
     cmd_p += sprintf(cmd_p, "-d %d ",debug_port_value );
           
-    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
+    export_slave_launcher_pid_file(pidfile,instance);
 
     // Launch exportd slave
     ret = rozo_launcher_start(pidfile, cmd);
@@ -204,7 +219,140 @@ void export_start_one_export_slave(int instance) {
             instance,  exportd_config_file,
             debug_port_value);
 }
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   rebalancer launcher pid file
 
+   @param vid: volume identifier of the rebalancer
+  
+   @retval none
+*/
+static inline void export_rebalancer_pid_file(char * pidfile, int vid) {
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_rebalance_vol%d.pid",vid);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   stop a rebalancer
+
+   @param vid: volume identifier of the rebalancer
+   @param cfg: rebalancer configuration file name
+  
+   @retval none
+*/
+void export_stop_one_rebalancer(int vid) {
+  char   pidfile[256];
+  int    ret = -1;
+
+  export_rebalancer_pid_file(pidfile,vid);
+
+  // Launch exportd slave
+  ret = rozo_launcher_stop(pidfile);
+  if (ret !=0) {
+    severe("rozo_launcher_stop(%s) %s",pidfile, strerror(errno));
+    return;
+  }
+}
+
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start a rebalancer
+
+   @param vid: volume identifier of the rebalancer
+   @param cfg: rebalancer configuration file name
+  
+   @retval none
+*/
+void export_start_one_rebalancer(int vid, char * cfg) {
+  char cmd[1024];
+  char pidfile[256];
+  int  ret = -1;
+
+  char *cmd_p = &cmd[0];
+  cmd_p += sprintf(cmd_p, "%s ", "rozo_rebalance --cont");
+  cmd_p += sprintf(cmd_p, "--volume %d ", vid);
+  cmd_p += sprintf(cmd_p, "--cfg %s ", cfg);
+  cmd_p += sprintf(cmd_p, "--config %s ", exportd_config_file);
+
+  export_rebalancer_pid_file(pidfile,vid);
+
+  // Launch exportd slave
+  ret = rozo_launcher_start(pidfile, cmd);
+  if (ret !=0) {
+    severe("rozo_launcher_start(%s,%s) %s",pidfile, cmd, strerror(errno));
+    return;
+  }
+
+  info("start vid %d rebalancer (%s)", vid, cfg);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start every rebalancer for volumes configured in automatic mode
+  
+   @retval none
+*/
+void export_rebalancer(int start) {
+  volume_entry_t  * pvol;
+  struct timespec ts = {3, 0};
+
+  for (;;) {
+    list_t *p;
+
+    if ((errno = pthread_rwlock_tryrdlock(&volumes_lock)) != 0) {
+     warning("can lock volumes, balance_volume_thread deferred.");
+     nanosleep(&ts, NULL);
+     continue;
+    }
+
+    list_for_each_forward(p, &volumes) {
+      pvol = (volume_entry_t * ) list_entry(p, volume_entry_t, list);
+      if (pvol->volume.rebalanceCfg) {
+        if (start) {
+          export_start_one_rebalancer(pvol->volume.vid,pvol->volume.rebalanceCfg);
+        }
+        else {
+          export_stop_one_rebalancer(pvol->volume.vid);
+        }  
+      }
+    }
+
+    if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
+      severe("can unlock volumes, potential dead lock.");
+    }
+    
+    break;
+  }
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start a remove server for storage node to execute some commands
+  
+   @retval none
+*/
+void export_rcmd_server(void) {
+  char   pidfile[128];
+  int    ret = -1;
+
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_rcmd_server.pid");
+  
+  // Launch exportd slave
+  ret = rozo_launcher_start(pidfile, "rozo_rcmd_server");
+  if (ret !=0) {
+    severe("rozo_launcher_start(%s,%s) %s",pidfile, "rozo_rcmd_server", strerror(errno));
+    return;
+  }
+
+  info("start rcmd server");
+}
 /*
  *_______________________________________________________________________
  */
@@ -232,7 +380,8 @@ void export_reload_one_export_slave(int instance) {
 
     cmd_p += sprintf(cmd_p, "-d %d ",debug_port_value );
           
-    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
+    export_slave_launcher_pid_file(pidfile,instance);
+//    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
 
     // Launch exportd slave
     ret = rozo_launcher_reload(pidfile);
@@ -274,8 +423,20 @@ void export_kill_all_export_slave() {
 
 void export_start_export_slave() {
 	int i;
+        
+    /*
+    ** Kill every rozolauncher of slave export just in case
+    */    
+    if (system("for pid in `ps -ef | grep \"exportd -i\" | grep rozolauncher | grep -v grep | awk '{print $2}'`; do kill $pid; done")){};
 
-    for (i = 1; i <= EXPORT_SLICE_PROCESS_NB; i++) {
+    usleep(10000);
+    
+    /*
+    ** Kill every exportd slave just in case
+    */
+    if (system("for pid in `ps -ef | grep \"exportd -i\" | grep -v rozolauncher | grep -v grep | awk '{print $2}'`; do kill $pid; done")){};
+
+    for (i = 1; i <= EXPORT_SLICE_PROCESS_NB; i++) { 
       export_start_one_export_slave(i);
     }
 }
@@ -827,6 +988,7 @@ static void *export_tracking_thread(void *v) {
  */
 static void do_monitor_master() {
   list_t *p;
+
   uint32_t nb_volumes = 0;
 
   if ((errno = pthread_rwlock_tryrdlock(&volumes_lock)) != 0) {
@@ -844,6 +1006,7 @@ static void do_monitor_master() {
   if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
     severe("can't unlock volumes, potential dead lock.");
   }
+
   gprofiler->nb_volumes = nb_volumes;
 }
 /*
@@ -870,7 +1033,6 @@ static void *monitoring_thread(void *v) {
   }
   return 0;
 }
-
 /*
  *_______________________________________________________________________
  ** Do one monitoring attempt on slave exportd
@@ -889,6 +1051,7 @@ static void do_monitor_slave() {
     return;
   }
 
+
   list_for_each_forward(p, &volumes) {
     if (monitor_volume_slave(&list_entry(p, volume_entry_t, list)->volume, nb_volumes) != 0) {
       severe("monitor thread failed: %s", strerror(errno));
@@ -904,6 +1067,7 @@ static void do_monitor_slave() {
     warning("can't lock exports, monitoring_thread deferred.");
     return;
   }
+
   gprofiler->nb_volumes = nb_volumes;
 
   gprofiler->nb_exports = 0;
@@ -937,6 +1101,13 @@ static void *monitoring_thread_slave(void *v) {
     sleep(ts);
     if (ts<10) {
       ts++;
+    }
+    /*
+    ** check if the limit of the level2 cache has been change
+    */
+    if (cache.max != common_config.level2_cache_max_entries_kb*1024)
+    {
+      cache.max = common_config.level2_cache_max_entries_kb*1024;      
     }
     
     do_monitor_slave();      
@@ -1047,16 +1218,23 @@ static void *georep_poll_thread(void *v) {
     }
     return 0;
 }
+
 /*
  *_______________________________________________________________________
  */
 eid_t *exports_lookup_id(ep_path_t path) {
     list_t *iterator;
     char export_path[PATH_MAX];
-    DEBUG_FUNCTION;
+    int is_path = 0;
+   
 
-    if (!realpath(path, export_path)) {
-        return NULL;
+    /*
+    ** Lookup export by name
+    */
+
+    if (realpath(path, export_path)) {
+        /* This is a pathname that counld be compared to the root path */
+        is_path = 1; 
     }
 
     if ((errno = pthread_rwlock_rdlock(&exports_lock)) != 0) {
@@ -1066,6 +1244,26 @@ eid_t *exports_lookup_id(ep_path_t path) {
 
     list_for_each_forward(iterator, &exports) {
         export_entry_t *entry = list_entry(iterator, export_entry_t, list);
+
+        /*
+        ** Check name
+        */
+        if (strcmp(entry->export.name, path) == 0) {
+            if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
+                severe("can unlock exports, potential dead lock.");
+                return NULL;
+            }
+            return &entry->export.eid;
+        }
+        
+        /*
+        ** Compare to the path name when this is one
+        */
+        if (is_path == 0) continue;
+
+        /*
+        ** Check path
+        */
         if (strcmp(entry->export.root, export_path) == 0) {
             if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
                 severe("can unlock exports, potential dead lock.");
@@ -1217,7 +1415,7 @@ static int load_volumes_conf() {
         ventry = (volume_entry_t *) xmalloc(sizeof (volume_entry_t));
 
         // Initialize the volume
-        volume_initialize(&ventry->volume, vconfig->vid, vconfig->layout,vconfig->georep,vconfig->multi_site);
+        volume_initialize(&ventry->volume, vconfig->vid, vconfig->layout,vconfig->georep,vconfig->multi_site, vconfig->rebalance_cfg);
 
         // For each cluster of this volume
 
@@ -1305,12 +1503,12 @@ static int load_exports_conf() {
                 goto out;
             }
         }
-	info("initializing export %d path %s",econfig->eid,econfig->root);
+	info("initializing export %d name %s path %s",econfig->eid,econfig->name,econfig->root);
 
         // Initialize export
         if (export_initialize(&entry->export, volume, econfig->layout, econfig->bsize,
-                &cache, econfig->eid, econfig->root, econfig->md5,
-                econfig->squota, econfig->hquota, econfig->filter_name) != 0) {
+                &cache, econfig->eid, econfig->root, econfig->name, econfig->md5,
+                econfig->squota, econfig->hquota, econfig->filter_name, econfig->thin) != 0) {
             severe("can't initialize export with path %s: %s\n",
                     econfig->root, strerror(errno));
             goto out;
@@ -1377,7 +1575,8 @@ static int exportd_initialize() {
         fatal("can't create balancing thread %s", strerror(errno));
 
     if (expgwc_non_blocking_conf.slave != 0) {
-      start_all_remove_bins_thread();     
+      start_all_remove_bins_thread();   
+      start_all_expthin_thread();  
     }
     	
     /*
@@ -1411,30 +1610,7 @@ static int exportd_initialize() {
 }
 
 static void exportd_release() {
-#if 0
-    pthread_cancel(bal_vol_thread);
-    pthread_cancel(rm_bins_thread);
-    pthread_cancel(exp_tracking_thread);
-    pthread_cancel(monitor_thread);
-    if ( expgwc_non_blocking_conf.slave == 1) pthread_cancel(geo_poll_thread);
 
-
-    if ((errno = pthread_rwlock_destroy(&config_lock)) != 0) {
-        severe("can't release config lock: %s", strerror(errno));
-    }
-#endif    
-
-#if 0
-    In case we crash, let the system free the memory for us.
-    It knows better than us, especially when we crash...
-    
-    monitor_release();
-    exports_release();
-    volumes_release();
-    export_expgws_release();
-    econfig_release(&exportd_config);
-    lv2_cache_release(&cache);
-#endif    
 }
 
 /*
@@ -1443,8 +1619,29 @@ static void exportd_release() {
 **__________________________________________________________________
 */
 void show_metadata_device_usage(char *pChar) {
-  pChar += sprintf(pChar,"Enable to check whether meta-data device lacks of resources\n");
-  pChar += sprintf(pChar,"usage : metadata <eid>\n");
+  pChar += rozofs_string_append           (pChar,"Checking metadata device resources\n");
+  pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tmetadata  [<eid>]\n");
+  pChar += rozofs_string_append           (pChar,"\tto display resources of device of export <eid>\n\tDefault export is 1\n");
+  pChar += rozofs_string_append_underscore(pChar,"\nDisplay:\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\teid");
+  pChar += rozofs_string_append           (pChar,"\t\texport identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfull");
+  pChar += rozofs_string_append           (pChar,"\t\twhether ENOSPC would be returned on mkdir/mknod\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfull counter");
+  pChar += rozofs_string_append           (pChar,"\t# of occurences of ENOSPC responses to mknod/mkdir\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfstat errors");
+  pChar += rozofs_string_append           (pChar,"\t# of occurences of fstat() errors\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tinodes/sizeMB");
+  pChar += rozofs_string_append           (pChar,"\tinformation about device inodes or size in MB\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . total");
+  pChar += rozofs_string_append           (pChar,"\ttotal <number of inode/size in MB> of the device\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . free");
+  pChar += rozofs_string_append           (pChar,"\t\tavailable <number of inode/size in MB> of the device\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . mini");
+  pChar += rozofs_string_append           (pChar,"\t\tminimal allowed value to process mknod/mkdir\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . depletion");
+  pChar += rozofs_string_append           (pChar,"\twhether an <inode/size> depletion is running\n"); 
 }
 /*
 **__________________________________________________________________
@@ -1476,17 +1673,17 @@ void show_metadata_device(char * argv[], uint32_t tcpRef, void *bufRef)  {
   pChar += sprintf(pChar,"{ \"meta-data\" : {\n");
   pChar += sprintf(pChar,"     \"eid\"             : %d,\n",eid);    
   pChar += sprintf(pChar,"     \"full\"            : \"%s\",\n",pRes->full?"YES":"NO");  
-  pChar += sprintf(pChar,"     \"full counter\"    : %llu,\n",(unsigned long long int) pRes->full_counter);
-  pChar += sprintf(pChar,"     \"fstat errors\"    : %llu,\n",(unsigned long long int) pRes->statfs_error);
+  pChar += sprintf(pChar,"     \"full counter\"    : %llu,\n",(unsigned long long int)pRes->full_counter);
+  pChar += sprintf(pChar,"     \"fstat errors\"    : %llu,\n",(unsigned long long int)pRes->statfs_error);
   pChar += sprintf(pChar,"     \"inodes\" : {\n");
-  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(unsigned long long int) pRes->inodes.total);
-  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(unsigned long long int) pRes->inodes.free);
-  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(unsigned long long int) common_config.min_metadata_inodes);
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(unsigned long long int)pRes->inodes.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(unsigned long long int)pRes->inodes.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(unsigned long long int)common_config.min_metadata_inodes);
   pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_inodes>pRes->inodes.free ?"YES":"NO");
   pChar += sprintf(pChar,"     },\n     \"sizeMB\" : {\n");
-  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(unsigned long long int) pRes->sizeMB.total);
-  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(unsigned long long int) pRes->sizeMB.free);
-  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(unsigned long long int) common_config.min_metadata_MB);
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(unsigned long long int)pRes->sizeMB.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(unsigned long long int)pRes->sizeMB.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(unsigned long long int)common_config.min_metadata_MB);
   pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_MB>pRes->sizeMB.free ?"YES":"NO");
   pChar += sprintf(pChar,"     }\n  }\n}\n"); 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	     
@@ -1644,6 +1841,17 @@ static void on_start() {
       */
       info("starting slave exportd");
       export_start_export_slave();
+      
+      /*
+      ** Start rebalancer when in automatic mode
+      */
+      export_rebalancer(1);
+      
+      /*
+      ** Start remote command server that enables storage node to 
+      ** remotly access the meta-data
+      */
+      export_rcmd_server();      
 
       info("running.");
       svc_run();
@@ -1668,6 +1876,7 @@ static void on_stop() {
     DEBUG_FUNCTION;
     if ( expgwc_non_blocking_conf.slave == 0)
     {
+    
       svc_exit();
 
       svc_unregister(EXPORT_PROGRAM, EXPORT_VERSION);
@@ -1682,7 +1891,11 @@ static void on_stop() {
     ** flush the dirent write back cache on disk
     */
     dirent_wbcache_flush_on_stop();
-    
+    /*
+    ** release the level2 cache: it might be possible that some dirty directories have
+    ** to be written back on disk
+    */
+    lv2_cache_release(&cache);
     
     exportd_release();
     closelog();
@@ -1690,12 +1903,7 @@ static void on_stop() {
     if ( expgwc_non_blocking_conf.slave == 0)
     {
       
-      remove_pid_file(0);
-      
-      /*
-      ** now kill every sub process
-      */
-      rozofs_session_leader_killer(100000);
+      remove_pid_file(0);      
     }    
 }
 /*
@@ -1758,7 +1966,7 @@ int export_reload_nb()
     } 
 
     stop_all_remove_bins_thread();
-
+    stop_all_expthin_thread();
 
     // Canceled the export tracking pthread before reload list of exports
     if ((errno = pthread_cancel(exp_tracking_thread)) != 0)
@@ -1797,6 +2005,11 @@ int export_reload_nb()
         severe("can't unlock config: %s", strerror(errno));
         goto error;
     }
+  
+    /*
+    ** Clean up file locks in case some export has been removed
+    */
+    file_lock_reload(); 
 
     // XXX: An export may have been deleted while the rest of the files deleted.
     // These files will never be deleted.
@@ -1804,6 +2017,7 @@ int export_reload_nb()
     // Start pthread for remove bins file on slave thread only
     if (expgwc_non_blocking_conf.slave != 0) {
       start_all_remove_bins_thread();
+      start_all_expthin_thread();
     }
 
     if (pthread_create(&exp_tracking_thread, NULL, export_tracking_thread, NULL) != 0)
@@ -1888,6 +2102,13 @@ static void on_hup() {
 
     econfig_release(&new);
 
+    /*
+    ** Stop every rebalancer
+    */
+    if (expgwc_non_blocking_conf.slave == 0)
+    {    
+      export_rebalancer(0);
+    }
     
     /*
     ** the configuration is valid, so we reload the new configuration
@@ -1936,6 +2157,11 @@ static void on_hup() {
       ** reload the slave exportd
       */
       export_reload_all_export_slave();
+      
+      /*
+      ** Start every rebalancer
+      */
+      export_rebalancer(1);
     }
 
     info("reloaded.");
@@ -1985,6 +2211,8 @@ int main(int argc, char *argv[]) {
     ** Change local directory to "/"
     */
     if (chdir("/")!=0) {}
+    
+    rozofs_mkpath(ROZOFS_RUNDIR_PID,0755);
 
     /* Try to get debug port from /etc/services */
     expgwc_non_blocking_conf.debug_port = rozofs_get_service_port_export_master_diag();
@@ -2048,6 +2276,11 @@ int main(int argc, char *argv[]) {
                 break;
         }
     }
+    
+    /*
+    ** Do not log each remote end disconnection
+    */
+    af_unix_socket_no_disconnect_log();
        
     /*
     ** read common config file
@@ -2109,7 +2342,6 @@ int main(int argc, char *argv[]) {
                     strerror(errno));
             goto error;
         }
-
         daemon_start("exportd", common_config.nb_core_file, EXPORTD_PID_FILE,
                 on_start, on_stop, on_hup);
     }

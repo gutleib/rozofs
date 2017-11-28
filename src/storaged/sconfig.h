@@ -48,6 +48,7 @@ typedef struct storage_config {
 
    
 typedef struct sconfig {
+    int                     numa_node_id;
     int                     io_addr_nb; 
     struct mp_io_address_t  io_addr[STORAGE_NODE_PORTS_MAX];
     char                  * export_hosts;

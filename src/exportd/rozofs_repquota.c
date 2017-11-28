@@ -52,6 +52,7 @@
 #define FL_NOCACHE 128	/* Don't cache dquots before resolving */
 #define FL_NOAUTOFS 256	/* Ignore autofs mountpoints */
 #define FL_RAWGRACE 512	/* Print grace times in seconds since epoch */
+#define FL_SHARE 1024	/* Print share information */
 /* Flags for formatting time */
 #define TF_ROUND 0x1		/* Should be printed time rounded? */
 
@@ -297,7 +298,8 @@ static void usage(void)
 -v, --verbose               display also users/groups without any usage\n\
 -u, --user                  display information about users\n\
 -g, --group                 display information about groups\n\
--s, --human-readable        show numbers in human friendly units (MB, GB, ...)\n\
+-s, --share                 display information about shares\n\
+-H, --human-readable        show numbers in human friendly units (MB, GB, ...)\n\
 -t, --truncate-names        truncate names to 9 characters\n\
 -p, --raw-grace             print grace time in seconds since epoch\n\
 -n, --no-names              do not translate uid/gid to name\n\
@@ -320,10 +322,11 @@ static void parse_options(int argcnt, char **argstr)
 		{ "verbose", 0, NULL, 'v' },
 		{ "user", 0, NULL, 'u' },
 		{ "group", 0, NULL, 'g' },
+		{ "share", 0, NULL, 's' },
 		{ "help", 0, NULL, 'h' },
 		{ "truncate-names", 0, NULL, 't' },
 		{ "raw-grace", 0, NULL, 'p' },
-		{ "human-readable", 0, NULL, 's' },
+		{ "human-readable", 0, NULL, 'H' },
 		{ "no-names", 0, NULL, 'n' },
 		{ "cache", 0, NULL, 'c' },
 		{ "no-cache", 0, NULL, 'C' },
@@ -334,7 +337,7 @@ static void parse_options(int argcnt, char **argstr)
 
         searched_user_id  = 0;
 	
-	while ((ret = getopt_long(argcnt, argstr, "VavughtspncCf:i:", long_opts, NULL)) != -1) {
+	while ((ret = getopt_long(argcnt, argstr, "VavugshtHpncCf:i:", long_opts, NULL)) != -1) {
 		switch (ret) {
 			case '?':
 			case 'h':
@@ -348,6 +351,9 @@ static void parse_options(int argcnt, char **argstr)
 			case 'g':
 				flags |= FL_GROUP;
 				break;
+			case 's':
+				flags |= FL_SHARE;
+				break;
 			case 'v':
 				flags |= FL_VERBOSE;
 				break;
@@ -360,7 +366,7 @@ static void parse_options(int argcnt, char **argstr)
 			case 'p':
 				flags |= FL_RAWGRACE;
 				break;
-			case 's':
+			case 'H':
 				flags |= FL_SHORTNUMS;
 				break;
 			case 'C':
@@ -471,6 +477,7 @@ static void print(rozofs_dquot_t *dquot, char *name)
      @param path: pathname of the export identifier
      
 */
+static char *quotatypes[] = INITQFNAMES;
 
 static void report_it(int type,int eid,char *path)
 {
@@ -489,7 +496,7 @@ static void report_it(int type,int eid,char *path)
 #endif
 
 	printf("                         %s limits                               File limits\n", spacehdr);
-	printf("%-9s          used       soft       hard      grace       used     soft     hard  grace\n", (type == USRQUOTA)?"User":"Group");
+	printf("%-9s          used       soft       hard      grace       used     soft     hard  grace\n", quotatypes[type]);
 	printf("---------------------------------------------------------------------------------------------\n");
 
 }
@@ -717,6 +724,13 @@ int main(int argc, char **argv)
 
 	  if (flags & FL_GROUP)
 		  dump_quota(quota_ctx_p->quota_inode[GRPQUOTA],GRPQUOTA,eid,pathname);
+
+          
+	  if (flags & FL_SHARE)
+	  {
+	      flags |=FL_NONAME;
+		  dump_quota(quota_ctx_p->quota_inode[SHRQUOTA],SHRQUOTA,eid,pathname);
+	  }
 	}
 
 	return 0;

@@ -1,0 +1,13 @@
+[Unit]
+Description=RozoFS filesystem (geo-replication service)
+Documentation=man:rozofs(8) man:geomgr(8) man:geomgr.conf(5)
+Documentation=http://rozofs.github.io/rozofs/
+After=network.target rpcbind.service
+
+[Service]
+Type=forking
+ExecStart=/bin/sh -c '/usr/bin/rozolauncher start /var/run/launcher_geomgr.pid geomgr & '
+PIDFile=/var/run/launcher_geomgr.pid
+
+[Install]
+WantedBy=multi-user.target

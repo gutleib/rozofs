@@ -50,7 +50,7 @@ extern "C" {
 * Attributes cache constants
 */
 #define STSPARE_FID_CACHE_LVL0_SZ_POWER_OF_2  12
-#define STSPARE_FID_CACHE_MAX_ENTRIES  (128*1024)
+extern uint32_t STSPARE_FID_CACHE_MAX_ENTRIES;
 
 #define STSPARE_FID_CACHE_LVL0_SZ  (1 << STSPARE_FID_CACHE_LVL0_SZ_POWER_OF_2) 
 #define STSPARE_FID_CACHE_LVL0_MASK  (STSPARE_FID_CACHE_LVL0_SZ-1)
@@ -122,8 +122,8 @@ typedef struct _stspare_fid_cache_stat_t
   uint64_t            release;
 } stspare_fid_cache_stat_t;
 
-extern stspare_fid_cache_stat_t stspare_fid_cache_stat;
-
+extern stspare_fid_cache_stat_t   stspare_fid_cache_stat;
+extern stspare_fid_cache_t      * stspare_fid_cache_next_list_entry;
  
 
 /*
@@ -171,7 +171,64 @@ static inline uint32_t stspare_fid_cache_hash(stspare_fid_cache_key_t *usr_key) 
 static inline void stspare_fid_cache_reset(stspare_fid_cache_t * p) {
   memset(&p->data,0,sizeof(stspare_fid_data_t));
 }
+/*
+**____________________________________________________
+**
+** Get next entry in cache
+**
+** @retval the pointer to the FID cache entry or NULL when no more entry
+**____________________________________________________
+*/
+static inline stspare_fid_cache_t * stspare_fid_cache_getnext() {
+  stspare_fid_cache_t          * stspare_fid_cache_current_entry = NULL;
 
+  
+  /*
+  ** Get first
+  */
+  if (stspare_fid_cache_next_list_entry == (stspare_fid_cache_t*) &stspare_fid_cache_running_list) {  
+    /*
+    ** Get 1Rst entry in the list
+    */
+    stspare_fid_cache_current_entry   = (stspare_fid_cache_t*) ruc_objGetFirst(&stspare_fid_cache_running_list);
+    if (stspare_fid_cache_current_entry == NULL) return NULL;
+    /*
+    ** Prepare next entry
+    */
+    stspare_fid_cache_next_list_entry = (stspare_fid_cache_t *)stspare_fid_cache_current_entry->link.ps; 
+    // no next entry
+    if (stspare_fid_cache_next_list_entry == (stspare_fid_cache_t*)&stspare_fid_cache_running_list) {
+      stspare_fid_cache_next_list_entry = NULL;
+    }
+    return stspare_fid_cache_current_entry;
+  }    
+
+  /*
+  ** Get next
+  */
+  stspare_fid_cache_current_entry = stspare_fid_cache_next_list_entry;
+  if (stspare_fid_cache_current_entry == NULL) { 
+    stspare_fid_cache_next_list_entry = (stspare_fid_cache_t*)&stspare_fid_cache_running_list;
+  }
+  else {
+    stspare_fid_cache_next_list_entry = (stspare_fid_cache_t *) stspare_fid_cache_current_entry->link.ps;
+  }
+  if (stspare_fid_cache_next_list_entry == (stspare_fid_cache_t*)&stspare_fid_cache_running_list) {
+    stspare_fid_cache_next_list_entry = NULL;
+  }    
+  return stspare_fid_cache_current_entry;
+}
+/*
+**____________________________________________________
+**
+** Get next entry in cache
+**
+** @retval the pointer to the FID cache entry or NULL when no more entry
+**____________________________________________________
+*/
+static inline void stspare_fid_cache_set1rst() {
+  stspare_fid_cache_next_list_entry = (stspare_fid_cache_t *)&stspare_fid_cache_running_list;
+}
 /*
 **____________________________________________________
 **
@@ -184,7 +241,19 @@ static inline void stspare_fid_cache_reset(stspare_fid_cache_t * p) {
 static inline void stspare_fid_cache_release(stspare_fid_cache_t *p) {
   uint32_t hash;
 
+  if (p == NULL) return; 
+  
   stspare_fid_cache_stat.release++;
+  
+  /*
+  ** Case it is the current listing entry
+  */
+  if (p == stspare_fid_cache_next_list_entry) {
+    /*
+    ** Go ahead to the next entry
+    */
+    stspare_fid_cache_getnext();
+  }
   
   /*
   ** Release the cache entry
@@ -238,6 +307,7 @@ static inline stspare_fid_cache_t * stspare_fid_cache_allocate() {
   ruc_objInsertTail(&stspare_fid_cache_running_list,&p->link);   
   return p;
 }
+
 /*
 **____________________________________________________
 **
@@ -361,7 +431,7 @@ static inline stspare_fid_cache_t * stspare_fid_cache_search(uint8_t cid, uint8_
 ** That API is intented to be called during the initialization of the module
 **____________________________________________________
 */
-uint32_t stspare_fid_cache_init();
+uint32_t stspare_fid_cache_init(uint32_t nbCtx);
 
 
 #ifdef __cplusplus

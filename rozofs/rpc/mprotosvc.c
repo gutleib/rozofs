@@ -25,6 +25,7 @@ monitor_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		mp_remove_arg_t mp_remove_1_arg;
 		mp_list_bins_files_arg_t mp_list_bins_files_1_arg;
 		mp_remove2_arg_t mp_remove2_1_arg;
+		mp_size_arg_t mp_size_1_arg;
 	} argument;
 	char *result;
 	xdrproc_t _xdr_argument, _xdr_result;
@@ -65,6 +66,12 @@ monitor_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_argument = (xdrproc_t) xdr_mp_remove2_arg_t;
 		_xdr_result = (xdrproc_t) xdr_mp_status_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) mp_remove2_1_svc;
+		break;
+
+	case MP_SIZE:
+		_xdr_argument = (xdrproc_t) xdr_mp_size_arg_t;
+		_xdr_result = (xdrproc_t) xdr_mp_size_ret_t;
+		local = (char *(*)(char *, struct svc_req *)) mp_size_1_svc;
 		break;
 
 	default:

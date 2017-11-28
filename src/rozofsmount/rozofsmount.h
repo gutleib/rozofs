@@ -57,7 +57,7 @@ extern int rozofs_rotation_read_modulo;
 extern int rozofs_bugwatch;
 extern uint16_t rozofsmount_diag_port;
 extern int rozofs_max_storcli_tx ;  /**< depends on the number of storcli processes */
-
+extern char *rozofs_mountpoint;
 extern struct fuse_lowlevel_ops rozofs_ll_operations;
 
 typedef struct rozofsmnt_conf {
@@ -83,6 +83,8 @@ typedef struct rozofsmnt_conf {
     unsigned entry_dir_timeout_ms;
     unsigned attr_dir_timeout_ms;
 
+    unsigned enoent_timeout_ms;  
+    
     unsigned symlink_timeout;
     unsigned shaper;
     unsigned rotate;
@@ -112,13 +114,15 @@ typedef struct rozofsmnt_conf {
     unsigned localPreference;    
     unsigned noReadFaultTolerant;   
     unsigned xattrcache;   /**< assert to 1 for extended attributes caching                        */      
-    unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */      
+    unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */
+    unsigned numanode;      
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 
 
 /** entry kept locally to map fuse_inode_t with rozofs fid_t */
 typedef struct ientry {
+    hash_entry_t he;
     fuse_ino_t inode; ///< value of the inode allocated by rozofs
     fid_t fid; ///< unique file identifier associated with the file or directory
     fid_t pfid; ///< unique file identifier associated with the parent
@@ -284,23 +288,15 @@ static inline unsigned int fid_hash(void *key) {
 }
 
 static inline void ientries_release() {
-    list_t *p, *q;
     return;
- 
-    htable_release(&htable_inode);
-    htable_release(&htable_fid);
-
-    list_for_each_forward_safe(p, q, &inode_entries) {
-        ientry_t *entry = list_entry(p, ientry_t, list);
-        list_remove(p);
-        free(entry);
-    }
 }
 
 static inline void put_ientry(ientry_t * ie) {
     DEBUG("put inode: %llx\n",(unsigned long long int)ie->inode);
     rozofs_ientries_count++;
-    htable_put(&htable_inode, &ie->inode, ie);
+    ie->he.key   = &ie->inode;
+    ie->he.value = ie;
+    htable_put_entry(&htable_inode, &ie->he);
 //    htable_put(&htable_fid, ie->fid, ie);
     list_push_front(&inode_entries, &ie->list);
 }
@@ -315,7 +311,7 @@ static inline void del_ientry(ientry_t * ie) {
     if (ie->nlookup != 0) return;
     
     rozofs_ientries_count--;
-    htable_del(&htable_inode, &ie->inode);
+    htable_del_entry(&htable_inode, &ie->he);
 //    htable_del(&htable_fid, ie->fid);
     list_remove(&ie->list);
     /*
@@ -361,7 +357,7 @@ static inline int rozofs_is_directory_inode(fuse_ino_t ino)
 
     if (ino == 1) return 1;
     fake_id.fid[1]=ino;
-    if ((ROZOFS_DIR_FID == fake_id.s.key) || (ROZOFS_DIR == fake_id.s.key))
+    if ((ROZOFS_DIR_FID == fake_id.s.key) || (ROZOFS_DIR == fake_id.s.key)||(ROZOFS_TRASH == fake_id.s.key) )
     {
       return 1;
     }
@@ -371,8 +367,21 @@ static inline int rozofs_is_directory_inode(fuse_ino_t ino)
 static inline ientry_t *get_ientry_by_inode(fuse_ino_t ino) {
     rozofs_inode_t fake_id;
 
+    if (ino == 0x2800000000000001) {
+      fuse_ino_t ino_root = 1;
+      return htable_get(&htable_inode, &ino_root);
+    }
     fake_id.fid[1]=ino;
-    if (ROZOFS_DIR_FID == fake_id.s.key) 
+    /*
+    ** check if the fid designate a directory referenced by its FID (relative path) or if is the trash associated with the
+    ** directory: the delete bit in the fid can be set for the case of the trash only.
+    */
+    if (ROZOFS_TRASH != fake_id.s.key)
+    {
+      fake_id.s.del = 0;
+    
+    }
+    if ( ROZOFS_DIR_FID == fake_id.s.key )
     {
       fake_id.s.key = ROZOFS_DIR;
     }
@@ -382,6 +391,10 @@ static inline ientry_t *get_ientry_by_inode(fuse_ino_t ino) {
 
 static inline ientry_t *get_ientry_by_fid(fid_t fid) {
     rozofs_inode_t *fake_id = (rozofs_inode_t *) fid;
+    /*
+    ** check if empty inode to address the case of invalid attributes returned by exportd
+    */
+    if (fake_id->fid[1] == 0) return NULL; 
     if (memcmp(fid, exportclt.rfid, sizeof (fid_t)) == 0){
       return get_ientry_by_inode(ROOT_INODE);
     }
@@ -394,6 +407,10 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
 	int extended_attributes = 0;
 	
 	inode_p = (rozofs_inode_t*) fid;
+	/*
+	** clear the delete bit if the fid does not designate the trash associated with a directory
+	*/
+	if (inode_p->s.key != ROZOFS_TRASH) inode_p->s.del = 0;
 	/*
 	** Check the alloc mode for ientry
 	*/
@@ -550,9 +567,19 @@ static inline struct stat *mattr_to_stat(mattr_t * attr, struct stat *st, uint32
     st->st_size = attr->size;
     st->st_ctime = attr->ctime;
     st->st_atime = attr->atime;
-    st->st_mtime = attr->mtime;
+    st->st_mtime = attr->mtime;    
     st->st_blksize = ROZOFS_BSIZE_BYTES(bsize);
-    st->st_blocks = ((attr->size + 512 - 1) / 512);
+    /*
+    ** check the case of the thin provisioning
+    */
+    if ((rozofs_get_thin_provisioning()) && (S_ISREG(st->st_mode)))
+    {
+      uint64_t local_blocks = attr->children;
+      local_blocks *=4096;
+      st->st_blocks = ((local_blocks + 512 - 1) / 512);
+    }
+    else
+      st->st_blocks = ((attr->size + 512 - 1) / 512);
     st->st_dev = 0;
     st->st_uid = attr->uid;
     st->st_gid = attr->gid;

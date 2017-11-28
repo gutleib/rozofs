@@ -461,6 +461,14 @@ void ep_mount_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         goto error;
 
     /*
+    ** Thin provisonning requires a MSIT mount
+    */
+    if (exp->thin) {
+      errno = ENOTSUP;
+      goto error;
+    }
+    
+    /*
     ** Check whether this client is allowed
     */
     uint32_t ip = af_unix_get_remote_ip(req_ctx_p->socketRef);
@@ -622,6 +630,16 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     if (!(exp = exports_lookup_export(*eid)))
         goto error;
     
+    ret.status_gw.ep_mount_msite_ret_t_u.export.msite = 0;
+    
+    /*
+    ** Tell whether thin provisionning is configured
+    */
+    if (exp->thin) {
+      ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_THIN_PROVISIONNING_BIT;
+    }
+    
+         
     /*
     ** Check whether this client is allowed
     */
@@ -652,7 +670,7 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 			** Volume is declared as multi site
 			*/
 			if (vc->multi_site) {
-			   ret.status_gw.ep_mount_msite_ret_t_u.export.msite = 1; 
+			   ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_MSITE_BIT; 
 			}	
 							
             /*
@@ -736,7 +754,7 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     }
 
     ret.status_gw.status = EP_SUCCESS;
-
+    
     goto out;
 error:
     ret.status_gw.status = EP_FAILURE;
@@ -1034,10 +1052,12 @@ void ep_getattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         goto error;
     if (export_getattr
             (exp, (unsigned char *) arg->arg_gw.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) != 0)
+            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
+    ret.parent_attr.status = EP_SUCCESS;
     ret.free_quota = exportd_get_free_quota(exp);
     ret.bsize = exp->bsize;
     ret.layout = exp->layout;
@@ -1081,10 +1101,12 @@ void ep_setattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
             (mattr_t *) & arg->arg_gw.attrs, arg->arg_gw.to_set) != 0)
         goto error;
     if (export_getattr(exp, (unsigned char *) arg->arg_gw.attrs.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) != 0)
+            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
+    ret.parent_attr.status = EP_SUCCESS;
     ret.free_quota = exportd_get_free_quota(exp);
     goto out;
 error:
@@ -1618,82 +1640,7 @@ out:
     return ;
 }
 
-/* not used anymore
-ep_io_ret_t *ep_read_1_svc_nb(ep_io_arg_t * arg; void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
-    static ep_io_ret_t ret;
-    export_t *exp;
-    DEBUG_FUNCTION;
 
-    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
-        goto error;
-    if ((ret.status_gw.ep_io_ret_t_u.length =
-            export_read(exp, arg->arg_gw.fid, arg->arg_gw.offset, arg->arg_gw.length)) < 0)
-        goto error;
-    ret.status_gw.status = EP_SUCCESS;
-    goto out;
-error:
-    ret.status_gw.status = EP_FAILURE;
-    ret.status_gw.ep_io_ret_t_u.error = errno;
-out:
-    return ;
-}
- */
-/*
-**______________________________________________________________________________
-*/
-/**
-*   exportd read_block : OBSOLETE
-
-
-*/
-void ep_read_block_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
-    static epgw_read_block_ret_t ret;
-    epgw_io_arg_t * arg = (epgw_io_arg_t*)pt; 
-    export_t *exp = NULL;
-    int64_t length = -1;
-    uint64_t first_blk = 0;
-    uint32_t nb_blks = 0;
-
-    DEBUG_FUNCTION;
-
-    // Set profiler export index
-    export_profiler_eid = arg->arg_gw.eid;
-
-    START_PROFILING_IO(ep_read_block, arg->arg_gw.length);
-
-    // Free memory buffers for xdr
-    xdr_free((xdrproc_t) xdr_epgw_read_block_ret_t, (char *) &ret);
-
-    // Get export
-    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
-        goto error;
-
-    // Check if EOF, get nb. of blocks to read and update atime
-    if ((length = export_read(exp, (unsigned char *) arg->arg_gw.fid, arg->arg_gw.offset,
-            arg->arg_gw.length, &first_blk, &nb_blks)) == -1)
-        goto error;
-
-    ret.status_gw.ep_read_block_ret_t_u.ret.length = length;
-    ret.status_gw.ep_read_block_ret_t_u.ret.dist.dist_len = nb_blks;
-    ret.status_gw.ep_read_block_ret_t_u.ret.dist.dist_val =
-            xmalloc(nb_blks * sizeof (dist_t));
-
-    // Get distributions
-    if (export_read_block(exp, (unsigned char *) arg->arg_gw.fid, first_blk, nb_blks,
-            ret.status_gw.ep_read_block_ret_t_u.ret.dist.dist_val) != 0)
-        goto error;
-
-    ret.status_gw.status = EP_SUCCESS;
-    goto out;
-
-error:
-    ret.status_gw.status = EP_FAILURE;
-    ret.status_gw.ep_read_block_ret_t_u.error = errno;
-out:
-    EXPORTS_SEND_REPLY(req_ctx_p);
-    STOP_PROFILING(ep_read_block);
-    return ;
-}
 /*
 **______________________________________________________________________________
 */

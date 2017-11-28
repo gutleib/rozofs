@@ -331,23 +331,6 @@ int main(int argc, char *argv[]) {
     ** read common config file
     */
     common_config_read(NULL);    
-
-    /*
-    **  set the numa node for storio and its disk threads
-    */
-    if (pHostArray[0] != NULL)
-    {
-       char *name;
-       name = pHostArray[0];
-       int instance;
-       int len = strlen(name);
-       instance = (int)name[len-1];
-       rozofs_numa_allocate_node(instance);
-    }
-    else
-    {
-      rozofs_numa_allocate_node(storio_instance);
-    }
     
     sprintf(logname,"storio:%d",storio_instance);
     uma_dbg_record_syslog_name(logname);
@@ -365,6 +348,41 @@ int main(int argc, char *argv[]) {
     if (sconfig_validate(&storaged_config) != 0) {
         fatal( "Inconsistent storage configuration file: %s.\n",strerror(errno));
     }
+
+
+    /*
+    **  set the numa node for storio and its disk threads
+    */
+    if (storaged_config.numa_node_id != -1) {       
+        /*
+        ** Use the node id of the storage.conf 
+        */
+        rozofs_numa_allocate_node(storaged_config.numa_node_id,"storage.conf");
+    }
+    else {
+      /*
+      ** No node identifier set in storage.conf 
+      */ 
+      if (pHostArray[0] != NULL) {
+         /*
+         ** Use hostname to dispatch the storios on the nodes
+         ** This is a one node configuration
+         */
+         char *name;
+         name = pHostArray[0];
+         int instance;
+         int len = strlen(name);
+         instance = (int)name[len-1];
+         rozofs_numa_allocate_node(instance,"host name");
+      }
+      else {
+        /*
+        ** Dispatch the storio depending on their cluster id
+        */
+        rozofs_numa_allocate_node(storio_instance,"cluster id");
+      }
+    }
+
     /*
     ** init of the crc32c
     */

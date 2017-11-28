@@ -112,6 +112,7 @@ typedef struct volume {
     uint8_t layout:6;
     uint8_t georep:1; /**< asserted to 1 when geo-replication is enabled */
     uint8_t multi_site:1; /**< asserted to 1 when geo-replication is enabled */ 
+    char *  rebalanceCfg; /**< rebalancer configuration file for this volume */
     list_t clusters; ///< cluster(s) list
     pthread_rwlock_t lock; ///< lock to be used by export
     /*
@@ -127,10 +128,11 @@ typedef struct volume {
  * @param vid: it' id
  * @param layout: layout defined for this volume
  * @param georep: asserted to 1 if geo-replication is supported for the volume
+ * @param rebalanceCfg: rebalancer configuration file
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site);
+int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site, char * rebalanceCfg);
 
 /** release a volume
  *

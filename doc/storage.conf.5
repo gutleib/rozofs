@@ -12,6 +12,16 @@ is managed thanks to
 .B libconfig
 grammar.
 
+.SS nodeid (optional)
+When
+.B numa_aware 
+is True in 
+.B rozofs.conf
+, this parameter enables to give the NUMA node identifier to pin the storaged and its storios on. If this parameter is not set but
+.B numa_aware 
+is True in 
+.B rozofs.conf
+, the storaged and storio make their own choice of node identifier based on the hostname (single node configuration) or cluster identifier.
 .SS listen (mandatory)
 
 Specifies list of IP(s) (or hostname(s)) and port(s) the storio process must listen to for receiving write and read requests from clients.

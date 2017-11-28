@@ -37,6 +37,7 @@
 ** quota file default names
 */ 
 char *quotatypes[] = INITQFNAMES;
+char *quotainfotypes[] = ROZOFS_INITQFNAMES;
 
 rozofs_qt_export_t *export_quota_table[EXPGW_EID_MAX_IDX+1] = {0};
 int rozofs_qt_init_done = 0;
@@ -150,6 +151,10 @@ void rw_quota_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
            type = GRPQUOTA;
 	   break;
       }      
+      if (strcmp(argv[3],"share")==0) {   
+           type = SHRQUOTA;
+	   break;
+      }      
       rw_quota_help(pChar);	
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;  
@@ -204,7 +209,7 @@ void rw_quota_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
     }
     else
     {
-      pChar +=sprintf(pChar,"Displaying quota for %s %u of exportd %d\n",(type==USRQUOTA)?"User":"Group",qid,eid);
+      pChar +=sprintf(pChar,"Displaying quota for %s %u of exportd %d\n",quotatypes[type],qid,eid);
       rozofs_qt_print(pChar,&dquot->dquot);
     }
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -448,7 +453,7 @@ int rozofs_qt_write_quota_info(char *root_path,rozofs_quota_info_t *quota_info_p
    char pathname[ROZOFS_PATH_MAX];
    int fd;
    
-   sprintf(pathname,"%s/%s_%s",root_path,ROZOFS_QUOTA_INFO_NAME,(type==USRQUOTA)?"usr":"grp");
+   sprintf(pathname,"%s/%s_%s",root_path,ROZOFS_QUOTA_INFO_NAME,quotainfotypes[type]);
    if ((fd = open(pathname, O_RDWR/* | NO_ATIME */| O_CREAT, S_IRWXU)) < 1) 
    {
       severe("cannot open quota info file %s: %s",pathname,strerror(errno));
@@ -483,7 +488,7 @@ int rozofs_qt_read_quota_info(char *root_path,rozofs_quota_info_t *quota_info_p,
    char pathname[ROZOFS_PATH_MAX];
    int fd;
    
-   sprintf(pathname,"%s/%s_%s",root_path,ROZOFS_QUOTA_INFO_NAME,(type==USRQUOTA)?"usr":"grp");
+   sprintf(pathname,"%s/%s_%s",root_path,ROZOFS_QUOTA_INFO_NAME,quotainfotypes[type]);
    if ((fd = open(pathname, O_RDWR,S_IRWXU)) < 1) 
    {
       warning("cannot open quota info file %s: %s",pathname,strerror(errno));
@@ -807,11 +812,12 @@ static inline int rozofs_qt_dqot_inode_update(disk_table_header_t *disk_p,
     @param grp_id : group quota
     @param nb_inode
     @param action: 1: increment, 0 decrement 
+    @param share: share identifier (0 if none)
     
     @retval : 0 on success
     @retval < 0 on error
  */
-int rozofs_qt_inode_update(int eid,int user_id,int grp_id,int nb_inode,int action)
+int rozofs_qt_inode_update(int eid,int user_id,int grp_id,int nb_inode,int action,uint16_t share)
 {
    rozofs_qt_export_t *p;
    /*
@@ -844,6 +850,11 @@ int rozofs_qt_inode_update(int eid,int user_id,int grp_id,int nb_inode,int actio
    {
       rozofs_qt_dqot_inode_update(p->quota_inode[GRPQUOTA],eid,GRPQUOTA,grp_id,nb_inode,action,
                                   &p->quota_super[GRPQUOTA]);
+   }
+   if (share !=0)
+   {
+      rozofs_qt_dqot_inode_update(p->quota_inode[SHRQUOTA],eid,SHRQUOTA,(int)share,nb_inode,action,
+                                  &p->quota_super[SHRQUOTA]);   
    }
    return 0;
 
@@ -915,11 +926,12 @@ static inline int rozofs_qt_dqot_block_update(disk_table_header_t *disk_p,
     @param grp_id : group quota
     @param nb_inode
     @param action: 1: increment, 0 decrement 
-    
+    @param share: share identifier (0 if none)
+        
     @retval : 0 on success
     @retval < 0 on error
  */
-int rozofs_qt_block_update(int eid,int user_id,int grp_id,uint64_t size,int action)
+int rozofs_qt_block_update(int eid,int user_id,int grp_id,uint64_t size,int action,uint16_t share)
 {
    rozofs_qt_export_t *p;
    /*
@@ -953,6 +965,11 @@ int rozofs_qt_block_update(int eid,int user_id,int grp_id,uint64_t size,int acti
    {
       rozofs_qt_dqot_block_update(p->quota_inode[GRPQUOTA],eid,GRPQUOTA,user_id,size,action,
                                   &p->quota_super[GRPQUOTA]);
+   }
+   if (share !=0)
+   {
+      rozofs_qt_dqot_block_update(p->quota_inode[SHRQUOTA],eid,SHRQUOTA,(int)share,size,action,
+                                  &p->quota_super[SHRQUOTA]);   
    }
    return 0;
 

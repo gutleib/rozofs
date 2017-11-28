@@ -1,0 +1,64 @@
+.\" Process this file with
+.\" groff -man -Tascii rozo_trashd.conf.5
+.\"
+.TH rozo_trashd.conf 5 "APRIL 2015" RozoFS "User Manuals"
+.SH NAME
+rozo_trashd.conf \- RozoFS trash daemon configuration file
+.SH DESCRIPTION
+.B "rozo_trashd.conf"
+is managed thanks to 
+.B libconfig
+<http://www.hyperrealm.com/libconfig/> and thus complies to the
+.B libconfig
+grammar.
+
+Boolean values must be set to either
+.B
+True
+or
+.B
+False.
+
+String values must enclosed into double quotes.
+
+One of such file should be created per export, and referenced in exportd.conf, 
+although several volumes could use the same configuration file.
+
+.SS frequency
+This parameter defines the scanning frequency in hours of the RozoFS trash daemon process.
+See the --frequency parameter of the CLI.
+
+.SS older
+This parameter defines the retention time in days that a file/directory might remain in
+RozoFS trash before effective deletion.. 
+See the --older parameter of the CLI.
+
+.SS deletion_rate
+This parameter defines the maximum deletion rate applied to files and directories. 
+See the --rate parameter of the CLI.
+
+.SS scan_rate
+This parameter defines the maximum inodes scanning rate while searching for file/directory to delete. 
+A value of -1 indicates that the scanning is achieved at the maximum rate.
+See the --scan parameter of the CLI.
+
+.SS verbose
+That option indicates that the trash process operates in verbose mode:
+See --verbose parameter of the CLI.
+.SH EXAMPLE
+.PP
+.nf
+.ta +3i
+frequency                                          = 12;
+deletion_rate                                      = 100;
+scan_rate                                          = 20000;
+.SH FILES
+.I /etc/rozofs/rozo_trashd.conf (/usr/local/etc/rozofs/rozo_trashd.conf)
+.RS
+.\".SH ENVIRONMENT
+.\".SH DIAGNOSTICS
+.\".SH BUGS
+.SH AUTHOR
+Rozo Systems <http://www.rozofs.com>
+.SH "SEE ALSO"
+.BR exportd.conf (5), rozofs (7), rozo_trashd (8)

@@ -52,6 +52,7 @@ typedef struct volume_config {
     uint8_t georep; 
     uint8_t multi_site;   
     list_t clusters;
+    char  * rebalance_cfg; // Rebalance configuation file if any
     list_t list;
 } volume_config_t;
 
@@ -60,7 +61,9 @@ typedef struct export_config {
     vid_t vid;
     uint8_t layout;
     ROZOFS_BSIZE_E  bsize;
+    uint8_t         thin;  /* Thin provisionning */
     char root[FILENAME_MAX];
+    char name[FILENAME_MAX];
     char md5[MD5_LEN];
     uint64_t squota;
     uint64_t hquota;

@@ -107,6 +107,7 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
 	struct rpc_msg   call_msg;
     uint32_t         null_val = 0;
 
+
     /*
     ** allocate a transaction context
     */
@@ -233,6 +234,19 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
       goto error;  
     }
     TX_STATS(ROZOFS_TX_SEND);
+
+    if (opcode == SP_READ) {
+      sp_read_arg_t *request = (sp_read_arg_t *)msg2encode_p;
+      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid);
+    }
+    else if(opcode == SP_WRITE) {
+      sp_write_arg_t *request = (sp_write_arg_t *)msg2encode_p;
+      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid);
+    }
+    else if(opcode == SP_TRUNCATE) {
+      sp_truncate_arg_t *request = (sp_truncate_arg_t *)msg2encode_p;
+      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid);
+    }
 
     /*
     ** OK, so now finish by starting the guard timer

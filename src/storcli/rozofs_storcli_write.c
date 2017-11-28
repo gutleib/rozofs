@@ -1595,6 +1595,7 @@ void rozofs_storcli_write_req_processing_cbk(void *this,void *param)
          STORCLI_ERR_PROF(write_prj_err);
        }       
        same_storage_retry_acceptable = 1;
+       rozofs_storcli_trace_response(working_ctx_p, projection_id,  errno);                        
        goto retry_attempt; 
     }
     storcli_lbg_cnx_sup_clear_tmo(lbg_id);
@@ -1667,6 +1668,8 @@ void rozofs_storcli_write_req_processing_cbk(void *this,void *param)
     */
     if (error)
     {
+       rozofs_storcli_trace_response(working_ctx_p, projection_id,  errno);                        
+
        /*
        ** there was an error on the remote storage while attempt to write the file
        ** try to write the projection on another storaged
@@ -1683,6 +1686,8 @@ void rozofs_storcli_write_req_processing_cbk(void *this,void *param)
        goto retry_attempt;    
     }
     STORCLI_STOP_NORTH_PROF((&working_ctx_p->prj_ctx[projection_id]),write_prj,0);
+
+    rozofs_storcli_trace_response(working_ctx_p, projection_id,  0);                  
 
     /*
     ** set the pointer to the read context associated with the projection for which a response has

@@ -51,13 +51,17 @@ This parameter enables to choose the file distribution rule at file creation. Th
 Maximum number of files that the remove bins thread of a slave export can remove in a run. A 2 second delay occurs between every run. This provides the maximum deletion rate.
 .SS deletion_delay 
 Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
+.SS nb_trash_thread
+Number of trash threads that work in parallel (default: 2, maximum: 8)
 .SS statfs_period 
 caching delay in second of the data reported by a statfs(). The default value is 10 seconds. When the delay is 0, there is no caching.
+
 .SS core_file_directory
 The directory under which the RozoFS modules store their core files in case a crash occurs. 
 
 .SS nb_core_file
-Maximum number of core file to keep on this node per RozoFS module type. The older core files are kept while the newest ones are removed. 
+Maximum number of RozoFS core file to keep on this node whatever the RozoFS executable. The older core files are kept while the newest ones are removed. 
+
 
 .SS nb_disk_thread
 Specifies the number of threads within the STORIO process that can operate the disk read/write.
@@ -133,13 +137,7 @@ This enables concurrent processes to all execute mkdir at the same time without 
 .SS mknod_ok_instead_of_eexist
 When set to True this parameter makes the export respond OK instead of EEXIST on a file creation while the file already exist. 
 This enables concurrent processes to all execute mkdir at the same time without getting any error. 
-.B Be aware that this will prevent some application to make use of mknod to simulate a lock between nodes.
-.SS ssh_user
-This parameter tells what user name to use between storage and export for ssh or scp when different from root. 
-.SS ssh_port
-This parameter tells what port to use between storage and export for ssh or scp when different from 22. 
-.SS ssh_param
-This parameter gives extra options to be used by ssh or scp ( -i <keypath> for instance). 
+.B Be aware that this will prevent some application to make use of mknod to simulate a lock between nodes.. 
 .SS client_fast_reconnect
 When set to True, the rozofsmount updates some of its timers in order to reconnect to the exportd as fast as possible.
 .SS disable_sync_attributes
@@ -209,6 +207,16 @@ This parameter is the maximum network/disk bandwidth that the spare file restori
 Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation (default 256K)
 .SS min_metadata_MB
 Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation (default 2048 MB)
+.SS export nb_thin_thread
+Number of thin provisioning threads that work in parallel. (default:2; maximum:4)
+.SS thin_scan_file_per_run
+Number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run. A new run occurs every 2 seconds. This requires that the export has been configured with thin provisioning. (default:1000)
+.SS thin_lv1_hash_tb_size
+Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart)
+.SS expthin_guard_delay_sec
+Guard delay en seconds between two file scanning of a file that belongs to an export configured for thin provisioning. (default:10; maximum 600)
+.SS level2_cache_max_entries_kb
+Maximum number of i-node entries that the export level 2 cache can contain (unit is K). (default 512K)
 .SH EXAMPLE
 .PP
 .nf
@@ -216,7 +224,7 @@ Minimum available size in MB that must be available on metadata device to allow 
 # sample RozoFS common configuration file
 
 #
-# Collocalize when possible
+# Colocated when possible
 #
 numa_aware           = True;
 

@@ -46,12 +46,14 @@
 #define EEXPORTS    "exports"
 #define EEID        "eid"
 #define EROOT       "root"
+#define ENAME       "name"
 #define EMD5        "md5"
 #define ESQUOTA     "squota"
 #define EHQUOTA     "hquota"
 #define EGEOREP     "georep"
 #define ESITE0     "site0"
 #define ESITE1     "site1"
+#define EREBALANCE "rebalance"
 
 #define EFILTERS    "filters"
 #define EFILTER     "filter"
@@ -60,6 +62,7 @@
 #define EFORBID     "forbid"
 #define EIP4SUBNET  "ip4subnet"
 #define ESUBNETS    "subnets"
+#define ETHIN       "thin-provisioning"
 
 /*
 ** constant for exportd gateways
@@ -134,6 +137,7 @@ int volume_config_initialize(volume_config_t *v, vid_t vid, uint8_t layout,uint8
     v->vid = vid;
     v->layout = layout;
     v->georep = georep;
+    v->rebalance_cfg = NULL;
     list_init(&v->clusters);
     list_init(&v->list);
     return 0;
@@ -146,6 +150,8 @@ void volume_config_release(volume_config_t *v) {
     list_for_each_forward_safe(p, q, &v->clusters) {
         cluster_config_t *entry = list_entry(p, cluster_config_t, list);
         cluster_config_release(entry);
+        if (v->rebalance_cfg) xfree(v->rebalance_cfg);
+        v->rebalance_cfg = NULL;
         list_remove(p);
         free(entry);
     }
@@ -204,7 +210,7 @@ void expgw_config_release(expgw_config_t *c) {
 
 
 int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t layout, uint32_t bsize,
-        const char *root, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name) {
+        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name, int thin) {
     DEBUG_FUNCTION;
 
     e->eid = eid;
@@ -212,9 +218,11 @@ int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t l
     e->layout = layout;
     e->bsize = bsize;
     strncpy(e->root, root, FILENAME_MAX);
+    strncpy(e->name, name, FILENAME_MAX);
     strncpy(e->md5, md5, MD5_LEN);
     e->squota = squota;
     e->hquota = hquota;
+    e->thin   = thin;
     if (filter_name == NULL) {
       e->filter_name = NULL;
     }  
@@ -339,7 +347,8 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
     int status = -1, v, c, s;
     struct config_setting_t *volumes_set = NULL;
     int    multi_site = -1;
-
+    const char *rebalance_cfg;
+    
     DEBUG_FUNCTION;
 
     // Get settings for volumes (list of volumes)
@@ -379,7 +388,16 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
             severe("can't lookup vid setting for volume idx: %d.", v);
             goto out;
         }
-
+        
+        /*
+        ** Looking for a rebalane configuration file 
+        ** for automatic rebalance launching
+        */
+        rebalance_cfg = NULL;
+        if (config_setting_lookup_string(vol_set, EREBALANCE, &rebalance_cfg) == CONFIG_FALSE) {
+          rebalance_cfg = NULL;
+        }
+        
         // Check whether a layout is specified for this volume in the configuration file
 	// or take the layout from the export default value
         if (config_setting_lookup_int(vol_set, ELAYOUT, &vlayout) == CONFIG_FALSE) {
@@ -417,6 +435,10 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
 
         vconfig->multi_site = 0;
         multi_site = -1; // To determine whether multi site or not
+        
+        if (rebalance_cfg!=NULL) {
+          vconfig->rebalance_cfg = xstrdup(rebalance_cfg);
+        } 
 
         // Get settings for clusters for this volume
         if ((clu_list_set = config_setting_get_member(vol_set, ECIDS)) == NULL) {
@@ -931,6 +953,7 @@ out:
 static int load_exports_conf(econfig_t *ec, struct config_t *config) {
     int status = -1, i;
     struct config_setting_t *export_set = NULL;
+    char   dafault_root_path[FILENAME_MAX];
 
     /*
     ** Prior to read the export configuration, we need
@@ -955,7 +978,9 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
     for (i = 0; i < config_setting_length(export_set); i++) {
         struct config_setting_t *mfs_setting = NULL;
         const char *root;
+        const char *name;
         const char *md5;
+        int thin;
         // Check version of libconfig
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
                || (LIBCONFIG_VER_MAJOR > 1))
@@ -967,7 +992,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         long int eid; // Export identifier
         long int vid; // Volume identifier
         long int bsize; // Block size
-	long int layout; // Export layout	
+	long int layout; // Export layout
 #endif
         const char *str;
         uint64_t squota;
@@ -1018,19 +1043,44 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         }
 
 	
-        if (config_setting_lookup_string(mfs_setting, EROOT, &root) == CONFIG_FALSE) {
-            errno = ENOKEY;
-            severe("can't look up root path for export idx: %d", i);
-            goto out;
+        /*
+        ** Search for root path
+        */
+        if (config_setting_lookup_string(mfs_setting, EROOT, &root) != CONFIG_FALSE) {
+          // Check root path length
+          if (strlen(root) >= FILENAME_MAX) {
+              errno = ENAMETOOLONG;
+              severe("root path length for export idx: %d must be lower than %d.",
+                      i, FILENAME_MAX);
+              goto out;
+          }
         }
+        /* 
+        ** Use default root path name
+        */
+        else {
+          sprintf(dafault_root_path,"%s/export_%d", EXPORTS_ROOT, (int) eid);
+          root = dafault_root_path;
+        }        
 
-        // Check root path length
-        if (strlen(root) > FILENAME_MAX) {
-            errno = ENAMETOOLONG;
-            severe("root path length for export idx: %d must be lower than %d.",
-                    i, FILENAME_MAX);
-            goto out;
+        /*
+        ** Search for a name
+        */        
+        if (config_setting_lookup_string(mfs_setting, ENAME, &name) != CONFIG_FALSE) {
+          // Check root path length
+          if (strlen(name) >= FILENAME_MAX) {
+              errno = ENAMETOOLONG;
+              severe("export name length for export idx: %d must be lower than %d.",
+                      i, FILENAME_MAX);
+              goto out;
+          }
         }
+        /*
+        ** Use oot path as default path name, which is the initial RozoFS behavior
+        */        
+        else {
+          name = root;
+        }          
 
         md5 = "";
         if (config_setting_lookup_string(mfs_setting, EMD5, &md5) != CONFIG_FALSE) {
@@ -1070,6 +1120,9 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
             goto out;
         }
 
+        // Check for thin provisionning
+        thin = 0;
+        config_setting_lookup_bool(mfs_setting, ETHIN, &thin);
 		
         // Lookup export layout if any
         if (config_setting_lookup_int(mfs_setting, ELAYOUT, &layout) == CONFIG_FALSE) {
@@ -1093,8 +1146,8 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         }
 	
         econfig = xmalloc(sizeof (export_config_t));
-        if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root,
-                md5, squota, hquota, filter_name) != 0) {
+        if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
+                md5, squota, hquota, filter_name, thin) != 0) {
             severe("can't initialize export config.");
         }
         // Initialize export
@@ -1497,6 +1550,11 @@ static int econfig_validate_exports(econfig_t *config) {
                 errno = EINVAL;
                 goto out;
             }
+            if (strcmp(e1->name, e2->name) == 0) {
+                severe("duplicated name: %s", e1->name);
+                errno = EINVAL;
+                goto out;
+            }            
         }
         found = 0;
 

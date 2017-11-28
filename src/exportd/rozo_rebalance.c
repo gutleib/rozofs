@@ -38,7 +38,7 @@
 #include "export_volume_stat.h"
 #include "rozo_balance.h"
 #include "rozofs_mover.h"
-
+#include "rebalance_config.h"
 #define RZ_FILE_128K  (1024*128)
 #define RZ_FILE_1M  (1024*1024)
 
@@ -133,6 +133,8 @@ void *rozofs_export_p = NULL;
 ** The name of the utility to display on help
 */
 char * utility_name=NULL;
+
+time_t rebalance_config_file_mtime = 0;
 
 /*
 *______________________________________________________________________
@@ -1311,14 +1313,16 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 
       if (rozo_balancing_ctx.verbose)
       {
-         printf("%s size:%llu bytes score %d\n",bufout,(long long unsigned int)inode_p->s.attrs.size,score);
+         char   msg[256];
+         char * p=msg;
+         info("%s size:%llu bytes score %d\n",bufout,(long long unsigned int)inode_p->s.attrs.size,score);
 	 int z;
-	 printf("CID :%d SID:",job->cid);
+	 p += sprintf(p,"CID :%d SID:",job->cid);
 	 for (z=0;z<4;z++)
 	 {
-            printf("%d ",job->sid[z]);
+            p += sprintf(p,"%d ",job->sid[z]);
 	 }
-	 printf("\n");
+         info("%s",msg);
       }
       if (rozo_balancing_ctx.file_mode != REBALANCE_MODE_FID)
       {
@@ -1338,22 +1342,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       list_push_back(&jobs,&job->list);    
     }
   }
-  else
-  {
-#if 0
-     if (score >= 0)
-     {
-       printf("file %s score %d/%d\n",bufout,score, rozo_balancing_ctx.max_cid_score);
-       int z;
-       printf("CID :%d SID:",inode_p->s.attrs.cid);
-       for (z=0;z<4;z++)
-       {
-          printf("%d ",inode_p->s.attrs.sids[z]);
-       }
-       printf("\n");          
-     }
-#endif
-  }
+
   if ((scanned_current_count > rozo_balancing_ctx.max_scanned) || (rozo_balancing_ctx.cur_move_size >=rozo_balancing_ctx.max_move_size_config))
   {  
     rozo_lib_stop_scanning();
@@ -1659,6 +1648,107 @@ int rozo_bal_write_result_file()
 /*
 *_______________________________________________________________________
 */
+/**
+*  Read configuration file and set rebalance context accordingly
+*
+*/  
+void rozo_bal_read_configuration_file(void) {
+  int          valid = 1;
+  struct stat  stats;  	
+  int          ret;
+  uint64_t     val64;
+  
+  /*
+  ** No configuration file
+  */  
+  if (rozo_balancing_ctx.rebalanceConfigFile == NULL) return;
+
+  /*
+  ** Read mtime and check if file has been modified
+  */
+  if (stat(rozo_balancing_ctx.rebalanceConfigFile,&stats) < 0) {
+    severe("fstat(%s) %s",rozo_balancing_ctx.rebalanceConfigFile,strerror(errno));
+    return;
+  }
+  if (stats.st_mtime == rebalance_config_file_mtime) return;
+  rebalance_config_file_mtime = stats.st_mtime;
+  
+  /*
+  ** Read configuration file
+  */
+  rebalance_config_read(rozo_balancing_ctx.rebalanceConfigFile);
+  
+  /*
+  ** check the delays
+  */
+  if ((rebalance_config.newer>0) && (rebalance_config.older>0))  {
+    if (rebalance_config.newer < rebalance_config.older) {
+       severe("newer (%lld) delay must be greater than older delay (%lld)!\n",
+              (long long int)rebalance_config.newer,
+              (long long int)rebalance_config.older); 
+       valid = 0;       
+    }      
+  }  
+
+  rozo_balancing_ctx.rebalance_threshold_config  = rebalance_config.free_avg_tolerance;
+  rozo_balancing_ctx.rebalance_threshold         = rozo_balancing_ctx.rebalance_threshold_config;  
+  rozo_balancing_ctx.rebalance_threshold_trigger = rebalance_config.free_low_threshold;
+  rozo_balancing_ctx.rebalance_frequency         = rebalance_config.frequency;
+  rozo_balancing_ctx.max_scanned                 = rebalance_config.movecnt;
+  rozo_balancing_ctx.throughput                  = rebalance_config.throughput;
+  
+  /*
+  ** Take newer and older when valid
+  */
+  if (valid) {
+    rozo_balancing_ctx.older_time_sec_config       = rebalance_config.older;
+    if (rozo_balancing_ctx.older_time_sec_config > 0) {
+      rozo_balancing_ctx.older_time_sec_config *= 60;
+    }
+    else {
+      rozo_balancing_ctx.older_time_sec_config = -1;
+    }
+
+    rozo_balancing_ctx.newer_time_sec_config = rebalance_config.newer;
+    if (rozo_balancing_ctx.newer_time_sec_config > 0) {
+      rozo_balancing_ctx.newer_time_sec_config *= 60;
+    }      
+    else {
+      rozo_balancing_ctx.newer_time_sec_config = -1;
+    }
+  }  
+  
+  
+  ret = get_size_value(rebalance_config.movesz,&val64);
+  if (ret < 0) {
+    severe("Bad value \"%s\" of movesz in configuration file", rebalance_config.movesz); 
+    rozo_balancing_ctx.max_move_size_config = REBALANCE_MAX_MOVE_SIZE;     
+  }
+  else {
+    rozo_balancing_ctx.max_move_size_config = val64;    
+  } 
+  
+  
+  if (strcmp(rebalance_config.mode,"rel")== 0) {
+    rozo_balancing_ctx.file_mode = REBALANCE_MODE_REL;
+  }
+  else if (strcmp(rebalance_config.mode,"abs")== 0) {
+    rozo_balancing_ctx.file_mode = REBALANCE_MODE_ABS;
+  }		
+  else if (strcmp(rebalance_config.mode,"fid")== 0)
+  {
+    rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
+  }	
+  else {
+    severe("unsupported file_mode: %s\n",rebalance_config.mode);
+  }
+      
+  info("cfg file %s reread", rozo_balancing_ctx.rebalanceConfigFile);
+
+}
+/*
+*_______________________________________________________________________
+*/
 static void usage() {
     char bufall[64];
     printf("\nUsage: rozo_rebalance [OPTIONS]\n\n");
@@ -1685,6 +1775,7 @@ static void usage() {
     printf("\t--movesz <value>[k|K|m|M|g|G] \tcumulated file size threshold before triggering file move (default:%s)\n",
           display_size_not_aligned(REBALANCE_MAX_MOVE_SIZE,bufall));
     printf("\t--throughput <value> \t\tfile move througput in MBytes/s (default:%d MB/s)\n",REBALANCE_DEFAULT_THROUGPUT);
+    printf("\t--cfg <fileName> \t\tThe rebalance configuration file name.\n");
     printf("\n");
 };
 
@@ -1775,6 +1866,7 @@ int main(int argc, char *argv[]) {
         {"movesz", required_argument, &long_opt_cur, 7},
         {"throughput", required_argument, &long_opt_cur, 8},
         {"mode", required_argument, &long_opt_cur, 9},
+        {"cfg", required_argument, &long_opt_cur, 10},
 
         {0, 0, 0, 0}
     };
@@ -1795,7 +1887,7 @@ int main(int argc, char *argv[]) {
 	   {
 	      case 0:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.older_time_sec_config)!= 1) {
-			  printf("Bad --olderm value: %s\n",optarg);	  
+                  severe("Bad --olderm value: %s\n",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1803,7 +1895,7 @@ int main(int argc, char *argv[]) {
 		break;
 	      case 1:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.older_time_sec_config)!= 1) {
-			  printf("Bad --older value: %s\n",optarg);	  
+		  severe("Bad --older value: %s\n",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1811,7 +1903,7 @@ int main(int argc, char *argv[]) {
 		break;
 	      case 2:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.newer_time_sec_config)!= 1) {
-			  printf("Bad --newerm value: %s\n",optarg);	  
+		  severe("Bad --newerm value: %s\n",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1819,7 +1911,7 @@ int main(int argc, char *argv[]) {
 		break;	      
 	      case 3:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.newer_time_sec_config)!= 1) {
-			  printf("Bad --newerm value: %s\n",optarg);	  
+		  severe("Bad --newerm value: %s\n",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1833,7 +1925,7 @@ int main(int argc, char *argv[]) {
 		break;   
 	      case 6:
         	if (sscanf(optarg,"%d",(int *)&rozo_balancing_ctx.max_scanned)!= 1) {
-			  printf("--throughput: Bad value: %s\n",optarg);	  
+		  severe("--throughput: Bad value: %s\n",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	} 
@@ -1841,6 +1933,7 @@ int main(int argc, char *argv[]) {
 	      case 7:
 		ret = get_size_value(optarg,&val64);
 		if (ret < 0) {
+ 		   severe("--movesz: Bad value: %s\n",optarg);	  
         	   usage();
         	   exit(EXIT_FAILURE);     
 		}
@@ -1849,7 +1942,7 @@ int main(int argc, char *argv[]) {
 		break;
 	      case 8:
         	if (sscanf(optarg,"%d",&rozo_balancing_ctx.throughput)!= 1) {
-			  printf("Bad --throughput value: %s\n",optarg);	  
+		  severe("Bad --throughput value: %s\n",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1875,11 +1968,20 @@ int main(int argc, char *argv[]) {
 		  rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
 		  break;
 		}	
-	        printf("unsupported file_mode: %s\n",optarg);	  
+	        severe("unsupported file_mode: %s\n",optarg);	  
         	usage();
         	exit(EXIT_FAILURE);	
 		break;
-#endif                
+#endif  
+
+	      case 10:
+                rozo_balancing_ctx.rebalanceConfigFile = optarg;
+                /*
+                ** Permanent balancer
+                */
+	        rozo_balancing_ctx.continue_on_balanced_state = 1;
+		break;                
+                
 	      default:
 	      break;	   
 	   }
@@ -1894,27 +1996,27 @@ int main(int argc, char *argv[]) {
               break;
           case 'f':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.rebalance_frequency)!= 1) {
-		      printf("Bad -f value %s\n",optarg);	  
+              severe("Bad -f value %s\n",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }  
 	    break;
           case 'v':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.volume_id)!= 1) {
-		      printf("Bad -v value %s\n",optarg);	  
+              severe("Bad -v value %s\n",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }              
 	    break;
           case 't':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.rebalance_threshold_config)!= 1) {
-		      printf("Bad -t value %s\n",optarg);	  
+              severe("Bad -t value %s\n",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }
 	    if ( rozo_balancing_ctx.rebalance_threshold_config > 100) 
 	    {
-	      printf("Out of range value %d (0..100)\n",rozo_balancing_ctx.rebalance_threshold_config);
+              severe("Out of range value %d (0..100)\n",rozo_balancing_ctx.rebalance_threshold_config);
               usage();
               exit(EXIT_FAILURE);	
 	    } 
@@ -1922,13 +2024,13 @@ int main(int argc, char *argv[]) {
 	    break;
           case 'a':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.rebalance_threshold_trigger)!= 1) {
-		      printf("Bad -t value %s\n",optarg);	  
+              severe("Bad -t value %s\n",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }              
 	    if ( rozo_balancing_ctx.rebalance_threshold_trigger > 100) 
 	    {
-	      printf("Out of range value %d (0..100)\n",rozo_balancing_ctx.rebalance_threshold_trigger);
+              severe("Out of range value %d (0..100)\n",rozo_balancing_ctx.rebalance_threshold_trigger);
               usage();
               exit(EXIT_FAILURE);	
 	    }       
@@ -1949,13 +2051,22 @@ int main(int argc, char *argv[]) {
 
   if (rozo_balancing_ctx.volume_id == -1)
   {
-     printf("Volume identifier is missing\n");
+       severe("Volume identifier is missing\n");
        usage();
        exit(EXIT_FAILURE);  
   }     
+  
+  /*
+  ** Case of the permanent mode with a configuration file.
+  ** Read the given configuration file
+  ** 
+  */ 
+  rozo_bal_read_configuration_file();
+  
+  
   if (rozo_balancing_ctx.rebalance_threshold == -1)
   {
-     printf("rebalance threshold is missing\n");
+       severe("rebalance threshold is missing\n");
        usage();
        exit(EXIT_FAILURE);  
   } 
@@ -1966,8 +2077,8 @@ int main(int argc, char *argv[]) {
   {
      if (rozo_balancing_ctx.newer_time_sec_config < rozo_balancing_ctx.older_time_sec_config)
      {
-        printf("newer (%lld) delay must be greater than older delay (%lld)!\n",(long long int)rozo_balancing_ctx.newer_time_sec_config,
-	                                                                       (long long int)rozo_balancing_ctx.older_time_sec_config); 
+        severe("newer (%lld) delay must be greater than older delay (%lld)!\n",(long long int)rozo_balancing_ctx.newer_time_sec_config,
+                                                                               (long long int)rozo_balancing_ctx.older_time_sec_config); 
         usage();
         exit(EXIT_FAILURE);
      }    
@@ -2043,6 +2154,13 @@ int main(int argc, char *argv[]) {
   */
    for(;;)
    {
+      /*
+      ** Case of the permanent mode with a configuration file.
+      ** Read the given configuration file if modified
+      ** 
+      */    
+      rozo_bal_read_configuration_file();
+   
       rebalance_trigger_score = 0;
       /*
       ** wait for some delay before looking at the volume statistics
@@ -2086,6 +2204,13 @@ int main(int argc, char *argv[]) {
       ** lock the data structure until the result becomes available
       */
 reloop:
+      /*
+      ** Case of the permanent mode with a configuration file.
+      ** Read the given configuration file if modified
+      ** 
+      */  
+      rozo_bal_read_configuration_file();
+
       pthread_rwlock_wrlock(&cluster_balance_compute_lock);
       /*
       ** compute the total size
@@ -2126,11 +2251,11 @@ reloop:
       */
       if (result == 0)
       {
-         if (rozo_balancing_ctx.verbose)printf("Nothing to re-balance min/max:%d/%d\n",rozo_balancing_ctx.max_cid_score,rozo_balancing_ctx.min_cid_score);
+         if (rozo_balancing_ctx.verbose) info("Nothing to re-balance min/max:%d/%d\n",rozo_balancing_ctx.max_cid_score,rozo_balancing_ctx.min_cid_score);
 	 if (rozo_balancing_ctx.continue_on_balanced_state) continue;
 	 goto end;
       }
-      if (rozo_balancing_ctx.verbose) printf(" current threshold : %d\n",rozo_balancing_ctx.rebalance_threshold);
+      if (rozo_balancing_ctx.verbose) info(" current threshold : %d\n",rozo_balancing_ctx.rebalance_threshold);
       list_init(&pList_volume_cluster);
       for (cluster_idx = 0; cluster_idx < export_rebalance_vol_stat_p->nb_cluster;cluster_idx++)
       {
@@ -2180,7 +2305,7 @@ reloop:
       */
       if (scanned_current_count !=0)
       {
-        if (rozo_balancing_ctx.verbose) printf("%d file to move\n",scanned_current_count);
+        if (rozo_balancing_ctx.verbose) info("%d file to move\n",scanned_current_count);
         all_export_scanned_count +=scanned_current_count;
 
         if (rozo_balancing_ctx.file_mode == REBALANCE_MODE_FID)
@@ -2198,6 +2323,7 @@ reloop:
 				&jobs); 	
 	}    
       }
+      
       if (rozo_lib_is_scanning_stopped()== 0)
       {
         int k;
@@ -2214,7 +2340,7 @@ reloop:
 	  if (all_export_scanned_count == 0)
 	  {
 	    score_shrink = 1;
-	    if (rozo_balancing_ctx.verbose) printf("Empty Scanning!\n");
+	    if (rozo_balancing_ctx.verbose) info("Empty Scanning!\n");
 	  }
 	  else
 	  {
@@ -2257,7 +2383,7 @@ reloop:
 	*/
 	rozo_lib_reset_index_context(&scan_context);	
 	if (rozo_balancing_ctx.verbose) {
-          printf("scan export %d from the beginning\n",volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+          info("scan export %d from the beginning\n",volume_export_table[rozo_balancing_ctx.current_eid_idx]);
         }
       }
       else
@@ -2265,7 +2391,7 @@ reloop:
         rozo_lib_save_index_context(&scan_context);
 	if (rozo_balancing_ctx.verbose) 
 	{
-	   printf("user_id %d file_id %llu inode_idx %d\n",scan_context.user_id,( long long unsigned int)scan_context.file_id,scan_context.inode_idx);
+	   info("user_id %d file_id %llu inode_idx %d\n",scan_context.user_id,( long long unsigned int)scan_context.file_id,scan_context.inode_idx);
         }
       }
       /*

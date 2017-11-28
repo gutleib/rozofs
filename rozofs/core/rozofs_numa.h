@@ -18,13 +18,13 @@
  #ifndef ROZOFS_NUMA_H
  #define ROZOFS_NUMA_H
 #include <numa.h>
-
 /**
 *  case of NUMA: allocate the running node according to the
 *  instance
 
    @param instance: instance number of the process
+   @param criteria: the criteria that leaded to the instance choice
 */
-void rozofs_numa_allocate_node(int instance);
+void rozofs_numa_allocate_node(int instance, char * criteria);
 
 #endif

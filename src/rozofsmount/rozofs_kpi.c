@@ -292,6 +292,11 @@ void rzkpi_lv2_cache_put(rzkpi_lv2_cache_t *cache, fid_t fid,int bytes_count,int
     memset(entry,0,sizeof(rozofs_file_kpi_t));
     list_init(&entry->list);
     memcpy(&entry->fid,fid,sizeof(fid_t));
+    /*
+    ** init of the hash_entry
+    */
+    entry->he.key = entry->fid;
+    entry->he.value = entry;
     switch (operation)
     {
       case RZKPI_READ:
@@ -325,7 +330,7 @@ void rzkpi_lv2_cache_put(rzkpi_lv2_cache_t *cache, fid_t fid,int bytes_count,int
       rozofs_file_kpi_t *lru;
 		
 	  lru = list_entry(cache->lru.prev, rozofs_file_kpi_t, list);             
-	  htable_del(&cache->htable, lru->fid);
+	  htable_del_entry(&cache->htable, &lru->he);
 	  rzkpi_lv2_cache_unlink(cache,lru);
 	  cache->lru_del++;
 
@@ -336,7 +341,7 @@ void rzkpi_lv2_cache_put(rzkpi_lv2_cache_t *cache, fid_t fid,int bytes_count,int
     ** Insert the new entry
     */
     rzkpi_lv2_cache_update_lru(cache,entry);
-    htable_put(&cache->htable, fid, entry);
+    htable_put_entry(&cache->htable,&entry->he);
     cache->size++;    
 }
 

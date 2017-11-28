@@ -80,6 +80,8 @@ add_executable(rozofsmount
    xattr.h
    xattr_main.h
    rozofs_opendir.c
+   rozofs_cachetrack.c
+   rozofs_cachetrack.h
 )
 #pthread need by fuse
 target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
@@ -100,3 +102,4 @@ install(PROGRAMS rozo_mount_repquota DESTINATION bin)
 install(PROGRAMS rozo_distribution_check DESTINATION bin)
 install(PROGRAMS rozo_mount_cleanup DESTINATION bin)
 install(PROGRAMS rozofsmount_wrapper DESTINATION bin)
+install(PROGRAMS rozo_trash DESTINATION bin)

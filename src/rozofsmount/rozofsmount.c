@@ -46,8 +46,8 @@
 #include "rozofs_xattr_flt.h"
 
 #define hash_xor8(n)    (((n) ^ ((n)>>8) ^ ((n)>>16) ^ ((n)>>24)) & 0xff)
-#define INODE_HSIZE (8192*8)
-#define PATH_HSIZE  (8192*8)
+#define INODE_HSIZE (8192*32)
+//#define PATH_HSIZE  (8192*8)
 
 // Filesystem source (first field in /etc/mtab)
 #define FSNAME "rozofs"
@@ -70,7 +70,7 @@
 
 
 int rozofs_rotation_read_modulo = 0;
-static char *mountpoint = NULL;
+char *rozofs_mountpoint = NULL;
 int rozofs_max_storcli_tx =0;  /**< depends on the number of storcli processes */
     
 DEFINE_PROFILING(mpp_profiler_t) ;
@@ -175,7 +175,7 @@ extern void rozofsmount_profile_program_1(struct svc_req *rqstp, SVCXPRT *ctl_sv
 static void usage() {
     fprintf(stderr, "ROZOFS options:\n");
     fprintf(stderr, "    -H EXPORT_HOST\t\tlist of \'/\' separated addresses (or dns names) where exportd daemon is running (default: rozofsexport) equivalent to '-o exporthost=EXPORT_HOST'\n");
-    fprintf(stderr, "    -E EXPORT_PATH\t\tdefine path of an export see exportd (default: /srv/rozofs/exports/export) equivalent to '-o exportpath=EXPORT_PATH'\n");
+    fprintf(stderr, "    -E EXPORT_NAME\t\tdefine name (or root path) of an export see exportd. Equivalent to '-o exportpath=EXPORT_NAME'\n");
     fprintf(stderr, "    -P EXPORT_PASSWD\t\tdefine passwd used for an export see exportd (default: none) equivalent to '-o exportpasswd=EXPORT_PASSWD'\n");
     fprintf(stderr, "    -o rozofsbufsize=N\t\tdefine size of I/O buffer in KiB (default: 256)\n");
     fprintf(stderr, "    -o rozofsminreadsize=N\tdefine minimum read size on disk in KiB (default: %u)\n", ROZOFS_BSIZE_BYTES(ROZOFS_BSIZE_MIN)/1024);
@@ -201,6 +201,9 @@ static void usage() {
                             rozofs_tmr_get(TMR_FUSE_ENTRY_DIR_CACHE_MS));
     fprintf(stderr, "    -o rozofssymlinktimeout=N\tdefine timeout (ms) for which symlink targets will be cached (default: %dms)\n",
                             rozofs_tmr_get(TMR_LINK_CACHE));
+    fprintf(stderr, "    -o rozofsenoenttimeout=N\tdefine timeout (ms) for which non existent names will be cached (default: %dms)\n",
+                            rozofs_tmr_get(TMR_FUSE_ENOENT_CACHE_MS));
+
     fprintf(stderr, "    -o debug_port=N\t\tdefine the base debug port for rozofsmount (default: none)\n");
     fprintf(stderr, "    -o instance=N\t\tdefine instance number (default: 0)\n");
     fprintf(stderr, "    -o rozofscachemode=N\tdefine the cache mode: 0: no cache, 1: direct_io, 2: keep_cache (default: 0)\n");
@@ -224,7 +227,7 @@ static void usage() {
     fprintf(stderr, "    -o asyncsetattr\t\t\toperates asynchronous mode for setattr operations)\n");
     fprintf(stderr, "    -o rozofssparestoragems=N\tdefine timeout for switching to a spare storaged for read/write requests (default: %d ms)\n",
                             rozofs_tmr_get(TMR_PRJ_READ_SPARE));
-
+    fprintf(stderr, "    -o numanode=<#node>\tpin rozofsmount as well as its STORCLI on numa node <node#>\n");
 
 }
 
@@ -261,7 +264,9 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("rozofsentrytimeout=%u", entry_timeout, 0),
     MYFS_OPT("rozofsentrytimeoutms=%u", entry_timeout_ms, 0),
     MYFS_OPT("rozofsentrydirtimeoutms=%u", entry_dir_timeout_ms, 0),
-    MYFS_OPT("rozofssymlinktimeout=%u", symlink_timeout, 0),
+    MYFS_OPT("rozofsenoenttimeout=%u", enoent_timeout_ms, 0),
+    
+    MYFS_OPT("numanode=%u", numanode, 0),   
     MYFS_OPT("debug_port=%u", dbg_port, 0),
     MYFS_OPT("instance=%u", instance, 0),
     MYFS_OPT("rozofscachemode=%u", cache_mode, 0),
@@ -420,6 +425,9 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(entry_timeout);
   DISPLAY_UINT32_CONFIG(entry_timeout_ms);
   DISPLAY_UINT32_CONFIG(symlink_timeout);
+  DISPLAY_UINT32_CONFIG(enoent_timeout_ms);
+  DISPLAY_UINT32_CONFIG(numanode);
+
   DISPLAY_UINT32_CONFIG(shaper);  
   DISPLAY_UINT32_CONFIG(rotate);  
   DISPLAY_UINT32_CONFIG(no_file_lock);  
@@ -443,6 +451,43 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
 */  
 void show_layout(char * argv[], uint32_t tcpRef, void *bufRef) {
   rozofs_display_size( uma_dbg_get_buffer(), exportclt.layout, exportclt.bsize);
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+} 
+/*__________________________________________________________________________
+*/  
+void man_prj_size(char * pt) {
+  pt += sprintf(pt,"This command shows the layout infomation as well as the effective\n");
+  pt += sprintf(pt,"projection sizes on disk. Without argument the current layout as well\n");
+  pt += sprintf(pt,"as block size is used. An other layout and/or block size can be given\n");
+  pt += sprintf(pt,"  prjsize [l <layout>] [b <bsize>]\n");
+  pt += sprintf(pt,"bsize is 0 for a 4096 block size or 1 for a 8192 block size.\n");
+  
+}
+void show_prj_size(char * argv[], uint32_t tcpRef, void *bufRef) {
+  int idx;
+  int bsize;
+  int layout;
+  
+  layout = exportclt.layout;
+  bsize  = exportclt.bsize;
+
+
+  idx = 1;
+  while ((argv[idx] != NULL)&&(argv[idx+1] != NULL)) {
+       
+    if (strcmp(argv[idx],"b")==0) {
+      sscanf(argv[idx+1],"%d",&bsize);
+      idx += 2;
+      continue;
+    }
+    if (strcmp(argv[idx],"l")==0) {
+      sscanf(argv[idx+1],"%d",&layout);
+      idx += 2;
+      continue;
+    }    
+  }  
+  
+  rozofs_display_prjsize( uma_dbg_get_buffer(), layout, bsize);
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
 } 
 /*__________________________________________________________________________
@@ -924,11 +969,12 @@ void show_mount(char * argv[], uint32_t tcpRef, void *bufRef) {
     char *pChar = uma_dbg_get_buffer();
     
     pChar += sprintf(pChar, "instance   : %d\n",conf.instance);
-    pChar += sprintf(pChar, "mount      : %s\n",mountpoint);
+    pChar += sprintf(pChar, "mount      : %s\n",rozofs_mountpoint);
     pChar += sprintf(pChar, "export     : %s\n",conf.export);
     pChar += sprintf(pChar, "host       : %s\n",conf.host);
     pChar += sprintf(pChar, "eid        : %d\n",exportclt.eid);
     pChar += sprintf(pChar, "multi site : %s\n",rozofs_get_msite()?"Yes":"No");
+    pChar += sprintf(pChar, "thin prov. : %s\n",rozofs_get_thin_provisioning()?"Yes":"No");
     pChar += sprintf(pChar, "local site : %d\n",rozofs_site_number);	
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
@@ -1500,8 +1546,12 @@ void rozofs_start_one_storcli(int instance) {
     cmd_p += sprintf(cmd_p, "-H %s ", conf.host);
     cmd_p += sprintf(cmd_p, "-o %s ", "rozofsmount");
     cmd_p += sprintf(cmd_p, "-E %s ", conf.export);
-    cmd_p += sprintf(cmd_p, "-M %s ", mountpoint);
+    cmd_p += sprintf(cmd_p, "-M %s ", rozofs_mountpoint);
     cmd_p += sprintf(cmd_p, "-g %d ", rozofs_site_number);
+    
+    if (conf.numanode != -1) {
+      cmd_p += sprintf(cmd_p, "-n %d ", conf.numanode);      
+    }
     
     /* Try to get debug port from /etc/services */
     debug_port_value = conf.dbg_port + instance;
@@ -1550,9 +1600,9 @@ void rozofs_start_one_storcli(int instance) {
     sprintf(pid_file,"/var/run/launcher_rozofsmount_%d_storcli_%d.pid", conf.instance, instance);
     rozo_launcher_start(pid_file,cmd);
     
-    info("start storcli (instance: %d, export host: %s, export path: %s, mountpoint: %s,"
+    info("start storcli (instance: %d, export host: %s, export name: %s, mountpoint: %s,"
             " profile port: %d, rozofs instance: %d, storage timeout: %d).",
-            instance, conf.host, conf.export, mountpoint,
+            instance, conf.host, conf.export, rozofs_mountpoint,
             debug_port_value, conf.instance,
             ROZOFS_TMR_GET(TMR_STORAGE_PROGRAM));
 
@@ -1642,7 +1692,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     }
 
     // Check the mountpoint after success connection with the export
-    if (rozofs_mountpoint_check(mountpoint) != 0) {
+    if (rozofs_mountpoint_check(rozofs_mountpoint) != 0) {
         return 1;
     }
     if (retry_count == 0) {
@@ -1651,7 +1701,7 @@ int fuseloop(struct fuse_args *args, int fg) {
                 "rozofsmount failed for:\n" "export directory: %s\n"
                 "export hostname: %s\n" "local mountpoint: %s\n" "error: %s\n"
                 "See log for more information\n", conf.export, conf.host,
-                mountpoint, strerror(errno));
+                rozofs_mountpoint, strerror(errno));
         return 1;
     }
     
@@ -1700,7 +1750,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     put_ientry(root);
 
     info("mounting - export: %s from : %s on: %s", conf.export, conf.host,
-            mountpoint);
+            rozofs_mountpoint);
 
     if (fg == 0) {
         if (pipe(piped) < 0) {
@@ -1724,7 +1774,7 @@ int fuseloop(struct fuse_args *args, int fg) {
         close(piped[0]);
         s = 1;
     }
-    if ((ch = fuse_mount(mountpoint, args)) == NULL) {
+    if ((ch = fuse_mount(rozofs_mountpoint, args)) == NULL) {
         fprintf(stderr, "error in fuse_mount\n");
         if (piped[1] >= 0) {
             if (write(piped[1], &s, 1) != 1) {
@@ -1747,7 +1797,7 @@ int fuseloop(struct fuse_args *args, int fg) {
             sizeof (rozofs_ll_operations), (void *) piped);
 
     if (se == NULL) {
-        fuse_unmount(mountpoint, ch);
+        fuse_unmount(rozofs_mountpoint, ch);
         fprintf(stderr, "error in fuse_lowlevel_new\n");
         usleep(100000); // time for print other error messages by FUSE
         if (piped[1] >= 0) {
@@ -1765,7 +1815,7 @@ int fuseloop(struct fuse_args *args, int fg) {
         fprintf(stderr, "error in fuse_set_signal_handlers\n");
         fuse_session_remove_chan(ch);
         fuse_session_destroy(se);
-        fuse_unmount(mountpoint, ch);
+        fuse_unmount(rozofs_mountpoint, ch);
         if (piped[1] >= 0) {
             if (write(piped[1], &s, 1) != 1) {
                 fprintf(stderr, "pipe write error\n");
@@ -1820,6 +1870,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     uma_dbg_addTopic("ientry", show_ientry);
     rozofs_layout_initialize();    
     uma_dbg_addTopic("layout", show_layout);
+    uma_dbg_addTopicAndMan("prjsize", show_prj_size, man_prj_size, 0);
     uma_dbg_addTopicAndMan("trc_fuse", show_trc_fuse,man_trc_fuse,UMA_DBG_OPTION_RESET);
     uma_dbg_addTopic("xattr_flt", show_xattr_flt);
     uma_dbg_addTopic("xattr", rozofs_disable_xattr);
@@ -1921,7 +1972,7 @@ int fuseloop(struct fuse_args *args, int fg) {
 
 
     /* try to create a flag file with port number */
-    sprintf(ppfile, "%s%s_%d%s", DAEMON_PID_DIRECTORY, "rozofsmount",conf.instance, mountpoint);
+    sprintf(ppfile, "%s%s_%d%s", DAEMON_PID_DIRECTORY, "rozofsmount",conf.instance, rozofs_mountpoint);
     c = ppfile + strlen(DAEMON_PID_DIRECTORY);
     while (*c++) {
         if (*c == '/') *c = '.';
@@ -1978,7 +2029,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     fuse_remove_signal_handlers(se);
     fuse_session_remove_chan(ch);
     fuse_session_destroy(se);
-    fuse_unmount(mountpoint, ch);
+    fuse_unmount(rozofs_mountpoint, ch);
     exportclt_release(&exportclt);
     ientries_release();
     rozofs_layout_release();
@@ -2126,6 +2177,8 @@ int main(int argc, char *argv[]) {
     conf.max_write_pending = ROZOFS_BSIZE_BYTES(ROZOFS_BSIZE_MIN)/1024; /*  */ 
     conf.attr_timeout = -1;
     conf.entry_dir_timeout_ms= -1;
+    conf.enoent_timeout_ms = -1;
+    conf.numanode = -1;
     conf.attr_dir_timeout_ms= -1;
     conf.attr_timeout_ms = -1;
     conf.entry_timeout = -1;
@@ -2161,7 +2214,12 @@ int main(int argc, char *argv[]) {
     /*
     **  set the numa node for rozofsmount and its storcli
     */
-    rozofs_numa_allocate_node(conf.instance);
+    if (conf.numanode==-1) {
+      rozofs_numa_allocate_node(conf.instance,"instance");
+    }
+    else {
+      rozofs_numa_allocate_node(conf.numanode,"parameter numanode");
+    }  
     /*
     ** init of the site number for that rozofs client
     */
@@ -2195,7 +2253,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (conf.export == NULL) {
-        conf.export = strdup("/srv/rozofs/exports/export");
+        fprintf(stderr, "Missing -E option. Export name (or root path) is mandatory.\n");
+        return 1;                
     }
 
     if (conf.passwd == NULL) {
@@ -2369,6 +2428,15 @@ int main(int argc, char *argv[]) {
       rozofs_tmr_configure(TMR_FUSE_ENTRY_DIR_CACHE_MS,conf.entry_dir_timeout_ms);        
     }
     
+    if (conf.enoent_timeout_ms ==-1)
+    {
+      rozofs_tmr_configure(TMR_FUSE_ENOENT_CACHE_MS,rozofs_tmr_get_enoent());    
+    }
+    else
+    {
+      rozofs_tmr_configure(TMR_FUSE_ENOENT_CACHE_MS,conf.enoent_timeout_ms);        
+    }
+    
     if (conf.attr_dir_timeout_ms ==-1)
     {
       rozofs_tmr_configure(TMR_FUSE_ATTR_DIR_CACHE_MS,rozofs_tmr_get_attr_ms());    
@@ -2392,18 +2460,18 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (fuse_parse_cmdline(&args, &mountpoint, NULL, &fg) == -1) {
+    if (fuse_parse_cmdline(&args, &rozofs_mountpoint, NULL, &fg) == -1) {
         fprintf(stderr, "see: %s -h for help\n", argv[0]);
         return 1;
     }
 
-    if (!mountpoint) {
+    if (!rozofs_mountpoint) {
         fprintf(stderr, "no mount point\nsee: %s -h for help\n", argv[0]);
         return 1;
     }
 
     // Check the mountpoint
-    if (rozofs_mountpoint_check(mountpoint) != 0) {
+    if (rozofs_mountpoint_check(rozofs_mountpoint) != 0) {
         return 1;
     }
     
@@ -2425,7 +2493,7 @@ int main(int argc, char *argv[]) {
       ** Give it a ROZOFS_MOUNT_CHECK_TIMEOUT_MICROSEC delay to stop
       */
       if (delay>=ROZOFS_MOUNT_CHECK_TIMEOUT_MICROSEC) {
-        fprintf(stderr, "Can not mount %s\n", mountpoint);
+        fprintf(stderr, "Can not mount %s\n", rozofs_mountpoint);
         fprintf(stderr, "A RozoFS mount point is already mounted with the same instance number (%d)\n", conf.instance);
         return 1;  	
       }

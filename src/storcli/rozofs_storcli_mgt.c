@@ -548,7 +548,9 @@ void  rozofs_storcli_ctxInit(rozofs_storcli_ctx_t *p,uint8_t creation)
    ** timer cell
    */
   ruc_listEltInitAssoc((ruc_obj_desc_t *)&p->timer_list,p);
- 
+  
+  p->traceSize = 0;
+  memset(p->traceBuffer,0,sizeof(p->traceBuffer));
 }
 
 /*

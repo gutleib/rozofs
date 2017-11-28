@@ -957,6 +957,7 @@ int put_mdirentry(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent_in, char *
     */
     memcpy(fid_parent,fid_parent_in,sizeof(fid_t));
     exp_metadata_inode_del_deassert(fid_parent);
+    rozofs_inode_set_dir(fid_parent);
     
     if (fid_name_info_p != NULL)
     {
@@ -1312,6 +1313,7 @@ int get_mdirentry(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent_in, char *
   */
   memcpy(fid_parent,fid_parent_in,sizeof(fid_t));
   exp_metadata_inode_del_deassert(fid_parent);
+  rozofs_inode_set_dir(fid_parent);
   /*
   ** file is unknown by default
   */
@@ -1580,6 +1582,7 @@ int del_mdirentry(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent_in, char *
   */
   memcpy(fid_parent,fid_parent_in,sizeof(fid_t));
   exp_metadata_inode_del_deassert(fid_parent);
+  rozofs_inode_set_dir(fid_parent);
 
   if (mask != 0)
   {
@@ -2035,6 +2038,7 @@ int list_mdirentries(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, ch
     memcpy(fid_parent,fid_parent_in,sizeof(fid_t));
     deleted_dir = exp_metadata_inode_is_del_pending(fid_parent);
     exp_metadata_inode_del_deassert(fid_parent);
+    rozofs_inode_set_dir(fid_parent);
    /*
    ** set the pointer to the root idx bitmap
    */
@@ -2498,22 +2502,43 @@ int list_mdirentries2(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, c
     int next_hash_entry_idx;
     int root_idx_bit;
     int deleted_dir;
+    int show_trash_dir = 0;
     int deleted_obj;
     fid_t fid_parent;
     rozofs_inode_t *inode_p ;
     fid_t      null_fid = {0};
+    int mangle_name = 0;
         
     START_PROFILING(list_mdirentries);
     /*
     ** check if the delete pending flag is asserted on the parent directory
     */
     memcpy(fid_parent,fid_parent_in,sizeof(fid_t));
-    deleted_dir = exp_metadata_inode_is_del_pending(fid_parent);
+    deleted_dir = 0;
+    if (exp_metadata_inode_is_del_pending(fid_parent) ||  exp_metadata_inode_is_del_pending(parent->s.attrs.fid))
+    {
+       deleted_dir = 1;
+    }
+    /*
+    ** check if there is a trash associated with the directory
+    */
+    if (deleted_dir == 0)
+    {
+      if (rozofs_has_root_trash(&parent->s.attrs.sids[0])== 0) show_trash_dir=0;
+      else 
+      {
+	show_trash_dir =1;
+      }
+    } 
+    /*
+    ** clear the delete pending bit & force the key to ROZOFS_DIR
+    */
     exp_metadata_inode_del_deassert(fid_parent);
-   /*
-   ** set the pointer to the root idx bitmap
-   */
-   dirent_set_root_idx_bitmap_ptr(root_idx_bitmap_p);
+    rozofs_inode_set_dir(fid_parent);
+    /*
+    ** set the pointer to the root idx bitmap
+    */
+    dirent_set_root_idx_bitmap_ptr(root_idx_bitmap_p);
 
     dirent_readdir_stats_call_count++;
     /*
@@ -2547,6 +2572,19 @@ int list_mdirentries2(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, c
 	 dirent_cookie.s.filler = 2;
 	 buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],"..",2,dirent_cookie.val64);	    
       }
+#if 1
+      if ((dirent_cookie.s.filler == 2) && (show_trash_dir==1))
+      {    
+	 dirent_cookie.s.filler = 3;
+	 inode_p = (rozofs_inode_t*)fid_parent_in;
+         exp_metadata_inode_del_assert(fid_parent_in);
+	 rozofs_inode_set_trash(fid_parent_in);
+	 buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],ROZOFS_DIR_TRASH,sizeof(ROZOFS_DIR_TRASH),dirent_cookie.val64);	
+	 rozofs_inode_set_dir(fid_parent_in);    
+         exp_metadata_inode_del_deassert(fid_parent_in);
+
+      }
+#endif
     }
     dirent_cookie.s.filler = 0;
     /*
@@ -2873,7 +2911,42 @@ get_next_collidx:
 	    ** flag of the object and of the parent
 	    */
 	    deleted_obj = exp_metadata_inode_is_del_pending(name_entry_p->fid);
+	    /*
+	    ** get the inode value for that entry
+	    */
+	    inode_p = (rozofs_inode_t*) name_entry_p->fid;
 #if 1
+            /**
+	    * check if the parent is a deleted dir
+	    */
+	    if (deleted_dir)
+	    {
+	       /*
+	       ** if the object is a not a a deleted we need to check if it is a directory
+	       */
+	       if (deleted_obj == 0)
+	       {
+	          if (inode_p->s.key != ROZOFS_DIR)
+		  {
+		     hash_entry_idx++;
+		     continue;
+		  }
+		  mangle_name = 1;
+	       }		  	    
+	    }
+	    else
+	    {
+	      /*
+	      ** This is an active directory
+	      */
+	      if (deleted_obj)
+	      {
+		 hash_entry_idx++;
+		 continue;	      
+	      }	    
+	    }
+#endif
+#if 0
 	    if (deleted_dir != deleted_obj) 
 	    {
                 hash_entry_idx++;
@@ -2892,11 +2965,20 @@ get_next_collidx:
 		dirent_cookie.s.index_level = index_level;
 		dirent_cookie.s.coll_idx = coll_idx;
 		dirent_cookie.s.valid_entry = 1;
-		/*
-		** get the inode value for that entry
-		*/
-		inode_p = (rozofs_inode_t*) name_entry_p->fid;
-		buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],name_entry_p->name,name_entry_p->len,dirent_cookie.val64);
+		if (mangle_name)
+		{
+		  char bufname[1024];
+		  int len = strlen(ROZOFS_DIR_TRASH);
+		  memcpy(bufname,ROZOFS_DIR_TRASH,len);
+		  memcpy(&bufname[len],name_entry_p->name,name_entry_p->len);
+                  buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],bufname,name_entry_p->len+len,dirent_cookie.val64);
+		  mangle_name = 0;
+		
+		}
+		else
+		{		
+		  buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],name_entry_p->name,name_entry_p->len,dirent_cookie.val64);
+		}
 	    }
             /*
              ** increment the number of file and try to get the next one

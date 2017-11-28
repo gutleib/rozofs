@@ -37,6 +37,10 @@ install(FILES rozo_setquota.8 DESTINATION share/man/man8 COMPONENT export)
 install(FILES rozo_quotaon.8 DESTINATION share/man/man8 COMPONENT export)
 install(FILES rozo_repquota.8 DESTINATION share/man/man8 COMPONENT export)
 install(FILES rozo_rebalance.8 DESTINATION share/man/man8 COMPONENT export)
+install(FILES rozo_rcmd_server.8 DESTINATION share/man/man8 COMPONENT export)
+install(FILES rozo_trash.8 DESTINATION share/man/man8 COMPONENT client)
+install(FILES rozo_trashd.8 DESTINATION share/man/man8 COMPONENT client)
+install(FILES rozo_trashd.conf.5 DESTINATION share/man/man5 COMPONENT client)
 install(FILES rozodump.8 DESTINATION share/man/man8 COMPONENT storage)
 
 

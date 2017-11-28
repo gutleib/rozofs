@@ -38,7 +38,9 @@
 #define ROZOFS_RUNDIR_RBS            ROZOFS_RUNDIR"rbs/"
 #define ROZOFS_RUNDIR_RBS_SPARE      ROZOFS_RUNDIR_RBS"spare/"
 #define ROZOFS_RUNDIR_RBS_REBUILD    ROZOFS_RUNDIR_RBS"rebuild/"
-
+#define ROZOFS_RUNDIR_CORE           ROZOFS_RUNDIR"core/"
+#define ROZOFS_RUNDIR_PID            ROZOFS_RUNDIR"pid/"
+#define ROZOFS_DIR_TRASH                 "@rozofs-trash@"
 
 #define ROZOFS_KPI_ROOT_PATH "/var/run/rozofs_kpi"
 //#include <rozofs/common/log.h>
@@ -89,7 +91,13 @@ static inline char * rozofs_file_distribution_rule2sting(rozofs_file_distributio
 
 
 
-
+/*
+**
+** Bitmap of export options returned on the mount inside the msite field
+**
+*/
+#define ROZOFS_EXPORT_MSITE_BIT              (1<<0)
+#define ROZOFS_EXPORT_THIN_PROVISIONNING_BIT (1<<1)
 
 
 
@@ -272,6 +280,12 @@ typedef enum _ROZOFS_BSIZE_E {
 #define EXPORT_SLICE_PROCESS_NB 8 /**< number of processes for the slices */
 
 
+/*
+** Exports default path
+*/
+#define EXPORTS_ROOT  "/srv/rozofs/exports"
+
+
 /* Value max for an Exportd Gateway */
 #define GWID_MAX 32
 /* Value min for a Exportd Gateway */
@@ -420,6 +434,17 @@ static inline int rozofs_get_recycle_from_fid(void * fid) {
   rozofs_inode_t * inode = (rozofs_inode_t *) fid; 
   return inode->s.recycle_cpt;
 }
+
+/*
+**__________________________________________
+** Extract the dif from the FID
+** @param fid : the FID
+** @retval the recycle counter value
+*/
+static inline eid_t rozofs_get_eid_from_fid(void * fid) {
+  rozofs_inode_t * inode = (rozofs_inode_t *) fid; 
+  return inode->s.eid;
+}
 /*
 **__________________________________________
 ** Set the recycle counter in the FID
@@ -430,6 +455,63 @@ static inline int rozofs_get_recycle_from_fid(void * fid) {
 static inline void rozofs_set_recycle_on_fid(void * fid, int value) {
   rozofs_inode_t * inode = (rozofs_inode_t *) fid; 
   inode->s.recycle_cpt = value;
+}
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    check the delete pending bit of an inode
+    
+    @param fid: inode reference
+    
+    @retval 1 when the i-node has the delete pending bit asserted
+    @retval 0 when the i-node has not the delete pending bit asserted
+*/
+static inline int rozofs_inode_is_del_pending(fid_t fid)
+{
+   rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid;
+   if(fake_inode->s.del!=0) return 1;
+   return 0;
+}
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    set trash key
+    
+    @param fid: inode reference
+    
+*/
+static inline void rozofs_inode_set_trash(fid_t fid)
+{
+   rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid;
+   fake_inode->s.key = ROZOFS_TRASH;
+}
+
+static inline void rozofs_inode_set_dir(fid_t fid)
+{
+   rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid;
+   fake_inode->s.key = ROZOFS_DIR;
+}
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    check if the inode designates the trash directory
+    
+    @param fid: inode reference
+    
+    @retval 1 trash diectory
+    @retval 0 not trash directory
+*/
+static inline int rozofs_inode_is_trash(fid_t fid)
+{
+   rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid;
+   if(fake_inode->s.key == ROZOFS_TRASH) return 1;
+   return 0;
 }
 /*
 **__________________________________________
@@ -692,9 +774,12 @@ static inline char * fid2string(fid_t fid , char * string) {
 static inline void rozofs_build_storage_fid (fid_t fid,uint8_t index)
 {
     rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid;
-    
+    /*
+    ** indicates a regular file with a given index (mover) and clear the delete bit from fid
+    */
     fake_inode->s.key = ROZOFS_REG;
     fake_inode->s.mover_idx = index;
+    fake_inode->s.del = 0;
 }
 /*
 **__________________________________________________________________
@@ -934,5 +1019,6 @@ out:
   if (isZero==0) *p ='/';
   return status;
 }
+
 
 #endif

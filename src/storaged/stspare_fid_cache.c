@@ -48,8 +48,120 @@ stspare_fid_cache_stat_t       stspare_fid_cache_stat = {0};
 ruc_obj_desc_t                 stspare_fid_cache_running_list;
 stspare_fid_cache_t          * stspare_fid_cache_free_list;
 
-#define STSPARE_FID_CACHE_MAX_ENTRIES  (128*1024)
+uint32_t STSPARE_FID_CACHE_MAX_ENTRIES = 0;
 
+stspare_fid_cache_t          * stspare_fid_cache_next_list_entry = NULL;
+
+
+/*
+**____________________________________________________
+**
+** Debug 
+**____________________________________________________  
+*/
+char * stspare_fid_cache_display(char * pChar, stspare_fid_cache_t * fidCtx, time_t now) {
+  uint32_t  mask;
+  int       first=1;
+  int       idx;
+  
+  if (fidCtx == NULL) return pChar;
+
+  pChar += rozofs_string_append(pChar,"    { \"cid\":");
+  pChar += rozofs_u32_append(pChar,fidCtx->data.key.cid);
+  pChar += rozofs_string_append(pChar,", \"sid\":");
+  pChar += rozofs_u32_append(pChar,fidCtx->data.key.sid);
+  pChar += rozofs_string_append(pChar,", \"fid\":\"");
+  pChar += rozofs_fid_append(pChar,fidCtx->data.key.fid);
+  pChar += rozofs_string_append(pChar,"\", \"modified\":");
+  pChar += rozofs_u32_append(pChar,now-fidCtx->data.mtime);
+  pChar += rozofs_string_append(pChar," , \"projections\":[\n");
+  mask=1;
+  for (idx=0; idx<32; idx++) {
+    if (fidCtx->data.prj_bitmap & mask) {
+      if (first) first = 0;
+      else {  
+        pChar += rozofs_string_append(pChar,",\n");
+      }
+      pChar += rozofs_string_append(pChar,"         { \"pjrId\":");
+      pChar += rozofs_u32_append(pChar,idx);
+      pChar += rozofs_string_append(pChar,", \"sid\":");
+      pChar += rozofs_u32_append(pChar,fidCtx->data.dist[idx]);
+      pChar += rozofs_string_append(pChar,", \"start\":");
+      pChar += rozofs_u32_append(pChar,fidCtx->data.prj[idx].start);
+      pChar += rozofs_string_append(pChar,", \"stop\":");
+      pChar += rozofs_u32_append(pChar,fidCtx->data.prj[idx].stop);
+      pChar += rozofs_string_append(pChar,"}");      
+    }
+    mask = mask << 1;
+  }
+  pChar += rozofs_string_append(pChar,"\n      ]\n    }");
+  return pChar;
+}  
+/*
+**____________________________________________________
+**
+** Man
+**____________________________________________________
+*/
+void stspare_fid_cache_man(char * pChar) {
+  pChar += rozofs_string_append           (pChar,"Display information related to the FID cache\n");
+  pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tfid");     
+  pChar += rozofs_string_append           (pChar,"\t\tdisplay cache statistics\n");     
+  pChar += rozofs_string_append_bold      (pChar,"\tfid first");     
+  pChar += rozofs_string_append           (pChar,"\tdisplay a first list of FID in the cache\n");     
+  pChar += rozofs_string_append_bold      (pChar,"\tfid next");     
+  pChar += rozofs_string_append           (pChar,"\tdisplay the next list of FID in the cache\n");     
+  pChar += rozofs_string_append_underscore(pChar,"\nDisplay statistics:\n");
+  pChar += rozofs_string_append_bold      (pChar,"statistics\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tcount ");
+  pChar += rozofs_string_append           (pChar,"\t# of entries used in the cache\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\thit");
+  pChar += rozofs_string_append           (pChar,"\t# of cache hit\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tmiss");
+  pChar += rozofs_string_append           (pChar,"\t# of cache miss\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tbkts");
+  pChar += rozofs_string_append           (pChar,"\t# of allocated sub buckets\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tmxbkt");
+  pChar += rozofs_string_append           (pChar,"\tmaximum # of sub buckets in a row\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tmxcol");
+  pChar += rozofs_string_append           (pChar,"\tmaximum collision count encountered\n");  
+  pChar += rozofs_string_append_bold      (pChar,"usage\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tentries\t");
+  pChar += rozofs_string_append           (pChar,"\tmaximum # of entries of the cache\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tsize\t");
+  pChar += rozofs_string_append           (pChar,"\tsize of an entry in the cache\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\ttotal\t");
+  pChar += rozofs_string_append           (pChar,"\ttotal cache size\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfree\t");
+  pChar += rozofs_string_append           (pChar,"\t# of free entries\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tallocation");
+  pChar += rozofs_string_append           (pChar,"\t# of allocation processed\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\trelease\t");
+  pChar += rozofs_string_append           (pChar,"\t# of release processed\n");  
+  pChar += rozofs_string_append_underscore(pChar,"\nDisplay list of FID:\n");
+  pChar += rozofs_string_append           (pChar,"\nFor each entry of the cache\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tcid\t");
+  pChar += rozofs_string_append           (pChar,"\tcluster identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tsid\t");
+  pChar += rozofs_string_append           (pChar,"\tstorage identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfid\t");
+  pChar += rozofs_string_append           (pChar,"\tfile unic identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tmodified");
+  pChar += rozofs_string_append           (pChar,"\tdelay in seconds since last file modification\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tprojections\n");
+  pChar += rozofs_string_append_bold      (pChar,"\t\tpjrId");
+  pChar += rozofs_string_append           (pChar,"\tprojection identifier present in the file\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t\tsid");
+  pChar += rozofs_string_append           (pChar,"\tnominal storage identifier for this projection\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t\tstart");
+  pChar += rozofs_string_append           (pChar,"\t1rst block in the file of this projection\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t\tstop");
+  pChar += rozofs_string_append           (pChar,"\tlast block in the file of this projection\n");  
+  pChar += rozofs_string_append_bold      (pChar,"end\t");
+  pChar += rozofs_string_append           (pChar,"\t\twhether this list has a next list\n");  
+
+}
 /*
 **____________________________________________________
 **
@@ -60,79 +172,62 @@ void stspare_fid_cache_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 
   char                         * pChar=uma_dbg_get_buffer();
-  int                            ret;
-  stspare_fid_cache_key_t        key;
-  storage_t                    * st;
-  int                            found;
+  stspare_fid_cache_t          * p = NULL;
+  int                            idx;  
+  int                            first=1;
 
-
+  time_t now = time(NULL);
+  
   if (argv[1] == NULL) {
+    pChar += rozofs_string_append(pChar,"{ \n");
+  
     pChar = display_cache_fid_stat(pChar);
+
+    pChar += rozofs_string_append(pChar,"  ,\n");
     
-    pChar += rozofs_string_append(pChar,"ctx nb x sz : ");
+    pChar += rozofs_string_append(pChar,"  \"usage\" : {\n    \"entries\": ");
     pChar += rozofs_u32_append(pChar,STSPARE_FID_CACHE_MAX_ENTRIES);
-    pChar += rozofs_string_append(pChar," x ");
+    pChar += rozofs_string_append(pChar,",\n    \"size\":");
     pChar += rozofs_u32_append(pChar,sizeof(stspare_fid_cache_t));
-    pChar += rozofs_string_append(pChar," = ");    
+    pChar += rozofs_string_append(pChar,",\n    \"total\":");    
     pChar += rozofs_u32_append(pChar,STSPARE_FID_CACHE_MAX_ENTRIES * sizeof(stspare_fid_cache_t));
-    pChar += rozofs_eol(pChar);    
-    pChar += rozofs_string_append(pChar,"free        : ");
+    pChar += rozofs_string_append(pChar,",\n    \"free\":");
     pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.free);
-    pChar += rozofs_string_append(pChar,"\nallocation  : ");
+    pChar += rozofs_string_append(pChar,",\n    \"allocation\":");
     pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.allocation);
-    pChar += rozofs_string_append(pChar," (release+");
-    pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.allocation-stspare_fid_cache_stat.release);
-    pChar += rozofs_string_append(pChar,")\nrelease     : ");
+    pChar += rozofs_string_append(pChar,",\n    \"release\":");
     pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.release);
-    pChar += rozofs_eol(pChar);
+    pChar += rozofs_string_append(pChar,"\n  }\n");
+    pChar += rozofs_string_append(pChar,"}\n");
 
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;       
   }     
-
-
-  ret = rozofs_uuid_parse(argv[1],key.fid);
-  if (ret != 0) {
-    pChar += rozofs_string_append(pChar,argv[1]);
-    pChar += rozofs_string_append(pChar," is not a FID !!!\n");
+  
+  if (strcmp(argv[1],"first")==0) {
+    stspare_fid_cache_set1rst();
+  }
+  
+  else if (strcmp(argv[1],"next")!=0) {
+    pChar += rozofs_string_append(pChar,"Bad syntax\n");    
     uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
-    return;
+    return; 
   }
 
-  st = NULL;
-  found = 0;
-  while ((st = storaged_next(st)) != NULL) {
-  
-    key.cid = st->cid;
-    key.sid = st->sid;
-
-    int index = storio_fid_cache_search(stspare_fid_cache_hash(&key),&key);
-    if (index == -1) {
-      continue;
-    } 
-    
-    found=1;
-    stspare_fid_cache_t * p = stspare_fid_cache_retrieve(index);
-    if (p == NULL) {
-      pChar += rozofs_string_append(pChar,argv[1]);
-      pChar += rozofs_string_append(pChar," no match found !!!\n");
-      continue;
-    }
-    pChar += rozofs_string_append(pChar,"cid/sid ");
-    pChar += rozofs_u32_append(pChar,key.cid);
-    pChar += rozofs_string_append(pChar,"/");
-    pChar += rozofs_u32_append(pChar,key.sid);
-    pChar += rozofs_eol(pChar);
-      
-  }  
-  if (found == 0) {
-    pChar += rozofs_string_append(pChar,argv[1]);
-    pChar += rozofs_string_append(pChar," no such FID !!!\n");    
-  }
-  
-  pChar += sprintf(pChar,"\n");
+  pChar += rozofs_string_append(pChar,"{\n  \"fids\":[\n");     
+  for (idx=0;idx<12; idx++) {
+    p = stspare_fid_cache_getnext();
+    if (p==NULL) break;
+    if (first) first = 0;
+    else pChar += rozofs_string_append(pChar,",\n");
+    pChar = stspare_fid_cache_display(pChar, p, now);
+  } 
+  pChar += rozofs_string_append(pChar,"\n  ],\n");  
+  if (p==NULL) pChar += sprintf(pChar," \"end\": true\n");
+  else         pChar += sprintf(pChar," \"end\": false\n");
+  pChar += sprintf(pChar,"}\n");
   uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
-  return;         
+  return;            
 }
 
 
@@ -191,10 +286,12 @@ uint32_t stspare_fid_cache_delete_req(uint32_t index) {
 ** @param index    The coontext index
 **____________________________________________________
 */
-static inline void stspare_fid_cache_distributor_init() {
-  int                            nbCtx = STSPARE_FID_CACHE_MAX_ENTRIES;
+static inline void stspare_fid_cache_distributor_init(uint32_t nbCtx) {
   stspare_fid_cache_t          * p;
   int                            idx;
+
+
+  STSPARE_FID_CACHE_MAX_ENTRIES = nbCtx*1024;
 
   /*
   ** Init list heads
@@ -205,12 +302,12 @@ static inline void stspare_fid_cache_distributor_init() {
   ** Reset stattistics 
   */
   memset(&stspare_fid_cache_stat, 0, sizeof(stspare_fid_cache_stat));
-  stspare_fid_cache_stat.free = nbCtx;
+  stspare_fid_cache_stat.free = STSPARE_FID_CACHE_MAX_ENTRIES;
   
   /*
   ** Allocate memory
   */
-  stspare_fid_cache_free_list = (stspare_fid_cache_t*) ruc_listCreate(nbCtx,sizeof(stspare_fid_cache_t));
+  stspare_fid_cache_free_list = (stspare_fid_cache_t*) ruc_listCreate(STSPARE_FID_CACHE_MAX_ENTRIES,sizeof(stspare_fid_cache_t));
   if (stspare_fid_cache_free_list == NULL) {
     /*
     ** error on distributor creation
@@ -219,7 +316,7 @@ static inline void stspare_fid_cache_distributor_init() {
   }
   
   
-  for (idx=0; idx<nbCtx; idx++) {
+  for (idx=0; idx<STSPARE_FID_CACHE_MAX_ENTRIES; idx++) {
     p = stspare_fid_cache_retrieve(idx);
     p->index  = idx;
     p->status = STSPARE_FID_CACHE_FREE;
@@ -234,8 +331,9 @@ static inline void stspare_fid_cache_distributor_init() {
 ** That API is intented to be called during the initialization of the module
 **____________________________________________________
 */
-uint32_t stspare_fid_cache_init() {
+uint32_t stspare_fid_cache_init(uint32_t nbCtx) {
 
+  stspare_fid_cache_next_list_entry = (stspare_fid_cache_t *) &stspare_fid_cache_running_list;
   
   /*
   ** Initialize the FID cache 
@@ -245,11 +343,11 @@ uint32_t stspare_fid_cache_init() {
   /*
   ** Initialize context distributor
   */
-  stspare_fid_cache_distributor_init();
+  stspare_fid_cache_distributor_init(nbCtx);
     
   /*
   ** Add a debug topic
   */
-  uma_dbg_addTopic("fidCache", stspare_fid_cache_debug); 
+  uma_dbg_addTopicAndMan("fidCache", stspare_fid_cache_debug, stspare_fid_cache_man, 0); 
   return 0;
 }

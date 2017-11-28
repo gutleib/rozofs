@@ -646,7 +646,7 @@ int rozo_rebalance_start_nb_blocking_th(void *args) {
     }
 
 
-    info("exportd non-blocking thread running (instance: %d, port: %d).",
+    info("Rebalance non-blocking thread running (instance: %d, port: %d).",
             args_p->instance, args_p->debug_port);
     
     /*

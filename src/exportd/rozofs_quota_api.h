@@ -36,11 +36,12 @@
     @param grp_id : group quota
     @param nb_inode
     @param action: 1: increment, 0 decrement 
+    @param share : share identifier (0 if none)
     
     @retval : 0 on success
     @retval < 0 on error
  */
-int rozofs_qt_inode_update(int eid,int user_id,int grp_id,int nb_inode,int action);
+int rozofs_qt_inode_update(int eid,int user_id,int grp_id,int nb_inode,int action,uint16_t share);
 /*
 **__________________________________________________________________
 */
@@ -53,11 +54,12 @@ int rozofs_qt_inode_update(int eid,int user_id,int grp_id,int nb_inode,int actio
     @param grp_id : group quota
     @param nb_inode
     @param action: 1: increment, 0 decrement 
+    @param share : share identifier (0 if none)
     
     @retval : 0 on success
     @retval < 0 on error
  */
-int rozofs_qt_block_update(int eid,int user_id,int grp_id,uint64_t size,int action);
+int rozofs_qt_block_update(int eid,int user_id,int grp_id,uint64_t size,int action,uint16_t share);
 /*
 **__________________________________________________________________
 */

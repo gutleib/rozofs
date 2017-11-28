@@ -38,6 +38,7 @@ struct epp_estat_t {
 	uint64_t files;
 	uint64_t ffree;
 	char path[ROZOFS_PATH_MAX];
+	char name[ROZOFS_PATH_MAX];
 };
 typedef struct epp_estat_t epp_estat_t;
 

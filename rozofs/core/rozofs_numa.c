@@ -23,6 +23,7 @@
 
 static    int bit = -1;
 static    int dbg_recorded = 0;
+static    char * numa_criteria = NULL;
 
 void show_numa(char * argv[], uint32_t tcpRef, void *bufRef) {
   char *pChar = uma_dbg_get_buffer();
@@ -41,6 +42,8 @@ void show_numa(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += sprintf(pChar,"\"True\",\n");
     pChar += sprintf(pChar,"    \"nodes    \" : %d,\n",
                      numa_num_configured_nodes());
+    pChar += sprintf(pChar,"    \"criteria \" : \"%s\",\n",
+                     numa_criteria);
     pChar += sprintf(pChar,"    \"node     \" : %d\n",
                      bit);
   }
@@ -53,12 +56,15 @@ void show_numa(char * argv[], uint32_t tcpRef, void *bufRef) {
 *  instance
 
    @param instance: instance number of the process
+   @param criteria: the criteria that leaded to the instance choice
 */
-void rozofs_numa_allocate_node(int instance)
+void rozofs_numa_allocate_node(int instance, char * criteria)
 {
    int configured_nodes;
    int available;
 
+   numa_criteria = criteria;
+   
    if (dbg_recorded==0) {
      dbg_recorded = 1;
      uma_dbg_addTopic("numa", show_numa);
@@ -77,8 +83,8 @@ void rozofs_numa_allocate_node(int instance)
      */
      info("rozofs_numa_allocate_node(%d): numa not available", instance);
      return;
-   }
-     
+   }  
+
    configured_nodes = numa_num_configured_nodes();   
    bit = instance%configured_nodes;
    numa_run_on_node(bit); 

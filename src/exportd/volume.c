@@ -106,7 +106,7 @@ void cluster_release(cluster_t *cluster) {
     }
 }
 
-int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site) {
+int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site, char * rebalanceCfg) {
     int status = -1;
     DEBUG_FUNCTION;
     volume->vid = vid;
@@ -114,6 +114,12 @@ int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep
     volume->multi_site = multi_site;
     volume->balanced = 0; // volume balance not yet called
     volume->layout = layout;
+    if (rebalanceCfg) {
+      volume->rebalanceCfg = xstrdup(rebalanceCfg);
+    }
+    else {
+      volume->rebalanceCfg = NULL;
+    }
     list_init(&volume->clusters);
     
     volume->active_list = 0;
@@ -131,6 +137,11 @@ out:
 void volume_release(volume_t *volume) {
     list_t *p, *q;
     DEBUG_FUNCTION;
+    
+    if (volume->rebalanceCfg) {
+      xfree(volume->rebalanceCfg);
+      volume->rebalanceCfg = NULL;
+    }  
 
     list_for_each_forward_safe(p, q, &volume->clusters) {
         cluster_t *entry = list_entry(p, cluster_t, list);
@@ -179,7 +190,12 @@ int volume_safe_copy(volume_t *to, volume_t *from) {
     to->layout = from->layout;
     to->georep = from->georep;
     to->multi_site = from->multi_site;
-
+    if (from->rebalanceCfg) {
+      to->rebalanceCfg = xstrdup(from->rebalanceCfg);
+    }
+    else {
+      to->rebalanceCfg = NULL;
+    }
     list_for_each_forward(p, &from->clusters) {
         cluster_t *to_cluster = xmalloc(sizeof (cluster_t));
         cluster_t *from_cluster = list_entry(p, cluster_t, list);
