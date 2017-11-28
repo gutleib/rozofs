@@ -357,7 +357,6 @@ static inline int storio_device_get_major_and_minor(storage_t * st, int dev) {
 int storio_check_expcted_mounted_device(storage_t   * st, int dev) {
   char            path[FILENAME_MAX];
   DIR           * dp = NULL;
-  struct dirent   ep;
   struct dirent * pep;
   int             status = 0;   
   int             cid,sid,device; 
@@ -378,7 +377,7 @@ int storio_check_expcted_mounted_device(storage_t   * st, int dev) {
   }
 
   // Readdir to find out the file identifying the device
-  while (readdir_r(dp,&ep,&pep) == 0) {
+  while ((pep = readdir(dp)) != NULL) {
     
     // end of directory
     if (pep == NULL) goto out;
