@@ -33,7 +33,8 @@ typedef enum _scan_criterie_e {
   SCAN_CRITERIA_NLINK, 
   SCAN_CRITERIA_CHILDREN, 
   SCAN_CRITERIA_PFID,
-  SCAN_CRITERIA_FNAME       
+  SCAN_CRITERIA_FNAME,       
+  SCAN_CRITERIA_UPDATE     /**< directory update time */      
 } SCAN_CRITERIA_E;
 
 SCAN_CRITERIA_E scan_criteria = SCAN_CRITERIA_NONE;
@@ -53,6 +54,14 @@ uint64_t    cr8_lower  = -1;
 uint64_t    cr8_bigger = -1;
 uint64_t    cr8_equal  = -1;
 uint64_t    cr8_diff  = -1;
+
+/*
+** directory update time 
+*/
+uint64_t    update_lower  = -1;
+uint64_t    update_bigger = -1;
+uint64_t    update_equal  = -1;
+uint64_t    update_diff  = -1;
 
 /*
 ** Size
@@ -579,7 +588,51 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }
   }
    
-  
+  if (S_ISDIR(inode_p->s.attrs.mode)) 
+  {
+    ext_dir_mattr_t *stats_attr_p;
+    stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
+    
+    if (stats_attr_p->s.version >=  ROZOFS_DIR_VERSION_1)
+    {
+    
+      /*
+      ** Must have a modification time bigger than update_bigger
+      */ 
+      if (update_bigger != -1) {
+	if (stats_attr_p->s.update_time < update_bigger) {
+	  return 0;
+	}
+      }  
+
+      /*
+      ** Must have a modification time lower than update_lower
+      */    
+      if (update_lower != -1) {
+	if (stats_attr_p->s.update_time > update_lower) {
+	  return 0;
+	}
+      }     
+
+      /*
+      ** Must have a modification time equal to update_equal
+      */    
+      if (update_equal != -1) {
+	if (stats_attr_p->s.update_time != update_equal) {
+	  return 0;
+	}
+      } 
+
+      /*
+      ** Must have a modification time different from update_diff
+      */    
+      if (update_diff != -1) {
+	if (stats_attr_p->s.update_time == update_diff) {
+	  return 0;
+	}
+      }
+    }
+  }     
   /*
   ** Must have a size bigger than size_bigger
   */ 
@@ -801,6 +854,7 @@ static void usage() {
     printf("\n\033[1mFIELD:\033[0m\n");
     printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
     printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
+    printf("\t\033[1m-r,--update\033[0m\t\tdirectory update date.\n"); 
     printf("\t\033[1m-s,--size\033[0m\t\tfile size.\n"); 
     printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
     printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
@@ -1114,6 +1168,7 @@ int main(int argc, char *argv[]) {
         {"ne", required_argument, 0, '!'},
         {"dir", no_argument, 0, 'd'},
         {"all", no_argument, 0, 'a'},
+        {"update", no_argument, 0, 'r'},
         {0, 0, 0, 0}
     };
     
@@ -1148,7 +1203,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSRa", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSRar", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1185,6 +1240,10 @@ int main(int argc, char *argv[]) {
               break;
           case 'm':
               NEW_CRITERIA(SCAN_CRITERIA_MOD);
+              date_criteria_is_set = 1;
+              break;
+          case 'r':
+              NEW_CRITERIA(SCAN_CRITERIA_UPDATE);
               date_criteria_is_set = 1;
               break;
           case 's':
@@ -1243,6 +1302,15 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_MOD:
                   mod_lower = rozofs_date2time(optarg);
                   if (mod_lower==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }    
+                  break; 
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_lower = rozofs_date2time(optarg);
+                  if (update_lower==-1) {
                     printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
                     usage();
                     exit(EXIT_FAILURE);
@@ -1318,6 +1386,16 @@ int main(int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                   }
                   mod_lower--;    
+                  break;  
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_lower = rozofs_date2time(optarg);
+                  if (update_lower==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }
+                  update_lower--;    
                   break;  
                   
                 case SCAN_CRITERIA_SIZE:
@@ -1406,6 +1484,15 @@ int main(int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                   }    
                   break; 
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_bigger = rozofs_date2time(optarg);
+                  if (update_bigger==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }    
+                  break;
                   
                 case SCAN_CRITERIA_SIZE:
                   size_bigger = rozofs_scan_u64(optarg);
@@ -1480,7 +1567,16 @@ int main(int argc, char *argv[]) {
                   } 
                   mod_bigger++;  
                   break;
-                  
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_bigger = rozofs_date2time(optarg);
+                  if (update_bigger==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  } 
+                  update_bigger++;  
+                  break;                  
                 case SCAN_CRITERIA_SIZE:
                   size_bigger = rozofs_scan_u64(optarg);
                   if (size_bigger==-1) {
@@ -1553,6 +1649,14 @@ int main(int argc, char *argv[]) {
                   }                   
                   break;  
                   
+                case SCAN_CRITERIA_UPDATE:
+                  update_equal = rozofs_date2time(optarg);
+                  if (update_equal==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }                   
+                  break;  
                 case SCAN_CRITERIA_SIZE:
                   size_equal = rozofs_scan_u64(optarg);
                   if (size_equal==-1) {
@@ -1646,6 +1750,15 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_MOD:
                   mod_diff = rozofs_date2time(optarg);
                   if (mod_diff==-1) {
+                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }                   
+                  break; 
+
+                case SCAN_CRITERIA_UPDATE:
+                  update_diff = rozofs_date2time(optarg);
+                  if (update_diff==-1) {
                     printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
                     usage();
                     exit(EXIT_FAILURE);
