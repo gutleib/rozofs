@@ -95,11 +95,6 @@ int disk_tb_load_bitmap_file(disk_table_header_t *ctx_p)
    bitmap_p->dirty = 0;
 
    /*
-   ** Clear bitmap before reading from disk
-   */
-   memset(bitmap_p->bitmap,0,ctx_p->bitmap_size);
-   bitmap_p->dirty = 0;
-   /*
    ** read the bitmap from disk
    */    
    if ((fd = open(fullpath, O_RDONLY | O_NOATIME, S_IRWXU)) < 0) 
