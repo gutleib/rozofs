@@ -18,10 +18,9 @@
 #
 cmake_minimum_required(VERSION 2.6)
 project(rozofs C)
-set(MAJOR "2")
-set(MINOR "2")
-
-set(REVISION "~alpha78-rdma")
+set(MAJOR "3")
+set(MINOR "0")
+set(REVISION "~alpha1-rdma")
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
@@ -60,11 +59,13 @@ if(NOT PYTHON)
 endif(NOT PYTHON)
 
 MESSAGE( STATUS "python version:         " ${PYTHON} )
-if(INFINIBAND_FOUND AND RDMA_FOUND)
-  MESSAGE( STATUS "RDMA is supported" )
-else(INFINIBAND_FOUND AND RDMA_FOUND)
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  MESSAGE( STATUS "RDMA is supported and will be used" )
+elseif(INFINIBAND_FOUND AND RDMA_FOUND AND NO_RDMA)
+  MESSAGE( STATUS "RDMA is supported but will be not used (NO_RDMA requested)" )
+else(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   MESSAGE( STATUS "RDMA is not supported" )
-endif(INFINIBAND_FOUND AND RDMA_FOUND)
+endif(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
 
 find_program(DEBUILD NAMES debuild)
 find_program(MAKEINFO NAMES makeinfo)

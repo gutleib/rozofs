@@ -21,7 +21,7 @@ include_directories(${PTHREAD_INCLUDE_DIR})
 link_directories(${CMAKE_BINARY_DIR}/rozofs)
 
 
-if(INFINIBAND_FOUND AND RDMA_FOUND)
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   add_definitions(-DROZOFS_RDMA)
 endif()
 
@@ -60,7 +60,7 @@ add_executable(storcli
     rozofs_storcli_wr_repair.c
  )
 
-if(INFINIBAND_FOUND AND RDMA_FOUND)
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   message(STATUS "Compiling storcli with RDMA support")
   set(storcli_rmda_sources
   # RDMA section
@@ -71,10 +71,10 @@ if(INFINIBAND_FOUND AND RDMA_FOUND)
   add_library(storcli_rmda STATIC ${storcli_rmda_sources})
   set_target_properties(storcli_rmda PROPERTIES COMPILE_FLAGS "-fPIC")
   target_link_libraries(storcli  storcli_rmda rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RDMA_LIBRARY} ${INFINIBAND_LIBRARY})
-else(INFINIBAND_FOUND AND RDMA_FOUND)
+else(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   message(STATUS "Compiling storcli without RDMA support")
   target_link_libraries(storcli rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
-endif(INFINIBAND_FOUND AND RDMA_FOUND)
+endif(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
 
 
 # Install
