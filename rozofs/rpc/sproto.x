@@ -376,18 +376,18 @@ program STORAGE_PROGRAM {
 	
 	sp_write_ret_t
         SP_WRITE_REPAIR2(sp_write_repair2_arg_t)        = 10;
+
 	sp_write_ret_t
         SP_WRITE_REPAIR3(sp_write_repair3_arg_t)        = 11;
-
-        sp_rdma_setup_ret_t
-        SP_RDMA_SETUP(sp_rdma_setup_arg_t)  = 11;		
 
         sp_read_ret_t
         SP_READ_RDMA(sp_read_rdma_arg_t)          = 12;
 
         sp_write_ret_t
         SP_WRITE_RDMA(sp_write_rdma_arg_t)        = 13;
-	sp_write_ret_t
-        SP_WRITE_REPAIR3(sp_write_repair3_arg_t)        = 14;
-    }=1;
+
+        sp_rdma_setup_ret_t
+        SP_RDMA_SETUP(sp_rdma_setup_arg_t)  = 14;		
+
+   }=1;
 } = 0x20000002;

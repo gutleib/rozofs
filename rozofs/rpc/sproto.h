@@ -422,18 +422,18 @@ extern  sp_status_ret_t * sp_clear_error_1_svc(sp_clear_error_arg_t *, struct sv
 #define SP_WRITE_REPAIR2 10
 extern  sp_write_ret_t * sp_write_repair2_1(sp_write_repair2_arg_t *, CLIENT *);
 extern  sp_write_ret_t * sp_write_repair2_1_svc(sp_write_repair2_arg_t *, struct svc_req *);
-#define SP_RDMA_SETUP 11
-extern  sp_rdma_setup_ret_t * sp_rdma_setup_1(sp_rdma_setup_arg_t *, CLIENT *);
-extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc(sp_rdma_setup_arg_t *, struct svc_req *);
+#define SP_WRITE_REPAIR3 11
+extern  sp_write_ret_t * sp_write_repair3_1(sp_write_repair3_arg_t *, CLIENT *);
+extern  sp_write_ret_t * sp_write_repair3_1_svc(sp_write_repair3_arg_t *, struct svc_req *);
 #define SP_READ_RDMA 12
 extern  sp_read_ret_t * sp_read_rdma_1(sp_read_rdma_arg_t *, CLIENT *);
 extern  sp_read_ret_t * sp_read_rdma_1_svc(sp_read_rdma_arg_t *, struct svc_req *);
 #define SP_WRITE_RDMA 13
 extern  sp_write_ret_t * sp_write_rdma_1(sp_write_rdma_arg_t *, CLIENT *);
 extern  sp_write_ret_t * sp_write_rdma_1_svc(sp_write_rdma_arg_t *, struct svc_req *);
-#define SP_WRITE_REPAIR3 14
-extern  sp_write_ret_t * sp_write_repair3_1(sp_write_repair3_arg_t *, CLIENT *);
-extern  sp_write_ret_t * sp_write_repair3_1_svc(sp_write_repair3_arg_t *, struct svc_req *);
+#define SP_RDMA_SETUP 14
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1(sp_rdma_setup_arg_t *, CLIENT *);
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc(sp_rdma_setup_arg_t *, struct svc_req *);
 extern int storage_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -470,18 +470,18 @@ extern  sp_status_ret_t * sp_clear_error_1_svc();
 #define SP_WRITE_REPAIR2 10
 extern  sp_write_ret_t * sp_write_repair2_1();
 extern  sp_write_ret_t * sp_write_repair2_1_svc();
-#define SP_RDMA_SETUP 11
-extern  sp_rdma_setup_ret_t * sp_rdma_setup_1();
-extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc();
+#define SP_WRITE_REPAIR3 11
+extern  sp_write_ret_t * sp_write_repair3_1();
+extern  sp_write_ret_t * sp_write_repair3_1_svc();
 #define SP_READ_RDMA 12
 extern  sp_read_ret_t * sp_read_rdma_1();
 extern  sp_read_ret_t * sp_read_rdma_1_svc();
 #define SP_WRITE_RDMA 13
 extern  sp_write_ret_t * sp_write_rdma_1();
 extern  sp_write_ret_t * sp_write_rdma_1_svc();
-#define SP_WRITE_REPAIR3 14
-extern  sp_write_ret_t * sp_write_repair3_1();
-extern  sp_write_ret_t * sp_write_repair3_1_svc();
+#define SP_RDMA_SETUP 14
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1();
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc();
 extern int storage_program_1_freeresult ();
 #endif /* K&R C */
 

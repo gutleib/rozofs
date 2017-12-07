@@ -175,15 +175,15 @@ sp_write_repair2_1(sp_write_repair2_arg_t *argp, CLIENT *clnt)
 	return (&clnt_res);
 }
 
-sp_rdma_setup_ret_t *
-sp_rdma_setup_1(sp_rdma_setup_arg_t *argp, CLIENT *clnt)
+sp_write_ret_t *
+sp_write_repair3_1(sp_write_repair3_arg_t *argp, CLIENT *clnt)
 {
-	static sp_rdma_setup_ret_t clnt_res;
+	static sp_write_ret_t clnt_res;
 
 	memset((char *)&clnt_res, 0, sizeof(clnt_res));
-	if (clnt_call (clnt, SP_RDMA_SETUP,
-		(xdrproc_t) xdr_sp_rdma_setup_arg_t, (caddr_t) argp,
-		(xdrproc_t) xdr_sp_rdma_setup_ret_t, (caddr_t) &clnt_res,
+	if (clnt_call (clnt, SP_WRITE_REPAIR3,
+		(xdrproc_t) xdr_sp_write_repair3_arg_t, (caddr_t) argp,
+		(xdrproc_t) xdr_sp_write_ret_t, (caddr_t) &clnt_res,
 		TIMEOUT) != RPC_SUCCESS) {
 		return (NULL);
 	}
@@ -220,15 +220,15 @@ sp_write_rdma_1(sp_write_rdma_arg_t *argp, CLIENT *clnt)
 	return (&clnt_res);
 }
 
-sp_write_ret_t *
-sp_write_repair3_1(sp_write_repair3_arg_t *argp, CLIENT *clnt)
+sp_rdma_setup_ret_t *
+sp_rdma_setup_1(sp_rdma_setup_arg_t *argp, CLIENT *clnt)
 {
-	static sp_write_ret_t clnt_res;
+	static sp_rdma_setup_ret_t clnt_res;
 
 	memset((char *)&clnt_res, 0, sizeof(clnt_res));
-	if (clnt_call (clnt, SP_WRITE_REPAIR3,
-		(xdrproc_t) xdr_sp_write_repair3_arg_t, (caddr_t) argp,
-		(xdrproc_t) xdr_sp_write_ret_t, (caddr_t) &clnt_res,
+	if (clnt_call (clnt, SP_RDMA_SETUP,
+		(xdrproc_t) xdr_sp_rdma_setup_arg_t, (caddr_t) argp,
+		(xdrproc_t) xdr_sp_rdma_setup_ret_t, (caddr_t) &clnt_res,
 		TIMEOUT) != RPC_SUCCESS) {
 		return (NULL);
 	}
