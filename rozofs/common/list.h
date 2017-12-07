@@ -57,9 +57,9 @@ static inline int list_empty(list_t * head) {
     return head->next == head;
 }
 
-static inline void list_move(list_t * to, list_t * from) {
 
-    if (list_empty(from)) return;
+
+static inline void list_move_nocheck(list_t * to, list_t * from) {
     
     to->prev->next   = from->next;
     from->next->prev = to->prev;
@@ -69,6 +69,13 @@ static inline void list_move(list_t * to, list_t * from) {
     
     list_init(from);
 }
+static inline void list_move(list_t * to, list_t * from) {
+
+    if (list_empty(from)) return;
+    
+    list_move_nocheck(to,from);
+}
+
 
 static inline int list_size(list_t * head) {
     list_t *iterator;

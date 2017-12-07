@@ -109,6 +109,7 @@ typedef enum _storio_disk_thread_request_e {
   STORIO_DISK_THREAD_REMOVE_CHUNK,
   STORIO_DISK_THREAD_REBUILD_START,
   STORIO_DISK_THREAD_REBUILD_STOP,
+  STORIO_DISK_THREAD_FID, /**<process request within a FID context rather than request per request */
   STORIO_DISK_THREAD_MAX_OPCODE
 } storio_disk_thread_request_e;
 
@@ -165,4 +166,19 @@ int storio_disk_thread_intf_send(storio_device_mapping_t      * fidCtx,
 */
 void storio_send_response (rozofs_disk_thread_ctx_t *thread_ctx_p, storio_disk_thread_msg_t * msg, int status);
 
+
+/*__________________________________________________________________________
+*/
+/**
+*  Send a disk request to the disk threads to activate the processing of the requests
+   associated with a FID
+*
+* @param fidCtx     FID context
+* @param timeStart  time stamp when the request has been decoded
+*
+* @retval 0 on success -1 in case of error
+*  
+*/
+int storio_disk_thread_intf_serial_send(storio_device_mapping_t      * fidCtx,
+				         uint64_t       timeStart);
 #endif

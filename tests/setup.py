@@ -1123,6 +1123,7 @@ class rozofs_class:
     self.metadata_size = None;
     self.min_metadata_inodes = None
     self.min_metadata_MB = None
+    self.mkfscmd = None
     
   def set_min_metadata_inodes(self,val): self.min_metadata_inodes = val
   def set_min_metadata_MB(self,val): self.min_metadata_MB = val
@@ -1161,18 +1162,24 @@ class rozofs_class:
   def set_file_distribution(self,val): self.file_distribution = val
   def set_client_fast_reconnect(self,val=2): 
     self.client_fast_reconnect = val
+
+  def set_mkfscmd(self,cmd):
+    self.mkfscmd = cmd    
     
   def set_xfs(self,mb,allocsize=None):
     self.fstype       = "xfs"
     self.disk_size_mb = mb
     self.allocsize    = allocsize
+    self.set_mkfscmd("mkfs.xfs -f -q ")      
+
   def set_deletion_delay(self,deletion_delay): self.deletion_delay = deletion_delay; 
     
   def set_ext4(self,mb):
     self.fstype = "ext4"
     self.disk_size_mb = mb
     self.set_device_automount()
-      
+    self.set_mkfscmd("mkfs.ext4 -b 4096 -m 0 -q ")      
+
   def get_config_path(self):
     path = "%s/SIMU"%(os.getcwd())
     if not os.path.exists(path): 
@@ -1254,12 +1261,9 @@ class rozofs_class:
     os.system(string)
     
     # Format it and mount it on the working directory
-    if rozofs.fstype == "ext4" :
-      os.system("mkfs.ext4 -m 0 -q %s"%(loop))
-      os.system("mount -t ext4 %s %s"%(loop,tmpdir))
-    else:  
-      os.system("mkfs.xfs -f -q %s"%(loop))
-      os.system("mount -t xfs %s %s"%(loop,tmpdir))  
+    os.system("%s %s"%(self.mkfscmd,loop))
+    os.system("mount %s %s"%(loop,tmpdir))
+
     # Create the mark file  
     if content == None:     		
       os.system("touch %s/%s"%(tmpdir,mark))
@@ -1379,6 +1383,8 @@ class rozofs_class:
     display_config_int("nb_trash_thread",8)
     
   def create_common_config(self):
+    if not os.path.exists("/usr/local/etc/rozofs"): os.system("mkdir -p /usr/local/etc/rozofs")  
+    if not os.path.exists("/etc/rozofs/"):          os.system("mkdir -p /etc/rozofs/")  
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
     except:pass
     try: os.remove('/etc/rozofs/rozofs.conf');
