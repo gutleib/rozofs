@@ -464,7 +464,7 @@ static inline void storio_device_mapping_release_entry(storio_device_mapping_t *
 
   if ((p->serial_is_running)||(!list_empty(&p->serial_pending_request)))
   {
-    fatal("storio_device_mapping_ctx_free but ctx is running");
+    severe("storio_device_mapping_ctx_free but ctx is running");
   }
    
   /*

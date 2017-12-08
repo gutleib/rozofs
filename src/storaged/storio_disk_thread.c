@@ -1932,6 +1932,7 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
          storio_disk_write_rdma(ctx_p,&msg);
          break;
 
+
        default:
          fatal(" unexpected opcode : %d\n",msg.opcode);
          exit(0);       
