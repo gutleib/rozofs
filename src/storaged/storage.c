@@ -769,6 +769,7 @@ out:
 char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozofs_stor_bins_file_hdr_t * hdr) {
   int                 fd;
   int                 nb_read;
+  rozofs_stor_bins_file_hdr_vall_t vall;
   
   /*
   ** Open hdr file
@@ -778,7 +779,7 @@ char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozof
     return "open hdr read";       
   }
 
-  nb_read = pread(fd, hdr, sizeof(rozofs_stor_bins_file_hdr_vall_t), 0); 
+  nb_read = pread(fd, &vall, sizeof(vall), 0); 
   close(fd);
 
   if (nb_read < 0) {
@@ -793,24 +794,24 @@ char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozof
   /*
   ** File can not be read completly 
   */    
-  if (hdr->version == 0) {
+  if (vall.version == 0) {
     if (nb_read < sizeof(rozofs_stor_bins_file_hdr_v0_t)) {
       return "hdr0 size";       
     }
   }  
-  else if (hdr->version == 1) {
+  else if (vall.version == 1) {
     if (nb_read < sizeof(rozofs_stor_bins_file_hdr_v1_t)) {
       return "hdr1 size";       
     }
   }
-  else if (hdr->version == 2) {
-    if ((hdr->nbChunks<8) || (hdr->nbChunks>ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) || (nb_read < rozofs_st_get_header_file_size(hdr))) {
+  else if (vall.version == 2) {
+    if ((vall.v2.nbChunks<8) || (vall.v2.nbChunks>ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) || (nb_read < rozofs_st_get_header_file_size(&vall))) {
       return "hdr2 size";       
     }
     /*
     ** Fullfill v2 chunk 2 device array with EOF marks
     */
-    memset(&hdr->devFromChunk[hdr->nbChunks], ROZOFS_EOF_CHUNK, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-hdr->nbChunks);
+    memset(&vall.v2.devFromChunk[vall.v2.nbChunks], ROZOFS_EOF_CHUNK, ROZOFS_STORAGE_MAX_CHUNK_PER_FILE-vall.v2.nbChunks);
   }
   else {
     return "hdr vers";         
@@ -820,30 +821,39 @@ char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozof
   ** check CRC32
   */
   uint32_t crc32 = fid2crc32((uint32_t *)fid);
-  if (storio_check_header_crc32(hdr, crc32) != 0) {
+  if (storio_check_header_crc32(&vall, crc32) != 0) {
     errno = 0;
     return "crc32 hdr";     
   } 
-
+  
   /*
-  ** Transform v0 header to v1 header
+  ** Fill the input v2 structure
   */
-  if (hdr->version == 0) {
-    rozofs_stor_bins_file_hdr_vall_t * vall = (rozofs_stor_bins_file_hdr_vall_t*) hdr;
-    vall->v1.cid     = cid;
-    vall->v1.sid     = sid;
-    vall->v1.version = 1;
+  if (vall.version == 2) {
+    /*
+    ** Just recopy the v2 header
+    */
+    memcpy(hdr, &vall, sizeof(rozofs_stor_bins_file_hdr_t));
   }
-  /*
-  ** Transform v1 header to v2 header
-  */
-  if (hdr->version == 1) {
-    rozofs_stor_bins_file_hdr_t v2; 
-    rozofs_st_header_from_v1_to_v2((rozofs_stor_bins_file_hdr_v1_t *)hdr, &v2);
-    int v2size = rozofs_st_get_header_file_size(&v2);        
-    memcpy(hdr,&v2,v2size);
-  }
+  else {
 
+    /*
+    ** Transform read v0 header to v1 header
+    */
+    if (vall.version == 0) {
+      vall.v1.cid     = cid;
+      vall.v1.sid     = sid;
+      vall.v1.version = 1;
+    }
+
+    /*
+    ** Transform read v1 header to input v2 structure
+    */
+    if (vall.version == 1) {
+      rozofs_st_header_from_v1_to_v2(&vall.v1, hdr);
+    }
+  }
+  
   /*
   ** check the recycle case : not the same recycling value
   */
@@ -3938,7 +3948,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
 		MS_NOATIME | MS_NODIRATIME | MS_SILENT, 
 		common_config.device_automount_option);
     if (ret != 0) {
-      severe("mount(%s,%s,%s) %s",
+      warning("mount(%s,%s,%s) %s",
               pDev->name,workDir,common_config.device_automount_option,
 	      strerror(errno));
       CONT;
