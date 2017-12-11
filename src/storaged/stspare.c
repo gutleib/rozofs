@@ -123,8 +123,8 @@ stspare_working_file_t stspare_current_working_file = {0};
 ** @retval -1 always
 **____________________________________________________
 */
-uint32_t storio_device_mapping_allocate_device(storage_t * st) {
-  severe("storaged spare restorer should not call storio_device_mapping_allocate_device");
+uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib) {
+  severe("storio_device_mapping_allocate_device");
   return -1;
 }
 /*

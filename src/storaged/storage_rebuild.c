@@ -3025,29 +3025,9 @@ paused:
   
    @param st: storage context
 */
-uint32_t storio_device_mapping_allocate_device(storage_t * st) {
-  struct statfs sfs;
-  int           dev;
-  uint64_t      max=0;
-  int           choosen_dev=0;
-  char          path[FILENAME_MAX];  
-  
-  for (dev = 0; dev < st->device_number; dev++) {
-
-    char * pChar = path;
-    pChar += rozofs_string_append(pChar,st->root);
-    *pChar++ = '/';
-    pChar += rozofs_u32_append(pChar,dev);
-    pChar += rozofs_string_append(pChar,"/");   
-               
-    if (statfs(path, &sfs) != -1) {
-      if (sfs.f_bfree > max) {
-        max         = sfs.f_bfree;
-	choosen_dev = dev;
-      }
-    }
-  }  
-  return choosen_dev;
+uint32_t storio_device_mapping_allocate_device(storage_t * s, uint8_t layout, sid_t * distrib) {
+  severe("storio_device_mapping_allocate_device");
+  return -1;
 }
 /*
 **____________________________________________________

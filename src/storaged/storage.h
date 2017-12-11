@@ -1436,7 +1436,7 @@ int storage_replace_with_spare(storage_t * st, int dev);
 void storio_device_error_log_reset();
 
 
-uint32_t storio_device_mapping_allocate_device(storage_t * st);
+uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib);
 /*
 ** 
 ** Create RozoFS storage subdirectories on a device

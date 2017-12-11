@@ -490,7 +490,9 @@ void volume_balance(volume_t *volume) {
     if  (volume->balanced == 0) goto swap;
     switch(common_config.file_distribution_rule) {
       case rozofs_file_distribution_strict_round_robin_forward: 
-      case rozofs_file_distribution_strict_round_robin_inverse: goto out;
+      case rozofs_file_distribution_strict_round_robin_inverse: 
+      case rozofs_file_distribution_read_round_robin: 
+        goto out;
     }
     
 swap:
@@ -1125,8 +1127,9 @@ static int do_cluster_distribute(uint8_t layout,int site_idx, cluster_t *cluster
 	  return do_cluster_distribute_weighted_round_robin(layout, site_idx, cluster, sids, multi_site);
 	  break;
     case rozofs_file_distribution_strict_round_robin_forward:
-	case rozofs_file_distribution_strict_round_robin_inverse:
-	  return do_cluster_distribute_strict_round_robin(layout, site_idx, cluster, sids, multi_site);	
+    case rozofs_file_distribution_strict_round_robin_inverse:
+    case rozofs_file_distribution_read_round_robin:
+      return do_cluster_distribute_strict_round_robin(layout, site_idx, cluster, sids, multi_site);	
       break;
   }	
   

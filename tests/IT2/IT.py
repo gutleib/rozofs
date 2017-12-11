@@ -44,11 +44,8 @@ sids=[]
 hosts=[]
 verbose=False
 
-
 #___________________________________________________
 # Messages and logs
-#___________________________________________________
-
 
 #___________________________________________________
 resetLine="\r"
@@ -900,6 +897,7 @@ def crc32():
 
   backline("Create file %s/crc32"%(exepath))
 
+
   crcfile="%s/crc32"%(exepath)
   # Create a file
   if os.path.exists(crcfile): os.remove(crcfile)      
@@ -988,7 +986,6 @@ def crc32():
     return -1      
   backline("mapper/header has been repaired ")
 
-
   # Corrupt the bins file
   f = open(bins, 'r+b')     
   f.seek(1211) 
@@ -996,12 +993,16 @@ def crc32():
   f.seek(3111) 
   f.write("DDT")
   f.seek(4444) 
-  f.write("DDT")
-  f.seek(6666) 
   f.write("DDT")    
   f.seek(1024*112) 
   f.write("DDT")    
-  f.seek(1024*116) 
+  f.seek(1024*114) 
+  f.write("DDT")    
+  f.seek(1024*115) 
+  f.write("DDT")    
+  f.seek(1024*118) 
+  f.write("DDT")    
+  f.seek(1024*120) 
   f.write("DDT")    
   size = os.path.getsize(bins)
   f.seek(size-11);
@@ -1025,8 +1026,9 @@ def crc32():
   else:     
     report("No CRC errors after file reread")
     return 1 
+
   # Reset storages
-  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
+  os.system("./setup.py storage all reset")
   wait_until_all_sid_up()
  
   # Clear error counter

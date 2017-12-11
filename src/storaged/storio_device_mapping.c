@@ -125,6 +125,7 @@ void storio_register_faulty_fid(int threadNb, uint8_t cid, uint8_t sid, fid_t fi
   p->nb_faulty_fid_in_table++;
   return;
 }
+
 /*
 **______________________________________________________________________________
 **
@@ -173,7 +174,6 @@ char * storio_display_one_mapping_ctx(char * pChar, storio_device_mapping_t * p)
   uint8_t                        storio_rebuild_ref;
   STORIO_REBUILD_T           *   pRebuild;
   
-
   pChar += rozofs_string_append(pChar,"    { \"index\" : ");
   pChar += rozofs_u32_append(pChar,p->index);    
   pChar += rozofs_string_append(pChar,", \"cid\" : ");
@@ -262,13 +262,13 @@ void storage_fid_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   int                            count;
   storio_device_mapping_t      * p;  
  
+
   /*
   ** Display general information
   */
   if (argv[1] == NULL) {
     
     pChar += rozofs_string_append(pChar,"{ \"FID mapping statistics\" : {\n");
-
     pChar = display_cache_fid_stat(pChar);
     
     pChar += rozofs_string_append(pChar,",\n  \"FID ctx statistics\" : {\n    \"chunk size\"  : ");    
@@ -284,6 +284,7 @@ void storage_fid_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += rozofs_string_append(pChar,",\n    \"release\" : ");
     pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.release);
     pChar += rozofs_string_append(pChar,"\n  }\n}}\n");
+
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;       
   }
@@ -426,8 +427,12 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     storage_device_error_reset();
     uma_dbg_send(tcpRef,bufRef,TRUE,"Device error counters have been reset");  
     return;  
-  } 
-
+  }
+   
+  pChar += rozofs_string_append(pChar,"File distibution rule = ");
+  pChar += rozofs_string_append(pChar, rozofs_file_distribution_rule_e2String(common_config.file_distribution_rule));
+  pChar += rozofs_eol(pChar);
+ 
   st = NULL;
   while ((st = storaged_next(st)) != NULL) {
     int           dev;
@@ -554,7 +559,6 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
   return;         
 }
-
 /*
 **______________________________________________________________________________
 */
@@ -607,7 +611,6 @@ void storage_rebuild_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   }
   pChar += rozofs_string_append(pChar,"\n] }"); 
 
-
   if (doreset) {
     memset(&storio_rebuild_stat,0,sizeof(storio_rebuild_stat));
     pChar += rozofs_string_append(pChar,"Reset done\n");
@@ -615,6 +618,69 @@ void storage_rebuild_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
   return;         
 }
+/*____________________________________________________
+
+  Allocate a device for a file in size balancing mode
+  
+   @param st: storage context
+*/
+static inline uint32_t storio_device_mapping_allocate_device_size_balancing(storage_t * st) {
+  int           active;
+  uint32_t      dev=0;
+  uint64_t      val;
+  uint32_t      choosen_device = 0;
+  uint64_t      max = 0;
+     
+  active = st->device_free.active;
+  for (dev = 0; dev < st->device_number; dev++) {
+    
+    val = st->device_free.blocks[active][dev];
+    
+    if (val > max) {
+      max            = val;
+      choosen_device = dev;
+    }
+  }
+  if (max > 256) max -= 256;
+
+  st->device_free.blocks[active][choosen_device] = max;
+   
+  
+  return choosen_device;
+} 
+/*____________________________________________________
+
+  Allocate a device for a file in strict round robin mode
+  
+   @param st: storage context
+*/
+static inline uint32_t storio_device_mapping_allocate_device_round_robin(storage_t * st) {
+  uint32_t      dev=0;
+  uint32_t      count=0;
+     
+  while(count < st->device_number) {    
+
+    /*
+    ** Get next device number
+    */  
+    dev = __atomic_fetch_add(&st->next_device,1,__ATOMIC_SEQ_CST) % st->device_number;
+
+    /*
+    ** Check that the device is usable
+    */     
+    if ((st->device_ctx[dev].status == storage_device_status_is)
+    ||  (st->device_ctx[dev].status == storage_device_status_rebuilding)) {
+      break;
+    }
+    
+    /*
+    ** Bad device. Get the next one
+    */
+    count++;
+  }
+
+  return dev;
+} 
 /*
 **____________________________________________________
 */
@@ -623,53 +689,37 @@ void storage_rebuild_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   
    @param st: storage context
 */
-uint32_t storio_device_mapping_allocate_device(storage_t * st) {
-  uint32_t      dev=0;
-  uint64_t    * pBlocks;
-  uint64_t      max = 0;
-  uint64_t      val;
-  uint64_t      choosen_device = 0;
-  int           active;
+uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib) {
+  uint8_t       inverse;
+  int           idx;
   
-  if (common_config.file_distribution_rule != rozofs_file_distribution_size_balancing) {
-    int count = 0;
-    
-    while(count < st->device_number) {
-    
-      /*
-      ** Get next device number
-      */  
-      dev = __atomic_fetch_add(&st->next_device,1,__ATOMIC_SEQ_CST) % st->device_number;
-
-      /*
-      ** Check that the device is usable
-      */     
-      if (st->device_ctx[dev].status <= storage_device_status_is) return dev;
-
-      /*
-      ** Bad device. Get the next one
-      */
-      count++;
+  /*
+  ** Read round robin
+  ** When in the first inverse of the distribution use round robin distribution
+  ** else try to equalize the devices
+  */
+  if (common_config.file_distribution_rule == rozofs_file_distribution_read_round_robin) {
+    inverse = rozofs_get_rozofs_inverse(layout);
+    for (idx=0; idx < inverse; idx++,distrib++) {
+      if (st->sid == *distrib) break;
     }
-    /*
-    ** Well !!!
-    */
-    return dev;
+    if (idx < inverse) {
+      return storio_device_mapping_allocate_device_round_robin(st);
+    }
+    return storio_device_mapping_allocate_device_size_balancing (st);
+  }
+
+  /*
+  ** size equalizing
+  */    
+  if (common_config.file_distribution_rule == rozofs_file_distribution_size_balancing) {
+    return storio_device_mapping_allocate_device_size_balancing (st);    
   }
   
-  active = st->device_free.active;
-  for (dev = 0; dev < st->device_number; dev++,pBlocks++) {
-    
-    val = st->device_free.blocks[active][dev];
-    if (val > max) {
-      max = val;
-      choosen_device = dev;
-    }
-  }
-  if (max > 256) max -= 256;
-  st->device_free.blocks[active][choosen_device] = max;
-  
-  return choosen_device;
+  /*
+  ** Strict roound robin
+  */
+  return storio_device_mapping_allocate_device_round_robin(st);
 }
 /*_____________________________________
 ** Parameter of the relocate thread

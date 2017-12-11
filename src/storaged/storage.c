@@ -1245,7 +1245,7 @@ static inline storage_dev_map_distribution_write_ret_e
     /*
     ** Allocate a device for this newly written chunk
     */
-    *dev = storio_device_mapping_allocate_device(st);
+    *dev = storio_device_mapping_allocate_device(st, layout, dist_set);
     rozofs_st_header_set_chunk(file_hdr,chunk,*dev);     
         
     /*
@@ -2652,7 +2652,7 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
       /*
       ** Aloocate a device
       */ 
-      dev = storio_device_mapping_allocate_device(st);
+      dev = storio_device_mapping_allocate_device(st, layout, dist_set);
       /*
       ** Store the devic e in the file header
       */
