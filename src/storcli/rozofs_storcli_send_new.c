@@ -253,7 +253,7 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
 	      }	    
 	    }
             ret = rozofs_sorcli_sp_write_standalone(lbg_id,
-	                                     rdma_socket_ref,
+	                                     standalone_socket_ref,
 					     timeout_sec,
 					     prog,
 					     vers,

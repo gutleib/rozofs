@@ -93,7 +93,6 @@ void rozofs_standalone_tx_tmo_proc(void *this);
 */
 void rozofs_standalone_tx_out_of_seq_cbk(uint32_t lbg_id,uint32_t xid);
 /*
-/*
 **__________________________________________________________________________
 */
 /**
