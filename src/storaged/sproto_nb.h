@@ -55,4 +55,8 @@ void sp_rdma_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void sp_read_rdma_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
 void sp_write_rdma_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
 
+void sp_standalone_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
+void sp_read_standalone_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
+void sp_write_standalone_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
+
 #endif

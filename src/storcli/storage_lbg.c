@@ -44,6 +44,7 @@
 #include <rozofs/rozofs_timer_conf.h>
 #include <rozofs/rdma/rozofs_rdma.h>
 #include "rdma_client_send.h"
+#include "standalone_client_send.h"
 
 static north_remote_ip_list_t my_list[STORAGE_NODE_PORTS_MAX];  /**< list of the connection for the exportd */
 
@@ -179,6 +180,31 @@ int storaged_lbg_initialize(mstorage_t *s, int index) {
 	} 							         
      }
 #endif              
+     /*
+     ** Check the case of the standalone mode: 
+     ** note: rdma and standalone mode are exclusive: if standalone mode is active, RDMA cannot not be activated
+     */
+     
+     if (common_config.standalone)
+     {
+       /*
+       ** standalone is supported only when the lbg_size is 1
+       */
+       if (lbg_size==1)
+       {
+     
+          ret = north_lbg_configure_af_inet_with_rdma_support(s->lbg_id[index],
+	                                                      rozofs_standalone_tcp_client_connect_CBK,
+							      rozofs_standalone_tcp_client_dis_CBK,
+							      rozofs_standalone_tx_out_of_seq_cbk);
+	  if (ret < 0)
+	  {
+	    severe("Cannot create Load Balancing Group %d for storaged %s",s->lbg_id[index],s->host);
+	    return -1; 
+	  } 							         
+       }          
+     }
+
      ret = north_lbg_configure_af_inet(s->lbg_id[index],
                                           s->host,
                                           INADDR_ANY,0,

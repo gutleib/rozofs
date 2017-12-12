@@ -58,6 +58,7 @@
 #include "storcli_main.h"
 #include <rozofs/rdma/rozofs_rdma.h>
 #include "rdma_client_send.h"
+#include "standalone_client_send.h"
 
 /*
 **_________________________________________________________________________
@@ -235,6 +236,8 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t rozofsmount_instance)
      ret = rdma_lbg_tmo_table_init(mx_lbg_north_ctx);
      if (ret != RUC_OK) break;        
 #endif
+     ret = standalone_lbg_tmo_table_init(mx_lbg_north_ctx);
+     if (ret != RUC_OK) break; 
      /*
      ** init of the storage client structure
      */

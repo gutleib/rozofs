@@ -234,3 +234,48 @@ sp_rdma_setup_1(sp_rdma_setup_arg_t *argp, CLIENT *clnt)
 	}
 	return (&clnt_res);
 }
+
+sp_status_ret_t *
+sp_standalone_setup_1(sp_standalone_setup_arg_t *argp, CLIENT *clnt)
+{
+	static sp_status_ret_t clnt_res;
+
+	memset((char *)&clnt_res, 0, sizeof(clnt_res));
+	if (clnt_call (clnt, SP_STANDALONE_SETUP,
+		(xdrproc_t) xdr_sp_standalone_setup_arg_t, (caddr_t) argp,
+		(xdrproc_t) xdr_sp_status_ret_t, (caddr_t) &clnt_res,
+		TIMEOUT) != RPC_SUCCESS) {
+		return (NULL);
+	}
+	return (&clnt_res);
+}
+
+sp_read_ret_t *
+sp_read_standalone_1(sp_read_standalone_arg_t *argp, CLIENT *clnt)
+{
+	static sp_read_ret_t clnt_res;
+
+	memset((char *)&clnt_res, 0, sizeof(clnt_res));
+	if (clnt_call (clnt, SP_READ_STANDALONE,
+		(xdrproc_t) xdr_sp_read_standalone_arg_t, (caddr_t) argp,
+		(xdrproc_t) xdr_sp_read_ret_t, (caddr_t) &clnt_res,
+		TIMEOUT) != RPC_SUCCESS) {
+		return (NULL);
+	}
+	return (&clnt_res);
+}
+
+sp_write_ret_t *
+sp_write_standalone_1(sp_write_standalone_arg_t *argp, CLIENT *clnt)
+{
+	static sp_write_ret_t clnt_res;
+
+	memset((char *)&clnt_res, 0, sizeof(clnt_res));
+	if (clnt_call (clnt, SP_WRITE_STANDALONE,
+		(xdrproc_t) xdr_sp_write_standalone_arg_t, (caddr_t) argp,
+		(xdrproc_t) xdr_sp_write_ret_t, (caddr_t) &clnt_res,
+		TIMEOUT) != RPC_SUCCESS) {
+		return (NULL);
+	}
+	return (&clnt_res);
+}

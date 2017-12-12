@@ -194,3 +194,5 @@ INT     client reply_thread_count                2  1:4
 INT   	export expdir_guard_delay_sec		10  1:7200
 // Maximum number of entries that the export level 2 cache can contain (unit is KB) 
 INT   	export level2_cache_max_entries_kb		512  1:4096
+// When that flag is asserted, RozoFS operates in standalone mode only.
+BOOL 	global 	standalone	            False

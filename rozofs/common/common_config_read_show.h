@@ -103,6 +103,12 @@ char * show_common_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the EXPORTD.\n");
   COMMON_CONFIG_SHOW_INT_OPT(export_dscp,34,"0:34");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(standalone,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, RozoFS operates in standalone mode only.\n");
+  COMMON_CONFIG_SHOW_BOOL(standalone,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -662,6 +668,8 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(storio_dscp,46,0,46);
   // DSCP for exchanges from/to the EXPORTD. 
   COMMON_CONFIG_READ_INT_MINMAX(export_dscp,34,0,34);
+  // When that flag is asserted, RozoFS operates in standalone mode only. 
+  COMMON_CONFIG_READ_BOOL(standalone,False);
   /*
   ** export scope configuration parameters
   */

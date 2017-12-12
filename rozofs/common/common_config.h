@@ -57,6 +57,8 @@ typedef struct _common_config_t {
   int32_t     storio_dscp;
   // DSCP for exchanges from/to the EXPORTD.
   int32_t     export_dscp;
+  // When that flag is asserted, RozoFS operates in standalone mode only.
+  int32_t     standalone;
 
   /*
   ** export scope configuration parameters

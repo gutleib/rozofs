@@ -1616,6 +1616,306 @@ static inline void storio_disk_remove_chunk(rozofs_disk_thread_ctx_t *thread_ctx
   thread_ctx_p->stat.remove_chunk_time +=(timeAfter-timeBefore);  
 }    
 
+
+/*__________________________________________________________________________
+*/
+/**
+   Get the pointer to the beginning of the buffer (standalone mode
+   
+   @param cnx_id : index of the TCP connection
+   @param buf_idx: index of the buffer for which address is expected
+   
+   @retval <> NULL buffer start address
+   @retval == NULL error (see errno for details)
+*/
+char *storio_stdalone_get_buffer_addr(int cnx_id,uint32_t buf_idx)
+{  
+  rozofs_storio_share_mem_ctx_t *sharemem_p = NULL;
+  uint8_t *pbase;
+  uint32_t buf_offset;
+  /*
+  ** get the pointer to the share memory context: take care since the connection might be
+  ** turned down before the thread reads the information from the TCP context
+  */
+  sharemem_p = af_inet_get_connection_user_ref(cnx_id);
+  if (sharemem_p == NULL)
+  {
+
+     errno = ENOMEM;
+     return NULL;
+  }
+  if (buf_idx >= sharemem_p->bufcount)
+  {
+
+     errno = ERANGE;
+     return NULL;
+  }
+  /*
+  ** compute the effective address of the buffer
+  */
+  pbase = (uint8_t*)sharemem_p->addr_p;
+  buf_offset = sharemem_p->bufsize*buf_idx;
+  return (char *) (pbase+buf_offset);
+  
+  }
+
+/*__________________________________________________________________________
+*/
+/**
+*  Read data from a file in standalone mode
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
+static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
+  struct timeval     timeDay;
+  unsigned long long timeBefore, timeAfter;
+  storage_t *st = 0;
+  sp_read_standalone_arg_t          * args;
+  rozorpc_srv_ctx_t      * rpcCtx;
+  sp_read_ret_t            ret;
+  int                      is_fid_faulty;
+  storio_device_mapping_t * fidCtx;
+    
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeBefore = MICROLONG(timeDay);
+
+  ret.status = SP_FAILURE;      
+  /*
+  ** update statistics
+  */
+  thread_ctx_p->stat.read_count++;
+  
+  rpcCtx = msg->rpcCtx;
+  args   = (sp_read_standalone_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+
+  fidCtx = storio_device_mapping_ctx_retrieve(msg->fidIdx);
+  if (fidCtx == NULL) {
+    ret.sp_read_ret_t_u.error = EIO;
+    severe("Bad FID ctx index %d",msg->fidIdx); 
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.read_error++ ;   
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }  
+
+  // Get the storage for the couple (cid;sid)
+  if ((st = storaged_lookup(args->cid, args->sid)) == 0) {
+    ret.sp_read_ret_t_u.error = errno;
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.read_badCidSid++ ;   
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }
+  
+  // Check whether this is exactly the same FID
+  // This is to handle the case when the read request has been serialized
+  // After serialization, the recycling counter may not be the same !!!
+  if (storio_get_dev(fidCtx,0) != ROZOFS_UNKNOWN_CHUNK) {
+    if (rozofs_get_recycle_from_fid(args->fid) != fidCtx->recycle_cpt) {
+      // This is not the same recycling counter, so not the same file
+      ret.sp_read_ret_t_u.error = ENOENT;
+      storio_encode_rpc_response(rpcCtx,(char*)&ret); 
+      thread_ctx_p->stat.read_nosuchfile++ ;          
+      storio_send_response(thread_ctx_p,msg,-1);
+      return;
+    }
+  }      
+  /*
+  ** set the pointer to the bins : we need to compute the address of the buffer based on the information
+  ** that we get in the read argument and on the reference of the shared memory associated with the TCP
+  ** connection
+  */
+   char *pbuf = storio_stdalone_get_buffer_addr(rpcCtx->socketRef,args->share_buffer_index);
+   if (pbuf == NULL)
+   {
+      /*
+      ** There was an error
+      */
+      ret.sp_read_ret_t_u.error = errno;
+      storio_encode_rpc_response(rpcCtx,(char*)&ret); 
+      thread_ctx_p->stat.rdma_read_error++ ;          
+      storio_send_response(thread_ctx_p,msg,-1);
+      return;
+   }
+
+  pbuf += rpcCtx->position;     
+  /*
+  ** clear the length of the bins and set the pointer where data must be returned
+  */  
+  ret.sp_read_ret_t_u.rsp.bins.bins_val = pbuf;
+  ret.sp_read_ret_t_u.rsp.bins.bins_len = 0;
+  
+
+
+  // Lookup for the device id for this FID
+  // Read projections
+  if (storage_read(st, fidCtx, args->layout, args->bsize,(sid_t *) args->dist_set, args->spare,
+            (unsigned char *) args->fid, args->bid, args->nb_proj,
+            (bin_t *) ret.sp_read_ret_t_u.rsp.bins.bins_val,
+            (size_t *) & ret.sp_read_ret_t_u.rsp.bins.bins_len,
+            &ret.sp_read_ret_t_u.rsp.file_size, &is_fid_faulty) != 0) 
+  {
+    ret.sp_read_ret_t_u.error = errno;
+    if (errno == ENOENT)    thread_ctx_p->stat.read_nosuchfile++;
+    else if (!args->spare)  thread_ctx_p->stat.read_error++;
+    else                    thread_ctx_p->stat.read_error_spare++;
+    if (is_fid_faulty) {
+      storio_register_faulty_fid(thread_ctx_p->thread_idx,
+				 args->cid,
+				 args->sid,
+				 (uint8_t*)args->fid);
+    }     
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }  
+  /*
+  ** It is a successful READ put the file size at the end of the buffer
+  */
+  {
+    uint64_t *p64;
+    char *pbuf = (char *)ret.sp_read_ret_t_u.rsp.bins.bins_val;
+//    rdma_p->bins_len = ret.sp_read_ret_t_u.rsp.bins.bins_len;
+    pbuf+= ret.sp_read_ret_t_u.rsp.bins.bins_len;
+    p64 = (uint64_t *)pbuf;
+    *p64 =ret.sp_read_ret_t_u.rsp.file_size; 
+  }
+
+
+ 
+  ret.status = SP_SUCCESS;  
+  msg->size = ret.sp_read_ret_t_u.rsp.bins.bins_len;        
+  storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+  thread_ctx_p->stat.read_Byte_count += ret.sp_read_ret_t_u.rsp.bins.bins_len;
+  storio_send_response(thread_ctx_p,msg,0);
+
+  /*
+  ** Update statistics
+  */
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeAfter = MICROLONG(timeDay);
+  thread_ctx_p->stat.read_time +=(timeAfter-timeBefore);  
+}
+
+/*__________________________________________________________________________
+*/
+/**
+*  Write data to a file in standalone mode
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
+static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
+  struct timeval     timeDay;
+  unsigned long long timeBefore, timeAfter;
+  storage_t *st = 0;
+  sp_write_standalone_arg_t * args;
+  rozorpc_srv_ctx_t      * rpcCtx;
+  sp_write_ret_t           ret;
+  uint8_t                  version = 0;
+  int                      size;
+  int                      is_fid_faulty;
+  storio_device_mapping_t * fidCtx;
+    
+  
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeBefore = MICROLONG(timeDay);
+
+  ret.status = SP_FAILURE;          
+  
+  /*
+  ** update statistics
+  */
+  thread_ctx_p->stat.write_count++;
+  
+  rpcCtx = msg->rpcCtx;
+  args   = (sp_write_standalone_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+
+  fidCtx = storio_device_mapping_ctx_retrieve(msg->fidIdx);
+  if (fidCtx == NULL) {
+    ret.sp_write_ret_t_u.error = EIO;
+    severe("Bad FID ctx index %d",msg->fidIdx); 
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.write_error++ ;   
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }  
+    
+  /*
+  ** Set the address to the beginning of the projection array to write on disk
+  ** the reference of the buffer as well as the offset of the first byte of
+  ** the projection set is found in the write request.
+  */
+  char *pbuf = storio_stdalone_get_buffer_addr(rpcCtx->socketRef,args->share_buffer_index); 
+  if (pbuf == NULL)
+  {
+      /*
+      ** There was an error
+      */
+      ret.sp_write_ret_t_u.error = errno;
+      storio_encode_rpc_response(rpcCtx,(char*)&ret); 
+      thread_ctx_p->stat.rdma_write_error++ ;          
+      storio_send_response(thread_ctx_p,msg,-1);
+      return;    
+  }
+  /*
+  ** add the offset
+  */
+  pbuf += args->buf_offset;
+
+  // Get the storage for the couple (cid;sid)
+  if ((st = storaged_lookup(args->cid, args->sid)) == 0) {
+    ret.sp_write_ret_t_u.error = errno;
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.write_badCidSid++ ;   
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }
+  
+  // Write projections
+  size =  storage_write(st, fidCtx, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
+          (unsigned char *) args->fid, args->bid, args->nb_proj, version,
+          &ret.sp_write_ret_t_u.file_size,(bin_t *) pbuf, &is_fid_faulty);
+  if (size <= 0)  {
+    ret.sp_write_ret_t_u.error = errno;
+    if (errno == ENOSPC)
+      thread_ctx_p->stat.write_nospace++;
+    else   
+      thread_ctx_p->stat.write_error++; 
+    if (is_fid_faulty) {
+      storio_register_faulty_fid(thread_ctx_p->thread_idx,
+				 args->cid,
+				 args->sid,
+				 (uint8_t*)args->fid);
+    }       
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }
+  msg->size = size;   
+    
+  ret.status = SP_SUCCESS;  
+  ret.sp_write_ret_t_u.file_size = 0;
+           
+  storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+  thread_ctx_p->stat.write_Byte_count += size;
+  storio_send_response(thread_ctx_p,msg,0);
+
+  /*
+  ** Update statistics
+  */
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeAfter = MICROLONG(timeDay);
+  thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+} 
+
+
+
 /*
 **   D I S K   T H R E A D
 */
@@ -1740,6 +2040,18 @@ void *storio_disk_thread(void *arg) {
       case STORIO_DISK_THREAD_FID:
         storio_disk_serial(ctx_p,&msg);
         break;	
+
+	/*
+	** Standalone support
+	*/
+      case STORIO_DISK_THREAD_READ_STDALONE:
+        storio_disk_read_standalone(ctx_p,&msg);
+        break;
+
+      case STORIO_DISK_THREAD_WRITE_STDALONE:
+         storio_disk_write_standalone(ctx_p,&msg);
+        break;
+
       default:
         fatal(" unexpected opcode : %d\n",msg.opcode);
         exit(0);       
@@ -1932,6 +2244,16 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
          storio_disk_write_rdma(ctx_p,&msg);
          break;
 
+	 /*
+	 ** Standalone mode support
+	 */
+       case STORIO_DISK_THREAD_READ_STDALONE:
+         storio_disk_read_standalone(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_WRITE_STDALONE:
+         storio_disk_write_standalone(ctx_p,&msg);
+         break;
 
        default:
          fatal(" unexpected opcode : %d\n",msg.opcode);

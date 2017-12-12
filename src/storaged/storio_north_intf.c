@@ -157,7 +157,17 @@ uint32_t storio_north_userRcvReadyCallBack(void * socket_ctx_p,int socketId)
 */
 void  storio_north_userDiscCallBack(void *userRef,uint32_t socket_context_ref,void *bufRef,int err_no)
 {
-
+   /*
+   ** if the userReference is not NULL, that context must be released
+   */
+   if (userRef != NULL)
+   {
+      /*
+      ** Check the key
+      */
+      rozofs_storio_share_mem_ctx_t *sharemem_p = (rozofs_storio_share_mem_ctx_t*) userRef;
+      if (sharemem_p->key_stdalone == ROZOFS_STORIO_STANDALONE_KEY) free(sharemem_p);
+   }
     /*
     ** release the current buffer if significant
     */

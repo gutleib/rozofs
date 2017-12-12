@@ -122,6 +122,8 @@ typedef enum _storio_disk_thread_request_e {
   STORIO_DISK_THREAD_READ_RDMA, /**< RDMA support */
   STORIO_DISK_THREAD_WRITE_RDMA, /**< RDMA support */
   STORIO_DISK_THREAD_FID, /**<process request within a FID context rather than request per request */
+  STORIO_DISK_THREAD_READ_STDALONE, /**< standalone mode */
+  STORIO_DISK_THREAD_WRITE_STDALONE,/**< standalone mode */
   STORIO_DISK_THREAD_MAX_OPCODE
 } storio_disk_thread_request_e;
 

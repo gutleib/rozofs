@@ -280,6 +280,29 @@ void storio_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
       size = sizeof (sp_read_rdma_arg_t);
       break;
 
+
+    case SP_STANDALONE_SETUP:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_standalone_setup_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_status_ret_t;
+      local = sp_standalone_setup;
+      size = sizeof (sp_standalone_setup_arg_t);
+      break;    
+
+    case SP_WRITE_STANDALONE:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_write_standalone_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_write_ret_t;
+      local = sp_write_standalone_1_svc_disk_thread;
+      size = sizeof (sp_write_standalone_arg_t);
+      break;
+  
+    case SP_READ_STANDALONE:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_read_standalone_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_read_rdma_ret_no_bins_t;
+      local = sp_read_standalone_1_svc_disk_thread;
+      size = sizeof (sp_read_standalone_arg_t);
+      break;
+
+
     default:
       rozorpc_srv_ctx_p->xmitBuf = rozorpc_srv_ctx_p->recv_buf;
       rozorpc_srv_ctx_p->recv_buf = NULL;

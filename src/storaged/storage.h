@@ -40,7 +40,18 @@
 #include "storio_device_mapping.h"
 #include "storage_header.h"
 
-
+/**
+* Structure used to store storcli buffer refence with RozoFS operates in standalone mode
+*/
+#define ROZOFS_STORIO_STANDALONE_KEY  0x53543031 
+typedef struct _rozofs_storio_share_mem_ctx_t {
+        uint32_t key_stdalone; 
+        int      shmid;       /**< id of the shared memory                       */
+ 	uint32_t sharemem_key;
+	uint32_t bufcount;
+	uint32_t bufsize;
+	void     *addr_p;     /**< pointer to the beginning of the sharememory  */
+} rozofs_storio_share_mem_ctx_t;
 /*
 ** The mark that should be present on a RozoFS device
 */

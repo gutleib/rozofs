@@ -532,6 +532,7 @@ typedef struct storcli_conf {
 } storcli_conf;
 
 extern storcli_conf conf;
+extern storcli_conf *storcli_conf_p;
 /*
 **_________________________________________________________________________________
 */

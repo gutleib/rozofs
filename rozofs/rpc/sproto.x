@@ -342,6 +342,53 @@ struct sp_read_rdma_arg_t {
     uint32_t remote_len;   /**< length of the data transfer =  nb_proj*blocksize */
 };
 
+
+
+
+struct sp_standalone_setup_arg_t
+{
+   uint32_t   sharemem_key;  /**< reference of the share memory key    */
+   uint32_t   bufcount;      /**< number of buffer                     */
+   uint32_t   bufsize;       /**< buffer size                          */
+};
+
+
+struct sp_read_standalone_arg_t {
+    uint16_t    cid;
+    uint8_t     sid;
+    uint8_t     layout;
+    uint8_t     bsize;    
+    uint8_t     spare;
+    uint32_t    dist_set[ROZOFS_SAFE_MAX_RPC];
+    sp_uuid_t   fid; 
+    uint64_t    bid;
+    uint32_t    nb_proj;
+    uint32_t    share_buffer_index;   /**< index of the buffer in the share memory   */
+    uint32_t   sharemem_key;          /**< reference of the share memory key         */
+    uint32_t   buf_offset;            /**< data offset in buffer                     */
+};
+
+
+struct sp_write_standalone_arg_t {
+    uint16_t    cid;
+    uint8_t     sid;          
+    uint8_t     layout;
+    uint8_t     spare;
+    uint32_t    rebuild_ref;
+    uint32_t    alignment1;
+    uint32_t    dist_set[ROZOFS_SAFE_MAX_RPC];
+    sp_uuid_t   fid;        
+    uint8_t     proj_id;     
+    uint64_t    bid;
+    uint32_t    nb_proj;
+    uint32_t    bsize;   
+    uint32_t    share_buffer_index;   /**< index of the buffer in the share memory   */
+    uint32_t   sharemem_key;          /**< reference of the share memory key         */
+    uint32_t   buf_offset;            /**< data offset in buffer                     */
+
+};
+
+
 program STORAGE_PROGRAM {
     version STORAGE_VERSION {
         void
@@ -387,7 +434,16 @@ program STORAGE_PROGRAM {
         SP_WRITE_RDMA(sp_write_rdma_arg_t)        = 13;
 
         sp_rdma_setup_ret_t
-        SP_RDMA_SETUP(sp_rdma_setup_arg_t)  = 14;		
+        SP_RDMA_SETUP(sp_rdma_setup_arg_t)  = 14;	
+	
+        sp_status_ret_t
+        SP_STANDALONE_SETUP(sp_standalone_setup_arg_t)  = 15;
+
+        sp_read_ret_t
+        SP_READ_STANDALONE(sp_read_standalone_arg_t)          = 16;
+
+        sp_write_ret_t
+        SP_WRITE_STANDALONE(sp_write_standalone_arg_t)        = 17;
 
    }=1;
 } = 0x20000002;

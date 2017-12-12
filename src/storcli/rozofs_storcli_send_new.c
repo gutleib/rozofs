@@ -50,6 +50,7 @@
 #include <rozofs/rozofs_srv.h>
 #include <rozofs/rdma/rozofs_rdma.h>
 #include "rdma_client_send.h"
+#include "standalone_client_send.h"
 
 DECLARE_PROFILING(stcpp_profiler_t);
 
@@ -199,6 +200,81 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
 
     }
 #endif
+{
+    uint32_t         standalone_socket_ref;
+    /*
+    ** Check if we can make use of RDMA for reading data:
+    ** - here we check the RDMA is globally enabled 
+    ** - if it exist a RDMA connection between the storio and the storcli
+    ** - if the read size is greater than a predefined threshold (future)
+    */
+    if ((common_config.standalone) && (storcli_lbg_is_standalone_up(lbg_id,&standalone_socket_ref)))
+    {
+       switch (opcode) 
+       {
+	 /*
+	 ** Check the the OPCODE is SP_READ , if RDMA is supported change the opcode in order to
+	 ** trigger a RDMA transfer from the storio
+	 */
+	 case SP_READ:  
+
+            ret = rozofs_sorcli_sp_read_standalone(lbg_id,
+	                                     standalone_socket_ref,
+					     timeout_sec,
+					     prog,
+					     vers,
+					     SP_READ_STANDALONE,
+	                                     (xdrproc_t)  xdr_sp_read_standalone_arg_t,
+					     msg2encode_p,
+	                                      xmit_buf,seqnum,
+					      opaque_value_idx1,
+					      extra_len,
+					      rozofs_storcli_read_standalone_req_processing_cbk,
+					      user_ctx_p);
+	   return ret;
+	   break;
+
+	 /*
+	 ** Check the the OPCODE is SP_WRITE , if RDMA is supported change the opcode in order to
+	 ** trigger a RDMA transfer from the storio
+	 */
+	 case SP_WRITE:
+ 	    /*
+	    ** check if we have reached the min size
+	    */
+	    {
+	      sp_write_arg_no_bins_t *request = (sp_write_arg_no_bins_t*)msg2encode_p;
+	      if (request->nb_proj <= 1)
+	      {
+	         /*
+		 ** min size is not reached: the storcli has allocated a small buffer so by-pass standalone mode
+		 */
+		 break;
+	      }	    
+	    }
+            ret = rozofs_sorcli_sp_write_standalone(lbg_id,
+	                                     rdma_socket_ref,
+					     timeout_sec,
+					     prog,
+					     vers,
+					     SP_WRITE_STANDALONE,
+	                                     (xdrproc_t)  xdr_sp_write_standalone_arg_t,
+					     msg2encode_p,
+	                                      xmit_buf,seqnum,
+					      opaque_value_idx1,
+					      0,
+					      rozofs_storcli_write_standalone_req_processing_cbk,
+					      user_ctx_p);
+	   return ret;
+	   break;
+	 
+	 default:
+	    break;
+       }
+
+    }
+}
+
     /*
     ** allocate a transaction context
     */

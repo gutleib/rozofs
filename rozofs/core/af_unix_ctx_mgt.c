@@ -1076,6 +1076,9 @@ uint32_t af_unix_module_init(uint32_t af_unix_ctx_count,
     return ret;
 }
 
+/*
+**__________________________________________________________________________
+*/
 /**
 *  Get the source/destination IP addresses and ports of a connection
 
@@ -1103,4 +1106,59 @@ int af_inet_get_connection_info(uint32_t cnx_idx,af_inet_connection_info_t *p)
    p->src_port = ctx_p->src_port_host;
    p->dst_port = ctx_p->remote_port_host;
    return 0;
+}
+
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*   Set the user reference of a TCP connection context
+
+   @param cnx_idx: connection index  
+   @param userRef: pointer to an opaque value
+   
+  @retval 0 on success
+  @eetval -1 on error
+*/
+int af_inet_set_connection_user_ref(uint32_t cnx_idx,void *userRef)
+{
+
+   af_unix_ctx_generic_t *ctx_p;
+   /*
+   ** Get the af_unix context for cnx_idx
+   */
+   ctx_p = af_unix_getObjCtx_p(cnx_idx);
+   if (ctx_p == NULL)
+   {
+     errno = ERANGE;
+     return -1;
+   }
+   ctx_p->userRef = userRef;
+   return 0;
+}
+/*
+**__________________________________________________________________________
+*/
+/**
+*   Set the user reference of a TCP connection context
+
+   @param cnx_idx: connection index  
+   @param userRef: pointer to an opaque value
+   
+  @retval pointer to the userRef or NULL
+*/
+void *af_inet_get_connection_user_ref(uint32_t cnx_idx)
+{
+
+   af_unix_ctx_generic_t *ctx_p;
+   /*
+   ** Get the af_unix context for cnx_idx
+   */
+   ctx_p = af_unix_getObjCtx_p(cnx_idx);
+   if (ctx_p == NULL)
+   {
+     return NULL;
+   }
+   return ctx_p->userRef;
 }

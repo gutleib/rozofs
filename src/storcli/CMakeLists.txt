@@ -58,6 +58,10 @@ add_executable(storcli
     rozofs_storcli_mojette_thread_intf.h
     rozofs_storcli_delete.c
     rozofs_storcli_wr_repair.c
+    rozofs_storcli_sharedmem.c
+    rozofs_storcli_sharedmem.h
+    standalone_client_send.c  
+    standalone_client_send.h
  )
 
 if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)

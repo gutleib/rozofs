@@ -385,6 +385,48 @@ struct sp_read_rdma_arg_t {
 };
 typedef struct sp_read_rdma_arg_t sp_read_rdma_arg_t;
 
+struct sp_standalone_setup_arg_t {
+	uint32_t sharemem_key;
+	uint32_t bufcount;
+	uint32_t bufsize;
+};
+typedef struct sp_standalone_setup_arg_t sp_standalone_setup_arg_t;
+
+struct sp_read_standalone_arg_t {
+	uint16_t cid;
+	uint8_t sid;
+	uint8_t layout;
+	uint8_t bsize;
+	uint8_t spare;
+	uint32_t dist_set[ROZOFS_SAFE_MAX_RPC];
+	sp_uuid_t fid;
+	uint64_t bid;
+	uint32_t nb_proj;
+	uint32_t share_buffer_index;
+	uint32_t sharemem_key;
+	uint32_t buf_offset;
+};
+typedef struct sp_read_standalone_arg_t sp_read_standalone_arg_t;
+
+struct sp_write_standalone_arg_t {
+	uint16_t cid;
+	uint8_t sid;
+	uint8_t layout;
+	uint8_t spare;
+	uint32_t rebuild_ref;
+	uint32_t alignment1;
+	uint32_t dist_set[ROZOFS_SAFE_MAX_RPC];
+	sp_uuid_t fid;
+	uint8_t proj_id;
+	uint64_t bid;
+	uint32_t nb_proj;
+	uint32_t bsize;
+	uint32_t share_buffer_index;
+	uint32_t sharemem_key;
+	uint32_t buf_offset;
+};
+typedef struct sp_write_standalone_arg_t sp_write_standalone_arg_t;
+
 #define STORAGE_PROGRAM 0x20000002
 #define STORAGE_VERSION 1
 
@@ -434,6 +476,15 @@ extern  sp_write_ret_t * sp_write_rdma_1_svc(sp_write_rdma_arg_t *, struct svc_r
 #define SP_RDMA_SETUP 14
 extern  sp_rdma_setup_ret_t * sp_rdma_setup_1(sp_rdma_setup_arg_t *, CLIENT *);
 extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc(sp_rdma_setup_arg_t *, struct svc_req *);
+#define SP_STANDALONE_SETUP 15
+extern  sp_status_ret_t * sp_standalone_setup_1(sp_standalone_setup_arg_t *, CLIENT *);
+extern  sp_status_ret_t * sp_standalone_setup_1_svc(sp_standalone_setup_arg_t *, struct svc_req *);
+#define SP_READ_STANDALONE 16
+extern  sp_read_ret_t * sp_read_standalone_1(sp_read_standalone_arg_t *, CLIENT *);
+extern  sp_read_ret_t * sp_read_standalone_1_svc(sp_read_standalone_arg_t *, struct svc_req *);
+#define SP_WRITE_STANDALONE 17
+extern  sp_write_ret_t * sp_write_standalone_1(sp_write_standalone_arg_t *, CLIENT *);
+extern  sp_write_ret_t * sp_write_standalone_1_svc(sp_write_standalone_arg_t *, struct svc_req *);
 extern int storage_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -482,6 +533,15 @@ extern  sp_write_ret_t * sp_write_rdma_1_svc();
 #define SP_RDMA_SETUP 14
 extern  sp_rdma_setup_ret_t * sp_rdma_setup_1();
 extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc();
+#define SP_STANDALONE_SETUP 15
+extern  sp_status_ret_t * sp_standalone_setup_1();
+extern  sp_status_ret_t * sp_standalone_setup_1_svc();
+#define SP_READ_STANDALONE 16
+extern  sp_read_ret_t * sp_read_standalone_1();
+extern  sp_read_ret_t * sp_read_standalone_1_svc();
+#define SP_WRITE_STANDALONE 17
+extern  sp_write_ret_t * sp_write_standalone_1();
+extern  sp_write_ret_t * sp_write_standalone_1_svc();
 extern int storage_program_1_freeresult ();
 #endif /* K&R C */
 
@@ -519,6 +579,9 @@ extern  bool_t xdr_sp_rdma_setup_arg_t (XDR *, sp_rdma_setup_arg_t*);
 extern  bool_t xdr_sp_rdma_setup_ret_t (XDR *, sp_rdma_setup_ret_t*);
 extern  bool_t xdr_sp_write_rdma_arg_t (XDR *, sp_write_rdma_arg_t*);
 extern  bool_t xdr_sp_read_rdma_arg_t (XDR *, sp_read_rdma_arg_t*);
+extern  bool_t xdr_sp_standalone_setup_arg_t (XDR *, sp_standalone_setup_arg_t*);
+extern  bool_t xdr_sp_read_standalone_arg_t (XDR *, sp_read_standalone_arg_t*);
+extern  bool_t xdr_sp_write_standalone_arg_t (XDR *, sp_write_standalone_arg_t*);
 
 #else /* K&R C */
 extern bool_t xdr_sp_uuid_t ();
@@ -552,6 +615,9 @@ extern bool_t xdr_sp_rdma_setup_arg_t ();
 extern bool_t xdr_sp_rdma_setup_ret_t ();
 extern bool_t xdr_sp_write_rdma_arg_t ();
 extern bool_t xdr_sp_read_rdma_arg_t ();
+extern bool_t xdr_sp_standalone_setup_arg_t ();
+extern bool_t xdr_sp_read_standalone_arg_t ();
+extern bool_t xdr_sp_write_standalone_arg_t ();
 
 #endif /* K&R C */
 
