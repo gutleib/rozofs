@@ -1512,8 +1512,8 @@ void rozofs_rdma_setup_cbk(void *this,void *param)
     ** get the sequence number and the reference of the projection id form the opaque user array
     ** of the transaction context
     */
-    rozofs_tx_read_opaque_data(this,0,&lbg_id);
-    rozofs_tx_read_opaque_data(this,1,&socket_context_ref);
+    rozofs_tx_read_opaque_data(this,2,&lbg_id);
+    rozofs_tx_read_opaque_data(this,0,&socket_context_ref);
     tcp_cnx_p = rozofs_rdma_get_tcp_connection_context_from_af_unix_id(socket_context_ref,0);
     /*    
     ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
