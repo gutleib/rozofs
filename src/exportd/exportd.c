@@ -55,6 +55,7 @@
 #include <rozofs/core/rozo_launcher.h>
 #include <rozofs/core/rozofs_core_files.h>
 #include <rozofs/core/af_unix_socket_generic.h>
+#include <rozofs/core/rozofs_numa.h>
 
 #include <rozofs/core/rozofs_cpu.h>
 #include "config.h"
@@ -2310,6 +2311,18 @@ int main(int argc, char *argv[]) {
                 strerror(errno));
         goto error;
     }
+    
+    /*
+    ** Is a numa node given in the configuration
+    */
+    if (exportd_config.nodeid != -1) {
+        /*
+        ** Use the node id of the export.conf 
+        */
+        rozofs_numa_allocate_node(exportd_config.nodeid ,"export.conf");
+    }
+    
+    
     /*
     ** compute the hash of the exportd configuration
     */
