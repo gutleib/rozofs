@@ -842,7 +842,6 @@ int rozofs_sorcli_sp_read_standalone(uint32_t lbg_id,uint32_t socket_context_ref
 void rozofs_storcli_write_standalone_req_processing_cbk(void *this,void *param) 
 {
    void *rdma_buf_ref;
-   void *recv_buf;
    int status;   
    int error;
    /*
@@ -873,22 +872,6 @@ void rozofs_storcli_write_standalone_req_processing_cbk(void *this,void *param)
        
      return rozofs_storcli_write_req_processing_cbk(this,param);
    }
-#if 0
-   /*
-   ** Get the received buffer
-   */
-    recv_buf = rozofs_tx_get_recvBuf(this);
-    if (recv_buf == NULL)
-    {
-       /*
-       ** something wrong happened: just clear the rdma reference from the
-       ** transaction context: the buffer must not be release since the
-       ** write process might attempt to use it on another lbg
-       */
-       rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
-       return rozofs_storcli_write_req_processing_cbk(this,param);
-    }
-#endif
     /*
     ** normal case : just remove the reference of the rdma_buffer
     */
