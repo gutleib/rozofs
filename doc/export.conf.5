@@ -24,6 +24,11 @@ grammar.
            - 1 (inverse = 4, forward = 6, safe = 8);
            - 2 (inverse = 8, forward = 12, safe = 16);
 
+.SS nodeid
+    This is the numa node identifier to pin the exportd processes on when numa_aware is
+    configured in rozofs.conf.
+               - is optional.
+               - must be an integer.
 
 .SS volumes
    It is a list of volumes. Each volume is identified by its vid and may contain

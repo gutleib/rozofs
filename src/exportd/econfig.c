@@ -63,6 +63,7 @@
 #define EIP4SUBNET  "ip4subnet"
 #define ESUBNETS    "subnets"
 #define ETHIN       "thin-provisioning"
+#define ENODEID     "nodeid"
 
 /*
 ** constant for exportd gateways
@@ -1174,9 +1175,11 @@ int econfig_read(econfig_t *config, const char *fname) {
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
                || (LIBCONFIG_VER_MAJOR > 1))
     int layout;
+    int nodeid;    
 #else
 
     long int layout;
+    long int nodeid;
 #endif
 
     DEBUG_FUNCTION;
@@ -1197,6 +1200,15 @@ int econfig_read(econfig_t *config, const char *fname) {
         goto out;
     }
     config->layout = (uint8_t) layout;
+
+    /*
+    ** Is there a defined numa node id to pin the export on
+    ** when num aware is requested in rozofs.conf
+    */
+    config->nodeid = -1;
+    if (config_lookup_int(&cfg, ENODEID, &nodeid)) {
+       config->nodeid = (uint8_t) nodeid;
+    }
 
 #if 0 // not needed since exportgateway code is inactive
     if (!config_lookup_string(&cfg, EVIP, &host)) {

@@ -91,6 +91,7 @@ typedef struct expgw_config {
 
 typedef struct econfig {
     uint8_t layout; ///< layout used for this exportd
+    int    nodeid; // Node identifier to be used when numa aware is set in rozofs.conf
     char   exportd_vip[ROZOFS_HOSTNAME_MAX]; ///< virtual IP address of the exportd
     list_t volumes;
     list_t exports;
