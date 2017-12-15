@@ -60,6 +60,7 @@ struct rdma_cm_id *rozofs_rdma_listener[ROZOFS_RDMA_MAX_LISTENER];   /**< rdma l
 int rozofs_rdma_listener_count = 0;                                  /**< current number of listener            */
 int rozofs_rdma_listener_max = 0;                                   /**< max number of listening contexts       */
 rozofs_rdma_mod_stats_t rozofs_rdma_mod_stats;                    /**< RDMA module statistics                */
+uint64_t rdma_err_stats[ROZOFS_IBV_WC_MAX_ERR+1] = {0} ;             /**< RDMA error counters */
 /*
 ** local prototypes
 */
@@ -270,8 +271,8 @@ void show_rdma_status(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 static char * show_rdma_stats_help(char * pChar) {
   pChar += sprintf(pChar,"usage:\n");
-  pChar += sprintf(pChar,"show_rdma_statistics reset  : reset statistics\n");
-  pChar += sprintf(pChar,"show_rdma_statistics        : display statistics\n");  
+  pChar += sprintf(pChar,"rdma_statistics reset  : reset statistics\n");
+  pChar += sprintf(pChar,"rdma_statistics        : display statistics\n");  
   return pChar; 
 }
 
@@ -320,6 +321,48 @@ void show_rdma_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
 	** Help
 	*/
 	pChar = show_rdma_stats_help(pChar);
+      }
+    }    
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
+
+
+/*
+**__________________________________________________
+*/
+
+static char * show_rdma_err_help(char * pChar) {
+  pChar += sprintf(pChar,"usage:\n");
+  pChar += sprintf(pChar,"rdma_err reset  : reset error counters\n");
+  pChar += sprintf(pChar,"rdma_err        : display RDMA error counters\n");  
+  return pChar; 
+}
+
+
+#define SHOW_RDMA_ERR(probe) pChar += sprintf(pChar," %-22s | %15llu |\n",\
+                    rozofs_rdma_err_e2String(probe),\
+                    (unsigned long long int)rdma_err_stats[probe]);
+
+
+void show_rdma_error(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char *pChar = uma_dbg_get_buffer();
+    int i;
+
+
+    pChar += sprintf(pChar, "      RDMA Error        |     count       | \n");
+    pChar += sprintf(pChar, "------------------------+-----------------+\n");
+    for (i=0; i <= ROZOFS_IBV_WC_MAX_ERR; i++) SHOW_RDMA_ERR(i);
+
+    if (argv[1] != NULL)
+    {
+      if (strcmp(argv[1],"reset")==0) {
+        memset(&rdma_err_stats,0,sizeof(rdma_err_stats));
+      }
+      else {
+	/*
+	** Help
+	*/
+	pChar = show_rdma_err_help(pChar);
       }
     }    
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -415,6 +458,39 @@ void show_rdma_mem(char * argv[], uint32_t tcpRef, void *bufRef) {
   }
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());      
 
+}
+
+/*
+**__________________________________________________
+*/
+void rozofs_rdma_error_register(int rdma_error)
+{
+  switch(rdma_error)
+  {
+      case IBV_WC_SUCCESS: rdma_err_stats[ROZOFS_IBV_WC_SUCCESS]++; break;
+      case IBV_WC_LOC_LEN_ERR: rdma_err_stats[ROZOFS_IBV_WC_LOC_LEN_ERR]++; break;
+      case IBV_WC_LOC_QP_OP_ERR: rdma_err_stats[ROZOFS_IBV_WC_LOC_QP_OP_ERR]++; break;
+      case IBV_WC_LOC_EEC_OP_ERR: rdma_err_stats[ROZOFS_IBV_WC_LOC_EEC_OP_ERR]++; break;
+      case IBV_WC_LOC_PROT_ERR: rdma_err_stats[ROZOFS_IBV_WC_LOC_PROT_ERR]++; break;
+      case IBV_WC_WR_FLUSH_ERR: rdma_err_stats[ROZOFS_IBV_WC_WR_FLUSH_ERR]++; break;
+      case IBV_WC_MW_BIND_ERR: rdma_err_stats[ROZOFS_IBV_WC_MW_BIND_ERR]++; break;
+      case IBV_WC_BAD_RESP_ERR: rdma_err_stats[ROZOFS_IBV_WC_BAD_RESP_ERR]++; break;
+      case IBV_WC_LOC_ACCESS_ERR: rdma_err_stats[ROZOFS_IBV_WC_LOC_ACCESS_ERR]++; break;
+      case IBV_WC_REM_INV_REQ_ERR: rdma_err_stats[ROZOFS_IBV_WC_REM_INV_REQ_ERR]++; break;
+      case IBV_WC_REM_ACCESS_ERR: rdma_err_stats[ROZOFS_IBV_WC_REM_ACCESS_ERR]++; break;
+      case IBV_WC_REM_OP_ERR: rdma_err_stats[ROZOFS_IBV_WC_REM_OP_ERR]++; break;
+      case IBV_WC_RETRY_EXC_ERR: rdma_err_stats[ROZOFS_IBV_WC_RETRY_EXC_ERR]++; break;
+      case IBV_WC_RNR_RETRY_EXC_ERR: rdma_err_stats[ROZOFS_IBV_WC_RNR_RETRY_EXC_ERR]++; break;
+      case IBV_WC_LOC_RDD_VIOL_ERR: rdma_err_stats[ROZOFS_IBV_WC_LOC_RDD_VIOL_ERR]++; break;
+      case IBV_WC_REM_INV_RD_REQ_ERR: rdma_err_stats[ROZOFS_IBV_WC_REM_INV_RD_REQ_ERR]++; break;
+      case IBV_WC_REM_ABORT_ERR: rdma_err_stats[ROZOFS_IBV_WC_REM_ABORT_ERR]++; break;
+      case IBV_WC_INV_EECN_ERR: rdma_err_stats[ROZOFS_IBV_WC_INV_EECN_ERR]++; break;
+      case IBV_WC_INV_EEC_STATE_ERR: rdma_err_stats[ROZOFS_IBV_WC_INV_EEC_STATE_ERR]++; break;
+      case IBV_WC_FATAL_ERR: rdma_err_stats[ROZOFS_IBV_WC_FATAL_ERR]++; break;
+      case IBV_WC_RESP_TIMEOUT_ERR: rdma_err_stats[ROZOFS_IBV_WC_RESP_TIMEOUT_ERR]++; break;
+      case IBV_WC_GENERAL_ERR:rdma_err_stats[ROZOFS_IBV_WC_GENERAL_ERR]++; break;
+      default: rdma_err_stats[ROZOFS_IBV_WC_MAX_ERR]++; break;
+  }
 }
 /*
 **__________________________________________________
@@ -592,6 +668,7 @@ int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode)
   */
   uma_dbg_addTopic("rdma_status", show_rdma_status);  
   uma_dbg_addTopic("rdma_statistics", show_rdma_statistics);  
+  uma_dbg_addTopic("rdma_error", show_rdma_error);  
   uma_dbg_addTopic("rdma_devices", show_rdma_devices);  
   uma_dbg_addTopic("rdma_mem", show_rdma_mem);  
   return ret;
@@ -961,6 +1038,7 @@ void rozofs_on_completion(struct ibv_wc *wc)
 	    thread_wr_p->status = -1;
 	    thread_wr_p->error = wc->status;
 	  }
+	  rozofs_rdma_error_register(wc->status);
 	  goto error;    
   }
   /*
@@ -1053,6 +1131,7 @@ void rozofs_on_completion2(struct ibv_wc *wc)
 	case IBV_WC_RESP_TIMEOUT_ERR:
 	case IBV_WC_GENERAL_ERR: 
 	default: 
+	    rozofs_rdma_error_register(wc->status);
             status = -1;
 	    error = wc->status;
 	  break;    

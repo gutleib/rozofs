@@ -634,6 +634,18 @@ void rozofs_storcli_read_rdma_req_processing_cbk(void *this,void *param)
     ** of the processing.
     */
     max_size = ruc_buf_getPayloadLen(recv_buf);  
+    /*
+    ** if the receive size is greater than 4KB it is a clear indication that was
+    ** something wrong at RDMA level, and the data have been provided by TCP, so we just need
+    ** to keep the received buffer and release the buffer allocated for RDMA transfer
+    */
+    if (max_size > 4096)
+    {    
+       ruc_buf_freeBuffer(rdma_buf_ref);
+       rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
+       return rozofs_storcli_read_req_processing_cbk(this,param);            
+    }
+
     memcpy(dst_payload,src_payload,max_size);
     /*
     ** adjust the size of the payload of the destination buffer

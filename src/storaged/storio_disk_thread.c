@@ -41,6 +41,8 @@
 #include <rozofs/core/ruc_buffer_debug.h>
 #include "storio_serialization.h"
 
+bool_t xdr_sp_read_ret_no_bins_t (XDR *xdrs, sp_read_ret_t *objp);
+
 int af_unix_disk_socket_ref = -1;
  
  #define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
@@ -472,12 +474,20 @@ void storio_disk_read_rdma_cbk(void *user_param,int status, int error)
     */
     args   = (sp_read_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
     rozofs_rdma_on_completion_check_status_of_rdma_connection(status,error,(rozofs_rdma_tcp_assoc_t*) &args->rdma_key);
+    /*
+    ** there is something wrong with RDMA but since we have the data in the buffer, we can use TCP to send
+    ** them back, however we have to change the xdr_encode procedure and use the one of TCP
+    */
+    rpcCtx->xdr_result  = (xdrproc_t) xdr_sp_read_ret_no_bins_t;
+
+#if 0
     ret.status = SP_FAILURE;     
     ret.sp_read_ret_t_u.error = error;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
     thread_ctx_p->stat.rdma_write_error++;
     storio_send_response(thread_ctx_p,msg,-1);
     return;  
+#endif
   }                             
   /*
   ** warning need to adjust the effective length since no data are returned when
@@ -638,11 +648,17 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
     */
     args   = (sp_read_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
     rozofs_rdma_on_completion_check_status_of_rdma_connection(status,-1,(rozofs_rdma_tcp_assoc_t*) &args->rdma_key);
-    ret.status = SP_FAILURE;     
-    ret.sp_read_ret_t_u.error = errno;
-    storio_encode_rpc_response(rpcCtx,(char*)&ret);
     thread_ctx_p->stat.rdma_write_error++;
-    storio_send_response(thread_ctx_p,msg,-1);
+    /*
+    ** there is something wrong with RDMA but since we have the data in the buffer, we can use TCP to send
+    ** them back, however we have to change the xdr_encode procedure and use the one of TCP
+    */
+    rpcCtx->xdr_result  = (xdrproc_t) xdr_sp_read_ret_no_bins_t;
+    ret.status = SP_SUCCESS;  
+    msg->size = ret.sp_read_ret_t_u.rsp.bins.bins_len;        
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.read_Byte_count += ret.sp_read_ret_t_u.rsp.bins.bins_len;
+    storio_send_response(thread_ctx_p,msg,0);
     return;  
   }                             
 #if 0

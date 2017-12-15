@@ -1986,6 +1986,8 @@ void sp_standalone_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
     req_ctx_p->recv_buf = NULL;
 
+#warning check that the remote IP@ is local  otherwise reject the service
+#if 0
     /*
     ** Check if the standalone mode is configure
     */
@@ -1994,6 +1996,7 @@ void sp_standalone_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
        errno = ENOTSUP;
        goto error;
     }
+#endif
     /*
     ** allocate a context to store the reference of the shared memory
     */

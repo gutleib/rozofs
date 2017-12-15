@@ -37,12 +37,4 @@ void common_config_extra_checks() {
       common_config.device_selfhealing_mode[0] = 0;
     }
   }
-  if (common_config.standalone)
-  {
-     if (common_config.rdma_enable)
-     {
-        warning("RDMA cannot be enabled with standalone is active (reset of rdma_enable)");
-	common_config.rdma_enable = 0;
-     }
-  }	
 }  

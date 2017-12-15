@@ -167,25 +167,54 @@ int storaged_lbg_initialize(mstorage_t *s, int index) {
      /*
      ** RDMA is supported only when the lbg_size is 1
      */
+     while(1)
+     {
      if (lbg_size==1)
      {
-        ret = north_lbg_configure_af_inet_with_rdma_support(s->lbg_id[index],
-	                                                    rozofs_rdma_tcp_client_connect_CBK,
-							    rozofs_rdma_tcp_client_dis_CBK,
-							    rozofs_rdma_tx_out_of_seq_cbk);
-	if (ret < 0)
-	{
-	  severe("Cannot create Load Balancing Group %d for storaged %s",s->lbg_id[index],s->host);
-	  return -1; 
-	} 							         
+       /*
+       ** check if the lbg is local: for the local case we use the standalone code
+       */
+       if ((local == 0) || (common_config.standalone == 0))
+       {
+          info ("RDMA is enabled: LBG operates in RDMA mode");
+          ret = north_lbg_configure_af_inet_with_rdma_support(s->lbg_id[index],
+	                                                      rozofs_rdma_tcp_client_connect_CBK,
+							      rozofs_rdma_tcp_client_dis_CBK,
+							      rozofs_rdma_tx_out_of_seq_cbk);
+	  if (ret < 0)
+	  {
+	    severe("Cannot create Load Balancing Group %d for storaged %s",s->lbg_id[index],s->host);
+	    return -1; 
+	  } 
+	  break;							         
+       }
+       if ((local == 1) && (common_config.standalone == 1))
+       {
+	 /*
+	 ** use the standalone code
+	 */     
+          info ("RDMA is enabled: LBG operates in Standalone  mode");
+	 ret = north_lbg_configure_af_inet_with_rdma_support(s->lbg_id[index],
+	                                                     rozofs_standalone_tcp_client_connect_CBK,
+							     rozofs_standalone_tcp_client_dis_CBK,
+							     rozofs_standalone_tx_out_of_seq_cbk);
+	 if (ret < 0)
+	 {
+	   severe("Cannot create Load Balancing Group %d for storaged %s",s->lbg_id[index],s->host);
+	   return -1; 
+	 } 		
+       }
+       break;
      }
+     break;
+     }	
 #endif              
      /*
      ** Check the case of the standalone mode: 
      ** note: rdma and standalone mode are exclusive: if standalone mode is active, RDMA cannot not be activated
      */
      
-     if (common_config.standalone)
+     if ((local == 1) && (common_config.standalone == 1))
      {
        /*
        ** standalone is supported only when the lbg_size is 1

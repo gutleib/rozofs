@@ -972,19 +972,21 @@ uint32_t rozofs_storcli_module_init()
       /*
       ** create the pool in shared memory if RozoFS operates in standalone mode
       */
-      if (common_config.standalone)
+//      if (common_config.standalone)
       {
          int key = (storcli_conf_p->rozofsmount_instance << 8) | storcli_conf_p->module_index;
      
       rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] = 
           rozofs_create_shared_memory(key,_ROZOFS_STORCLI_SOUTH_LARGE_POOL,rozofs_storcli_south_large_buf_count,rozofs_storcli_south_large_buf_sz,"SouthLarge");
       }
+#if 0
       else
       {
         rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] = ruc_buf_poolCreate(rozofs_storcli_south_large_buf_count,rozofs_storcli_south_large_buf_sz);
 	if (rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] != NULL)
 	   ruc_buffer_debug_register_pool("SouthLarge",rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL]); 
       }
+#endif
       if (rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] == NULL)
       {
          ret = RUC_NOK;
