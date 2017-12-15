@@ -643,6 +643,7 @@ void rozofs_storcli_read_rdma_req_processing_cbk(void *this,void *param)
     {    
        ruc_buf_freeBuffer(rdma_buf_ref);
        rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
+       rozofs_tx_put_recvBuf(this,recv_buf);
        return rozofs_storcli_read_req_processing_cbk(this,param);            
     }
 
