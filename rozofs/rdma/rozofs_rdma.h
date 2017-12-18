@@ -85,7 +85,7 @@ typedef struct rozofs_rdma_sig_th_statistics_t
 
 #define ROZOFS_MAX_RDMA_MEMREG 8
 #define ROZOFS_MAX_RDMA_ADAPTOR 8
-#define ROZOFS_RDMA_COMPQ_SIZE 128  /**< must be at least equal to the number of disk threads  */
+#define ROZOFS_RDMA_COMPQ_SIZE 512  /**< must be at least equal to the number of disk threads  */
 
 /*
 ** RDMA module statistics

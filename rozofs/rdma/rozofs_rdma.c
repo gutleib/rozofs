@@ -28,6 +28,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <rozofs/common/log.h>
+#include <rozofs/core/af_unix_socket_generic.h>
 /**
 *  Global data
 */
@@ -61,6 +62,7 @@ int rozofs_rdma_listener_count = 0;                                  /**< curren
 int rozofs_rdma_listener_max = 0;                                   /**< max number of listening contexts       */
 rozofs_rdma_mod_stats_t rozofs_rdma_mod_stats;                    /**< RDMA module statistics                */
 uint64_t rdma_err_stats[ROZOFS_IBV_WC_MAX_ERR+1] = {0} ;             /**< RDMA error counters */
+int  rozofs_rdma_qp_next_idx=0;
 /*
 ** local prototypes
 */
@@ -368,9 +370,7 @@ void show_rdma_error(char * argv[], uint32_t tcpRef, void *bufRef) {
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
 
-/*
-**__________________________________________________
-*/
+
 /*
 **__________________________________________________
 */
@@ -379,14 +379,22 @@ void show_rdma_error(char * argv[], uint32_t tcpRef, void *bufRef) {
 
     @param device_p: pointer to the device
     @param pChar: pointer to the display buffer
+    @param index: adpator index
+    @param display_ports: when asserted displays the port informations
     
     retval pointer to the next byte in display buffer
 */
-char *rozofs_rdma_display_device_properties(struct ibv_context *device_p,char *pChar,int index)
+char  *rozofs_ibv_query_port_debug( struct ibv_context *context, 
+                                    uint8_t port_num,
+				    char *pbuf);
+
+char *rozofs_rdma_display_device_properties(struct ibv_context *device_p,char *pChar,int index,int port_display)
 {
    int ret;
    struct ibv_device_attr device_attr;
    char bufall[128];
+   char *pname = NULL;
+   int i;
    
    memset(bufall,0,128);
    pChar +=sprintf(pChar,"adaptor #%d \n",index);
@@ -396,14 +404,37 @@ char *rozofs_rdma_display_device_properties(struct ibv_context *device_p,char *p
       pChar +=sprintf(pChar,"ibv_query_device error:%s\n",strerror(errno));
       return pChar;
    }
-   memcpy(bufall,&device_attr.fw_ver,64);
-   pChar +=sprintf(pChar,"firmware version    %s\n",bufall);
-   pChar +=sprintf(pChar,"vendor              %x-%x-%x\n",device_attr.vendor_id,device_attr.vendor_part_id,device_attr.hw_ver);
-   pChar +=sprintf(pChar,"max_qp_init_rd_atom %d\n",device_attr.max_qp_init_rd_atom);
-   pChar +=sprintf(pChar,"max_qp_rd_atom      %d\n",device_attr.max_qp_rd_atom);
-   pChar +=sprintf(pChar,"max_res_rd_atom     %d\n",device_attr.max_res_rd_atom);
-   pChar +=sprintf(pChar,"max_qp              %d\n",device_attr.max_qp);
-   pChar +=sprintf(pChar,"phys_port_cnt       %d\n",device_attr.phys_port_cnt);
+   /*
+   ** get the device name
+   */
+   pname = (char *)ibv_get_device_name(device_p->device);
+   if (pname == NULL)
+   {
+     pChar +=sprintf(pChar,"Device name         No name\n");
+   }
+   else
+   {
+     pChar +=sprintf(pChar,"Device name         %s\n",pname);   
+   }
+   if (port_display == 0)
+   {
+     memcpy(bufall,&device_attr.fw_ver,64);
+     pChar +=sprintf(pChar,"firmware version    %s\n",bufall);
+     pChar +=sprintf(pChar,"vendor              %x-%x-%x\n",device_attr.vendor_id,device_attr.vendor_part_id,device_attr.hw_ver);
+     pChar +=sprintf(pChar,"max_qp_init_rd_atom %d\n",device_attr.max_qp_init_rd_atom);
+     pChar +=sprintf(pChar,"max_qp_rd_atom      %d\n",device_attr.max_qp_rd_atom);
+     pChar +=sprintf(pChar,"max_res_rd_atom     %d\n",device_attr.max_res_rd_atom);
+     pChar +=sprintf(pChar,"max_qp              %d\n",device_attr.max_qp);
+     pChar +=sprintf(pChar,"phys_port_cnt       %d\n",device_attr.phys_port_cnt);
+     return pChar;
+   }
+   /*
+   ** display each port of the device
+   */
+   for (i = 0;i <device_attr.phys_port_cnt;i++)
+   {
+      pChar = rozofs_ibv_query_port_debug(device_p,i+1,pChar);
+   }   
    return pChar;
 
 }
@@ -432,7 +463,7 @@ void show_rdma_devices(char * argv[], uint32_t tcpRef, void *bufRef) {
   {
      if (rozofs_rmda_ibv_tb[i]== 0) continue;
      ctx = rozofs_rmda_ibv_tb[i];
-     if (ctx->ctx != NULL) rozofs_rdma_display_device_properties(ctx->ctx,pChar,i);
+     if (ctx->ctx != NULL) rozofs_rdma_display_device_properties(ctx->ctx,pChar,i,0);
   }   
    
 out:
@@ -440,6 +471,141 @@ out:
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());      
     
 }
+
+
+/*
+**__________________________________________________
+*/
+
+char *rozofs_ibv_mtu2string(int ibv_mtu)
+{
+    switch (ibv_mtu)
+    {
+	case IBV_MTU_256: return "256";
+	case IBV_MTU_512: return "512";
+	case IBV_MTU_1024 : return "1024";
+	case IBV_MTU_2048 : return "2048";
+	case IBV_MTU_4096: return "4096";
+	default: return "Unknown";
+    }
+}
+
+#define SHOW_IBV_FIED_STRING(name,string) pbuf+=sprintf(pbuf,"   %-22s: %s\n",#name,string);
+#define SHOW_IBV_FIED_INT(name) pbuf+=sprintf(pbuf,"   %-22s: %d\n",#name,p->name);
+#define SHOW_IBV_FIED_UINT(name) pbuf+=sprintf(pbuf,"   %-22s: %u\n",#name,p->name);
+#define SHOW_IBV_FIED_HEX(name) pbuf+=sprintf(pbuf,"   %-22s: 0x%x\n",#name,p->name);
+
+
+/*
+  Port capability
+  ---------------
+  
+  enum ibv_port_cap_flags {
+	IBV_PORT_SM				= 1 <<  1,
+	IBV_PORT_NOTICE_SUP			= 1 <<  2,
+	IBV_PORT_TRAP_SUP			= 1 <<  3,
+	IBV_PORT_OPT_IPD_SUP			= 1 <<  4,
+	IBV_PORT_AUTO_MIGR_SUP			= 1 <<  5,
+	IBV_PORT_SL_MAP_SUP			= 1 <<  6,
+	IBV_PORT_MKEY_NVRAM			= 1 <<  7,
+	IBV_PORT_PKEY_NVRAM			= 1 <<  8,
+	IBV_PORT_LED_INFO_SUP			= 1 <<  9,
+	IBV_PORT_SYS_IMAGE_GUID_SUP		= 1 << 11,
+	IBV_PORT_PKEY_SW_EXT_PORT_TRAP_SUP	= 1 << 12,
+	IBV_PORT_EXTENDED_SPEEDS_SUP		= 1 << 14,
+	IBV_PORT_CM_SUP				= 1 << 16,
+	IBV_PORT_SNMP_TUNNEL_SUP		= 1 << 17,
+	IBV_PORT_REINIT_SUP			= 1 << 18,
+	IBV_PORT_DEVICE_MGMT_SUP		= 1 << 19,
+	IBV_PORT_VENDOR_CLASS			= 1 << 24,
+	IBV_PORT_CLIENT_REG_SUP			= 1 << 25,
+	IBV_PORT_IP_BASED_GIDS			= 1 << 26,
+};
+*/
+/*
+**__________________________________________________
+*/
+/**
+*  Query the information relative to a port
+
+*/
+
+char  *rozofs_ibv_query_port_debug( struct ibv_context *context, 
+                                    uint8_t port_num,
+				    char *pbuf)
+{
+
+   int ret;
+   struct ibv_port_attr port_attr;
+   struct ibv_port_attr *p;
+   p = &port_attr;
+   
+   pbuf+=sprintf(pbuf,"\nPort %d\n",port_num);
+   ret = ibv_query_port(context,port_num,&port_attr);
+   if (ret < 0)
+   {
+      pbuf+=sprintf(pbuf,"error :%s\n",strerror(errno));
+      return pbuf;
+   }
+	SHOW_IBV_FIED_STRING(state,ibv_port_state_str(p->state));
+	SHOW_IBV_FIED_STRING(max_mtu,rozofs_ibv_mtu2string(p->max_mtu));
+	SHOW_IBV_FIED_STRING(active_mtu,rozofs_ibv_mtu2string(p->active_mtu));
+	SHOW_IBV_FIED_INT(gid_tbl_len);
+	SHOW_IBV_FIED_HEX(port_cap_flags);
+	SHOW_IBV_FIED_UINT(max_msg_sz);
+	SHOW_IBV_FIED_UINT(bad_pkey_cntr);
+	SHOW_IBV_FIED_UINT(qkey_viol_cntr);
+	SHOW_IBV_FIED_UINT(pkey_tbl_len);
+	SHOW_IBV_FIED_UINT(lid);
+	SHOW_IBV_FIED_UINT(sm_lid);
+	SHOW_IBV_FIED_UINT(lmc);
+	SHOW_IBV_FIED_UINT(max_vl_num);
+	SHOW_IBV_FIED_UINT(sm_sl);
+	SHOW_IBV_FIED_UINT(subnet_timeout);
+	SHOW_IBV_FIED_UINT(init_type_reply);
+	SHOW_IBV_FIED_UINT(active_width);
+	SHOW_IBV_FIED_UINT(active_speed);
+	SHOW_IBV_FIED_UINT(phys_state);
+	SHOW_IBV_FIED_UINT(link_layer);
+	return pbuf;
+   
+}
+
+
+/*
+**__________________________________________________
+*/
+
+void show_rdma_ports(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char *pChar = uma_dbg_get_buffer();
+  int i;
+  int count = 0;
+  rozofs_rmda_ibv_cxt_t *ctx;
+  
+  for (i=0;i< ROZOFS_MAX_RDMA_ADAPTOR; i++) 
+  {
+     if (rozofs_rmda_ibv_tb[i]== 0) continue;
+     ctx = rozofs_rmda_ibv_tb[i];
+     if (ctx->ctx != NULL) count++;
+  } 
+  pChar+=sprintf(pChar,"number of active devices contexts: %d/%d\n",count,(int) ROZOFS_MAX_RDMA_ADAPTOR);
+  if ( count == 0) goto out;
+  /*
+  ** Display the port of each devices
+  */
+  for (i=0;i< ROZOFS_MAX_RDMA_ADAPTOR; i++) 
+  {
+     if (rozofs_rmda_ibv_tb[i]== 0) continue;
+     ctx = rozofs_rmda_ibv_tb[i];
+     if (ctx->ctx != NULL) rozofs_rdma_display_device_properties(ctx->ctx,pChar,i,1);
+  }   
+   
+out:
+    
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());      
+    
+}
+
 /*
 **__________________________________________________
 */
@@ -458,6 +624,309 @@ void show_rdma_mem(char * argv[], uint32_t tcpRef, void *bufRef) {
   }
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());      
 
+}
+
+
+/*
+**___________________________________________________________
+*/
+char *print_ibv_qp_state(int state)
+{
+   switch (state)
+   {
+	case IBV_QPS_RESET: return "RESET";
+	case IBV_QPS_INIT: return "INIT";
+	case IBV_QPS_RTR: return "RTR";
+	case IBV_QPS_RTS:return "RTS";
+	case IBV_QPS_SQD: return "SQD";
+	case IBV_QPS_SQE: return "SQE";
+	case IBV_QPS_ERR: return "ERR";
+	default: return "UNKNOWN";
+  }
+}
+
+/*
+**___________________________________________________________
+*/
+char *print_ibv_mig_state(int state)
+{
+   switch (state)
+   {
+	case IBV_MIG_MIGRATED: return "MIGRATED";
+	case IBV_MIG_REARM: return "REARM";
+	case IBV_MIG_ARMED: return "ARMED";
+	default: return "UNKNOWN";
+  }
+}
+
+#define SHOW_IBV_QP_CAP_UINT(name) pbuf+=sprintf(pbuf,"   %-22s: %u\n",#name,p->name);
+/*
+**___________________________________________________________
+*/
+char *print_ibv_qp_cap(struct ibv_qp_cap *p,char *pbuf)
+{
+  SHOW_IBV_QP_CAP_UINT(max_send_wr);
+  SHOW_IBV_QP_CAP_UINT(max_recv_wr);
+  SHOW_IBV_QP_CAP_UINT(max_send_sge);
+  SHOW_IBV_QP_CAP_UINT(max_recv_sge);
+  SHOW_IBV_QP_CAP_UINT(max_inline_data);
+  return pbuf;
+}
+
+/*
+**___________________________________________________________
+*/
+
+#define SHOW_IBV_AH_FIELD_UINT(prefix,name) pbuf+=sprintf(pbuf,"   %s.%-22s: %u\n",prefix,#name,p->name);
+#define SHOW_IBV_AH_FIELD_ULONG(prefix,name) pbuf+=sprintf(pbuf,"   %s.%-22s: %llu\n",prefix,#name,(long long unsigned int)p->name);
+char *print_ibv_ah_attr(char *field_name,struct ibv_ah_attr *p,char *pbuf)
+{
+
+  SHOW_IBV_AH_FIELD_ULONG(field_name,grh.dgid.global.subnet_prefix);
+  SHOW_IBV_AH_FIELD_ULONG(field_name,grh.dgid.global.interface_id);
+  SHOW_IBV_AH_FIELD_UINT(field_name,grh.flow_label);
+  SHOW_IBV_AH_FIELD_UINT(field_name,grh.sgid_index);
+  SHOW_IBV_AH_FIELD_UINT(field_name,grh.hop_limit);
+  SHOW_IBV_AH_FIELD_UINT(field_name,grh.traffic_class);  
+  
+  SHOW_IBV_AH_FIELD_UINT(field_name,dlid);
+  SHOW_IBV_AH_FIELD_UINT(field_name,sl);
+  SHOW_IBV_AH_FIELD_UINT(field_name,src_path_bits);
+  SHOW_IBV_AH_FIELD_UINT(field_name,static_rate);
+  SHOW_IBV_AH_FIELD_UINT(field_name,is_global);
+  SHOW_IBV_AH_FIELD_UINT(field_name,port_num);
+  return pbuf;
+}
+
+
+#define SHOW_IBV_QP_FIELD_STRING(name,string) pbuf+=sprintf(pbuf,"   %-22s: %s\n",#name,string);
+#define SHOW_IBV_QP_FIELD_INT(name) pbuf+=sprintf(pbuf,"   %-22s: %d\n",#name,attr.name);
+#define SHOW_IBV_QP_FIELD_UINT(name) pbuf+=sprintf(pbuf,"   %-22s: %u\n",#name,attr.name);
+#define SHOW_IBV_QP_FIELD_HEX(name) pbuf+=sprintf(pbuf,"   %-22s: 0x%x\n",#name,attr.name);
+/*
+**___________________________________________________________
+*/
+char *rozofs_rdma_qp_display(rozofs_rdma_connection_t  *conn_p,int display_level,char *pbuf)
+{
+    struct ibv_qp_attr attr;
+    struct ibv_qp_init_attr init_attr;
+    int ret;
+    int	qp_attr_mask =
+	     IBV_QP_STATE		| /* = 1 << 0 */
+	     IBV_QP_CUR_STATE	| /* = 1 << 1 */
+	     IBV_QP_EN_SQD_ASYNC_NOTIFY | /* = 1 << 2 */
+	     IBV_QP_ACCESS_FLAGS	| /* = 1 << 3 */
+	     IBV_QP_PKEY_INDEX	| /* = 1 << 4 */
+	     IBV_QP_PORT		| /* = 1 << 5 */
+	     IBV_QP_QKEY		| /* = 1 << 6 */
+	     IBV_QP_AV		| /* = 1 << 7 */
+	     IBV_QP_PATH_MTU	| /* = 1 << 8 */
+	     IBV_QP_TIMEOUT	| /* = 1 << 9 */
+	     IBV_QP_RETRY_CNT | /* = 1 << 10 */
+	     IBV_QP_RNR_RETRY	| /* = 1 << 11 */
+	     IBV_QP_RQ_PSN		| /* = 1 << 12 */
+	     IBV_QP_MAX_QP_RD_ATOMIC| /* = 1 << 13 */
+	     IBV_QP_ALT_PATH	| /* = 1 << 14 */
+	     IBV_QP_MIN_RNR_TIMER	| /* = 1 << 15 */
+	     IBV_QP_SQ_PSN		| /* = 1 << 16 */
+	     IBV_QP_MAX_DEST_RD_ATOMIC| /* = 1 << 17 */
+	     IBV_QP_PATH_MIG_STATE	| /* = 1 << 18 */
+	     IBV_QP_CAP		| /* = 1 << 19 */
+	     IBV_QP_DEST_QPN	/* = 1 << 20 */;
+	     
+	     
+    uint32_t ipAddr = af_unix_get_remote_ip(conn_p->tcp_index);
+         
+    pbuf +=sprintf(pbuf,"Queue Pair : %u (TCP ref:%d)\n",conn_p->qp->qp_num,conn_p->tcp_index);
+    pbuf +=sprintf(pbuf,"Remote IP  : %u.%u.%u.%u\n", (ipAddr >> 24)&0xFF, (ipAddr >> 16)&0xFF, (ipAddr >> 8)&0xFF, (ipAddr)&0xFF);    
+    ret =  ibv_query_qp(conn_p->qp, &attr,
+		        qp_attr_mask,
+		         &init_attr);
+    if (ret < 0) 
+    {
+      pbuf+=sprintf(pbuf,"error : %s\n",strerror(errno));
+      return pbuf;
+    }
+    SHOW_IBV_QP_FIELD_UINT(dest_qp_num);
+
+    SHOW_IBV_QP_FIELD_STRING(qp_state,print_ibv_qp_state(attr.qp_state));
+    SHOW_IBV_QP_FIELD_STRING(cur_qp_state,print_ibv_qp_state(attr.cur_qp_state));
+    SHOW_IBV_QP_FIELD_STRING(path_mtu,rozofs_ibv_mtu2string(attr.path_mtu));
+    SHOW_IBV_QP_FIELD_STRING(path_mig_state,print_ibv_mig_state(attr.path_mig_state));
+    SHOW_IBV_QP_FIELD_HEX(qkey);
+    SHOW_IBV_QP_FIELD_HEX(rq_psn);
+    SHOW_IBV_QP_FIELD_HEX(sq_psn);
+    SHOW_IBV_QP_FIELD_HEX(qp_access_flags);
+    /*
+    ** cap, ah_attr, alt_ah_attr 
+    */
+    if (display_level > 0)
+    {
+      pbuf = print_ibv_qp_cap(&attr.cap,pbuf);
+      pbuf= print_ibv_ah_attr("ah_attr",&attr.ah_attr,pbuf);
+      pbuf= print_ibv_ah_attr("alt_ah_attr",&attr.alt_ah_attr,pbuf);
+    }
+
+    SHOW_IBV_QP_FIELD_INT(qp_access_flags);
+    SHOW_IBV_QP_FIELD_UINT(pkey_index);
+    SHOW_IBV_QP_FIELD_UINT(alt_pkey_index);
+    SHOW_IBV_QP_FIELD_UINT(en_sqd_async_notify);
+    SHOW_IBV_QP_FIELD_UINT(sq_draining);
+    SHOW_IBV_QP_FIELD_UINT(max_rd_atomic);
+    SHOW_IBV_QP_FIELD_UINT(max_dest_rd_atomic);
+    SHOW_IBV_QP_FIELD_UINT(min_rnr_timer);
+    SHOW_IBV_QP_FIELD_UINT(port_num);
+    SHOW_IBV_QP_FIELD_UINT(timeout);
+    SHOW_IBV_QP_FIELD_UINT(retry_cnt);
+    SHOW_IBV_QP_FIELD_UINT(rnr_retry);
+    SHOW_IBV_QP_FIELD_UINT(alt_port_num);
+    SHOW_IBV_QP_FIELD_UINT(alt_timeout);
+    
+    return pbuf;
+}
+
+
+/*__________________________________________________________________________
+  Show the 1rst context
+  ==========================================================================*/
+
+void rozofs_rdma_qp_debug_show_first(char *pChar) {
+  int i;
+  rozofs_rdma_connection_t *conn_p = NULL;
+
+  rozofs_rdma_qp_next_idx = 0;
+  
+  for (i = rozofs_rdma_qp_next_idx; i < rozofs_nb_rmda_tcp_context; i++)
+  {
+    conn_p = rozofs_rdma_tcp_table[i];
+    rozofs_rdma_qp_next_idx = i;
+    if (conn_p == NULL) continue;
+    rozofs_rdma_qp_display(conn_p,1,pChar);
+    rozofs_rdma_qp_next_idx +=1;
+    return;
+  
+  }
+  pChar += sprintf(pChar, "END\n"); 
+  rozofs_rdma_qp_next_idx = 0;
+}
+
+/*__________________________________________________________________________
+  Show the next context
+  ==========================================================================*/
+
+void rozofs_rdma_qp_debug_show_next(char *pChar) {
+  int i;
+  rozofs_rdma_connection_t *conn_p = NULL;
+
+  if (rozofs_rdma_qp_next_idx >= rozofs_nb_rmda_tcp_context)
+  {
+    pChar += sprintf(pChar, "END\n");   
+  }
+  
+  for (i = rozofs_rdma_qp_next_idx; i < rozofs_nb_rmda_tcp_context; i++)
+  {
+    conn_p = rozofs_rdma_tcp_table[i];
+    rozofs_rdma_qp_next_idx = i;
+    if (conn_p == NULL) continue;
+    rozofs_rdma_qp_display(conn_p,1,pChar);
+    rozofs_rdma_qp_next_idx +=1;
+    return;
+  
+  }
+  pChar += sprintf(pChar, "END\n"); 
+}
+
+/*__________________________________________________________________________
+  Search context by nickname and display it
+  ==========================================================================*/
+#if 0
+void rozofs_rdma_qp_debug_show_name(char *pChar, char * name) {
+
+  rozofs_rdma_connection_t *conn_p = NULL;
+  uint32_t index;
+  
+  int ret = sscanf(name,"%u",&index);
+  if (ret != 1) {
+    pChar += sprintf(pChar, "this is not a valid index\n");
+    return;	        
+  }
+  if (index >= rozofs_nb_rmda_tcp_context)
+  {
+    pChar += sprintf(pChar, "out of range index, max is %d\n",rozofs_nb_rmda_tcp_context-1);
+    return;           
+  }
+  conn_p = rozofs_rdma_tcp_table[index];
+  if (conn_p == NULL)
+  {
+    pChar += sprintf(pChar, "no context for index %d\n",index);
+    return;           
+  }
+  rozofs_rdma_qp_display(conn_p,1,pChar);
+  return;
+
+}
+#endif
+void rozofs_rdma_qp_debug_show_name(char *pChar, char * name) {
+
+  rozofs_rdma_connection_t *conn_p = NULL;
+  uint32_t index;
+  int i;
+  
+  int ret = sscanf(name,"%u",&index);
+  if (ret != 1) {
+    pChar += sprintf(pChar, "this is not a valid queue pair value\n");
+    return;	        
+  }
+  for (i = 0; i < rozofs_nb_rmda_tcp_context; i++)
+  {
+    conn_p = rozofs_rdma_tcp_table[i];
+    if (conn_p == NULL) continue;
+    if (conn_p->qp->qp_num == index)
+    {
+      rozofs_rdma_qp_display(conn_p,1,pChar);
+      return;
+    }
+  
+  }
+  pChar += sprintf(pChar, "Not found\n"); 
+
+  return;
+
+}
+
+/*__________________________________________________________________________
+  Trace level debug function
+  ==========================================================================
+  PARAMETERS:
+  -
+  RETURN: none
+  ==========================================================================*/
+void rozofs_rdma_qp_debug_man(char * pt) {
+  pt += sprintf(pt,"To display information about the RDMA Queue Pairs .\n");
+//  pt += sprintf(pt,"rdma_qp        : display global counters.\n");
+  pt += sprintf(pt,"rdma_qp first    : display the 1rst context.\n");
+  pt += sprintf(pt,"rdma_qp next     : display the next context.\n");
+  pt += sprintf(pt,"rdma_qp <qp_num> : display a the context associated with <qp_num>.\n");  
+}
+void rozofs_rdma_qp_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char *pChar = uma_dbg_get_buffer();
+   
+  if (argv[1] == NULL) {
+    //rozofs_rdma_qp_debug_show_no_param(pChar);
+    rozofs_rdma_qp_debug_man(pChar);   
+    return   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer()); 
+  }
+  else if (strcmp(argv[1],"first")==0) {
+    rozofs_rdma_qp_debug_show_first(pChar);        
+  }
+  else if (strcmp(argv[1],"next")==0) {
+    rozofs_rdma_qp_debug_show_next(pChar);
+  }
+  else {
+    rozofs_rdma_qp_debug_show_name(pChar, argv[1]);      
+  }  
+  
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
 
 /*
@@ -670,7 +1139,9 @@ int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode)
   uma_dbg_addTopic("rdma_statistics", show_rdma_statistics);  
   uma_dbg_addTopic("rdma_error", show_rdma_error);  
   uma_dbg_addTopic("rdma_devices", show_rdma_devices);  
+  uma_dbg_addTopic("rdma_ports", show_rdma_ports);  
   uma_dbg_addTopic("rdma_mem", show_rdma_mem);  
+  uma_dbg_addTopicAndMan("rdma_qp", rozofs_rdma_qp_debug, rozofs_rdma_qp_debug_man, 0);
   return ret;
 error:
   rozofs_rdma_enable = 0;
@@ -1382,6 +1853,7 @@ void rozofs_rdma_print_device_properties(struct ibv_context *device_p)
       perror("ibv_query_device error");
       return;
    }
+   
    printf("max_qp_init_rd_atom %d\n",device_attr.max_qp_init_rd_atom);
    printf("max_qp_rd_atom      %d\n",device_attr.max_qp_rd_atom);
    printf("max_res_rd_atom     %d\n",device_attr.max_res_rd_atom);
@@ -1646,6 +2118,11 @@ int rozofs_rdma_srv_on_connect_request(struct rdma_cm_id *id,struct rdma_cm_even
      attr.max_rd_atomic = 16;
 
      if (ibv_modify_qp(id->qp, &attr,IBV_QP_ACCESS_FLAGS|IBV_QP_MAX_DEST_RD_ATOMIC| IBV_QP_MAX_QP_RD_ATOMIC)< 0) goto error;
+
+     attr.retry_cnt = 2;
+     attr.rnr_retry = 2;
+     attr.min_rnr_timer = 14;
+     if (ibv_modify_qp(id->qp, &attr,IBV_QP_RETRY_CNT|IBV_QP_RNR_RETRY| IBV_QP_MIN_RNR_TIMER)< 0) goto error;
   }
   /*
   ** post receive is intended to fill up some context for the case of WRITE_SEND (not used by RozoFS)
