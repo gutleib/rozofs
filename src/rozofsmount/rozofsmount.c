@@ -205,7 +205,7 @@ static void usage() {
                             rozofs_tmr_get(TMR_FUSE_ENOENT_CACHE_MS));
 
     fprintf(stderr, "    -o debug_port=N\t\tdefine the base debug port for rozofsmount (default: none)\n");
-    fprintf(stderr, "    -o instance=N\t\tdefine instance number (default: 0)\n");
+    fprintf(stderr, "    -o instance=N\t\tdefine instance number within [0..127] (default: 0)\n");
     fprintf(stderr, "    -o rozofscachemode=N\tdefine the cache mode: 0: no cache, 1: direct_io, 2: keep_cache (default: 0)\n");
     fprintf(stderr, "    -o rozofsmode=N\t\tdefine the operating mode of rozofsmount: 0: filesystem, 1: block mode (default: 0)\n");
     fprintf(stderr, "    -o rozofsnbstorcli=N\tdefine the number of storcli process(es) to use (default: 1)\n");
@@ -2210,6 +2210,14 @@ int main(int argc, char *argv[]) {
     ** read common config file
     */
     common_config_read(NULL);  
+
+    /*
+    **  Rozofsmount instance must be lower than 128
+    */
+    if (conf.instance >= 128) {
+        fprintf(stderr, "Rozofsmount instance must be lower than 128\n");  
+        return 1;          
+    }  
 
     /*
     **  set the numa node for rozofsmount and its storcli

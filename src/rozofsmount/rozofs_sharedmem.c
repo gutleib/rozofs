@@ -73,7 +73,7 @@ void rozofs_shared_mem_display(char * argv[], uint32_t tcpRef, void *bufRef)
  
 int rozofs_create_shared_memory(int key_instance,int pool_idx,uint32_t buf_nb, uint32_t buf_sz)
 {
-   key_t key = 0x524F5A30 | key_instance;
+   key_t key = 0x524F5A00 | key_instance;
 
    rozofs_storcli_shared_mem[pool_idx].key          = key;
    rozofs_storcli_shared_mem[pool_idx].buf_sz       = buf_sz;
