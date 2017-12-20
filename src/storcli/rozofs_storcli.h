@@ -72,7 +72,7 @@ extern uint64_t rozofs_storcli_ctx_wrap_count_err;
 /**
 *  North Interface
 */
-#define STORCLI_CTX_CNT 64 /**< context for processing either a read or write request from rozofsmount and internal read req */
+#define STORCLI_CTX_CNT 96 /**< context for processing either a read or write request from rozofsmount and internal read req */
 #define STORCLI_CTX_MIN_CNT 16 /**< minimum count to process a request from rozofsmount */
 /**
 * Buffer s associated with the reception of the load balancing group on north interface

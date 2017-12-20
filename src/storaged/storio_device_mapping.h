@@ -34,6 +34,7 @@ extern "C" {
 #include <limits.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
+#include <pthread.h>
 
 #include <rozofs/rozofs.h>
 #include <rozofs/common/log.h>
@@ -47,7 +48,6 @@ extern "C" {
 
 #include "storio_fid_cache.h"
 #include "storage_header.h"
-
 
 
 /**
@@ -127,16 +127,20 @@ typedef union _storio_device_u {
 typedef struct _storio_device_mapping_t
 {
   list_t               link;  
-  uint32_t             padding:4;
+//  uint32_t             padding:3;
   uint32_t             recycle_cpt:2;
+  uint32_t             serial_is_running:1;     /**< assert to one when a disk thread is processing the requests         */
   uint32_t             small_device_array:1;    // how to read device union
   uint32_t             device_unknown:1;        // Set to 1 when device distr. is unknown
   uint32_t             index:24;
   storio_device_mapping_key_t key;
   storio_device_u      device;                  // List of devices per chunk number
-  list_t               running_request;
-  list_t               waiting_request;
-//  uint64_t             consistency;
+  /*
+  ** storio serialise
+  */
+  list_t               serial_pending_request;  /**< list the pending request for the FID   */
+  pthread_rwlock_t     serial_lock;             /**< lock associated with serial_pending_request list & running flag     */
+    
   STORIO_REBUILD_REF_U storio_rebuild_ref;
 } storio_device_mapping_t;
 
@@ -354,6 +358,7 @@ static inline void storio_read_from_ctx(storio_device_mapping_t * p, uint8_t * n
 }
 
 
+
 typedef struct _storio_device_mapping_stat_t
 {
 //  uint64_t            consistency; 
@@ -367,8 +372,6 @@ typedef struct _storio_device_mapping_stat_t
 } storio_device_mapping_stat_t;
 
 extern storio_device_mapping_stat_t storio_device_mapping_stat;
-
-
 
 /*
 **______________________________________________________________________________
@@ -405,27 +408,6 @@ static inline uint32_t storio_device_mapping_hash32bits_compute(storio_device_ma
 **______________________________________________________________________________
 */
 /**
-* Put the FID context in the correct list
-*
-* @param idx The context index
-*
-* @return the rebuild context address or NULL
-*/
-static inline int storio_device_mapping_ctx_check_running(storio_device_mapping_t * p) {
-      
-  if ((p->storio_rebuild_ref.u64 != 0xFFFFFFFFFFFFFFFF)
-  ||  (!list_empty(&p->running_request))
-  ||  (!list_empty(&p->waiting_request))) {
-    return 1; 
-  }
-  return 0;  
-}
-
-
-/*
-**______________________________________________________________________________
-*/
-/**
 * Reset a storio device_mapping context
 
   @param p the device_mapping context to initialize
@@ -439,8 +421,8 @@ static inline void storio_device_mapping_ctx_reset(storio_device_mapping_t * p) 
   p->small_device_array = 1;
   p->device.ptr         = NULL;
 //  p->consistency   = storio_device_mapping_stat.consistency;
-  list_init(&p->running_request);
-  list_init(&p->waiting_request);
+  list_init(&p->serial_pending_request);
+  p->serial_is_running = 0;
 
   p->storio_rebuild_ref.u64 = 0xFFFFFFFFFFFFFFFF;
 }
@@ -479,12 +461,10 @@ static inline void storio_device_mapping_release_entry(storio_device_mapping_t *
   }
      
 
-  if (storio_device_mapping_ctx_check_running(p)) {
+  if ((p->serial_is_running)||(!list_empty(&p->serial_pending_request)))
+  {
     severe("storio_device_mapping_ctx_free but ctx is running");
   }
-
-
-
    
   /*
   ** Unchain the context
@@ -585,6 +565,7 @@ static inline void storio_device_mapping_ctx_distributor_init(int nbCtx) {
   ** Reset stattistics 
   */
   memset(&storio_device_mapping_stat, 0, sizeof(storio_device_mapping_stat));
+
   /*
   ** Allocate memory
   */
@@ -595,6 +576,7 @@ static inline void storio_device_mapping_ctx_distributor_init(int nbCtx) {
   
   for (idx=0; idx<STORIO_DEVICE_MAPPING_MAX_ENTRIES; idx++) {
     p = storio_device_mapping_ctx_retrieve(idx);
+    pthread_rwlock_init(&p->serial_lock, NULL);
     p->index  = idx;
     storio_device_mapping_ctx_reset(p);
   }  

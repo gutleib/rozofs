@@ -183,8 +183,7 @@ char * storio_display_one_mapping_ctx(char * pChar, storio_device_mapping_t * p)
   pChar += rozofs_string_append(pChar,", \"FID\" : \"");
   pChar += rozofs_fid_append(pChar,p->key.fid);
   pChar += rozofs_string_append(pChar,"\", \"running\" : ");
-
-  if (!list_empty(&p->running_request)) {    
+  if (p->serial_is_running) {    
     pChar += rozofs_string_append(pChar,"\"YES\",\n");
   }
   else {  

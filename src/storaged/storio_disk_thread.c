@@ -36,6 +36,9 @@
 #include "storio_disk_thread_intf.h" 
 #include "storage.h" 
 #include "storio_device_mapping.h" 
+#include "storio_north_intf.h"
+#include <rozofs/core/ruc_buffer_debug.h>
+#include "storio_serialization.h"
 
 int af_unix_disk_socket_ref = -1;
  
@@ -51,6 +54,8 @@ storage_t *storaged_lookup(cid_t cid, sid_t sid) ;
 */
 rozofs_disk_thread_ctx_t rozofs_disk_thread_ctx_tb[ROZOFS_MAX_DISK_THREADS];
 
+
+void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t * msg_in);
 /*
 **__________________________________________________________________________
 */
@@ -1224,6 +1229,9 @@ void *storio_disk_thread(void *arg) {
         storio_disk_rebuild_stop(ctx_p,&msg);
         break;
 
+      case STORIO_DISK_THREAD_FID:
+        storio_disk_serial(ctx_p,&msg);
+        break;	
       default:
         fatal(" unexpected opcode : %d\n",msg.opcode);
         exit(0);       
@@ -1305,5 +1313,103 @@ int storio_disk_thread_create(char * hostname, int nb_threads, int instance_id) 
      thread_ctx_p++;
   }
   return 0;
+}
+ 
+ 
+
+/*__________________________________________________________________________
+*/
+/**
+*  Process requests found in the serial_pending_request list of a FID
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
+void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t * msg_in) {
+
+  storio_device_mapping_t * fidCtx;
+  list_t diskthread_list;
+  int empty;
+  rozorpc_srv_ctx_t      * rpcCtx;
+  storio_disk_thread_msg_t   msg;  
+  int fdl_count = 0;
+  
+  memcpy(&msg,msg_in,sizeof(storio_disk_thread_msg_t));
+  /*
+  ** get the FID context where fits the pending request list
+  */
+  fidCtx = storio_device_mapping_ctx_retrieve(msg.fidIdx);
+  if (fidCtx == NULL) {
+    fatal("Bad FID ctx index %d",msg.fidIdx); 
+    return;
+  }
+  /*
+  ** init of the local list
+  */
+  list_init(&diskthread_list);
+  /*
+  ** process the requests
+  */
+  while(1)
+  {
+     
+     empty = storio_get_pending_request_list(fidCtx,&diskthread_list);
+     if (empty) break;
+     
+     rpcCtx = list_first_entry(&diskthread_list,rozorpc_srv_ctx_t,list);
+     list_remove(&rpcCtx->list);
+     fdl_count++;
+     
+     msg.opcode = rpcCtx->opcode; 
+     msg.size   = 0;
+     msg.rpcCtx = rpcCtx;
+     msg.timeStart = rpcCtx->profiler_time;
+     
+     switch (msg.opcode) {
+
+       case STORIO_DISK_THREAD_READ:
+         storio_disk_read(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_RESIZE:
+         storio_disk_resize(ctx_p,&msg);
+         break;	
+
+       case STORIO_DISK_THREAD_WRITE:
+         storio_disk_write(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_TRUNCATE:
+         storio_disk_truncate(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_WRITE_REPAIR3:
+         storio_disk_write_repair3(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_REMOVE:
+         storio_disk_remove(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_REMOVE_CHUNK:
+         storio_disk_remove_chunk(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_REBUILD_START:
+         storio_disk_rebuild_start(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_REBUILD_STOP:
+         storio_disk_rebuild_stop(ctx_p,&msg);
+         break;
+
+       default:
+         fatal(" unexpected opcode : %d\n",msg.opcode);
+         exit(0);       
+     }       
+  } 
+//  severe("FDL storio count %d for %p",fdl_count, fidCtx);  
 }
  
