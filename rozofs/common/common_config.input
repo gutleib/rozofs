@@ -61,7 +61,9 @@ BOOL	export 	fid_recycle                     False
 // Whether STORCLI acknowleges write request on inverse or forward STORIO responses.
 BOOL	client 	wr_ack_on_inverse		False
 INT	export 	export_buf_cnt			128 32:1024
-// Number of disk threads in the STORIO.
+// Number of sub threads in the storaged
+INT	storage nb_storaged_subthread         	4 1:8
+/// Number of disk threads in the STORIO.
 INT	storage nb_disk_thread         		4 2:64
 // Whether STORIO is in multiple (1 STORIO per cluster) 
 // or single mode (only 1 STORIO).
