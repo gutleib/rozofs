@@ -21,30 +21,49 @@ def setLayout(l=0):
     sys.exit(-1)  
   
 #_____________________________________ 
-def setVolumeHosts(nbHosts):
+# Create a volume with the given number of host
+#
+# The number of SID per host may be given as input
+# when one want more SID per host than the minimum 
+# by the layout. If no SID/host number is given or
+# when the given number is too small, the minimum 
+# required number of SID per host is used.
+#
+def setVolumeHosts(nbHosts, nbSidPerHost=0):
   global layout_int
   global nbclusters
   global clients_nb
   global georep
   global failures
-    
-  # Is there more server than sid per cluster
-  factor=int(1)
-  safe=rozofs.min_sid(layout_int)
-  nb=int(nbHosts)
+   
+  # Compute the required number of SID per host 
+  # considering the number of host and the chossen layout
+  minimumSidPerHost = int(1)
+  safe              = rozofs.min_sid(layout_int)
+  nb                = int(nbHosts)
+  
   while int(safe) > int(nb):
-    factor=int(factor) * int(2)
-    nb=int(nb) * int(2)  
+    minimumSidPerHost = int(minimumSidPerHost) + 1
+    nb                = int(nb) + int(nbHosts)
+  
+  # If the proposed number of SID per host is 
+  # too small to have a correct SID distribution
+  # create enough SID per host
+  if int(nbSidPerHost) < minimumSidPerHost: 
+    nbSidPerHost = minimumSidPerHost
     
   # Create a volume
   v1 = volume_class(layout)
-  if factor != 1:
+
+  # Compute the number of host failure allowed
+  if minimumSidPerHost != 1:
     failures = int(v1.get_failures())
-    failures = failures / factor
+    failures = failures / minimumSidPerHost
     v1.set_failures(failures)
   
   # Create clusters on this volume
   for i in range(nbclusters):
+
     c = v1.add_cid(devices,mapper,redundancy)  
     cnf_clusters.append(c)
 
@@ -52,13 +71,13 @@ def setVolumeHosts(nbHosts):
     # The 2 clusters use the same host for a given sid number
     for s in range(nbHosts):
       if georep == False:
-        for f in range(factor):
+        for f in range(nbSidPerHost):
           c.add_sid_on_host(s+1,(s % rozofs.site_number)+1)
       else:
         # In geo replication 
 	# host2 on site 1 replicates host1 on site 0
 	# host4 on site 1 replicates host3 on site 0...	
-        for f in range(factor):
+        for f in range(nbSidPerHost):
           c.add_sid_on_host((2*s)+1,0,(2*s)+2,1)
         
   return v1  

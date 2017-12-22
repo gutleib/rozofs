@@ -969,8 +969,8 @@ class exportd_class:
         else             : squota="squota=\"%s\";"%(e.squota)
         if e.hquota == "": hquota=""
         else             : hquota="hquota=\"%s\";"%(e.hquota)
-        if e.thin == True: thin = ", thin-provisionning = True"
-        else             : thin=""
+        if e.thin == True: thin = "; thin-provisioning = True;"
+        else             : thin=";"
 	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s %s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout),thin)
 	nexte=","	
     print ");"
@@ -1709,6 +1709,9 @@ def syntax_monitor() :
 def syntax_debug() :
   console("./setup.py \tcore    \tremove {all|<coredir>/<corefile>}")
   console("./setup.py \tcore    \t[<coredir>/<corefile>]")
+#_____________________________________________  
+def syntax_diag() :
+  console("./setup.py \tdiag    \t{mount|storcli|export|storaged|storio} <command>")
   
 #_____________________________________________  
 def syntax_all() :
@@ -1730,6 +1733,7 @@ def syntax_all() :
   syntax_config()  
   syntax_if()
   syntax_debug()
+  syntax_diag()
   console("./setup.py \tprocess \t[pid]")
   console("./setup.py \tvnr ...")
   console("./setup.py \t{build|rebuild|clean}")
@@ -1772,7 +1776,39 @@ def rebuild() :
     os.system("cd build; make")
   else:
     build()
+#_____________________________________________  
+def diag(argv) :  
 
+  if len(argv) < 3 : syntax("Missing target","diag")
+  if len(argv) < 4 : syntax("Missing diag command","diag")
+
+  rzcmd="rozodiag"
+
+  if argv[2] == "mount":    
+    for m in mount_points: 
+      rzcmd=rzcmd+" -T mount:%s"%(m.instance)    
+ 
+  elif argv[2] == "storcli":
+    for m in mount_points: 
+      for stc in range(rozofs.nb_storcli):
+        rzcmd=rzcmd+" -T mount:%s:%s"%(m.instance,stc+1)    
+
+  elif argv[2] == "storaged":
+    for h in hosts: rzcmd=rzcmd+" -i %s -T storaged"%(h.addr)    
+
+  elif argv[2] == "storio":
+    for h in hosts: 
+      for cid in cids:
+        rzcmd=rzcmd+" -i %s -T storio:%s"%(h.addr,cid.cid)    
+  elif argv[2] == "export":
+    for i in range(8):
+      rzcmd=rzcmd+" -T export:%s"%(i)          
+  else :syntax("Unknown target","diag") 
+
+  rzcmd=rzcmd+" -c" 
+  for arg in argv[3:]:rzcmd=rzcmd+" %s"%(arg)
+
+  os.system(rzcmd)
 #_____________________________________________  	 
 def test_parse(command, argv):	
   global rozofs
@@ -1811,7 +1847,8 @@ def test_parse(command, argv):
   elif command == "clean"              : clean()
   elif command == "monitor"            : rozofs.monitor()
   elif command == "rozofs.conf"        : rozofs.create_common_config()
-
+  elif command == "diag"               : diag(argv)
+    
   elif command == "spare"              : 
     try: 
       rozofs.newspare(argv[2]) 

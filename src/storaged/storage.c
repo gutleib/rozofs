@@ -1477,6 +1477,10 @@ int storage_initialize(storage_t *st,
     for (dev=0; dev<device_number; dev++) {
       st->device_ctx[dev].status = storage_device_status_init;
       st->device_ctx[dev].failure = 0;
+      /*
+      ** Allocate per device kpi counters memory
+      */
+      st->device_ctx[dev].kpiRef = storage_device_kpi_allocate(cid,sid,dev);
     }
 
     memset(&st->device_errors , 0,sizeof(st->device_errors));        
@@ -1485,7 +1489,7 @@ int storage_initialize(storage_t *st,
     st->cid = cid;
 
     storage_subdirectories_create(st);
-
+    
     status = 0;
 out:
     return status;

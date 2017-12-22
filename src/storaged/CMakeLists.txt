@@ -32,6 +32,8 @@ add_executable(storaged
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h                
     storaged.h
     storaged.c
     storaged_nblock_init.h
@@ -42,7 +44,7 @@ add_executable(storaged
     storio_crc32.h
     storaged_sub_thread.c
     storaged_sub_thread_intf.c
-    storaged_sub_thread_intf.h    
+    storaged_sub_thread_intf.h 
 )
 target_link_libraries(storaged rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
@@ -56,6 +58,8 @@ add_executable(stspare
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h                  
     storio_crc32.c
     storio_crc32.h   
     storio_fid_cache.c
@@ -64,7 +68,7 @@ add_executable(stspare
     stspare_fid_cache.h
     rbs_eclient.c
     rbs.h    
-    rbs.c    
+    rbs.c  
 )
 target_link_libraries(stspare rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
@@ -73,6 +77,8 @@ add_executable(storage_rebuild
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h       
     rbs.h
     rbs_transform.h
     rbs_transform.c
@@ -85,6 +91,7 @@ add_executable(storage_rebuild
     storio_crc32.c
     storio_crc32.h    
     storage_rebuild.c
+     
 )
 target_link_libraries(storage_rebuild rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -99,7 +106,7 @@ add_executable(storage_list_rebuilder
     rbs_eclient.c
     rbs.c
     storaged.h
-    storage_list_rebuilder.c 
+    storage_list_rebuilder.c        
 )
 
 target_link_libraries(storage_list_rebuilder rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
@@ -110,6 +117,8 @@ add_executable(storio
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h       
     sproto_nb.h
     sproto_nb.c
     sprotosvc_nb.c
@@ -136,7 +145,7 @@ add_executable(storio
     storio_fid_cache.c
     storio_fid_cache.h
     storio_crc32.c
-    storio_crc32.h
+    storio_crc32.h         
 )
 
 if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)

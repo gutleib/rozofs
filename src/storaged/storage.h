@@ -39,6 +39,7 @@
 
 #include "storio_device_mapping.h"
 #include "storage_header.h"
+#include "storage_device_kpi.h"
 
 /**
 * Structure used to store storcli buffer refence with RozoFS operates in standalone mode
@@ -253,6 +254,11 @@ typedef struct _storage_device_ctx_t {
   uint64_t                    monitor_run;
   uint64_t                    monitor_no_activity;
   uint64_t                    last_activity_time;
+  /*
+  ** Reference of the per device kpi memory
+  */
+  int                         kpiRef;
+  
 } storage_device_ctx_t;
 
 

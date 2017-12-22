@@ -424,7 +424,22 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
   */
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeAfter = MICROLONG(timeDay);
-  thread_ctx_p->stat.read_time +=(timeAfter-timeBefore);  
+  thread_ctx_p->stat.read_time +=(timeAfter-timeBefore); 
+  
+  /*
+  ** Update KPI per device
+  */
+  {
+    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+    int dev   = storio_get_dev(fidCtx, chunk); 
+    if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+      storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                thread_ctx_p->thread_idx, 
+                                storage_device_kpi_read, 
+                                ret.sp_read_ret_t_u.rsp.bins.bins_len,
+                                timeAfter-timeBefore); 
+    }  
+  }  
 }
 #ifdef ROZOFS_RDMA
 /*__________________________________________________________________________
@@ -680,6 +695,21 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeAfter = MICROLONG(timeDay);
   thread_ctx_p->stat.read_time +=(timeAfter-timeBefore);  
+  
+  /*
+  ** Update KPI per device
+  */
+  {
+    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+    int dev   = storio_get_dev(fidCtx, chunk); 
+    if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+      storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                thread_ctx_p->thread_idx, 
+                                storage_device_kpi_read, 
+                                ret.sp_read_ret_t_u.rsp.bins.bins_len,
+                                timeAfter-timeBefore); 
+    }  
+  }    
 }
 #else
 void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
@@ -753,9 +783,6 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   rozofs_rdma_disk_read_t   *rdma_p;
   int status;
     
-  
-  gettimeofday(&timeDay,(struct timezone *)0);  
-  timeBefore = MICROLONG(timeDay);
 
   ret.status = SP_FAILURE;          
   
@@ -848,6 +875,14 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   }
 
   /*
+  ** Get start time for KPI statistics
+  ** These statistics do not encompass the frame receiving time  
+  ** but only the device writing
+  */
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeBefore = MICROLONG(timeDay);
+
+  /*
   ** Check that the received data length is consistent with the bins length
   */
   size = ruc_buf_getPayloadLen(rpcCtx->xmitBuf) - rpcCtx->position;
@@ -925,6 +960,21 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeAfter = MICROLONG(timeDay);
   thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+
+  /*
+  ** Update KPI per device
+  */
+  {
+    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+    int dev   = storio_get_dev(fidCtx, chunk); 
+    if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+      storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                thread_ctx_p->thread_idx, 
+                                storage_device_kpi_write, 
+                                size,
+                                timeAfter-timeBefore); 
+    }  
+  }     
 } 
 #else
 static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
@@ -1185,6 +1235,21 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeAfter = MICROLONG(timeDay);
   thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+  
+  /*
+  ** Update KPI per device
+  */
+  {
+    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+    int dev   = storio_get_dev(fidCtx, chunk); 
+    if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+      storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                thread_ctx_p->thread_idx, 
+                                storage_device_kpi_write, 
+                                size,
+                                timeAfter-timeBefore); 
+    }  
+  }
 } 
 /*__________________________________________________________________________
 */
@@ -1814,6 +1879,21 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeAfter = MICROLONG(timeDay);
   thread_ctx_p->stat.read_time +=(timeAfter-timeBefore);  
+
+  /*
+  ** Update KPI per device
+  */
+  {
+    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+    int dev   = storio_get_dev(fidCtx, chunk); 
+    if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+      storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                thread_ctx_p->thread_idx, 
+                                storage_device_kpi_read, 
+                                ret.sp_read_ret_t_u.rsp.bins.bins_len ,
+                                timeAfter-timeBefore); 
+    }  
+  }  
 }
 
 /*__________________________________________________________________________
@@ -1928,6 +2008,21 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeAfter = MICROLONG(timeDay);
   thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+
+  /*
+  ** Update KPI per device
+  */
+  {
+    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+    int dev   = storio_get_dev(fidCtx, chunk); 
+    if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+      storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                thread_ctx_p->thread_idx, 
+                                storage_device_kpi_write, 
+                                size,
+                                timeAfter-timeBefore); 
+    }  
+  }
 } 
 
 
