@@ -996,8 +996,10 @@ static inline int rozofs_mkpath(char * path2create, mode_t mode) {
     
     if (access(directory_path, F_OK) != 0) {
       if (mkdir(directory_path, mode) != 0) {
-	severe("mkdir(%s) %s", directory_path, strerror(errno));
-        goto out;
+        if (errno != EEXIST) {
+	  severe("mkdir(%s) %s", directory_path, strerror(errno));
+          goto out;
+        }  
       }      
     }
     
