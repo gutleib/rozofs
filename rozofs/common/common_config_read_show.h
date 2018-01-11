@@ -87,8 +87,9 @@ char * show_common_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.\n");
   pChar += rozofs_string_append(pChar,"// 0      = size balancing\n");
   pChar += rozofs_string_append(pChar,"// 1      = weigthed round robin\n");
-  pChar += rozofs_string_append(pChar,"// 2 or 3 = strict round robin\n");
-  COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:10");
+  pChar += rozofs_string_append(pChar,"// 2 & 3  = strict round robin\n");
+  pChar += rozofs_string_append(pChar,"// 4      = read round robin\n");
+  COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:100");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_INT(storio_dscp,46);
@@ -101,6 +102,12 @@ char * show_common_config_module_global(char * pChar) {
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the EXPORTD.\n");
   COMMON_CONFIG_SHOW_INT_OPT(export_dscp,34,"0:34");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(standalone,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, RozoFS operates in standalone mode only.\n");
+  COMMON_CONFIG_SHOW_BOOL(standalone,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -329,6 +336,12 @@ char * show_common_config_module_client(char * pChar) {
   pChar += rozofs_string_append(pChar,"// statfs period in seconds. minimum is 0.\n");
   COMMON_CONFIG_SHOW_INT(statfs_period,10);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(reply_thread_count,2);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
+  COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:4");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -344,9 +357,15 @@ char * show_common_config_module_storage(char * pChar) {
   pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
   pChar += rozofs_string_append_bold(pChar,"#\n\n");
 
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_storaged_subthread,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Number of sub threads in the storaged\n");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_storaged_subthread,4,"1:8");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
   COMMON_CONFIG_IS_DEFAULT_INT(nb_disk_thread,4);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// Number of disk threads in the STORIO.\n");
+  pChar += rozofs_string_append(pChar,"/// Number of disk threads in the STORIO.\n");
   COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
@@ -517,6 +536,38 @@ char * show_common_config_module_storage(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
+** storcli scope configuration parameters
+**
+*/
+char * show_common_config_module_storcli(char * pChar) {
+
+  pChar += rozofs_string_append_bold(pChar,"#\n");
+  pChar += rozofs_string_append_bold(pChar,"# ");
+  pChar += rozofs_string_append_bold(pChar,"storcli");
+  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_enable,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, the storcli uses RDMA when storio supports it\n");
+  COMMON_CONFIG_SHOW_BOOL(rdma_enable,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(min_rmda_size_KB,64);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Minimum read/write size in KB to trigger RDMA transfer\n");
+  COMMON_CONFIG_SHOW_INT(min_rmda_size_KB,64);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(mojette_thread_count,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// number of Mojette threads\n");
+  COMMON_CONFIG_SHOW_INT_OPT(mojette_thread_count,4,"1:4");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
 ** common_config diagnostic function
 **
 */
@@ -540,6 +591,9 @@ char *pChar = uma_dbg_get_buffer();
       else if (strcmp("storage",argv[1])==0) {
         pChar = show_common_config_module_storage(pChar);
       }
+      else if (strcmp("storcli",argv[1])==0) {
+        pChar = show_common_config_module_storcli(pChar);
+      }
       else {
         pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
       }
@@ -558,6 +612,7 @@ char *pChar = uma_dbg_get_buffer();
   pChar = show_common_config_module_export(pChar);
   pChar = show_common_config_module_client(pChar);
   pChar = show_common_config_module_storage(pChar);
+  pChar = show_common_config_module_storcli(pChar);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
   return;
@@ -612,12 +667,15 @@ static inline void common_config_generated_read(char * fname) {
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual. 
   // 0      = size balancing 
   // 1      = weigthed round robin 
-  // 2 or 3 = strict round robin 
-  COMMON_CONFIG_READ_INT_MINMAX(file_distribution_rule,0,0,10);
+  // 2 & 3  = strict round robin 
+  // 4      = read round robin 
+  COMMON_CONFIG_READ_INT_MINMAX(file_distribution_rule,0,0,100);
   // DSCP for exchanges from/to the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(storio_dscp,46,0,46);
   // DSCP for exchanges from/to the EXPORTD. 
   COMMON_CONFIG_READ_INT_MINMAX(export_dscp,34,0,34);
+  // When that flag is asserted, RozoFS operates in standalone mode only. 
+  COMMON_CONFIG_READ_BOOL(standalone,False);
   /*
   ** export scope configuration parameters
   */
@@ -695,10 +753,14 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_BOOL(async_setattr,False);
   // statfs period in seconds. minimum is 0. 
   COMMON_CONFIG_READ_INT(statfs_period,10);
+  // number of Fuse threads 
+  COMMON_CONFIG_READ_INT_MINMAX(reply_thread_count,2,1,4);
   /*
   ** storage scope configuration parameters
   */
-  // Number of disk threads in the STORIO. 
+  // Number of sub threads in the storaged 
+  COMMON_CONFIG_READ_INT_MINMAX(nb_storaged_subthread,4,1,8);
+  /// Number of disk threads in the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,64);
   // Whether STORIO is in multiple (1 STORIO per cluster)  
   // or single mode (only 1 STORIO). 
@@ -764,6 +826,15 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(storio_fidctx_ctx,256);
   // Spare file restoring : Number of spare file context in 1K unit 
   COMMON_CONFIG_READ_INT(spare_restore_spare_ctx,16);
+  /*
+  ** storcli scope configuration parameters
+  */
+  // When that flag is asserted, the storcli uses RDMA when storio supports it 
+  COMMON_CONFIG_READ_BOOL(rdma_enable,False);
+  // Minimum read/write size in KB to trigger RDMA transfer 
+  COMMON_CONFIG_READ_INT(min_rmda_size_KB,64);
+  // number of Mojette threads 
+  COMMON_CONFIG_READ_INT_MINMAX(mojette_thread_count,4,1,4);
  
   config_destroy(&cfg);
 }

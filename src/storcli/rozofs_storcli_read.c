@@ -1632,7 +1632,6 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     }
     STORCLI_STOP_KPI(storcli_kpi_transform_inverse,0);
 
-
     /*
     ** update the index of the next block to read
     */

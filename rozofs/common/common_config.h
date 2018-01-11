@@ -50,12 +50,15 @@ typedef struct _common_config_t {
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
   // 0      = size balancing
   // 1      = weigthed round robin
-  // 2 or 3 = strict round robin
+  // 2 & 3  = strict round robin
+  // 4      = read round robin
   int32_t     file_distribution_rule;
   // DSCP for exchanges from/to the STORIO.
   int32_t     storio_dscp;
   // DSCP for exchanges from/to the EXPORTD.
   int32_t     export_dscp;
+  // When that flag is asserted, RozoFS operates in standalone mode only.
+  int32_t     standalone;
 
   /*
   ** export scope configuration parameters
@@ -137,12 +140,16 @@ typedef struct _common_config_t {
   int32_t     async_setattr;
   // statfs period in seconds. minimum is 0.
   int32_t     statfs_period;
+  // number of Fuse threads
+  int32_t     reply_thread_count;
 
   /*
   ** storage scope configuration parameters
   */
 
-  // Number of disk threads in the STORIO.
+  // Number of sub threads in the storaged
+  int32_t     nb_storaged_subthread;
+  /// Number of disk threads in the STORIO.
   int32_t     nb_disk_thread;
   // Whether STORIO is in multiple (1 STORIO per cluster) 
   // or single mode (only 1 STORIO).
@@ -208,6 +215,17 @@ typedef struct _common_config_t {
   int32_t     storio_fidctx_ctx;
   // Spare file restoring : Number of spare file context in 1K unit
   int32_t     spare_restore_spare_ctx;
+
+  /*
+  ** storcli scope configuration parameters
+  */
+
+  // When that flag is asserted, the storcli uses RDMA when storio supports it
+  int32_t     rdma_enable;
+  // Minimum read/write size in KB to trigger RDMA transfer
+  int32_t     min_rmda_size_KB;
+  // number of Mojette threads
+  int32_t     mojette_thread_count;
 } common_config_t;
 
 extern common_config_t common_config;

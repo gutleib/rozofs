@@ -42,6 +42,9 @@
 #include "sconfig.h"
 #include "sprotosvc_nb.h"
 #include "storio_north_intf.h"
+
+#include <rozofs/rdma/rozofs_rdma.h>
+
 /**
 * Buffers information
 */
@@ -154,7 +157,17 @@ uint32_t storio_north_userRcvReadyCallBack(void * socket_ctx_p,int socketId)
 */
 void  storio_north_userDiscCallBack(void *userRef,uint32_t socket_context_ref,void *bufRef,int err_no)
 {
-
+   /*
+   ** if the userReference is not NULL, that context must be released
+   */
+   if (userRef != NULL)
+   {
+      /*
+      ** Check the key
+      */
+      rozofs_storio_share_mem_ctx_t *sharemem_p = (rozofs_storio_share_mem_ctx_t*) userRef;
+      if (sharemem_p->key_stdalone == ROZOFS_STORIO_STANDALONE_KEY) free(sharemem_p);
+   }
     /*
     ** release the current buffer if significant
     */
@@ -233,6 +246,19 @@ int storio_north_interface_buffer_init(int read_write_buf_count,int read_write_b
     ruc_buffer_debug_register_pool("Pool_rcv",  storage_receive_buffer_pool_p);
 
     /*
+    ** registration with the RDMA module
+    */
+#ifdef ROZOFS_RDMA
+    {
+      rozofs_rdma_memory_reg_t rdma_reg_ctx;
+      rdma_reg_ctx.mem = ruc_buf_get_pool_base_and_length(storage_receive_buffer_pool_p,&rdma_reg_ctx.len);
+      if (rdma_reg_ctx.mem != NULL)
+      {
+	rozofs_rdma_user_memory_register(&rdma_reg_ctx);
+      }
+    }
+#endif
+    /*
     ** create the pool for sending requests to rozofsmount
     */
     storage_xmit_buffer_pool_p = ruc_buf_poolCreate(storage_read_write_buf_count, STORIO_BUF_XMIT_SZ);
@@ -242,7 +268,19 @@ int storio_north_interface_buffer_init(int read_write_buf_count,int read_write_b
        return -1;
     }
     ruc_buffer_debug_register_pool("Pool_snd",  storage_xmit_buffer_pool_p);
-
+    /*
+    ** registration with the RDMA module
+    */
+#ifdef ROZOFS_RDMA
+    {
+      rozofs_rdma_memory_reg_t rdma_reg_ctx;
+      rdma_reg_ctx.mem = ruc_buf_get_pool_base_and_length(storage_xmit_buffer_pool_p,&rdma_reg_ctx.len);
+      if (rdma_reg_ctx.mem != NULL)
+      {
+	rozofs_rdma_user_memory_register(&rdma_reg_ctx);
+      }
+    }
+#endif
     return 0;
 
 }
@@ -323,6 +361,14 @@ int storio_north_interface_init(char * host, int instance_id) {
               ip>>24, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF, storaged_config.io_addr[i].port+instance_id);
       return -1;
     } 
+    /*
+    ** attempt to create a RDMA listening: best effort
+    */
+#ifdef ROZOFS_RDMA
+    {
+      rozofs_rdma_listening_create( storaged_config.io_addr[i].ipv4,storaged_config.io_addr[i].port+instance_id);
+    }
+#endif
   }
   
   return 0;

@@ -20,8 +20,13 @@ include_directories(${CMAKE_SOURCE_DIR}) # for librozofs headers
 include_directories(${PTHREAD_INCLUDE_DIR})
 link_directories(${CMAKE_BINARY_DIR}/rozofs)
 
+
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  add_definitions(-DROZOFS_RDMA)
+endif()
+
 add_executable(storcli
-    rozofs_storcli.h
+     rozofs_storcli.h
     rozofs_storcli_transform.h
     rozofs_storcli_lbg_cnf_supervision.h
     storage_proto.h
@@ -53,9 +58,28 @@ add_executable(storcli
     rozofs_storcli_mojette_thread_intf.h
     rozofs_storcli_delete.c
     rozofs_storcli_wr_repair.c
-)
-#pthread need by fuse
-target_link_libraries(storcli rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+    rozofs_storcli_sharedmem.c
+    rozofs_storcli_sharedmem.h
+    standalone_client_send.c  
+    standalone_client_send.h
+ )
+
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  message(STATUS "Compiling storcli with RDMA support")
+  set(storcli_rmda_sources
+  # RDMA section
+      rdma_client_send.c
+      ../../rozofs/rdma/rozofs_rdma.c
+      ../../rozofs/rdma/rozofs_rdma.h
+  )
+  add_library(storcli_rmda STATIC ${storcli_rmda_sources})
+  set_target_properties(storcli_rmda PROPERTIES COMPILE_FLAGS "-fPIC")
+  target_link_libraries(storcli  storcli_rmda rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RDMA_LIBRARY} ${INFINIBAND_LIBRARY})
+else(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  message(STATUS "Compiling storcli without RDMA support")
+  target_link_libraries(storcli rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+endif(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+
 
 # Install
 install(TARGETS storcli

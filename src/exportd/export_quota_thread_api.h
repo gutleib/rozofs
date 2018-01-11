@@ -47,11 +47,14 @@ int export_fstat_init();
    @param eid : export identifier
    @param root_path : root path of the export
    @param create_flag : assert to 1 if  file MUST be created
+   @param hquota : hardware quota in blocks
+   @param squota : software quota in blocks
+   @param hquota_fast : hardware quota in blocks for fast volume
    
    @retval <> NULL: pointer to the attributes tracking table
    @retval == NULL : error (see errno for details)
 */
-void *export_fstat_alloc_context(uint16_t eid, char *root_path,uint64_t hquota,uint64_t squota,int create);
+void *export_fstat_alloc_context(uint16_t eid, char *root_path,uint64_t hquota,uint64_t squota,uint64_t hquota_fast,int create);
 
 /*
 **__________________________________________________________________
@@ -60,11 +63,12 @@ void *export_fstat_alloc_context(uint16_t eid, char *root_path,uint64_t hquota,u
  *
  * @param eid: the export to update
  * @param n: number of files
+   @param vid_fast: reference of a fast volume (0: not significant)
  *
  * @return always 0
  */
-int export_fstat_create_files(uint16_t eid, uint32_t n);
-int export_fstat_delete_files(uint16_t eid, uint32_t n);
+int export_fstat_create_files(uint16_t eid, uint32_t n,uint8_t vid_fast);
+int export_fstat_delete_files(uint16_t eid, uint32_t n,uint8_t vid_fast);
 /*
 **__________________________________________________________________
 */
@@ -74,10 +78,11 @@ int export_fstat_delete_files(uint16_t eid, uint32_t n);
  * @param newblocks: new number of blocks
  * @param oldblocks: old number of blocks
    @param thin_provisioning: assert to 1 if export is configured with thin provisioning
+   @param vid_fast: reference of a fast volume (0 is not significant)
  *
  * @return 0 on success -1 otherwise
  */
-int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning);
+int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning,uint8_t vid_fast);
 
 /*
 **_______________________________________________________________

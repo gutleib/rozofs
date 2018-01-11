@@ -371,8 +371,8 @@ int rozofs_storcli_regenerate_initial_block(rozofs_storcli_ctx_t             * w
  *
  * @return: the length written on success, -1 otherwise (errno is set)
  */
-void rozofs_storcli_transform_forward_repair(rozofs_storcli_ctx_t             * working_ctx_p,
-                                             rozofs_storcli_projection_ctx_t  * repair_prj_ctx, 
+ void rozofs_storcli_transform_forward_repair(rozofs_storcli_ctx_t             * working_ctx_p,
+                                              rozofs_storcli_projection_ctx_t  * repair_prj_ctx, 
                                 	      uint8_t                            layout,
                                 	      char                             * data) 
  {
@@ -907,14 +907,7 @@ void rozofs_storcli_write_repair_req_processing(rozofs_storcli_ctx_t *working_ct
      */
      if (prj_cxt_p[projection_id].bins == NULL) continue; 
      xmit_buf = prj_cxt_p[projection_id].prj_buf;
-     if (xmit_buf == NULL)
-     {
-       /*
-       ** fatal error since the ressource control already took place
-       */       
-       error = EIO;
-       goto fail;     
-     }
+     if (xmit_buf == NULL) continue;
        
      /*
      ** fill partially the common header

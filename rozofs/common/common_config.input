@@ -42,8 +42,9 @@ INT	global 	storio_slice_number		1024 8:(32*1024)
 // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
 // 0      = size balancing
 // 1      = weigthed round robin
-// 2 or 3 = strict round robin
-INT	global 	file_distribution_rule		0 0:10
+// 2 & 3  = strict round robin
+// 4      = read round robin
+INT	global 	file_distribution_rule		0 0:100
 // DSCP for exchanges from/to the STORIO.
 INT	global 	storio_dscp  			46 0:46
 // DSCP for exchanges from/to the EXPORTD.
@@ -60,7 +61,9 @@ BOOL	export 	fid_recycle                     False
 // Whether STORCLI acknowleges write request on inverse or forward STORIO responses.
 BOOL	client 	wr_ack_on_inverse		False
 INT	export 	export_buf_cnt			128 32:1024
-// Number of disk threads in the STORIO.
+// Number of sub threads in the storaged
+INT	storage nb_storaged_subthread         	4 1:8
+/// Number of disk threads in the STORIO.
 INT	storage nb_disk_thread         		4 2:64
 // Whether STORIO is in multiple (1 STORIO per cluster) 
 // or single mode (only 1 STORIO).
@@ -181,8 +184,17 @@ INT	export 	thin_scan_file_per_run		1000
 INT	export 	thin_lv1_hash_tb_size		10 6:128
 // Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning
 INT   	export expthin_guard_delay_sec		10  1:600
+// When that flag is asserted, the storcli uses RDMA when storio supports it
+BOOL 	storcli 	rdma_enable	            False
+// Minimum read/write size in KB to trigger RDMA transfer
+INT     storcli min_rmda_size_KB                   64
+// number of Mojette threads
+INT     storcli mojette_thread_count                4  1:4
+// number of Fuse threads
+INT     client reply_thread_count                2  1:4
 // Guard delay associated with directory re-write used for tracking children changes within a directory 
 INT   	export expdir_guard_delay_sec		10  1:7200
 // Maximum number of entries that the export level 2 cache can contain (unit is KB) 
 INT   	export level2_cache_max_entries_kb		512  1:4096
-
+// When that flag is asserted, RozoFS operates in standalone mode only.
+BOOL 	global 	standalone	            False

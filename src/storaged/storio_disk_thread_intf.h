@@ -32,6 +32,9 @@
 #include <rozofs/core/rozofs_rpc_non_blocking_generic_srv.h>
 #include "storage.h"
 #include "storio_device_mapping.h"
+#include <semaphore.h>
+#include <rozofs/rdma/rozofs_rdma.h>
+
 
 typedef struct _rozofs_disk_thread_stat_t {
   uint64_t            read_count;
@@ -79,6 +82,9 @@ typedef struct _rozofs_disk_thread_stat_t {
   uint64_t            rebStop_error;
   uint64_t            rebStop_badCidSid;  
   uint64_t            rebStop_time;
+  
+  uint64_t            rdma_write_error;
+  uint64_t            rdma_read_error;
 
 } rozofs_disk_thread_stat_t;
 /*
@@ -90,6 +96,10 @@ typedef struct _rozofs_disk_thread_ctx_t
   int                          thread_idx;
   char                       * hostname;  
   int                          sendSocket;
+  sem_t                        sema_rdma;       /**< storio semaphore for RDMA      */
+#ifdef ROZOFS_RDMA
+  rozofs_wr_id_t               rdma_ibv_post_send_ctx;   /**< context for ibv_post_send */
+#endif
   rozofs_disk_thread_stat_t    stat;
 } rozofs_disk_thread_ctx_t;
 
@@ -109,7 +119,11 @@ typedef enum _storio_disk_thread_request_e {
   STORIO_DISK_THREAD_REMOVE_CHUNK,
   STORIO_DISK_THREAD_REBUILD_START,
   STORIO_DISK_THREAD_REBUILD_STOP,
+  STORIO_DISK_THREAD_READ_RDMA, /**< RDMA support */
+  STORIO_DISK_THREAD_WRITE_RDMA, /**< RDMA support */
   STORIO_DISK_THREAD_FID, /**<process request within a FID context rather than request per request */
+  STORIO_DISK_THREAD_READ_STDALONE, /**< standalone mode */
+  STORIO_DISK_THREAD_WRITE_STDALONE,/**< standalone mode */
   STORIO_DISK_THREAD_MAX_OPCODE
 } storio_disk_thread_request_e;
 

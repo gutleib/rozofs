@@ -94,6 +94,8 @@ extern unsigned long long Global_timeBefore, Global_timeAfter;
 #define UMA_AGING_RUN   1
 #define UMA_AGING_AGED  2
 
+
+typedef void (*ruc_pf_2uint32_t)(uint32_t par1, uint32_t par2);
 /*
 **____________________________________________________________________________
 */

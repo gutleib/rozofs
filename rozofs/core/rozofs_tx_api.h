@@ -109,6 +109,26 @@ static inline void *rozofs_tx_get_recvBuf(rozofs_tx_ctx_t *this)
 **____________________________________________________
 */
 /**
+  Get the receive buffer associated with the current transaction
+  
+   @param this : pointer to the transaction context
+   @param bufnew : pointer to the new buffer
+   
+   @retval spointer to the receive buffer or null
+*/   
+static inline void *rozofs_tx_put_recvBuf(rozofs_tx_ctx_t *this,void *bufnew)
+{
+  void *buf;
+  buf = this->recv_buf;
+  this->recv_buf = bufnew;
+  return buf;
+
+}
+
+/*
+**____________________________________________________
+*/
+/**
   Clear the receive buffer reference
   
    @param this : pointer to the transaction context
@@ -273,6 +293,21 @@ static inline uint32_t rozofs_tx_alloc_xid(rozofs_tx_ctx_t *tx_p)
     tx_p->xid_low = 1;
   }
   tx_p->xid = ((tx_p->index<<16) | xid);
+  return  tx_p->xid;
+
+}
+
+/*
+*________________________________________________________
+*/
+/**  get the xid of a transaction
+
+  @param call_p : pointer to the transaction context
+  retval  value of the xid
+*/
+static inline uint32_t rozofs_tx_read_xid(rozofs_tx_ctx_t *tx_p)
+{
+
   return  tx_p->xid;
 
 }
@@ -450,6 +485,52 @@ static inline uint32_t  rozofs_tx_get_transaction_id( )
   if (rozofs_tx_global_transaction_id == 0) rozofs_tx_global_transaction_id++;
   return rozofs_tx_global_transaction_id;
 }
+/*
+**____________________________________________________
+*/
+/**
+   Save the reference of the RDMA buffer in the transaction context
+   
+   @param tx_p : pointer to the transaction context
+   @param rdma_bufref: reference of the RDMA buffer
+   
+   @retval none
+*/
+static inline void rozofs_tx_set_rdma_bufref(void *tx_p,void *rdma_bufref)
+{
+   rozofs_tx_ctx_t *p = (rozofs_tx_ctx_t*)tx_p;
+   p->rdma_bufref = rdma_bufref;
+}
+/*
+**____________________________________________________
+*/
+/**
+   read the reference of the RDMA buffer in the transaction context
+   
+   @param tx_p : pointer to the transaction context   
+   @retval rdma_bufref : reference of the RDMA buffer
+*/
+static inline void *rozofs_tx_read_rdma_bufref(void *tx_p)
+{
+   rozofs_tx_ctx_t *p = (rozofs_tx_ctx_t*)tx_p;
+   return(p->rdma_bufref );
+}
 
+/*
+**____________________________________________________
+*/
+/**
+   Save the reference of the RDMA buffer in the transaction context
+   
+   @param tx_p : pointer to the transaction context
+   @param rdma_bufref: reference of the RDMA buffer
+   
+   @retval none
+*/
+static inline void rozofs_tx_clear_rdma_bufref(void *tx_p)
+{
+   rozofs_tx_ctx_t *p = (rozofs_tx_ctx_t*)tx_p;
+   p->rdma_bufref =NULL;
+}
 #endif
 

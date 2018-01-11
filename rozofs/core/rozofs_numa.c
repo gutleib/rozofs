@@ -92,5 +92,10 @@ void rozofs_numa_allocate_node(int instance, char * criteria)
    ** set the preferred memory
    */
    numa_set_preferred(bit);
-   info("rozofs_numa_allocate_node(%d): set on node %d", instance,bit);
-}
+   if (criteria == NULL) {
+     info("rozofs_numa_allocate_node(%d): set on node %d", instance, bit);   
+   }
+   else {
+     info("rozofs_numa_allocate_node(%d,%s): pined on node %d", instance, criteria, bit);
+   }
+} 

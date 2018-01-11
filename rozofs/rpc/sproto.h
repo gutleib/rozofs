@@ -17,6 +17,8 @@ extern "C" {
 
 typedef uint32_t sp_uuid_t[ROZOFS_UUID_SIZE_RPC];
 
+typedef uint32_t rozofs_rdma_key_t[6];
+
 enum sp_status_t {
 	SP_SUCCESS = 0,
 	SP_FAILURE = 1,
@@ -332,6 +334,99 @@ struct sp_write_ret_t {
 };
 typedef struct sp_write_ret_t sp_write_ret_t;
 
+struct sp_rdma_setup_arg_t {
+	rozofs_rdma_key_t rdma_key;
+};
+typedef struct sp_rdma_setup_arg_t sp_rdma_setup_arg_t;
+
+struct sp_rdma_setup_ret_t {
+	sp_status_t status;
+	union {
+		sp_rdma_setup_arg_t rsp;
+		int error;
+	} sp_rdma_setup_ret_t_u;
+};
+typedef struct sp_rdma_setup_ret_t sp_rdma_setup_ret_t;
+
+struct sp_write_rdma_arg_t {
+	uint16_t cid;
+	uint8_t sid;
+	uint8_t layout;
+	uint8_t spare;
+	uint32_t rebuild_ref;
+	uint32_t alignment1;
+	uint32_t dist_set[ROZOFS_SAFE_MAX_RPC];
+	sp_uuid_t fid;
+	uint8_t proj_id;
+	uint64_t bid;
+	uint32_t nb_proj;
+	uint32_t bsize;
+	rozofs_rdma_key_t rdma_key;
+	uint32_t rkey;
+	uint64_t remote_addr;
+	uint32_t remote_len;
+};
+typedef struct sp_write_rdma_arg_t sp_write_rdma_arg_t;
+
+struct sp_read_rdma_arg_t {
+	uint16_t cid;
+	uint8_t sid;
+	uint8_t layout;
+	uint8_t bsize;
+	uint8_t spare;
+	uint32_t dist_set[ROZOFS_SAFE_MAX_RPC];
+	sp_uuid_t fid;
+	uint64_t bid;
+	uint32_t nb_proj;
+	rozofs_rdma_key_t rdma_key;
+	uint32_t rkey;
+	uint64_t remote_addr;
+	uint32_t remote_len;
+};
+typedef struct sp_read_rdma_arg_t sp_read_rdma_arg_t;
+
+struct sp_standalone_setup_arg_t {
+	uint32_t sharemem_key;
+	uint32_t bufcount;
+	uint32_t bufsize;
+};
+typedef struct sp_standalone_setup_arg_t sp_standalone_setup_arg_t;
+
+struct sp_read_standalone_arg_t {
+	uint16_t cid;
+	uint8_t sid;
+	uint8_t layout;
+	uint8_t bsize;
+	uint8_t spare;
+	uint32_t dist_set[ROZOFS_SAFE_MAX_RPC];
+	sp_uuid_t fid;
+	uint64_t bid;
+	uint32_t nb_proj;
+	uint32_t share_buffer_index;
+	uint32_t sharemem_key;
+	uint32_t buf_offset;
+};
+typedef struct sp_read_standalone_arg_t sp_read_standalone_arg_t;
+
+struct sp_write_standalone_arg_t {
+	uint16_t cid;
+	uint8_t sid;
+	uint8_t layout;
+	uint8_t spare;
+	uint32_t rebuild_ref;
+	uint32_t alignment1;
+	uint32_t dist_set[ROZOFS_SAFE_MAX_RPC];
+	sp_uuid_t fid;
+	uint8_t proj_id;
+	uint64_t bid;
+	uint32_t nb_proj;
+	uint32_t bsize;
+	uint32_t share_buffer_index;
+	uint32_t sharemem_key;
+	uint32_t buf_offset;
+};
+typedef struct sp_write_standalone_arg_t sp_write_standalone_arg_t;
+
 #define STORAGE_PROGRAM 0x20000002
 #define STORAGE_VERSION 1
 
@@ -372,6 +467,24 @@ extern  sp_write_ret_t * sp_write_repair2_1_svc(sp_write_repair2_arg_t *, struct
 #define SP_WRITE_REPAIR3 11
 extern  sp_write_ret_t * sp_write_repair3_1(sp_write_repair3_arg_t *, CLIENT *);
 extern  sp_write_ret_t * sp_write_repair3_1_svc(sp_write_repair3_arg_t *, struct svc_req *);
+#define SP_READ_RDMA 12
+extern  sp_read_ret_t * sp_read_rdma_1(sp_read_rdma_arg_t *, CLIENT *);
+extern  sp_read_ret_t * sp_read_rdma_1_svc(sp_read_rdma_arg_t *, struct svc_req *);
+#define SP_WRITE_RDMA 13
+extern  sp_write_ret_t * sp_write_rdma_1(sp_write_rdma_arg_t *, CLIENT *);
+extern  sp_write_ret_t * sp_write_rdma_1_svc(sp_write_rdma_arg_t *, struct svc_req *);
+#define SP_RDMA_SETUP 14
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1(sp_rdma_setup_arg_t *, CLIENT *);
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc(sp_rdma_setup_arg_t *, struct svc_req *);
+#define SP_STANDALONE_SETUP 15
+extern  sp_status_ret_t * sp_standalone_setup_1(sp_standalone_setup_arg_t *, CLIENT *);
+extern  sp_status_ret_t * sp_standalone_setup_1_svc(sp_standalone_setup_arg_t *, struct svc_req *);
+#define SP_READ_STANDALONE 16
+extern  sp_read_ret_t * sp_read_standalone_1(sp_read_standalone_arg_t *, CLIENT *);
+extern  sp_read_ret_t * sp_read_standalone_1_svc(sp_read_standalone_arg_t *, struct svc_req *);
+#define SP_WRITE_STANDALONE 17
+extern  sp_write_ret_t * sp_write_standalone_1(sp_write_standalone_arg_t *, CLIENT *);
+extern  sp_write_ret_t * sp_write_standalone_1_svc(sp_write_standalone_arg_t *, struct svc_req *);
 extern int storage_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -411,6 +524,24 @@ extern  sp_write_ret_t * sp_write_repair2_1_svc();
 #define SP_WRITE_REPAIR3 11
 extern  sp_write_ret_t * sp_write_repair3_1();
 extern  sp_write_ret_t * sp_write_repair3_1_svc();
+#define SP_READ_RDMA 12
+extern  sp_read_ret_t * sp_read_rdma_1();
+extern  sp_read_ret_t * sp_read_rdma_1_svc();
+#define SP_WRITE_RDMA 13
+extern  sp_write_ret_t * sp_write_rdma_1();
+extern  sp_write_ret_t * sp_write_rdma_1_svc();
+#define SP_RDMA_SETUP 14
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1();
+extern  sp_rdma_setup_ret_t * sp_rdma_setup_1_svc();
+#define SP_STANDALONE_SETUP 15
+extern  sp_status_ret_t * sp_standalone_setup_1();
+extern  sp_status_ret_t * sp_standalone_setup_1_svc();
+#define SP_READ_STANDALONE 16
+extern  sp_read_ret_t * sp_read_standalone_1();
+extern  sp_read_ret_t * sp_read_standalone_1_svc();
+#define SP_WRITE_STANDALONE 17
+extern  sp_write_ret_t * sp_write_standalone_1();
+extern  sp_write_ret_t * sp_write_standalone_1_svc();
 extern int storage_program_1_freeresult ();
 #endif /* K&R C */
 
@@ -418,6 +549,7 @@ extern int storage_program_1_freeresult ();
 
 #if defined(__STDC__) || defined(__cplusplus)
 extern  bool_t xdr_sp_uuid_t (XDR *, sp_uuid_t);
+extern  bool_t xdr_rozofs_rdma_key_t (XDR *, rozofs_rdma_key_t);
 extern  bool_t xdr_sp_status_t (XDR *, sp_status_t*);
 extern  bool_t xdr_sp_status_ret_t (XDR *, sp_status_ret_t*);
 extern  bool_t xdr_sp_write_arg_t (XDR *, sp_write_arg_t*);
@@ -443,9 +575,17 @@ extern  bool_t xdr_sp_rebuild_stop_ret_t (XDR *, sp_rebuild_stop_ret_t*);
 extern  bool_t xdr_sp_read_t (XDR *, sp_read_t*);
 extern  bool_t xdr_sp_read_ret_t (XDR *, sp_read_ret_t*);
 extern  bool_t xdr_sp_write_ret_t (XDR *, sp_write_ret_t*);
+extern  bool_t xdr_sp_rdma_setup_arg_t (XDR *, sp_rdma_setup_arg_t*);
+extern  bool_t xdr_sp_rdma_setup_ret_t (XDR *, sp_rdma_setup_ret_t*);
+extern  bool_t xdr_sp_write_rdma_arg_t (XDR *, sp_write_rdma_arg_t*);
+extern  bool_t xdr_sp_read_rdma_arg_t (XDR *, sp_read_rdma_arg_t*);
+extern  bool_t xdr_sp_standalone_setup_arg_t (XDR *, sp_standalone_setup_arg_t*);
+extern  bool_t xdr_sp_read_standalone_arg_t (XDR *, sp_read_standalone_arg_t*);
+extern  bool_t xdr_sp_write_standalone_arg_t (XDR *, sp_write_standalone_arg_t*);
 
 #else /* K&R C */
 extern bool_t xdr_sp_uuid_t ();
+extern bool_t xdr_rozofs_rdma_key_t ();
 extern bool_t xdr_sp_status_t ();
 extern bool_t xdr_sp_status_ret_t ();
 extern bool_t xdr_sp_write_arg_t ();
@@ -471,6 +611,13 @@ extern bool_t xdr_sp_rebuild_stop_ret_t ();
 extern bool_t xdr_sp_read_t ();
 extern bool_t xdr_sp_read_ret_t ();
 extern bool_t xdr_sp_write_ret_t ();
+extern bool_t xdr_sp_rdma_setup_arg_t ();
+extern bool_t xdr_sp_rdma_setup_ret_t ();
+extern bool_t xdr_sp_write_rdma_arg_t ();
+extern bool_t xdr_sp_read_rdma_arg_t ();
+extern bool_t xdr_sp_standalone_setup_arg_t ();
+extern bool_t xdr_sp_read_standalone_arg_t ();
+extern bool_t xdr_sp_write_standalone_arg_t ();
 
 #endif /* K&R C */
 

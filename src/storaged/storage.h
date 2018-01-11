@@ -39,8 +39,20 @@
 
 #include "storio_device_mapping.h"
 #include "storage_header.h"
+#include "storage_device_kpi.h"
 
-
+/**
+* Structure used to store storcli buffer refence with RozoFS operates in standalone mode
+*/
+#define ROZOFS_STORIO_STANDALONE_KEY  0x53543031 
+typedef struct _rozofs_storio_share_mem_ctx_t {
+        uint32_t key_stdalone; 
+        int      shmid;       /**< id of the shared memory                       */
+ 	uint32_t sharemem_key;
+	uint32_t bufcount;
+	uint32_t bufsize;
+	void     *addr_p;     /**< pointer to the beginning of the sharememory  */
+} rozofs_storio_share_mem_ctx_t;
 /*
 ** The mark that should be present on a RozoFS device
 */
@@ -96,6 +108,9 @@ static inline int rozofs_scan_mark_file(char * name, int * cid, int * sid, int *
 #else
 #define dbg(fmt,...) info(fmt,__VA_ARGS__)
 #endif
+
+
+#define ROZOFS_DECODED_BUF_RDMA_EXTRA_SIZE 128  /**< reserved used in rpc decoded buffer */
 
 /*
 ** Initialize a CRC32 from a FID
@@ -239,6 +254,11 @@ typedef struct _storage_device_ctx_t {
   uint64_t                    monitor_run;
   uint64_t                    monitor_no_activity;
   uint64_t                    last_activity_time;
+  /*
+  ** Reference of the per device kpi memory
+  */
+  int                         kpiRef;
+  
 } storage_device_ctx_t;
 
 
@@ -432,6 +452,7 @@ static inline char * trace_device(char * pChar, storio_device_mapping_t * p) {
       break; 
     }   
     if (dev == ROZOFS_EOF_CHUNK) break;
+
 
     if (dev == ROZOFS_EMPTY_CHUNK) {
       *pChar++ = 'E';
@@ -1432,7 +1453,7 @@ int storage_replace_with_spare(storage_t * st, int dev);
 void storio_device_error_log_reset();
 
 
-uint32_t storio_device_mapping_allocate_device(storage_t * st);
+uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib);
 /*
 ** 
 ** Create RozoFS storage subdirectories on a device

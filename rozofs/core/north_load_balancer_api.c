@@ -198,7 +198,7 @@ void  north_lbg_userRecvCallBack(void *userRef,uint32_t  socket_ctx_idx, void *b
    /*
    ** OK now call the application
    */
-   (lbg_p->userRcvCallBack)(NULL,lbg_p->index,bufRef);
+   (lbg_p->userRcvCallBack)((void*)(lbg_p->rdma_out_of_seq_CallBack),lbg_p->index,bufRef);
 }
 
 /*__________________________________________________________________________
@@ -230,6 +230,11 @@ void  north_lbg_userDiscCallBack(void *userRef,uint32_t socket_context_ref,void 
    ruc_obj_desc_t        *pnext = (ruc_obj_desc_t*)NULL;
    int up2down_transition = 0;
 
+
+    /*
+    ** check the presence of a RDMA callback
+    */
+    if (lbg_p->rdma_disconnect_CallBack!=NULL) (lbg_p->rdma_disconnect_CallBack)(userRef,socket_context_ref,bufRef,err_no);
     /*
     ** change the state to DOWN
     */
@@ -561,6 +566,7 @@ void  north_lbg_userXmiDoneCallBack(void *userRef,uint32_t socket_context_ref,vo
 void north_lbg_connect_cbk (void *userRef,uint32_t socket_context_ref,int retcode,int errnum)
 {
    north_lbg_entry_ctx_t *entry_p = (north_lbg_entry_ctx_t*)userRef;
+   north_lbg_ctx_t       *lbg_p   = (north_lbg_ctx_t*)entry_p->parent;
    uint8_t fake_buf[16];
    int len;
    int status;
@@ -590,6 +596,10 @@ void north_lbg_connect_cbk (void *userRef,uint32_t socket_context_ref,int retcod
       north_lbg_entry_stop_timer(entry_p);
       sock_p->stats.totalUpDownTransition++;
       north_lbg_entry_state_change(entry_p,NORTH_LBG_UP);
+      /*
+      ** check if there is a RDMA callback: ALways called with a successful status
+      */
+      if (lbg_p->rdma_connected_CallBack!=NULL) (lbg_p->rdma_connected_CallBack)(userRef,socket_context_ref,RUC_OK,0);
       /*
       ** attempt the fill the xmit queue of that entry
       */
@@ -895,8 +905,6 @@ int north_lbg_create_af_inet(char *name,
 }
 
 
-
-
 /**
 *  API that provide the current state of a load balancing Group
 
@@ -1137,6 +1145,69 @@ int north_lbg_configure_af_inet(int lbg_idx,char *name,
   return (lbg_p->index);
 
 }
+
+/*__________________________________________________________________________
+*/ 
+ /**
+*  API to configure RDMA support on an already created LBG
+   The load balancing group must have been created previously with north_lbg_create_no_conf() 
+  
+ @param lbg_idx: index of the load balancing group
+ @param rdma_connected_CallBack: call back called upon the TCP connection indication (failure or success )
+ @param rdma_disconnect_CallBack: call back called upon the TCP disconnect
+ @param rdma_out_of_seq_CallBack: call back called upon receiving an out of sequence transaction
+ 
+  @retval >= reference of the load balancer object
+  @retval < 0 error (out of context ??)
+*/
+int north_lbg_configure_af_inet_with_rdma_support(int lbg_idx,
+                                                  generic_connect_CBK_t rdma_connected_CallBack,
+						  generic_disc_CBK_t    rdma_disconnect_CallBack,
+						  ruc_pf_2uint32_t      rdma_out_of_seq_CallBack)
+{
+  north_lbg_ctx_t  *lbg_p;
+   
+   
+  lbg_p = north_lbg_getObjCtx_p(lbg_idx);
+  if (lbg_p == NULL) 
+  {
+    warning("north_lbg_configure_af_inet: no such instance %d ",lbg_idx);
+    return -1;
+  }
+  /*
+  ** store the RDMA callnacks
+  */
+  lbg_p->rdma_connected_CallBack = rdma_connected_CallBack;
+  lbg_p->rdma_disconnect_CallBack = rdma_disconnect_CallBack;
+  lbg_p->rdma_out_of_seq_CallBack = rdma_out_of_seq_CallBack;
+  
+  return (lbg_p->index);
+
+}
+
+/*__________________________________________________________________________
+*/ 
+ /**
+*  API to get the out of sequence callback associated with a load balancing group
+  
+ @param lbg_idx             Index of the load balancing group
+ 
+  @retval NULL: not callback
+  @retval<>NULL user callback for out of sequence transaction
+*/
+ruc_pf_2uint32_t north_lbg_get_rdma_out_of_seq_CallBack(int lbg_idx)
+{
+  north_lbg_ctx_t  *lbg_p;
+  
+  lbg_p = north_lbg_getObjCtx_p(lbg_idx);
+  if (lbg_p == NULL) 
+  {
+    return NULL;
+  }
+
+  return (lbg_p->rdma_out_of_seq_CallBack);
+} 
+
 
 /*__________________________________________________________________________
 */ 
@@ -1760,4 +1831,82 @@ uint32_t north_lbg_get_remote_ip_address(int  lbg_idx)
     return (sock_p->remote_ipaddr_host);
   }
   return 0;
+}
+
+
+/*__________________________________________________________________________
+*/
+/**
+*  Set RDMA state to UP
+
+  @param lbg_idx : reference of the load balancing group
+  @param ref: reference of the socket controller
+
+
+  @retval 0 on success
+  @retval < 0 on error
+*/
+int north_lbg_set_rdma_up(int  lbg_idx,uint32_t ref)
+{
+  north_lbg_ctx_t  *lbg_p;
+  
+  lbg_p = north_lbg_getObjCtx_p(lbg_idx);
+  if (lbg_p == NULL) 
+  {
+    errno = ENOENT;
+    return -1;
+  }
+  lbg_p->rdma_ref  = ref;
+  lbg_p->rdma_state = 1;  
+  return 0;
+}
+/*__________________________________________________________________________
+*/
+/**
+*  Set RDMA state to DOWN
+
+  @param lbg_idx : reference of the load balancing group
+
+
+  @retval 0 on success
+  @retval < 0 on error
+*/
+int north_lbg_set_rdma_down(int  lbg_idx)
+{
+  north_lbg_ctx_t  *lbg_p;
+  
+  lbg_p = north_lbg_getObjCtx_p(lbg_idx);
+  if (lbg_p == NULL) 
+  {
+    errno = ENOENT;
+    return -1;
+  }
+
+  lbg_p->rdma_state = 0;  
+  return 0;
+}
+
+/*__________________________________________________________________________
+*/
+/**
+*  Check the RDMA support for the LBG
+
+  @param lbg_idx : reference of the load balancing group
+  @param ref_p: pointer where to store the socket controller reference (might be NULL
+
+
+  @retval 1 when supported & available
+  @retval 0 otherwise
+*/
+int north_lbg_is_rdma_up(int  lbg_idx,uint32_t *ref_p)
+{
+  north_lbg_ctx_t  *lbg_p;
+  
+  lbg_p = north_lbg_getObjCtx_p(lbg_idx);
+  if (lbg_p == NULL) 
+  {
+    return 0;
+  }
+  if (ref_p != NULL) *ref_p = lbg_p->rdma_ref;
+  return(lbg_p->rdma_state);  
 }

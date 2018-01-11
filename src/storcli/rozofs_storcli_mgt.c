@@ -24,6 +24,8 @@
 
 #include "rozofs_storcli.h"
 #include <rozofs/rozofs_srv.h>
+#include <rozofs/rdma/rozofs_rdma.h>
+#include "rozofs_storcli_sharedmem.h"
 
 rozofs_storcli_ctx_t *rozofs_storcli_ctx_freeListHead;  /**< head of list of the free context  */
 rozofs_storcli_ctx_t rozofs_storcli_ctx_activeListHead;  /**< list of the active context     */
@@ -967,14 +969,45 @@ uint32_t rozofs_storcli_module_init()
          break;
       }
       ruc_buffer_debug_register_pool("SouthSmall",rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_SMALL_POOL]);
-      rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] = ruc_buf_poolCreate(rozofs_storcli_south_large_buf_count,rozofs_storcli_south_large_buf_sz);
+      /*
+      ** create the pool in shared memory if RozoFS operates in standalone mode
+      */
+//      if (common_config.standalone)
+      {
+         int key = (storcli_conf_p->rozofsmount_instance << 8) | storcli_conf_p->module_index;
+     
+      rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] = 
+          rozofs_create_shared_memory(key,_ROZOFS_STORCLI_SOUTH_LARGE_POOL,rozofs_storcli_south_large_buf_count,rozofs_storcli_south_large_buf_sz,"SouthLarge");
+      }
+#if 0
+      else
+      {
+        rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] = ruc_buf_poolCreate(rozofs_storcli_south_large_buf_count,rozofs_storcli_south_large_buf_sz);
+	if (rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] != NULL)
+	   ruc_buffer_debug_register_pool("SouthLarge",rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL]); 
+      }
+#endif
       if (rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL] == NULL)
       {
          ret = RUC_NOK;
          severe( "rcv ruc_buf_poolCreate(%d,%d)", rozofs_storcli_south_large_buf_count, rozofs_storcli_south_large_buf_sz ); 
 	 break;
       }
-      ruc_buffer_debug_register_pool("SouthLarge",rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL]);      
+           
+#ifdef ROZOFS_RDMA
+      /*
+      ** registration with the RDMA module
+      */
+      {
+	rozofs_rdma_memory_reg_t rdma_reg_ctx;
+
+	rdma_reg_ctx.mem = ruc_buf_get_pool_base_and_length(rozofs_storcli_pool[_ROZOFS_STORCLI_SOUTH_LARGE_POOL],&rdma_reg_ctx.len);
+	if (rdma_reg_ctx.mem != NULL)
+	{
+          rozofs_rdma_user_memory_register(&rdma_reg_ctx);
+	}
+      }
+#endif
    break;
    }
    return ret;

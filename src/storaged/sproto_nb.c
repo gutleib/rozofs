@@ -748,6 +748,329 @@ error:
 out:
     return;    
 }
+
+
+/*
+**___________________________________________________________
+*/
+/**
+*  READ with RDMA support
+*/
+void sp_read_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static sp_read_ret_t ret;
+    storio_device_mapping_t * dev_map_p = NULL;
+    sp_read_rdma_arg_t           * read_arg_p = (sp_read_rdma_arg_t *) pt;
+    int                       same_recycle_cpt;
+    
+    START_PROFILING(read);
+            
+    /*
+    ** Use received buffer for the response
+    */
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
+ 
+    /*
+    ** Set the position where the data has to be written in the xmit buffer 
+    */
+    req_ctx_p->position = storage_get_position_of_first_byte2write_from_read_req();
+
+    /*
+    ** Lookup for the cid/sid/FID in the lookup table. 
+    ** Do not update the entry, but tell whether the reycling counter has the same
+    ** value in the context and in the request 
+    */ 
+    dev_map_p = storio_device_mapping_search(read_arg_p->cid,
+                                             read_arg_p->sid,
+					     read_arg_p->fid,
+					     &same_recycle_cpt);
+    /*
+    ** A mapping context exist containing information synchronized
+    ** with the disk header file content.
+    */    
+    if ((dev_map_p) && (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK)) {
+      /*
+      ** This is not the same recycling counter, 
+      ** so the requested FID does not exist.
+      */
+      if (!same_recycle_cpt) {
+        errno = ENOENT;
+	goto error;
+      }
+    }
+    
+    /*
+    ** No mapping context exist, so create one
+    */
+    if (dev_map_p == NULL) { 
+      dev_map_p = storio_device_mapping_insert (read_arg_p->cid, 
+                                                read_arg_p->sid, 
+						read_arg_p->fid);
+      if (dev_map_p == NULL) { 
+        errno = ENOMEM;
+        goto error;
+      }
+    }  
+    req_ctx_p->opcode = STORIO_DISK_THREAD_READ_RDMA;
+        
+    /*
+    ** If any request is already running, chain this request on the FID context
+    */
+    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
+      goto out;
+    }  
+    
+    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
+      goto out;
+    }
+    severe("storio_disk_thread_intf_send %s", strerror(errno));
+    
+error:
+    ret.status                = SP_FAILURE;            
+    ret.sp_read_ret_t_u.error = errno;
+    
+    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+    /*
+    ** release the context
+    */
+    rozorpc_srv_release_context(req_ctx_p);
+    STOP_PROFILING(read);
+
+out:
+    return;    
+}
+
+/*
+**___________________________________________________________
+*/
+/**
+*  WRITE with RDMA support
+*/
+/*
+**___________________________________________________________
+*/
+
+void sp_write_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static sp_write_ret_t ret;
+    storio_device_mapping_t * dev_map_p = NULL;
+    sp_write_rdma_arg_t          * write_arg_p = (sp_write_rdma_arg_t *) pt;
+    uint8_t                   nb_rebuild;
+    uint8_t                   storio_rebuild_ref;
+    STORIO_REBUILD_T        * pRebuild; 
+    int                       same_recycle_cpt;
+    int                       write_last;
+    int                       write_first;
+    
+    START_PROFILING(write);
+
+    /*
+    ** Use received buffer for the response
+    */
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
+    req_ctx_p->opcode   = STORIO_DISK_THREAD_WRITE_RDMA;
+  
+    /*
+    ** Rebuild reference is 0 when the write comes from the STORCLI.
+    ** When the write comes from a rebuild process, this reference is 
+    ** the index of the rebuild context whithin the FID context {1..4}
+    */
+    nb_rebuild = write_arg_p->rebuild_ref;
+    if (nb_rebuild > MAX_FID_PARALLEL_REBUILD) {
+      /* bad reference ?? */
+      severe("Bad rebuild ref %d",nb_rebuild);
+      errno = EAGAIN; // Break this rebuild
+      goto error;	
+    } 
+
+    /*
+    ** Lookup for the FID context in the lookup table. 
+    */
+    dev_map_p = storio_device_mapping_search(write_arg_p->cid, 
+                                             write_arg_p->sid, 
+					     write_arg_p->fid,
+					     &same_recycle_cpt);
+
+
+    write_first = write_arg_p->bid;
+    write_last  = write_first + write_arg_p->nb_proj - 1;
+
+    /*
+    ** THIS IS A WRITE FROM A REBUILD PROCESS
+    */
+    if (nb_rebuild != 0) {
+    
+      /*
+      ** No mapping context, so no such valid rebuild
+      */
+      if (dev_map_p == NULL) {
+	errno = EAGAIN;  // Break this rebuild
+	goto error;
+      }   
+          
+      /*
+      ** Retrieve the rebuild context from the rebuild index
+      */
+      nb_rebuild--;
+      storio_rebuild_ref = dev_map_p->storio_rebuild_ref.u8[nb_rebuild];
+      pRebuild = storio_rebuild_ctx_retrieve(storio_rebuild_ref, (char*)write_arg_p->fid);
+      if (pRebuild == NULL) {
+	/* This context is running for this FID */
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF;
+	errno = EAGAIN;
+	goto error;
+      }      
+     
+      /* check that the rebuild does not overrun the rebuild area... */
+      /* ... after ... */ 
+      if (((pRebuild->stop_block != -1) &&  (write_last>pRebuild->stop_block))
+      /* ... or before. */
+      ||  (write_first < pRebuild->start_block)) {
+	storio_rebuild_ctx_free(pRebuild);
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF;
+	errno = EAGAIN;
+	goto error;
+      }
+      
+      /*
+      ** Rebuild still on going. Update the time stamp
+      ** and starting point of the on going rebuild
+      */        
+      pRebuild->rebuild_ts  = time(NULL);
+      pRebuild->start_block = write_first;
+      
+      /*
+      ** Forward the request to the disk thread.
+      ** On the 1rzt write of a rebuild with relocate
+      */
+      
+      if (pRebuild->relocate == RBS_TO_RELOCATE) {
+        req_ctx_p->opcode = STORIO_DISK_THREAD_REBUILD_START;
+      }
+      goto send_to_disk_thread;   
+    }
+    
+      
+    /*
+    ** THIS IS A WRITE WRITE FROM THE STORCLI.
+    */ 
+
+    /*
+    ** No mapping context exist, so create one
+    */
+    if (dev_map_p==NULL) {
+      dev_map_p = storio_device_mapping_insert (write_arg_p->cid, 
+                                                write_arg_p->sid, 
+						write_arg_p->fid);
+      if (dev_map_p == NULL) { 
+        goto error;// errno already set
+      }
+      goto send_to_disk_thread;
+    } 
+
+    /*
+    ** A mapping context exist containing information synchronized
+    ** with the disk header file content.
+    */   
+    if (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK) { 
+      /*
+      ** This is not the same recycling counter, so let's recycle
+      */
+      if (!same_recycle_cpt) {
+	/* 
+	** This is an old file that is being recycled.
+	** Let's clear the chunk distribution to force a header file update
+	** and a data truncate.
+	*/
+        storio_free_dev_mapping(dev_map_p);
+	dev_map_p->recycle_cpt =  rozofs_get_recycle_from_fid(write_arg_p->fid);
+      }
+    } 
+
+    /*
+    ** Check whether this write breaks a running rebuild
+    */
+    if (dev_map_p->storio_rebuild_ref.u64 == 0xFFFFFFFFFFFFFFFF ) {
+      // No running rebuild
+      goto send_to_disk_thread;
+    }
+    
+    /*
+    ** Check for compatibility with all the running rebuilds
+    */    
+    for (nb_rebuild=0; nb_rebuild < MAX_FID_PARALLEL_REBUILD; nb_rebuild++) {
+
+      storio_rebuild_ref = dev_map_p->storio_rebuild_ref.u8[nb_rebuild];
+
+      /* This context is free */
+      if (storio_rebuild_ref == 0xFF) {
+	continue;
+      }
+
+      /*
+      ** Retrieve the rebuild context  
+      */
+      pRebuild = storio_rebuild_ctx_retrieve(storio_rebuild_ref, (char*)write_arg_p->fid);
+      if (pRebuild == NULL) {
+	/* This context is not allocated for this FID,
+	** or not the same recycling counter */
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF; // break this rebuild
+        continue;
+      }
+
+      /*
+      ** Writing the area that the rebuild process is trying to rebuild
+      ** breaks the rebuild.
+      */
+      if ((write_first > pRebuild->start_block) 
+       && ((pRebuild->stop_block==-1)||(write_first <= pRebuild->stop_block))) {
+        /* 
+	** Writing within the rebuild area !
+	** Let's shrink the rebuild area to the 1rst written block
+	*/
+	pRebuild->stop_block = write_first-1;    
+      }  
+      else if ((write_first <= pRebuild->start_block) && (write_last >= pRebuild->start_block)) {
+        /* 
+	** Writing at the beginning of the rebuild area !
+	** it breaks the rebuild
+	*/        
+	storio_rebuild_ctx_free(pRebuild);
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF; // break this rebuild	
+      }
+    }         
+
+
+send_to_disk_thread:
+        
+    /*
+    ** If any request is already running, chain this request on the FID context
+    */
+    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
+      goto out;
+    }   
+
+    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
+      goto out;
+    }  
+    severe("storio_disk_thread_intf_send %s", strerror(errno));
+
+
+error:    
+    
+    ret.status                 = SP_FAILURE;            
+    ret.sp_write_ret_t_u.error = errno;
+    
+    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+    /*
+    ** release the context
+    */
+    rozorpc_srv_release_context(req_ctx_p);
+    STOP_PROFILING(write);
+
+out:
+    return;
+}
 /*
 **___________________________________________________________
 */
@@ -1466,6 +1789,7 @@ error:
 out:
     return;
 }
+
 /*
 **___________________________________________________________
 */
@@ -1554,4 +1878,498 @@ out:
 
     STOP_PROFILING(clear_error);
     return ;
+}
+
+
+
+
+/*
+**___________________________________________________________
+*/
+
+typedef struct __rozofs_rdma_tcp_assoc_t
+{
+    uint16_t cli_ref;  /**< reference of the client : local index of the TCP connection  */
+    uint16_t srv_ref;  /**< reference of the serveur: local index of the TCP connection   */
+    uint32_t ip_cli;   /**< client IP address   */   
+    uint32_t ip_srv;   /**< server IP address   */
+    uint16_t port_cli; /**< client port         */
+    uint16_t port_srv; /**< server port         */
+    uint64_t cli_ts;   /**< timestamp of the client */
+} FDL_rozofs_rdma_tcp_assoc_t;
+
+void sp_rdma_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static sp_rdma_setup_ret_t    ret;
+    sp_rdma_setup_arg_t    * sp_rdma_setup_arg_p = (sp_rdma_setup_arg_t *) pt;
+    FDL_rozofs_rdma_tcp_assoc_t *assoc_p;
+
+      
+//    START_PROFILING(clear_error);
+    
+
+    /*
+    ** Use received buffer for the response
+    */    
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
+
+    /*
+    ** Check if the server supports the RDMA
+    */
+    /*
+    ** copy the RDMA key
+    */
+    memcpy(&ret.sp_rdma_setup_ret_t_u.rsp,sp_rdma_setup_arg_p,sizeof(sp_rdma_setup_arg_t));
+    assoc_p = (FDL_rozofs_rdma_tcp_assoc_t*)&ret.sp_rdma_setup_ret_t_u.rsp;
+    /*
+    ** set the client reference
+    */
+    assoc_p->srv_ref = req_ctx_p->socketRef;
+    ret.status = SP_SUCCESS;
+    goto out;
+    
+/*
+error:    
+    
+    ret.status                  = SP_FAILURE;            
+    ret.sp_rdma_setup_ret_t_u.error = errno;
+*/
+out:    
+    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+    /*
+    ** release the context
+    */
+    rozorpc_srv_release_context(req_ctx_p);
+
+//    STOP_PROFILING(clear_error);
+    return ;
+}
+
+
+/*
+**________________________________________________________________________
+
+     S T A N D A L O N E   M O D E 
+**________________________________________________________________________
+*/
+
+/*
+**________________________________________________________________________
+*/
+/**
+*  That service is intended to be called by the storcli when RozoFS operates
+   in standalone mode
+   
+   The storcli uses that API to provide the information relative to the share
+   memory that contains the buffers that it uses for readling and writing from/to the storio
+   
+   The storcli is intended to provide the key of the shared memory, the number of buffers and 
+   the size of each buffer
+   
+   On the storio side, one register this information along with the TCP connection context
+   That operation takes place only if the rozofs.conf file indicates that the standalone mode
+   is supported.
+*/
+   
+void sp_standalone_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static sp_status_ret_t    ret;
+    sp_standalone_setup_arg_t *arg_p = (sp_standalone_setup_arg_t *) pt;
+    rozofs_storio_share_mem_ctx_t *sharemem_p=NULL;
+
+      
+//    START_PROFILING(clear_error);
+    
+
+    /*
+    ** Use received buffer for the response
+    */    
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
+
+#warning check that the remote IP@ is local  otherwise reject the service
+#if 0
+    /*
+    ** Check if the standalone mode is configure
+    */
+    if (common_config.standalone == 0)
+    {
+       errno = ENOTSUP;
+       goto error;
+    }
+#endif
+    /*
+    ** allocate a context to store the reference of the shared memory
+    */
+    sharemem_p = malloc(sizeof(rozofs_storio_share_mem_ctx_t));
+    if (sharemem_p == NULL)
+    {
+      errno = ENOMEM;
+      goto error;
+    }
+    memset(sharemem_p,0,sizeof(rozofs_storio_share_mem_ctx_t));
+    sharemem_p->key_stdalone = ROZOFS_STORIO_STANDALONE_KEY;
+    sharemem_p->sharemem_key = arg_p->sharemem_key;
+    sharemem_p->bufcount     = arg_p->bufcount;
+    sharemem_p->bufsize      = arg_p->bufsize;
+    /*
+    ** do all the stuff to get an address for that shared memory
+    */
+    sharemem_p->shmid = shmget(sharemem_p->sharemem_key, 
+                        	sharemem_p->bufcount*sharemem_p->bufsize, 
+                        	0666);
+    if (sharemem_p->shmid < 0) goto error;
+    
+     sharemem_p->addr_p = shmat(sharemem_p->shmid, NULL, 0);
+     if (sharemem_p->addr_p == (char *) -1) goto error;
+     
+    /*
+    ** store the reference of the shared memory in the userRef of the TCP connection.
+    */
+    if (af_inet_set_connection_user_ref(req_ctx_p->socketRef,sharemem_p) < 0)
+    {
+       shmdt((const void*)sharemem_p->addr_p);
+       goto error;
+    }
+    ret.status = SP_SUCCESS;
+    goto out;
+    
+
+error:        
+    ret.status                  = SP_FAILURE;            
+    ret.sp_status_ret_t_u.error = errno;
+    if (sharemem_p != NULL) free(sharemem_p);
+    
+out:    
+    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+    /*
+    ** release the context
+    */
+    rozorpc_srv_release_context(req_ctx_p);
+
+//    STOP_PROFILING(clear_error);
+    return ;
+}
+
+     
+/*
+**___________________________________________________________
+*/
+/**
+*  READ in standalone mode
+*/
+void sp_read_standalone_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static sp_read_ret_t ret;
+    storio_device_mapping_t * dev_map_p = NULL;
+    sp_read_standalone_arg_t           * read_arg_p = (sp_read_standalone_arg_t *) pt;
+    int                       same_recycle_cpt;
+    
+    START_PROFILING(read);
+            
+    /*
+    ** Use received buffer for the response
+    */
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
+ 
+    /*
+    ** Set the position where the data has to be written in the xmit buffer 
+    */
+    req_ctx_p->position = storage_get_position_of_first_byte2write_from_read_req();
+
+    /*
+    ** Lookup for the cid/sid/FID in the lookup table. 
+    ** Do not update the entry, but tell whether the reycling counter has the same
+    ** value in the context and in the request 
+    */ 
+    dev_map_p = storio_device_mapping_search(read_arg_p->cid,
+                                             read_arg_p->sid,
+					     read_arg_p->fid,
+					     &same_recycle_cpt);
+    /*
+    ** A mapping context exist containing information synchronized
+    ** with the disk header file content.
+    */    
+    if ((dev_map_p) && (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK)) {
+      /*
+      ** This is not the same recycling counter, 
+      ** so the requested FID does not exist.
+      */
+      if (!same_recycle_cpt) {
+        errno = ENOENT;
+	goto error;
+      }
+    }
+    
+    /*
+    ** No mapping context exist, so create one
+    */
+    if (dev_map_p == NULL) { 
+      dev_map_p = storio_device_mapping_insert (read_arg_p->cid, 
+                                                read_arg_p->sid, 
+						read_arg_p->fid);
+      if (dev_map_p == NULL) { 
+        errno = ENOMEM;
+        goto error;
+      }
+    }  
+    req_ctx_p->opcode = STORIO_DISK_THREAD_READ_STDALONE;
+        
+    /*
+    ** If any request is already running, chain this request on the FID context
+    */
+    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
+      goto out;
+    }  
+    
+    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
+      goto out;
+    }
+    severe("storio_disk_thread_intf_send %s", strerror(errno));
+    
+error:
+    ret.status                = SP_FAILURE;            
+    ret.sp_read_ret_t_u.error = errno;
+    
+    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+    /*
+    ** release the context
+    */
+    rozorpc_srv_release_context(req_ctx_p);
+    STOP_PROFILING(read);
+
+out:
+    return;    
+}
+
+
+/*
+**___________________________________________________________
+*/
+/**
+*  WRITE with standalone mode
+*/
+/*
+**___________________________________________________________
+*/
+
+void sp_write_standalone_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static sp_write_ret_t ret;
+    storio_device_mapping_t * dev_map_p = NULL;
+    sp_write_standalone_arg_t          * write_arg_p = (sp_write_standalone_arg_t *) pt;
+    uint8_t                   nb_rebuild;
+    uint8_t                   storio_rebuild_ref;
+    STORIO_REBUILD_T        * pRebuild; 
+    int                       same_recycle_cpt;
+    int                       write_last;
+    int                       write_first;
+    
+    START_PROFILING(write);
+
+    /*
+    ** Use received buffer for the response
+    */
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
+    req_ctx_p->opcode   = STORIO_DISK_THREAD_WRITE_STDALONE;
+  
+    /*
+    ** Rebuild reference is 0 when the write comes from the STORCLI.
+    ** When the write comes from a rebuild process, this reference is 
+    ** the index of the rebuild context whithin the FID context {1..4}
+    */
+    nb_rebuild = write_arg_p->rebuild_ref;
+    if (nb_rebuild > MAX_FID_PARALLEL_REBUILD) {
+      /* bad reference ?? */
+      severe("Bad rebuild ref %d",nb_rebuild);
+      errno = EAGAIN; // Break this rebuild
+      goto error;	
+    } 
+
+    /*
+    ** Lookup for the FID context in the lookup table. 
+    */
+    dev_map_p = storio_device_mapping_search(write_arg_p->cid, 
+                                             write_arg_p->sid, 
+					     write_arg_p->fid,
+					     &same_recycle_cpt);
+
+
+    write_first = write_arg_p->bid;
+    write_last  = write_first + write_arg_p->nb_proj - 1;
+
+    /*
+    ** THIS IS A WRITE FROM A REBUILD PROCESS
+    */
+    if (nb_rebuild != 0) {
+    
+      /*
+      ** No mapping context, so no such valid rebuild
+      */
+      if (dev_map_p == NULL) {
+	errno = EAGAIN;  // Break this rebuild
+	goto error;
+      }   
+          
+      /*
+      ** Retrieve the rebuild context from the rebuild index
+      */
+      nb_rebuild--;
+      storio_rebuild_ref = dev_map_p->storio_rebuild_ref.u8[nb_rebuild];
+      pRebuild = storio_rebuild_ctx_retrieve(storio_rebuild_ref, (char*)write_arg_p->fid);
+      if (pRebuild == NULL) {
+	/* This context is running for this FID */
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF;
+	errno = EAGAIN;
+	goto error;
+      }      
+     
+      /* check that the rebuild does not overrun the rebuild area... */
+      /* ... after ... */ 
+      if (((pRebuild->stop_block != -1) &&  (write_last>pRebuild->stop_block))
+      /* ... or before. */
+      ||  (write_first < pRebuild->start_block)) {
+	storio_rebuild_ctx_free(pRebuild);
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF;
+	errno = EAGAIN;
+	goto error;
+      }
+      
+      /*
+      ** Rebuild still on going. Update the time stamp
+      ** and starting point of the on going rebuild
+      */        
+      pRebuild->rebuild_ts  = time(NULL);
+      pRebuild->start_block = write_first;
+      
+      /*
+      ** Forward the request to the disk thread.
+      ** On the 1rzt write of a rebuild with relocate
+      */
+      
+      if (pRebuild->relocate == RBS_TO_RELOCATE) {
+        req_ctx_p->opcode = STORIO_DISK_THREAD_REBUILD_START;
+      }
+      goto send_to_disk_thread;   
+    }
+    
+      
+    /*
+    ** THIS IS A WRITE WRITE FROM THE STORCLI.
+    */ 
+
+    /*
+    ** No mapping context exist, so create one
+    */
+    if (dev_map_p==NULL) {
+      dev_map_p = storio_device_mapping_insert (write_arg_p->cid, 
+                                                write_arg_p->sid, 
+						write_arg_p->fid);
+      if (dev_map_p == NULL) { 
+        goto error;// errno already set
+      }
+      goto send_to_disk_thread;
+    } 
+
+    /*
+    ** A mapping context exist containing information synchronized
+    ** with the disk header file content.
+    */   
+    if (storio_get_dev(dev_map_p,0) != ROZOFS_UNKNOWN_CHUNK) { 
+      /*
+      ** This is not the same recycling counter, so let's recycle
+      */
+      if (!same_recycle_cpt) {
+	/* 
+	** This is an old file that is being recycled.
+	** Let's clear the chunk distribution to force a header file update
+	** and a data truncate.
+	*/
+        storio_free_dev_mapping(dev_map_p);
+	dev_map_p->recycle_cpt =  rozofs_get_recycle_from_fid(write_arg_p->fid);
+      }
+    } 
+
+    /*
+    ** Check whether this write breaks a running rebuild
+    */
+    if (dev_map_p->storio_rebuild_ref.u64 == 0xFFFFFFFFFFFFFFFF ) {
+      // No running rebuild
+      goto send_to_disk_thread;
+    }
+    
+    /*
+    ** Check for compatibility with all the running rebuilds
+    */    
+    for (nb_rebuild=0; nb_rebuild < MAX_FID_PARALLEL_REBUILD; nb_rebuild++) {
+
+      storio_rebuild_ref = dev_map_p->storio_rebuild_ref.u8[nb_rebuild];
+
+      /* This context is free */
+      if (storio_rebuild_ref == 0xFF) {
+	continue;
+      }
+
+      /*
+      ** Retrieve the rebuild context  
+      */
+      pRebuild = storio_rebuild_ctx_retrieve(storio_rebuild_ref, (char*)write_arg_p->fid);
+      if (pRebuild == NULL) {
+	/* This context is not allocated for this FID,
+	** or not the same recycling counter */
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF; // break this rebuild
+        continue;
+      }
+
+      /*
+      ** Writing the area that the rebuild process is trying to rebuild
+      ** breaks the rebuild.
+      */
+      if ((write_first > pRebuild->start_block) 
+       && ((pRebuild->stop_block==-1)||(write_first <= pRebuild->stop_block))) {
+        /* 
+	** Writing within the rebuild area !
+	** Let's shrink the rebuild area to the 1rst written block
+	*/
+	pRebuild->stop_block = write_first-1;    
+      }  
+      else if ((write_first <= pRebuild->start_block) && (write_last >= pRebuild->start_block)) {
+        /* 
+	** Writing at the beginning of the rebuild area !
+	** it breaks the rebuild
+	*/        
+	storio_rebuild_ctx_free(pRebuild);
+	dev_map_p->storio_rebuild_ref.u8[nb_rebuild] = 0xFF; // break this rebuild	
+      }
+    }         
+
+
+send_to_disk_thread:
+        
+    /*
+    ** If any request is already running, chain this request on the FID context
+    */
+    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
+      goto out;
+    }   
+
+    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
+      goto out;
+    }  
+    severe("storio_disk_thread_intf_send %s", strerror(errno));
+
+
+error:    
+    
+    ret.status                 = SP_FAILURE;            
+    ret.sp_write_ret_t_u.error = errno;
+    
+    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+    /*
+    ** release the context
+    */
+    rozorpc_srv_release_context(req_ctx_p);
+    STOP_PROFILING(write);
+
+out:
+    return;
 }

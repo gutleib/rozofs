@@ -21,6 +21,10 @@ include_directories(${PTHREAD_INCLUDE_DIR})
 link_directories(${CMAKE_BINARY_DIR}/rozofs)
 
 
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  add_definitions(-DROZOFS_RDMA)
+endif()
+
 add_executable(storaged
     mproto.c
     mprotosvc.h
@@ -28,6 +32,8 @@ add_executable(storaged
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h                
     storaged.h
     storaged.c
     storaged_nblock_init.h
@@ -38,20 +44,22 @@ add_executable(storaged
     storio_crc32.h
     storaged_sub_thread.c
     storaged_sub_thread_intf.c
-    storaged_sub_thread_intf.h    
+    storaged_sub_thread_intf.h 
 )
 target_link_libraries(storaged rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
 add_executable(rozo_storage_fid2pathname
     rozo_storage_fid2pathname.c
 )
-target_link_libraries(rozo_storage_fid2pathname rozofs ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_storage_fid2pathname rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 add_executable(stspare
     sconfig.h
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h                  
     storio_crc32.c
     storio_crc32.h   
     storio_fid_cache.c
@@ -60,7 +68,7 @@ add_executable(stspare
     stspare_fid_cache.h
     rbs_eclient.c
     rbs.h    
-    rbs.c    
+    rbs.c  
 )
 target_link_libraries(stspare rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
@@ -69,6 +77,8 @@ add_executable(storage_rebuild
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h       
     rbs.h
     rbs_transform.h
     rbs_transform.c
@@ -81,6 +91,7 @@ add_executable(storage_rebuild
     storio_crc32.c
     storio_crc32.h    
     storage_rebuild.c
+     
 )
 target_link_libraries(storage_rebuild rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -95,7 +106,7 @@ add_executable(storage_list_rebuilder
     rbs_eclient.c
     rbs.c
     storaged.h
-    storage_list_rebuilder.c 
+    storage_list_rebuilder.c        
 )
 
 target_link_libraries(storage_list_rebuilder rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
@@ -106,6 +117,8 @@ add_executable(storio
     sconfig.c
     storage.h
     storage.c
+    storage_device_kpi.c
+    storage_device_kpi.h       
     sproto_nb.h
     sproto_nb.c
     sprotosvc_nb.c
@@ -132,11 +145,23 @@ add_executable(storio
     storio_fid_cache.c
     storio_fid_cache.h
     storio_crc32.c
-    storio_crc32.h
+    storio_crc32.h         
 )
 
-target_link_libraries(storio rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
-
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  message(STATUS "Compiling storio with RDMA support")
+  set(storio_rmda_sources
+  # RDMA section
+      ../../rozofs/rdma/rozofs_rdma.c
+      ../../rozofs/rdma/rozofs_rdma.h
+  )
+  add_library(storio_rmda STATIC ${storio_rmda_sources})
+  set_target_properties(storio_rmda PROPERTIES COMPILE_FLAGS "-fPIC")
+  target_link_libraries(storio storio_rmda rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RDMA_LIBRARY} ${INFINIBAND_LIBRARY})
+else(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  message(STATUS "Compiling storio without RDMA support")
+  target_link_libraries(storio rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+endif(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
 
 add_executable(rozodump
     rozodump.c

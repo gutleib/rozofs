@@ -141,8 +141,8 @@ void north_lbg_entries_debug_show(uint32_t tcpRef, void *bufRef) {
         north_lbg_ctx_t *lbg_p;
         ruc_obj_desc_t *pnext;
         int i;
-        pChar += sprintf(pChar, "  LBG Name                | lbg_id | idx  | sock |    state   | rdy |    Queue  | Cnx Attpts | Xmit Attpts | Recv count  |   Recv-Q  |   Send-Q  |\n");
-        pChar += sprintf(pChar, "--------------------------+--------+------+------+------------+-----+-----------+------------+-------------+-------------+-----------+-----------+\n");
+        pChar += sprintf(pChar, "  LBG Name                | lbg_id | idx  | sock |    state   | rdy |    Queue  | Cnx Attpts | Xmit Attpts | Recv count  |   Recv-Q  |   Send-Q  | RDMA |\n");
+        pChar += sprintf(pChar, "--------------------------+--------+------+------+------------+-----+-----------+------------+-------------+-------------+-----------+-----------+------+\n");
         pnext = (ruc_obj_desc_t*) NULL;
         while ((lbg_p = (north_lbg_ctx_t*) ruc_objGetNext((ruc_obj_desc_t*) & north_lbg_context_activeListHead,
                 &pnext))
@@ -189,8 +189,21 @@ void north_lbg_entries_debug_show(uint32_t tcpRef, void *bufRef) {
 		  ioctl(sock_p->socketRef,SIOCOUTQ,&siocoutq_value);
 		}
                 pChar += sprintf(pChar, "  %8d |",  siocinq_value);
-                pChar += sprintf(pChar, "  %8d |\n",siocoutq_value);
+                pChar += sprintf(pChar, "  %8d |",siocoutq_value);
+		/*
+		** provide the RDMA status
+		*/
+		if (lbg_p->rdma_connected_CallBack == NULL)
+		{
+		  pChar += sprintf(pChar, "  N/A |\n");
+		}
+		else
+		{
+		  if (lbg_p->rdma_state != 0) pChar += sprintf(pChar, "  UP  |\n");
+		  else pChar += sprintf(pChar, " DOWN |\n");
+		}
             }
+	    
 
 
         }
@@ -383,10 +396,17 @@ void north_lbg_ctxInit(north_lbg_ctx_t *p, uint8_t creation) {
     p->next_global_entry_idx_p = NULL;
 
     p->state = NORTH_LBG_DOWN;
+    p->rdma_state = 0;
     p->userPollingCallBack = NULL;
     p->available_state = 1;
     memset(&p->stats, 0, sizeof (north_lbg_stats_t));
-
+    /*
+    ** clear the RDMA callbacks
+    */
+    p->rdma_connected_CallBack = NULL;
+    p->rdma_disconnect_CallBack = NULL;
+    p->rdma_out_of_seq_CallBack = NULL;
+    
     p->rechain_when_lbg_gets_down = 0;
     p->active_lbg_entry = -1;
     p->active_standby_mode = 0;

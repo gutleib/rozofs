@@ -334,4 +334,51 @@ void af_inet_sock_set_dscp(int fd,uint8_t dscp);
 */
 int af_inet_sock_get_dscp(int fd);
 
+/*
+**__________________________________________________________________________
+*/
+typedef struct _af_inet_connection_info_t
+{
+   uint32_t src_ip;
+   uint32_t dst_ip;
+   uint16_t src_port;
+   uint16_t dst_port;
+} af_inet_connection_info_t;
+
+/**
+*  Get the source/destination IP addresses and ports of a connection
+
+  @param cnx_idx: connection index  
+  @param p: pointer to the array when connection information are returned
+  
+  @retval 0 on success
+  @eetval -1 on error
+*/
+int af_inet_get_connection_info(uint32_t cnx_idx,af_inet_connection_info_t *p);
+/*
+**__________________________________________________________________________
+*/
+/**
+*   Set the user reference of a TCP connection context
+
+   @param cnx_idx: connection index  
+   @param userRef: pointer to an opaque value
+   
+  @retval 0 on success
+  @eetval -1 on error
+*/
+int af_inet_set_connection_user_ref(uint32_t cnx_idx,void *userRef);
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*   Set the user reference of a TCP connection context
+
+   @param cnx_idx: connection index  
+   @param userRef: pointer to an opaque value
+   
+  @retval pointer to the userRef or NULL
+*/
+void *af_inet_get_connection_user_ref(uint32_t cnx_idx);    
 #endif

@@ -1245,7 +1245,7 @@ static inline storage_dev_map_distribution_write_ret_e
     /*
     ** Allocate a device for this newly written chunk
     */
-    *dev = storio_device_mapping_allocate_device(st);
+    *dev = storio_device_mapping_allocate_device(st, layout, dist_set);
     rozofs_st_header_set_chunk(file_hdr,chunk,*dev);     
         
     /*
@@ -1477,6 +1477,10 @@ int storage_initialize(storage_t *st,
     for (dev=0; dev<device_number; dev++) {
       st->device_ctx[dev].status = storage_device_status_init;
       st->device_ctx[dev].failure = 0;
+      /*
+      ** Allocate per device kpi counters memory
+      */
+      st->device_ctx[dev].kpiRef = storage_device_kpi_allocate(cid,sid,dev);
     }
 
     memset(&st->device_errors , 0,sizeof(st->device_errors));        
@@ -1485,7 +1489,7 @@ int storage_initialize(storage_t *st,
     st->cid = cid;
 
     storage_subdirectories_create(st);
-
+    
     status = 0;
 out:
     return status;
@@ -2652,7 +2656,7 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
       /*
       ** Aloocate a device
       */ 
-      dev = storio_device_mapping_allocate_device(st);
+      dev = storio_device_mapping_allocate_device(st, layout, dist_set);
       /*
       ** Store the devic e in the file header
       */

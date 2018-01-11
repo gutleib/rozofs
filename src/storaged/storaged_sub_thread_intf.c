@@ -141,7 +141,6 @@ void storaged_sub_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   display_line_val_and_sum("   errors", list_bins_errors);
   display_line_val_and_sum("   Cumulative Time (us)",list_bins_time);
   display_line_div_and_sum("   Average Time (us)",list_bins_time,list_bins_count);
-
   display_line_topic("size");  
   display_line_val_and_sum("   number", size_count);
   display_line_val_and_sum("   errors", size_errors);

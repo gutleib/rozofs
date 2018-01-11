@@ -99,6 +99,8 @@ typedef struct export_fstat {
     uint64_t files;
     uint64_t file_per_size[ROZOFS_MAX_BLOCK_BITS];
     uint64_t blocks_thin;  /**< number of blocks for thin provisioning */
+    uint64_t blocks_fast;  /**< number of blocks allocated on the fast volume of the exportd  */
+    uint64_t files_fast;   /**< number of files allocated on the fast volume of the exportd  */
 } export_fstat_t;
 
 
@@ -202,6 +204,7 @@ typedef struct _meta_resources_t {
 typedef struct export {
     eid_t eid; ///< export identifier
     volume_t *volume; ///< the volume export relies on
+    volume_t *volume_fast; ///< the secondary volume that is intended to be SSD based: used for small files mainly 
     uint32_t bsize; ///< the block size from enum ROZOFS_BSIZE_E
     char root[PATH_MAX]; ///< absolute path of the storage root
     char name[PATH_MAX]; ///< Export name
@@ -218,7 +221,9 @@ typedef struct export {
     
     uint64_t squota; ///< soft quota in blocks
     uint64_t hquota; ///< hard quota in blocks
+    uint64_t hquota_fast; ///< hard quota in blocks for fast volume
     void    *quota_p;  ///< pointer to the quota context
+    int      suffix_file_idx;  /**< index of the suffix file (used when fast volume is configgured */
 //    export_fstat_t fstat; ///< fstat value
     int fdstat; ///< open file descriptor on stat file
     fid_t rfid; ///< root fid
@@ -328,11 +333,15 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  * @param: hard quotas
  * @param: IPv4 filter name
  * @param: thin whether thin provisionning is used
+   @param volume_fast: pointer to the fast volume context (null if none is associated with exportd
+   @param hquota_fast: hardware quota associated with fast_volume
+   @param suffix_file_idx: suffix file index
+
  * @return 0 on success -1 otherwise (errno is set)
  */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin);
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin,volume_t *volume_fast,uint64_t hquota_fast,int suffix_file_idx);
 
 /** initialize an export.
  *

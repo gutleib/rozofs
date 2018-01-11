@@ -20,7 +20,7 @@ cmake_minimum_required(VERSION 2.6)
 project(rozofs C)
 set(MAJOR "3")
 set(MINOR "0")
-set(REVISION "~alpha2")
+set(REVISION "~alpha3")
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
@@ -49,6 +49,9 @@ find_package(READLINE REQUIRED)
 find_package(SWIG REQUIRED)
 find_package(NUMA REQUIRED)
 find_package(Doxygen QUIET)
+find_package(RDMA QUIET)
+find_package(INFINIBAND QUIET)
+
 
 find_program(PYTHON NAMES python2.7)
 if(NOT PYTHON)
@@ -56,6 +59,13 @@ if(NOT PYTHON)
 endif(NOT PYTHON)
 
 MESSAGE( STATUS "python version:         " ${PYTHON} )
+if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  MESSAGE( STATUS "RDMA is supported and will be used" )
+elseif(INFINIBAND_FOUND AND RDMA_FOUND AND NO_RDMA)
+  MESSAGE( STATUS "RDMA is supported but will be not used (NO_RDMA requested)" )
+else(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
+  MESSAGE( STATUS "RDMA is not supported" )
+endif(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
 
 find_program(DEBUILD NAMES debuild)
 find_program(MAKEINFO NAMES makeinfo)

@@ -334,7 +334,11 @@ int main(int argc, char *argv[]) {
     
     sprintf(logname,"storio:%d",storio_instance);
     uma_dbg_record_syslog_name(logname);
-    
+
+    /*
+    ** KPI service per device
+    */
+    storage_device_kpi_init(common_config.nb_disk_thread);    
         
     // Initialize the list of storage config
     if (sconfig_initialize(&storaged_config) != 0) {

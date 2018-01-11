@@ -51,5 +51,12 @@ void update_read_detailed_counters(uint64_t delay) ;
 void sp_rebuild_stop_response(void * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p);
 void serialization_counters_init(void) ;
 void sp_write_repair3_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
+void sp_rdma_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
+void sp_read_rdma_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
+void sp_write_rdma_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
+
+void sp_standalone_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
+void sp_read_standalone_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
+void sp_write_standalone_1_svc_disk_thread(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
 
 #endif

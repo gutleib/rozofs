@@ -533,7 +533,7 @@ int rozofs_stat_start(void *args) {
     ** create the fuse threads
     */
     info("FDL RozoFs Instance %d",args_p->instance);
-    ret = rozofs_fuse_thread_intf_create("localhost",args_p->instance,4);
+    ret = rozofs_fuse_thread_intf_create("localhost",args_p->instance,ROZOFS_MAX_FUSE_THREADS);
     if (ret < 0)
     {
        fatal("Cannot create fuse threads");

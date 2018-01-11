@@ -24,6 +24,11 @@ grammar.
            - 1 (inverse = 4, forward = 6, safe = 8);
            - 2 (inverse = 8, forward = 12, safe = 16);
 
+.SS nodeid
+    This is the numa node identifier to pin the exportd processes on when numa_aware is
+    configured in rozofs.conf.
+               - is optional.
+               - must be an integer.
 
 .SS volumes
    It is a list of volumes. Each volume is identified by its vid and may contain
@@ -148,7 +153,13 @@ rule. Incoming IP addresses for a given export are checked against the
                  i.e every attempt to write beyond hquota will fail (EDQUOT).
                - when no hard quota this field may be omitted.
 
-       for squota and hquota:
+       hquota_fast: (hard quota)
+               - hquota_fast stands for blocking quotas which are blocking quotas
+                 i.e every attempt to write beyond hquota will fail (EDQUOT).
+               - when no hard quota this field may be omitted.
+               - It applies for exportd for which a fast volume (SSD) is configured.
+
+       for squota, hquota and hquota_fast:
                - quotas are express in nb. of blocks (no suffix), Kilo, Mega,
                  Giga or Tera Bytes according to suffix K, M, G or T. Only the
                   first letter of  suffix is used that is: 128G is equivalent to
@@ -159,6 +170,16 @@ rule. Incoming IP addresses for a given export are checked against the
                - must be an integer.
                - should exist in volume list.
                - several filesystem can use the same volume.
+
+       vid_fast: (volume identifier used to store file data for this filesystem whose files match some particular suffixes)
+               - must be an integer.
+               - should exist in volume list.
+               - several filesystem can use the same volume.
+
+       suffix_file: index of the suffix file that contains the candidate file suffixes to be stored on vid_fast
+               - must be an integer (1..64).
+               - the suffix files are in the same directory as export.conf
+               - the predefined filename is: suffix_file_<suffix_file>.txt
 
        thin-provisioning: (whether accounting of allocated sectors per file must be done)
                - must be a boolean.

@@ -137,14 +137,23 @@ typedef struct _north_lbg_ctx_t
   ** specific part
   */
   int               state;                   /**< aggregator state: see north_lbg_entry_state_e */
-  int               family;                   /**< load balancer family            */
-  char              name[NORTH_LBG_MAX_NAME];  /**< name of the load balancer       */
+  int               rdma_state;              /**< RDMA state of the Load balancing group  :0 DOWN/ 1:UP       */
+  uint32_t          rdma_ref;                /**< RDMA socket controller index                                */
+  int               family;                   /**< load balancer family              */
+  char              name[NORTH_LBG_MAX_NAME];  /**< name of the load balancer        */
   int               nb_entries_conf;          /**< number of configured entries      */
   int               nb_active_entries;        /**< number of active entries          */
   int               next_entry_idx;           /**< index of the next enry to select  */
   int             * next_global_entry_idx_p;  /**< index of the next entry in case it is shared between several lbg */
   generic_disc_CBK_t  userDiscCallBack;    /**< user disconnect call back (optional)        */
   generic_recv_CBK_t  userRcvCallBack;    /**< user receive call back (mandatory)        */
+  /*
+  ** RDMA section
+  */
+  generic_connect_CBK_t rdma_connected_CallBack;   /* callback provided by the connection owner block */  
+  generic_disc_CBK_t    rdma_disconnect_CallBack;  /* callback provided by the connection owner block */  
+  ruc_pf_2uint32_t      rdma_out_of_seq_CallBack;  /* callback provided by the connection owner block */  
+    
   uint8_t           entry_bitmap_state[NORTH__LBG_TB_MAX_ENTRY];
   ruc_obj_desc_t xmitList[NORTH_LBG_MAX_PRIO]; /* pending xmit list        */
   north_lbg_stats_t stats;                     /**< load balancing group statistics  */
@@ -162,6 +171,7 @@ typedef struct _north_lbg_ctx_t
   int                        active_standby_mode;   /**< Set when LBG is in active/standby mode */
   int                        active_lbg_entry;      /**< -1 no entry available/ >=0: index on the active tcp connection */
   int                        local; /**< 1 when the destination is local. 0 else */
+  
 } north_lbg_ctx_t;
 
 /*

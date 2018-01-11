@@ -321,6 +321,33 @@ static inline void *ruc_buf_get_pool_base_data(void * poolRef)
   return p->ptr;
 }
 
+/**
+*  that service returns the pointer to the beginning of the user data array and the total length
+
+  @param poolRef : pointer to the pool 
+  @param length_p: not NULL if length is reuquested
+  
+  @retval NULL if it is not a pool
+  @retval <>NULL : pointer to the first byte of the user data array
+*/
+static inline void *ruc_buf_get_pool_base_and_length(void * poolRef,uint64_t *length_p)
+{
+  ruc_buf_t *p;
+
+  p = (ruc_buf_t*)poolRef;
+
+  if (p->type != BUF_POOL_HEAD)
+  {
+    /*
+    **  not a buffer pool reference
+    */
+    RUC_WARNING(p->type);
+    return NULL;
+  }
+  if (length_p != NULL) *length_p = (uint64_t)p->len;
+  return p->ptr;
+}
+
 
 // 64BITS uint32_t ruc_buf_getBuffer(uint32_t poolRef)
 static inline void * ruc_buf_getBuffer(void * poolRef)

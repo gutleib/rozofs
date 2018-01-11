@@ -59,6 +59,7 @@ typedef struct volume_config {
 typedef struct export_config {
     eid_t eid;
     vid_t vid;
+    vid_t vid_fast;
     uint8_t layout;
     ROZOFS_BSIZE_E  bsize;
     uint8_t         thin;  /* Thin provisionning */
@@ -67,7 +68,9 @@ typedef struct export_config {
     char md5[MD5_LEN];
     uint64_t squota;
     uint64_t hquota;
-    char *   filter_name;  
+    uint64_t hquota_fast;
+    char *   filter_name; 
+    int      suffix_file_idx;  /**< suffix file */ 
     list_t list;
 } export_config_t;
 
@@ -91,6 +94,7 @@ typedef struct expgw_config {
 
 typedef struct econfig {
     uint8_t layout; ///< layout used for this exportd
+    int    nodeid; // Node identifier to be used when numa aware is set in rozofs.conf
     char   exportd_vip[ROZOFS_HOSTNAME_MAX]; ///< virtual IP address of the exportd
     list_t volumes;
     list_t exports;

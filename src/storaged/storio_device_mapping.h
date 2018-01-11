@@ -1,3 +1,4 @@
+
 /*
  Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
  This file is part of Rozofs.

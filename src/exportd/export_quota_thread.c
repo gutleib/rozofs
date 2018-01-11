@@ -29,6 +29,7 @@
 #include <rozofs/common/htable.h>
 #include <rozofs/common/log.h>
 #include "export.h"
+#include "exportd.h"
 #include "rozofs_quota.h"
 #include "rozofs_quota_api.h"
 #include <rozofs/core/disk_table_service.h>
@@ -81,6 +82,13 @@ typedef struct export_fstat_ctx_t {
     uint64_t squota;             /**< software quota               */
     int    quota_exceeded_flag;  /**< assert to one if quota is exceeded  */
     time_t quota_exceeded_time;  /**< last time of quota exceeded  */
+    /*
+    ** field used for fast volume management
+    */
+    uint64_t hquota_fast;             /**< hardware quota               */
+    int    quota_exceeded_flag_fast;  /**< assert to one if quota is exceeded  */
+    time_t quota_exceeded_time_fast;  /**< last time of quota exceeded  */    
+    
     int fd;
     char *pathname;     /**< full pathname of the stats file  */
 } export_fstat_ctx_t;
@@ -108,6 +116,8 @@ static char * show_export_fstat_thread_help(char * pChar) {
 
 char *show_export_fstat_entry(char *pChar,export_fstat_ctx_t *tab_p,uint16_t eid)
 {
+   export_t *exp;
+   
    pChar += sprintf(pChar,"file statistics for eid %d(%p) :%s\n",eid,tab_p,tab_p->pathname);
    export_fstat_t *p;
    p = &tab_p->memory;
@@ -130,6 +140,22 @@ char *show_export_fstat_entry(char *pChar,export_fstat_ctx_t *tab_p,uint16_t eid
    pChar += sprintf(pChar," hardware quota                         : %llu\n",(unsigned long long int) tab_p->hquota);
    pChar += sprintf(pChar," software quota                         : %llu\n",(unsigned long long int) tab_p->squota);
    pChar += sprintf(pChar," quota exceeded                         : %s\n",(tab_p->quota_exceeded_flag==0)?"NO":"YES");
+   exp = exports_lookup_export(eid);
+   if (exp != NULL)
+   {
+     /*
+     ** check if there is a fast volume associated with the export
+     */
+     if (exp->volume_fast != NULL)
+     {
+       pChar += sprintf(pChar,"\nFast Volume statistics (volume %d):\n",exp->volume_fast->vid);
+       pChar += sprintf(pChar," number of blocks                 (disk): %llu\n",(unsigned long long int) p->blocks_fast);
+       pChar += sprintf(pChar," number of files                  (disk): %llu\n",(unsigned long long int) p->files_fast);
+       pChar += sprintf(pChar," hardware quota                         : %llu\n",(unsigned long long int) tab_p->hquota_fast);
+       pChar += sprintf(pChar," quota exceeded                         : %s\n",(tab_p->quota_exceeded_flag_fast==0)?"NO":"YES");          
+     }
+   
+   }
 
 
    return pChar;
@@ -297,10 +323,11 @@ export_fstat_t * export_fstat_get_stat(uint16_t eid)
  *
  * @param eid: the export to update
  * @param n: number of files
- *
+   @param vid_fast: reference of a fast volume (0: not significant)
+
  * @return always 0
  */
-int export_fstat_delete_files(uint16_t eid, uint32_t n) 
+int export_fstat_delete_files(uint16_t eid, uint32_t n,uint8_t vid_fast) 
 {
     export_fstat_ctx_t *tab_p;
     
@@ -339,6 +366,15 @@ int export_fstat_delete_files(uint16_t eid, uint32_t n)
      n = tab_p->memory.file_per_size[0]; 
    }
    tab_p->memory.file_per_size[0] -= n; 
+   
+   if (vid_fast)
+   {
+     if (n > tab_p->memory.files_fast) {
+	export_fstat_stats.negative_file_count_err++;
+	n = tab_p->memory.files_fast;
+     }
+     tab_p->memory.files_fast -= n;      
+   }
     return 0;
 }
 /*
@@ -400,10 +436,11 @@ static inline int my_lzcnt64(uint64_t val) {
  *
  * @param eid: the export to update
  * @param n: number of created files
- *
+   @param vid_fast: reference of a fast volume (0: not significant)
+  
  * @return 0 on success -1 otherwise
  */
-int export_fstat_create_files(uint16_t eid, uint32_t n) {
+int export_fstat_create_files(uint16_t eid, uint32_t n,uint8_t vid_fast) {
     export_fstat_ctx_t *tab_p;
     
    if (export_fstat_init_done == 0)
@@ -428,7 +465,8 @@ int export_fstat_create_files(uint16_t eid, uint32_t n) {
    } 
    tab_p = export_fstat_table[eid];
    tab_p->memory.file_per_size[0] += n;  
-   tab_p->memory.files += n;       
+   tab_p->memory.files += n;   
+   if (vid_fast)  tab_p->memory.files_fast += n;     
    return 0;
 }       
 /*
@@ -440,10 +478,11 @@ int export_fstat_create_files(uint16_t eid, uint32_t n) {
   @param newblocks: new number of blocks
   @param oldblocks: old number of blocks
   @param thin_provisioning: assert to 1 if export is configured with thin provisioning
+   @param vid_fast: reference of a fast volume (0 is not significant)
 
  * @return 0 on success -1 otherwise
  */
-int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning) {
+int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning,uint8_t vid_fast) {
     int status = -1;
     export_fstat_ctx_t *tab_p;
     time_t timecur;
@@ -503,6 +542,19 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
       }
 
       tab_p->memory.blocks -= n;
+      /*
+      ** check the case of the fast volume
+      */
+      if (vid_fast)
+      {
+	if (n > tab_p->memory.blocks) {
+          severe("export %s blocks %"PRIu64" files %"PRIu64". Releasing %lld blocks for fast volume",
+		tab_p->pathname, tab_p->memory.blocks_fast, tab_p->memory.files_fast, n); 
+          n = tab_p->memory.blocks_fast;
+	}
+
+	tab_p->memory.blocks_fast -= n;            
+      }
     }
     else 
     {
@@ -537,7 +589,43 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
           tab_p->quota_exceeded_flag = 0;
 	}
       }
-      tab_p->memory.blocks += n;      
+      tab_p->memory.blocks += n; 
+      /*
+      ** check the case of the fast volume
+      */
+      if (vid_fast)
+      {
+	if (thin_provisioning == 0)
+	{
+	  if (tab_p->hquota_fast > 0 && tab_p->memory.blocks_fast + n > tab_p->hquota_fast) 
+	  {
+             if (tab_p->quota_exceeded_flag_fast == 0)
+	     {
+	       tab_p->quota_exceeded_time_fast = time(NULL); 
+	     }
+	     /*
+	     ** send a warning if is time to do it
+	     */
+	     timecur = time(NULL);
+	     if (( tab_p->quota_exceeded_flag_fast == 1) || 
+		((timecur -tab_p->quota_exceeded_time_fast ) > export_fstat_quota_delay))
+	     {
+        	warning("quota exceed for fast volume: %llu over %llu", tab_p->memory.blocks_fast + n,
+                	 (long long unsigned int)tab_p->hquota_fast);
+  		tab_p->quota_exceeded_time_fast = time(NULL); 
+		tab_p->quota_exceeded_flag_fast = 1;
+             }
+             /*
+	     ** do report quota error: the control is done at creation file only
+	     */
+	  }
+	  else
+	  {
+            tab_p->quota_exceeded_flag_fast = 0;
+	  }
+	}
+	tab_p->memory.blocks_fast += n;       
+      }           
     }
     status = 0;
 out:
@@ -646,16 +734,18 @@ out:
    @param eid : export identifier
    @param root_path : root path of the export
    @param create_flag : assert to 1 if  file MUST be created
+   @param hquota : hardware quota in blocks
+   @param squota : software quota in blocks
+   @param hquota_fast : hardware quota in blocks for fast volume
    
    @retval <> NULL: pointer to the attributes tracking table
    @retval == NULL : error (see errno for details)
 */
-void *export_fstat_alloc_context(uint16_t eid, char *root_path,uint64_t hquota,uint64_t squota,int create)
+void *export_fstat_alloc_context(uint16_t eid, char *root_path,uint64_t hquota,uint64_t squota,uint64_t hquota_fast,int create)
 {
    export_fstat_ctx_t *tab_p = NULL; 
    int ret; 
    int fd;
-   
    /*
    ** if the init of the quota module has not yet been done do it now
    */
@@ -685,6 +775,7 @@ void *export_fstat_alloc_context(uint16_t eid, char *root_path,uint64_t hquota,u
       tab_p = export_fstat_table[eid];
       tab_p->squota = squota;
       tab_p->hquota = hquota; 
+      tab_p->hquota_fast = hquota_fast; 
       return (void*)tab_p;
    }
    
@@ -745,6 +836,7 @@ void *export_fstat_alloc_context(uint16_t eid, char *root_path,uint64_t hquota,u
    export_fstat_table[eid]= tab_p;
    tab_p->squota = squota;
    tab_p->hquota = hquota;   
+   tab_p->hquota_fast = hquota_fast; 
    return (void*)tab_p;
 
 error:
@@ -769,7 +861,8 @@ void export_fstat_thread_update(export_fstat_ctx_t *tab_p)
    ** check if there is a change
    */
    if ((tab_p->memory.blocks!= tab_p->last_written.blocks) || (tab_p->memory.files!= tab_p->last_written.files) 
-       || (tab_p->memory.blocks_thin!= tab_p->last_written.blocks_thin))
+       || (tab_p->memory.blocks_thin!= tab_p->last_written.blocks_thin)
+       || (tab_p->memory.blocks!= tab_p->last_written.blocks_fast) || (tab_p->memory.files!= tab_p->last_written.files_fast))
    {
       if ((fd = open(tab_p->pathname, O_RDWR /*| NO_ATIME*/ | O_CREAT, S_IRWXU)) < 1) {
           export_fstat_stats.open_err++;

@@ -72,11 +72,13 @@
 #include "storage.h"
 #include "storio_crc32.h"
 #include "storio_device_mapping.h"
+#include <rozofs/rdma/rozofs_rdma.h>
 
 extern sconfig_t storaged_config;
 extern char * pHostArray[];
 
 void * decoded_rpc_buffer_pool = NULL;
+int    decoded_rpc_buffer_size;
 
 DECLARE_PROFILING(spp_profiler_t);
 
@@ -318,6 +320,17 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
 	    }  
             uma_dbg_set_name(name);
         }
+	/*
+	** init of the RDMA in server mode
+	*/
+#ifdef ROZOFS_RDMA
+	ret = rozofs_rdma_init(ROZO_SOCKCTRL_CTX_STORIO,0);
+	if (ret < 0)
+	{
+	  severe("fail to initialize RDMA");
+	}
+	ret = RUC_OK;	
+#endif	
         /*
         ** RPC SERVER MODULE INIT
         */
@@ -377,6 +390,17 @@ int storio_start_nb_th(void *args) {
   if (size < sizeof(sp_rebuild_stop_arg_t)) size = sizeof(sp_rebuild_stop_arg_t);
   if (size < sizeof(sp_remove_chunk_arg_t)) size = sizeof(sp_remove_chunk_arg_t);
   if (size < sizeof(sp_clear_error_arg_t)) size = sizeof(sp_clear_error_arg_t);
+ if (size < sizeof(sp_read_rdma_arg_t)) size = sizeof(sp_read_rdma_arg_t);
+  
+  /*
+  ** align the size on 8 bytes 
+  */
+  if ((size % 8 )!=0) size = ((size/8)*8) + 8;
+  decoded_rpc_buffer_size = size;
+  /*
+  ** add an extra length on buffer to process RDMA read/write requests
+  */
+  size +=ROZOFS_DECODED_BUF_RDMA_EXTRA_SIZE;
 
   decoded_rpc_buffer_pool = ruc_buf_poolCreate(common_config.storio_buf_cnt,size);
   if (decoded_rpc_buffer_pool == NULL) {

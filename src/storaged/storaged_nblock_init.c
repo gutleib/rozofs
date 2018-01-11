@@ -639,7 +639,7 @@ int storaged_start_nb_th(void *args) {
     /*
     ** Create storaged subthreads
     */
-    storaged_sub_thread_intf_create((pHostArray[0]==NULL)?"":pHostArray[0], 2);
+    storaged_sub_thread_intf_create((pHostArray[0]==NULL)?"":pHostArray[0], common_config.nb_storaged_subthread);
 
     /*
      ** add profiler subject 

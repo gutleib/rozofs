@@ -42,6 +42,10 @@
 #include "rozofs_storcli.h"
 #include <rozofs/core/rozofs_ip_utilities.h>
 #include <rozofs/rozofs_timer_conf.h>
+#include <rozofs/rdma/rozofs_rdma.h>
+#include "rdma_client_send.h"
+#include "standalone_client_send.h"
+
 static north_remote_ip_list_t my_list[STORAGE_NODE_PORTS_MAX];  /**< list of the connection for the exportd */
 
 /*
@@ -112,6 +116,9 @@ static af_unix_socket_conf_t  af_inet_storaged_conf =
   NULL   //    *recvPool; /* user pool reference or -1 */
 };
 
+
+
+
 int storcli_next_storio_global_index =0;
 
 int storaged_lbg_initialize(mstorage_t *s, int index) {
@@ -156,7 +163,77 @@ int storaged_lbg_initialize(mstorage_t *s, int index) {
     }
      af_inet_storaged_conf.recv_srv_type = ROZOFS_RPC_SRV;
      af_inet_storaged_conf.rpc_recv_max_sz = rozofs_storcli_south_large_buf_sz;
-              
+#ifdef ROZOFS_RDMA
+     /*
+     ** RDMA is supported only when the lbg_size is 1
+     */
+     while(1)
+     {
+     if (lbg_size==1)
+     {
+       /*
+       ** check if the lbg is local: for the local case we use the standalone code
+       */
+       if ((local == 0) || (common_config.standalone == 0))
+       {
+          info ("RDMA is enabled: LBG operates in RDMA mode");
+          ret = north_lbg_configure_af_inet_with_rdma_support(s->lbg_id[index],
+	                                                      rozofs_rdma_tcp_client_connect_CBK,
+							      rozofs_rdma_tcp_client_dis_CBK,
+							      rozofs_rdma_tx_out_of_seq_cbk);
+	  if (ret < 0)
+	  {
+	    severe("Cannot create Load Balancing Group %d for storaged %s",s->lbg_id[index],s->host);
+	    return -1; 
+	  } 
+	  break;							         
+       }
+       if ((local == 1) && (common_config.standalone == 1))
+       {
+	 /*
+	 ** use the standalone code
+	 */     
+          info ("RDMA is enabled: LBG operates in Standalone  mode");
+	 ret = north_lbg_configure_af_inet_with_rdma_support(s->lbg_id[index],
+	                                                     rozofs_standalone_tcp_client_connect_CBK,
+							     rozofs_standalone_tcp_client_dis_CBK,
+							     rozofs_standalone_tx_out_of_seq_cbk);
+	 if (ret < 0)
+	 {
+	   severe("Cannot create Load Balancing Group %d for storaged %s",s->lbg_id[index],s->host);
+	   return -1; 
+	 } 		
+       }
+       break;
+     }
+     break;
+     }	
+#endif              
+     /*
+     ** Check the case of the standalone mode: 
+     ** note: rdma and standalone mode are exclusive: if standalone mode is active, RDMA cannot not be activated
+     */
+     
+     if ((local == 1) && (common_config.standalone == 1))
+     {
+       /*
+       ** standalone is supported only when the lbg_size is 1
+       */
+       if (lbg_size==1)
+       {
+     
+          ret = north_lbg_configure_af_inet_with_rdma_support(s->lbg_id[index],
+	                                                      rozofs_standalone_tcp_client_connect_CBK,
+							      rozofs_standalone_tcp_client_dis_CBK,
+							      rozofs_standalone_tx_out_of_seq_cbk);
+	  if (ret < 0)
+	  {
+	    severe("Cannot create Load Balancing Group %d for storaged %s",s->lbg_id[index],s->host);
+	    return -1; 
+	  } 							         
+       }          
+     }
+
      ret = north_lbg_configure_af_inet(s->lbg_id[index],
                                           s->host,
                                           INADDR_ANY,0,

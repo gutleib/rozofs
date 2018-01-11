@@ -32,7 +32,7 @@
 #include <rozofs/core/rozofs_rpc_non_blocking_generic_srv.h>
 #include <rozofs/rpc/mproto.h>
 
-#define STORAGED_MAX_SUB_THREADS  6
+#define STORAGED_MAX_SUB_THREADS  8
 #include "storage.h"
 
 typedef struct _storaged_sub_thread_stat_t {

@@ -61,6 +61,7 @@
 #include "storcli_main.h"
 #include "rozofs_storcli_reload_storage_config.h"
 #include "rozofs_storcli_mojette_thread_intf.h"
+#include "rozofs_storcli_sharedmem.h"
 
 #define STORCLI_PID_FILE "storcli.pid"
 
@@ -99,6 +100,7 @@ void storcli_cli_repair(char * argv[], uint32_t tcpRef, void *bufRef) ;
  
 
 storcli_conf conf;
+storcli_conf  *storcli_conf_p=&conf;
 
 /*__________________________________________________________________________
  */
@@ -2035,6 +2037,8 @@ int main(int argc, char *argv[]) {
     memset(&storcli_kpi_transform_forward,0,sizeof(  storcli_kpi_transform_forward));
     memset(&storcli_kpi_transform_inverse,0,sizeof(  storcli_kpi_transform_inverse));
  
+    rozofs_init_shared_memory();
+    
     
     /*
      ** init of the non blocking part
