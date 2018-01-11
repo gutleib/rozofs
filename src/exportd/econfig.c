@@ -36,6 +36,7 @@
 #define EVIP	    "exportd_vip"
 #define EVOLUMES    "volumes"
 #define EVID        "vid"
+#define EVID_FAST   "vid_fast"
 #define ECIDS       "cids"
 #define ECID        "cid"
 #define ESTORAGES   "storages"
@@ -50,6 +51,8 @@
 #define EMD5        "md5"
 #define ESQUOTA     "squota"
 #define EHQUOTA     "hquota"
+#define EHQUOTA_FAST     "hquota_fast"
+#define SUFFIX_FILE     "suffix_file"
 #define EGEOREP     "georep"
 #define ESITE0     "site0"
 #define ESITE1     "site1"
@@ -211,19 +214,23 @@ void expgw_config_release(expgw_config_t *c) {
 
 
 int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t layout, uint32_t bsize,
-        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name, int thin) {
+        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, 
+	const char *filter_name, int thin,vid_t vid_fast, uint64_t hquota_fast,int suffix_file) {
     DEBUG_FUNCTION;
 
     e->eid = eid;
     e->vid = vid;
+    e->vid_fast = vid_fast;
     e->layout = layout;
     e->bsize = bsize;
     strncpy(e->root, root, FILENAME_MAX);
     strncpy(e->name, name, FILENAME_MAX);
     strncpy(e->md5, md5, MD5_LEN);
     e->squota = squota;
-    e->hquota = hquota;
+    e->hquota = hquota;    
+    e->hquota_fast = hquota_fast;
     e->thin   = thin;
+    e->suffix_file_idx = suffix_file;
     if (filter_name == NULL) {
       e->filter_name = NULL;
     }  
@@ -389,7 +396,6 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
             severe("can't lookup vid setting for volume idx: %d.", v);
             goto out;
         }
-        
         /*
         ** Looking for a rebalane configuration file 
         ** for automatic rebalance launching
@@ -987,17 +993,23 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
                || (LIBCONFIG_VER_MAJOR > 1))
         int eid; // Export identifier
         int vid; // Volume identifier
+        int vid_fast; // Volume identifier
 	int bsize; // Block size
 	int layout; // Export layout
+	int suffix_file;
 #else
         long int eid; // Export identifier
         long int vid; // Volume identifier
+        long int vid_fast; // Volume identifier
         long int bsize; // Block size
 	long int layout; // Export layout
+	long int suffix_file;
 #endif
         const char *str;
         uint64_t squota;
         uint64_t hquota;
+        uint64_t hquota_fast;
+	
         export_config_t *econfig = NULL;
         const char * filter_name;
         
@@ -1114,11 +1126,27 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
           }
         }
 		
+		hquota_fast = 0;
+        if (config_setting_lookup_string(mfs_setting, EHQUOTA_FAST, &str) != CONFIG_FALSE) {
+          if (strquota_to_nbblocks(str, &hquota_fast, bsize) != 0) {
+              severe("%s: can't convert to quota)", str);
+              goto out;
+          }
+        }
+	suffix_file = -1;
+        if (config_setting_lookup_int(mfs_setting, SUFFIX_FILE, &suffix_file) != CONFIG_FALSE) {
+
+        }
+		
         // Lookup volume identifier
         if (config_setting_lookup_int(mfs_setting, EVID, &vid) == CONFIG_FALSE) {
             errno = ENOKEY;
             severe("can't look up vid for export idx: %d", i);
             goto out;
+        }
+        // Lookup fast volume identifier
+        if (config_setting_lookup_int(mfs_setting, EVID_FAST, &vid_fast) == CONFIG_FALSE) {
+            vid_fast = -1;
         }
 
         // Check for thin provisionning
@@ -1148,7 +1176,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
 	
         econfig = xmalloc(sizeof (export_config_t));
         if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
-                md5, squota, hquota, filter_name, thin) != 0) {
+                md5, squota, hquota, filter_name, thin, (vid_t) vid_fast,hquota_fast,suffix_file) != 0) {
             severe("can't initialize export config.");
         }
         // Initialize export

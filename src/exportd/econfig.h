@@ -59,6 +59,7 @@ typedef struct volume_config {
 typedef struct export_config {
     eid_t eid;
     vid_t vid;
+    vid_t vid_fast;
     uint8_t layout;
     ROZOFS_BSIZE_E  bsize;
     uint8_t         thin;  /* Thin provisionning */
@@ -67,7 +68,9 @@ typedef struct export_config {
     char md5[MD5_LEN];
     uint64_t squota;
     uint64_t hquota;
-    char *   filter_name;  
+    uint64_t hquota_fast;
+    char *   filter_name; 
+    int      suffix_file_idx;  /**< suffix file */ 
     list_t list;
 } export_config_t;
 

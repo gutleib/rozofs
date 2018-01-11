@@ -169,7 +169,7 @@ typedef union
 {
   uint32_t u32;
   struct {
-  uint8_t filler1;
+  uint8_t vid_fast;     /**< index of the fast volume: 0-> not significant  */
   uint8_t filler2;
   uint8_t mover_idx;   /**< index of the mover FID for storage usage   */
   uint8_t primary_idx; /**< index of the normal FID for storage usage  */

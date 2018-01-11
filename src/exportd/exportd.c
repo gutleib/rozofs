@@ -69,6 +69,7 @@
 #include "export_share.h"
 #include "geo_profiler.h"
 #include "export_thin_prov_api.h"
+#include "rozofs_suffix.h"
 
 #define EXPORTD_PID_FILE "exportd.pid"
 /* Maximum open file descriptor number for exportd daemon */
@@ -1486,6 +1487,7 @@ static int load_exports_conf() {
 	}
         entry = xmalloc(sizeof (export_entry_t));
         volume_t *volume;
+	volume_t *volume_fast = NULL;
 
         list_init(&entry->list);
 
@@ -1493,6 +1495,17 @@ static int load_exports_conf() {
             severe("can't lookup volume for vid %d: %s\n",
                     econfig->vid, strerror(errno));
         }
+	/*
+	** check if the export uses a fast volume too. If the fast volume cannot be found
+	** just trigger a warning
+	*/
+	if (econfig->vid_fast != -1)
+	{
+          if (!(volume_fast = volumes_lookup_volume(econfig->vid_fast))) {
+              warning("can't lookup fast volume for vid_fast %d: %s\n",
+                      econfig->vid_fast, strerror(errno));
+          }
+	}
 	entry->export.trk_tb_p = NULL;
 	entry->export.quota_p = NULL;
         if (export_is_valid(econfig->root) != 0) {
@@ -1509,7 +1522,7 @@ static int load_exports_conf() {
         // Initialize export
         if (export_initialize(&entry->export, volume, econfig->layout, econfig->bsize,
                 &cache, econfig->eid, econfig->root, econfig->name, econfig->md5,
-                econfig->squota, econfig->hquota, econfig->filter_name, econfig->thin) != 0) {
+                econfig->squota, econfig->hquota, econfig->filter_name, econfig->thin,volume_fast,econfig->hquota_fast,econfig->suffix_file_idx) != 0) {
             severe("can't initialize export with path %s: %s\n",
                     econfig->root, strerror(errno));
             goto out;
@@ -1730,7 +1743,10 @@ static void on_start() {
        loop_count++;
        if (loop_count > 5) fatal("Non Blocking thread does not answer");
     }
-
+    /*
+    ** init of the default suffix table
+    */
+    rozofs_suffix_tb_init();
 
     if (exportd_initialize() != 0) {
         fatal("can't initialize exportd.");

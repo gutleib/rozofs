@@ -734,11 +734,12 @@ char *rozofs_rdma_qp_display(rozofs_rdma_connection_t  *conn_p,int display_level
 	     IBV_QP_CAP		| /* = 1 << 19 */
 	     IBV_QP_DEST_QPN	/* = 1 << 20 */;
 	     
-	     
+    	     
     uint32_t ipAddr = af_unix_get_remote_ip(conn_p->tcp_index);
          
     pbuf +=sprintf(pbuf,"Queue Pair : %u (TCP ref:%d)\n",conn_p->qp->qp_num,conn_p->tcp_index);
     pbuf +=sprintf(pbuf,"Remote IP  : %u.%u.%u.%u\n", (ipAddr >> 24)&0xFF, (ipAddr >> 16)&0xFF, (ipAddr >> 8)&0xFF, (ipAddr)&0xFF);    
+    memset(&attr,0,sizeof(attr));
     ret =  ibv_query_qp(conn_p->qp, &attr,
 		        qp_attr_mask,
 		         &init_attr);
@@ -2685,6 +2686,8 @@ int rozofs_rdma_cli_on_route_resolved(struct rdma_cm_id *id)
   */
   cm_params.responder_resources = 16;
   cm_params.initiator_depth = 16;
+  cm_params.retry_count = 2;
+  cm_params.rnr_retry_count = 3;  
   
   if(rdma_connect(id, &cm_params) < 0)
   {

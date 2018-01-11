@@ -110,6 +110,8 @@ add_executable(exportd
     rozofs_ip4_flt.h
     
     export_thin_prov.c
+    rozofs_suffix.h
+    rozofs_suffix.c
 )
 target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 

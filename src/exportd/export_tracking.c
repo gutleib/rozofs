@@ -58,6 +58,7 @@
 #include "rozofs_exp_mover.h"
 #include "export_thin_prov_api.h"
 #include "exportd.h"
+#include "rozofs_suffix.h"
 
 #define ROZOFS_DIR_STATS 1
 #ifdef ROZOFS_DIR_STATS
@@ -1291,18 +1292,21 @@ void export_dir_check_sync_write_on_lru(lv2_entry_t *dir)
  *
  * @param e: the export to update
  * @param n: number of files
+   @param children: contains the indication if the file has been allocated on a fast volume
  *
  * @return 0 on success -1 otherwise
  */
-static int export_update_files(export_t *e, int32_t n) {
+static int export_update_files(export_t *e, int32_t n,uint32_t children) {
     int status = -1;
+    rozofs_mover_children_t vid_fast;
+    
     START_PROFILING(export_update_files);
-
+    vid_fast.u32 = children;
     if (n > 0) {
-      status = export_fstat_create_files(e->eid,n);
+      status = export_fstat_create_files(e->eid,n,vid_fast.fid_st_idx.vid_fast);
     }
     else {
-      status = export_fstat_delete_files(e->eid,-n);
+      status = export_fstat_delete_files(e->eid,-n,vid_fast.fid_st_idx.vid_fast);
     }
       
 
@@ -1314,18 +1318,22 @@ static int export_update_files(export_t *e, int32_t n) {
 */
 /** update the number of blocks in file system
  *
- * @param e: the export to update
- * @param n: number of blocks
- *
+  @param e: the export to update
+  @param newblocks: new number of blocks
+  @param oldblocks: old number of blocks
+  @param children: children field of a regular file that might contains the reference of a fast volume
+ 
  * @return 0 on success -1 otherwise
  */
-static int export_update_blocks(export_t * e, uint64_t newblocks, uint64_t oldblocks) {
+static int export_update_blocks(export_t * e, uint64_t newblocks, uint64_t oldblocks,uint32_t children) {
     int status = -1;
+    rozofs_mover_children_t vid_fast;
 
     if (oldblocks == newblocks) return 0;
     
     START_PROFILING(export_update_blocks);
-     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin);
+    vid_fast.u32 = children;
+     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin,vid_fast.fid_st_idx.vid_fast);
     STOP_PROFILING(export_update_blocks);
     return status;
 }
@@ -1594,7 +1602,7 @@ static void *load_trash_dir_thread(void *v) {
 */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin) {
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin, volume_t *volume_fast,uint64_t hquota_fast,int suffix_file) {
 
     char fstat_path[PATH_MAX];
     char const_path[PATH_MAX];
@@ -1627,6 +1635,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     
     e->eid = eid;
     e->volume = volume;
+    e->volume_fast = volume_fast;
     e->bsize = bsize;
     e->thin = thin;
     e->lv2_cache = lv2_cache;
@@ -1703,7 +1712,12 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     }
     e->squota = squota;
     e->hquota = hquota;
-
+    e->hquota_fast = hquota_fast;
+    e->suffix_file_idx = suffix_file;
+    /*
+    ** inform that the suffix file need to be parsed
+    */
+    if (e->suffix_file_idx != -1) rozofs_suffix_file_parse_req( e->suffix_file_idx);
     // open the export_stat file an load it
     sprintf(fstat_path, "%s/%s_%d", e->root, FSTAT_FNAME,(int)expgwc_non_blocking_conf.instance);
     if ((e->fdstat = open(fstat_path, O_RDWR)) < 0)
@@ -1719,7 +1733,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     /*
     ** register the export with the periodic quota thread
     */
-    if (export_fstat_alloc_context(e->eid,fstat_path,hquota,squota,0) == NULL)
+    if (export_fstat_alloc_context(e->eid,fstat_path,hquota,squota,hquota_fast,0) == NULL)
     {
        severe("cannot allocate context for eid in quota thread");
        return -1;
@@ -2207,7 +2221,6 @@ out:
       if (retcode == 1)
       {
          expthin_update_blocks(e,nb_blocks,dir);
-         // info("FDL LOOKUP  thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
 	 /*
 	 ** write inode attributes on disk
 	 */
@@ -2347,7 +2360,6 @@ int export_getattr(export_t *e, fid_t fid, mattr_t *attrs,mattr_t * pattrs) {
       if (retcode == 1)
       {
          expthin_update_blocks(e,nb_blocks,dir);
-         //info("FDL GETATTR thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
 	 /*
 	 ** write inode attributes on disk
 	 */
@@ -2450,8 +2462,11 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	  */	  
 	  if (plv2) export_dir_adjust_child_size(plv2,(nrb_old-nrb_new)*bbytes,0,bbytes);
 #endif
-	}      		
-        if (export_update_blocks(e, nrb_new, nrb_old)!= 0)
+	}  
+	/*
+	** provides the children field since it contains the indication on which volume the file has been allocated
+	*/    		
+        if (export_update_blocks(e, nrb_new, nrb_old,lv2->attributes.s.attrs.children)!= 0)
             goto out;
 
         lv2->attributes.s.attrs.size = attrs->size;
@@ -2506,7 +2521,6 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	if (retcode == 1)
 	{
 	   expthin_update_blocks(e,nb_blocks,dir);
-           //info("FDL TRUNCATE thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
 	}
       }
     }    
@@ -2952,7 +2966,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     export_attr_thread_submit(plv2,e->trk_tb_p,0 /* No sync */);
 
     // update export files
-    export_update_files(e, filecount+1);
+    export_update_files(e, filecount+1,0);
     
     rozofs_qt_inode_update(e->eid,uid,gid,filecount+1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
     status = 0;
@@ -3248,10 +3262,59 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     if (lv2_recycle == NULL)
     {
       /*
-      ** get the distribution for the file
+      ** get the distribution for the file:
+      **  When the export has a fast volume, we check the suffix of the file to figure out if the file can be allocated
+      **  with the fast volume. When the fast volume is full or because the fast quota is reached, we allocate the file
+      **  within the default volume associated with the exportd
       */
-      if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
-          goto error;
+      while (1)
+      {
+	if ((e->volume_fast != NULL) && (rozofs_htable_tab_p[e->suffix_file_idx] !=NULL))
+	{
+           /*
+	   ** we check if the suffix of the file can be candidate for fast volume
+	   */
+	   if (export_file_create_check_fast_htable(name,e->suffix_file_idx) >= 0)
+	   {
+	     /*
+	     ** Check that some space os left for the new file in case a hard quota is set for the fast volume
+	     */
+	     if (e->hquota_fast) {
+	       export_fstat_t * estats = export_fstat_get_stat(e->eid); 
+	       /*
+	       ** the thin provisioning does not apply to fast volume
+	       */         
+	       if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
+        	 /*
+		 ** no space left: use the regular procedure
+		 */
+		 if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
+        	     goto error;
+		 break;
+	       }
+	     }	     
+	     /*
+	     ** attempt to allocate on fast volume
+	     */
+	     if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) == 0)
+	     {
+	       rozofs_mover_children_t *children_p;
+	       /*
+	       ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
+	       */
+	       children_p = (rozofs_mover_children_t*) &ext_attrs.s.attrs.children;
+	       children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
+	       break;
+	     }
+	   }
+	}	
+	/*
+	** default case
+	*/ 
+	if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
+            goto error;
+	break;
+      }
     }
     ext_attrs.s.attrs.mode = mode;
     rozofs_clear_xattr_flag(&ext_attrs.s.attrs.mode);
@@ -3345,7 +3408,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     export_attr_thread_submit(plv2,e->trk_tb_p,0 /* No sync */);
 
     // update export files
-    export_update_files(e, 1);
+    export_update_files(e, 1,ext_attrs.s.attrs.children);
 
     rozofs_qt_inode_update(e->eid,uid,gid,1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
     
@@ -3720,7 +3783,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
         goto error;
 
     // update export files
-    export_update_files(e, 1);
+    export_update_files(e, 1,0);
     rozofs_qt_inode_update(e->eid,uid,gid,1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
 
     /*
@@ -4035,8 +4098,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,mat
       }
       // Update the nb. of blocks
       if (export_update_blocks(e,0,
-              (((int64_t) lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)
-              / ROZOFS_BSIZE_BYTES(e->bsize))) != 0) {
+              (((int64_t) lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)/ ROZOFS_BSIZE_BYTES(e->bsize)),lv2->attributes.s.attrs.children) != 0) {
 	  severe("export_update_blocks failed: %s", strerror(errno));
 	  // Best effort
       }
@@ -4046,7 +4108,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,mat
     /*
     ** all the subfile have been deleted so  Update export files
     */
-    export_update_files(e, 0-deleted_fid_count);
+    export_update_files(e, 0-deleted_fid_count,0);
     rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,deleted_fid_count,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
     rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
 
@@ -4331,7 +4393,7 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
    */
    if (export_update_blocks(e,0,
            (((int64_t) lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)
-           / ROZOFS_BSIZE_BYTES(e->bsize))) != 0) {
+           / ROZOFS_BSIZE_BYTES(e->bsize)),lv2->attributes.s.attrs.children) != 0) {
        severe("export_update_blocks failed: %s", strerror(errno));
        // Best effort
    }
@@ -4343,7 +4405,7 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
    /*
    ** Update export files
    */
-   export_update_files(e, -1);
+   export_update_files(e, -1,lv2->attributes.s.attrs.children);
    /*
    ** Remove from the cache when deleted (will be closed and freed)
    */
@@ -4642,7 +4704,7 @@ duplicate_deleted_file:
 	    {
               if (export_update_blocks(e,0,
                       (((int64_t) lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)
-                      / ROZOFS_BSIZE_BYTES(e->bsize))) != 0) {
+                      / ROZOFS_BSIZE_BYTES(e->bsize)),lv2->attributes.s.attrs.children) != 0) {
                   severe("export_update_blocks failed: %s", strerror(errno));
                   // Best effort
               }
@@ -4682,7 +4744,7 @@ duplicate_deleted_file:
            rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
            rozofs_qt_block_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
            // Update export files
-          export_update_files(e, -1);
+          export_update_files(e, -1,lv2->attributes.s.attrs.children);
 
           // Remove from the cache when deleted (will be closed and freed)
           if (fid_has_been_recycled == 0)
@@ -5685,7 +5747,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     if (rename == 0)
     {
       // update export nb files: best effort mode
-      export_update_files(e, -1);
+      export_update_files(e, -1,0);
       /*
       ** update the quota
       */
@@ -5961,7 +6023,7 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     */
     rozofs_qt_inode_update(e->eid,ext_attrs.s.attrs.uid,ext_attrs.s.attrs.gid,1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
     // update export files
-    export_update_files(e, 1);
+    export_update_files(e, 1,0);
 
     status = 0;
     /*
@@ -6203,7 +6265,7 @@ int export_rename_trash(export_t *e, fid_t pfid, char *name, fid_t npfid,
     /*
     ** update export nb files: best effort mode
     */
-    export_update_files(e, -1);
+    export_update_files(e, -1,0);
     /*
     ** update the quota
     */
@@ -6477,7 +6539,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
             // We'll write attributes of parents after
 
             // Update export files
-            if (export_update_files(e, -1) != 0)
+            if (export_update_files(e, -1,0) != 0)
                 goto out;
 
             char lv2_path[PATH_MAX];
@@ -6827,7 +6889,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	  */	  
 	  if (plv2) export_dir_adjust_child_size(plv2,(nbnew-nbold)*ROZOFS_BSIZE_BYTES(e->bsize),1,ROZOFS_BSIZE_BYTES(e->bsize));
 #endif
-        if (export_update_blocks(e, nbnew, nbold) != 0)
+        if (export_update_blocks(e, nbnew, nbold,lv2->attributes.s.attrs.children) != 0)
             goto out;
 
         lv2->attributes.s.attrs.size = off + len;
@@ -6846,7 +6908,6 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
       retcode = expthin_check_entry(e,lv2,1,&nb_blocks,&dir);
       if (retcode == 1)
       {
-        // info("FDL thin dir %s nb_blocks:%u",dir<0 ?"SUB":"ADD",nb_blocks);
          retcode = expthin_update_blocks(e,nb_blocks,dir);
 	 if (retcode != 0)
 	 {

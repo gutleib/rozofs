@@ -657,14 +657,19 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     if ((errno = pthread_rwlock_rdlock(&config_lock)) != 0) {
         goto error;
     }
-
+    /*
+    ** init of the working variables: it has been moved here because one export might be associated with 2 volumes
+    */
+    stor_idx = 0;
+    ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes_nb = 0;
+    memset(ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes, 0, sizeof (ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes));
     /* For each volume */
     list_for_each_forward(p, &exportd_config.volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
         /* Get volume with this vid */
-        if (vc->vid == exp->volume->vid) {
+        if ((vc->vid == exp->volume->vid) || ((exp->volume_fast != NULL) && (vc->vid == exp->volume_fast->vid))) {
 		
 		    /*
 			** Volume is declared as multi site
@@ -684,11 +689,11 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     		  errno = EINVAL;
     		  goto error;
     		}			
-			
+#if 0			
             stor_idx = 0;
             ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes_nb = 0;
             memset(ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes, 0, sizeof (ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes));
-
+#endif
             /* For each cluster */
             list_for_each_forward(q, &vc->clusters) {
 
