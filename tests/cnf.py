@@ -125,6 +125,9 @@ rozofs.set_file_distribution(2)
 # Disable self healing
 rozofs.set_self_healing(1)
 
+# Disable spare file restoration
+#rozofs.spare_restore_disable()
+
 # Modify number of listen port/ per storio
 # rozofs.set_nb_listen(4)
 
@@ -132,7 +135,7 @@ rozofs.set_self_healing(1)
 #rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
-rozofs.set_ext4(320)
+#rozofs.set_ext4(320)
 #rozofs.set_xfs(1000,None)
 #rozofs.set_xfs(1000,"4096")
 #rozofs.set_xfs(1000,"64K")
@@ -168,7 +171,7 @@ mapper     = 2
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 1
+nbclusters = 2
 
 # default is to have one mount point per site and export
 clients_nb = 1

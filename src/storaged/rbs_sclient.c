@@ -218,6 +218,7 @@ int rbs_read_proj(sclient_t *storage, cid_t cid, sid_t sid, uint8_t stor_idx,
     uint8_t spare = 0;
     uint64_t size;
     uint16_t rozofs_max_psize_in_msg = rozofs_get_max_psize_in_msg(layout,bsize);
+    bin_t * bins = NULL;
     DEBUG_FUNCTION;
     
     proj_ctx_p->nbBlocks = 0;
@@ -228,14 +229,21 @@ int rbs_read_proj(sclient_t *storage, cid_t cid, sid_t sid, uint8_t stor_idx,
         goto out;
     }
 
-    // Memory allocation for store response
-    size = rozofs_max_psize_in_msg * nb_blocks_2_read;
-	    
-    bin_t * bins = memalign(32,size);
-    memset(bins, 0, size);
-    
+    /*
+    ** Allocate memory for the response when none is given
+    */	
+    if (proj_ctx_p->bins == NULL) {        
+      size = rozofs_max_psize_in_msg * nb_blocks_2_read;
+      bins = memalign(32,size);
+    }
+    /*
+    ** Else use given memory buffer
+    */
+    else {
+      bins = proj_ctx_p->bins;
+    }
 
-    // Is-it a spare storage ?
+    // Is it a spare storage ?
     if (stor_idx >= rozofs_get_rozofs_forward(layout)) {
         spare = 1;
     }
@@ -246,7 +254,13 @@ int rbs_read_proj(sclient_t *storage, cid_t cid, sid_t sid, uint8_t stor_idx,
     // Error
     if (ret != 0) {
         proj_ctx_p->prj_state = PRJ_READ_ERROR;
-        free(bins);
+        /*
+        ** Memory was allocated localy. Free it
+        */
+        if (proj_ctx_p->bins == NULL) { 
+          free(bins);
+          bins = NULL;
+        }  
         goto out;
     }
 
@@ -514,14 +528,39 @@ int rbs_read_all_available_proj(sclient_t **storages, int spare_idx, uint8_t lay
 out:
     return status;
 }
+/*_____________________________________________________________________________
+ * Read a set of projections from the available storages in order to reconstitute
+ * the initial data of a given number of block.
+ *
+ * @param storages         The storages information in the cluster of the targeted file
+ * @param local_idx        The index of the storage to rebuild within the storages array
+ * @param layout           The file layout
+ * @param bsize            The file block size
+ * @param cid              The file cluster identifier
+ * @param dist_set         The file SID distribution set
+ * @param fid              The file FID
+ * @param first_block_idx  The starting block index to read in the file
+ * @param nb_blocks_2_read The number of blocks to read
+ * @param nb_blocks_read   The number of blocks actually read
+ * @param retry_nb         The number of retry attempt allowed
+ * @param working_ctx_p    The file rebuild working context
+ * @param size_read        On return gives the total ize of the read data
+ * @param empty            On return tells whether all read blocks are empty
+ *
+ * @return: 0 on success -1 otherwise (errno is set)
+ */
 int rbs_read_blocks(sclient_t **storages, int local_idx, uint8_t layout, uint32_t bsize, cid_t cid,
         sid_t dist_set[ROZOFS_SAFE_MAX], fid_t fid, bid_t first_block_idx,
         uint32_t nb_blocks_2_read, uint32_t * nb_blocks_read, int retry_nb,
         rbs_storcli_ctx_t * working_ctx_p, 
-	uint64_t          * size_read) {
+	uint64_t          * size_read,
+        int               * empty) {
 
     int status = -1;
     int ret = -1;
+    
+    *empty = 0;
+    
     // Nb. of blocks read on storages
     uint32_t real_nb_blocks_read = 0;
 
@@ -559,14 +598,16 @@ int rbs_read_blocks(sclient_t **storages, int local_idx, uint8_t layout, uint32_
     }
 
     // Memory allocation for store reconstructed blocks
-    working_ctx_p->data_read_p = memalign(32,real_nb_blocks_read * ROZOFS_BSIZE_BYTES(bsize));
-
+    if (working_ctx_p->data_read_p == NULL) {
+      working_ctx_p->data_read_p = memalign(32,real_nb_blocks_read * ROZOFS_BSIZE_BYTES(bsize));
+    }
+    
 transform_inverse:
 
     // Check timestamp and perform transform inverse
     ret = rbs_transform_inverse(working_ctx_p->prj_ctx, layout, bsize, 0,
             real_nb_blocks_read, working_ctx_p->block_ctx_table,
-            working_ctx_p->data_read_p);
+            working_ctx_p->data_read_p, empty);
     if (ret < 0) {
         // There is no enough projection to rebuild the initial message
 

@@ -89,12 +89,34 @@ int rbs_get_rb_entry_list(mclient_t * mclt, cid_t cid, sid_t sid,
         sid_t rebuild_sid, uint8_t * device, uint8_t * spare, uint16_t * slice,
         uint64_t * cookie,
         bins_file_rebuild_t ** children, uint8_t * eof);
-
+/*_____________________________________________________________________________
+ * Read a set of projections from the available storages in order to reconstitute
+ * the initial data of a given number of block.
+ *
+ * @param storages         The storages information in the cluster of the targeted file
+ * @param local_idx        The index of the storage to rebuild within the storages array
+ * @param layout           The file layout
+ * @param bsize            The file block size
+ * @param cid              The file cluster identifier
+ * @param dist_set         The file SID distribution set
+ * @param fid              The file FID
+ * @param first_block_idx  The starting block index to read in the file
+ * @param nb_blocks_2_read The number of blocks to read
+ * @param nb_blocks_read   The number of blocks actually read
+ * @param retry_nb         The number of retry attempt allowed
+ * @param working_ctx_p    The file rebuild working context
+ * @param size_read        On return gives the total ize of the read data
+ * @param empty            On return tells whether all read blocks are empty
+ *
+ * @return: 0 on success -1 otherwise (errno is set)
+ */
 int rbs_read_blocks(sclient_t **storages, int local_idx, uint8_t layout, uint32_t bsize, cid_t cid,
         sid_t dist_set[ROZOFS_SAFE_MAX], fid_t fid, bid_t first_block_idx,
         uint32_t nb_blocks_2_read, uint32_t * nb_blocks_read, int retry_nb,
-        rbs_storcli_ctx_t * working_ctx_p,
-	uint64_t          * size_read);
+        rbs_storcli_ctx_t * working_ctx_p, 
+	uint64_t          * size_read,
+        int               * empty);
+        
 int rbs_read_all_available_proj(sclient_t **storages, int spare_idx, uint8_t layout, uint32_t bsize, cid_t cid,
         sid_t dist_set[ROZOFS_SAFE_MAX], fid_t fid, bid_t first_block_idx,
         uint32_t nb_blocks_2_read, uint32_t * nb_blocks_read, 

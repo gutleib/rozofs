@@ -95,14 +95,17 @@ typedef struct _rozofs_disk_thread_ctx_t
 
 extern rozofs_disk_thread_ctx_t rozofs_disk_thread_ctx_tb[];
 
-/**
+/*
 * Message sent/received in the af_unix disk sockets
+*
+* REGENERATE storio_disk_thread_request_e2String.h ON ANY CHANGE
 */
 
 typedef enum _storio_disk_thread_request_e {
   STORIO_DISK_THREAD_READ=1,
   STORIO_DISK_THREAD_RESIZE,
   STORIO_DISK_THREAD_WRITE,
+  STORIO_DISK_THREAD_WRITE_EMPTY,
   STORIO_DISK_THREAD_TRUNCATE,
   STORIO_DISK_THREAD_WRITE_REPAIR3,
   STORIO_DISK_THREAD_REMOVE,
@@ -112,6 +115,7 @@ typedef enum _storio_disk_thread_request_e {
   STORIO_DISK_THREAD_FID, /**<process request within a FID context rather than request per request */
   STORIO_DISK_THREAD_MAX_OPCODE
 } storio_disk_thread_request_e;
+#include "storio_disk_thread_request_e2String.h"
 
 typedef struct _storio_disk_thread_msg_t
 {

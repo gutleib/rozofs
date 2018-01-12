@@ -33,6 +33,7 @@
 void sp_null_1_svc_nb(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
 void sp_write_1_svc_nb(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
 void sp_write_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
+void sp_write_empty_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 
 void sp_read_1_svc_nb(void *args, rozorpc_srv_ctx_t *req_ctx_p) ;
 void sp_read_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) ;

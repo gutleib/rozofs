@@ -56,10 +56,6 @@ static inline void reset_serialization_counters(void) {
   memset(storage_unqueued_req,0, sizeof(storage_unqueued_req));
   memset(storage_direct_req,0, sizeof(storage_direct_req));
 }
-/*_______________________________________________________________________
-* Display opcode
-*/
-#include "storio_disk_thread_request_e2String.h"
 
 /*_______________________________________________________________________
 * Serialization debug function

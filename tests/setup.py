@@ -382,6 +382,7 @@ class sid_class:
       res=cmd_returncode("storage_rebuild --simu %s %s"%(exportd.get_config_name(),param))      
     else: 
       h = self.host[0]   
+#      res=cmd_returncode("valgrind --leak-check=full --track-origins=yes --log-file=/root/valgrind  storage_rebuild --simu %s -c %s -H localhost%s -s %d/%d %s"%(exportd.get_config_name(),h.get_config_name(),h.number,self.cid.cid,self.sid,param))  
       res=cmd_returncode("storage_rebuild --simu %s -c %s -H localhost%s -s %d/%d %s"%(exportd.get_config_name(),h.get_config_name(),h.number,self.cid.cid,self.sid,param))  
     sys.exit(res)
                    
@@ -969,8 +970,8 @@ class exportd_class:
         else             : squota="squota=\"%s\";"%(e.squota)
         if e.hquota == "": hquota=""
         else             : hquota="hquota=\"%s\";"%(e.hquota)
-        if e.thin == True: thin = ", thin-provisionning = True"
-        else             : thin=""
+        if e.thin == True: thin = "; thin-provisioning = True;"
+        else             : thin=";"
 	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s %s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout),thin)
 	nexte=","	
     print ");"
@@ -1119,6 +1120,7 @@ class rozofs_class:
     self.client_fast_reconnect = 0
     self.deletion_delay = None
     self.trashed_file_per_run = 100
+    self.spare_restore = True
     self.spare_restore_loop_delay = 15
     self.metadata_size = None;
     self.min_metadata_inodes = None
@@ -1163,6 +1165,9 @@ class rozofs_class:
   def set_client_fast_reconnect(self,val=2): 
     self.client_fast_reconnect = val
 
+  def spare_restore_disable(self):
+    self.spare_restore = False
+    
   def set_mkfscmd(self,cmd):
     self.mkfscmd = cmd    
     
@@ -1372,6 +1377,7 @@ class rozofs_class:
     if self.client_fast_reconnect != 0: display_config_bool("client_fast_reconnect",True)
     display_config_int("storio_buf_cnt",32)
     display_config_int("export_buf_cnt",32)
+    display_config_bool("spare_restore_enable",self.spare_restore)
     display_config_int("spare_restore_spare_ctx",1)
     display_config_int("spare_restore_loop_delay",rozofs.spare_restore_loop_delay);
     display_config_int("storio_fidctx_ctx",1)   
@@ -1534,7 +1540,7 @@ class rozofs_class:
       if words[0] =="VID": 
         vid = words[2]
 	continue      	 
-      if words[0] =="ST.NAME": 
+      if words[0] =="FID_SP": 
         st_name = words[2]
 	continue      	 
 
@@ -1561,6 +1567,8 @@ class rozofs_class:
   def exe_from_core_dir(self,dir):
     if dir == "storio": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
     if dir == "stspare": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
+    if dir == "storage_rebuild" : return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)    
+    if dir == "storage_list_rebuilder" : return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)    
     if dir == "export_slave": return "%s/build/src/%s/%s"%(os.getcwd(),"exportd","exportd")
     if dir == "geomgr" : return "%s/build/src/%s/%s"%(os.getcwd(),"geocli",dir)    
     if dir == "rozo_rebalance" : return "%s/build/src/%s/%s"%(os.getcwd(),"exportd",dir)    
@@ -1690,9 +1698,6 @@ def syntax_storage() :
 def syntax_cou() :
   console("./setup.py \tcou     \t<fileName>")
 #_____________________________________________  
-def syntax_config() :
-  console("./setup.py \tconfig  \t<confFileName>")  
-#_____________________________________________  
 def syntax_sid() :
   console("./setup.py \tsid     \t<cid> <sid>\tdevice-delete {all|<#device>} [<site>]")
   console("./setup.py \tsid     \t<cid> <sid>\tdevice-create {all|<#device>} [<site>]")
@@ -1709,6 +1714,9 @@ def syntax_monitor() :
 def syntax_debug() :
   console("./setup.py \tcore    \tremove {all|<coredir>/<corefile>}")
   console("./setup.py \tcore    \t[<coredir>/<corefile>]")
+#_____________________________________________  
+def syntax_diag() :
+  console("./setup.py \tdiag    \t{mount|storcli|export|storaged|storio|stspare} <command>")
   
 #_____________________________________________  
 def syntax_all() :
@@ -1727,9 +1735,9 @@ def syntax_all() :
   syntax_storage() 
   syntax_sid() 
   syntax_cou() 
-  syntax_config()  
   syntax_if()
   syntax_debug()
+  syntax_diag()
   console("./setup.py \tprocess \t[pid]")
   console("./setup.py \tvnr ...")
   console("./setup.py \t{build|rebuild|clean}")
@@ -1772,7 +1780,42 @@ def rebuild() :
     os.system("cd build; make")
   else:
     build()
+#_____________________________________________  
+def diag(argv) :  
 
+  if len(argv) < 3 : syntax("Missing target","diag")
+  if len(argv) < 4 : syntax("Missing diag command","diag")
+
+  rzcmd="rozodiag"
+
+  if argv[2] == "mount":    
+    for m in mount_points: 
+      rzcmd=rzcmd+" -T mount:%s"%(m.instance)    
+ 
+  elif argv[2] == "storcli":
+    for m in mount_points: 
+      for stc in range(rozofs.nb_storcli):
+        rzcmd=rzcmd+" -T mount:%s:%s"%(m.instance,stc+1)    
+
+  elif argv[2] == "storaged":
+    for h in hosts: rzcmd=rzcmd+" -i %s -T storaged"%(h.addr)    
+
+  elif argv[2] == "stspare":
+    for h in hosts: rzcmd=rzcmd+" -i %s -T stspare"%(h.addr)    
+
+  elif argv[2] == "storio":
+    for h in hosts: 
+      for cid in cids:
+        rzcmd=rzcmd+" -i %s -T storio:%s"%(h.addr,cid.cid)    
+  elif argv[2] == "export":
+    for i in range(8):
+      rzcmd=rzcmd+" -T export:%s"%(i)          
+  else :syntax("Unknown target","diag") 
+
+  rzcmd=rzcmd+" -c" 
+  for arg in argv[3:]:rzcmd=rzcmd+" %s"%(arg)
+
+  os.system(rzcmd)
 #_____________________________________________  	 
 def test_parse(command, argv):	
   global rozofs
@@ -1811,7 +1854,8 @@ def test_parse(command, argv):
   elif command == "clean"              : clean()
   elif command == "monitor"            : rozofs.monitor()
   elif command == "rozofs.conf"        : rozofs.create_common_config()
-
+  elif command == "diag"               : diag(argv)
+    
   elif command == "spare"              : 
     try: 
       rozofs.newspare(argv[2]) 

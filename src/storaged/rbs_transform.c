@@ -290,9 +290,29 @@ int rbs_count_timestamp_tb(rbs_projection_ctx_t *prj_ctx_p, int spare_idx, uint8
     }
     return -1;
 }
+/*_____________________________________________________________________________________
+  Apply the transform to a buffer starting at "data". That buffer MUST be
+  ROZOFS_BSIZE aligned.
+  The first_block_idx is the index of a ROZOFS_BSIZE array in the output buffer
+  The number_of_blocks is the number of ROZOFS_BSIZE that must be transform
+  Notice that the first_block_idx offset applies to the output transform buffer
+  only not to the input buffer pointed by "data".
+  
+ * 
+ * @param *prj_ctx_p: pointer to the working array of the projections set
+ * @param layout: rozofs layout used for store data
+ * @param bsize: Block size as define in enum ROZOFS_BSIZE_E 
+ * @param first_block_idx: index of the first block to transform
+ * @param number_of_blocks: number of blocks to write
+ * @param *block_ctx_p: pointer to the working array of blocks
+ * @param *data: pointer to the source data that must be transformed
+ * param  *empty: returns whether this is a whole set of empty blocks
+ *
+ * @return: 0 on success -1 otherwise
+ */
 int rbs_transform_inverse(rbs_projection_ctx_t *prj_ctx_p, uint8_t layout, uint32_t bsize,
         uint32_t first_block_idx, uint32_t number_of_blocks,
-        rbs_inverse_block_t *block_ctx_p, char *data) {
+        rbs_inverse_block_t *block_ctx_p, char *data, int * empty) {
 
     projection_t *projections = NULL;
     int block_idx = 0;
@@ -302,6 +322,11 @@ int rbs_transform_inverse(rbs_projection_ctx_t *prj_ctx_p, uint8_t layout, uint3
     int bbytes = ROZOFS_BSIZE_BYTES(bsize);
     uint16_t rozofs_max_psize_in_msg = rozofs_get_max_psize_in_msg(layout,bsize);
 
+    /*
+    ** The blocks are empty (a priori)
+    */
+    * empty = 1;
+    
     uint8_t rozofs_inverse = rozofs_get_rozofs_inverse(layout);
 
     projections = rbs_projections;
@@ -310,6 +335,10 @@ int rbs_transform_inverse(rbs_projection_ctx_t *prj_ctx_p, uint8_t layout, uint3
     for (block_idx = 0; block_idx < number_of_blocks; block_idx++) {
 
         if (block_ctx_p[block_idx].state == BLK_TRANSFORM_DONE) {
+            /*
+            ** Count the number of empty blocks
+            */
+            if (block_ctx_p[block_idx].timestamp != 0) * empty = 0;
             // Transformation has already been done for that block
             // check the next one
             continue;
@@ -340,7 +369,7 @@ int rbs_transform_inverse(rbs_projection_ctx_t *prj_ctx_p, uint8_t layout, uint3
             // Clear the memory
             memset(data + (bbytes * (first_block_idx + block_idx)), 0,
                     bbytes);
-            block_ctx_p[block_idx].state = BLK_TRANSFORM_DONE;
+            block_ctx_p[block_idx].state = BLK_TRANSFORM_DONE;  
             continue;
         }
 
@@ -383,6 +412,10 @@ int rbs_transform_inverse(rbs_projection_ctx_t *prj_ctx_p, uint8_t layout, uint3
 
         // Indicate that transform has been done for the projection
         block_ctx_p[block_idx].state = BLK_TRANSFORM_DONE;
+        /*
+        ** This is not an empty block
+        */
+        * empty = 0;
     }
 
     // Now the inverse transform is finished

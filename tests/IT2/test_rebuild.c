@@ -187,7 +187,7 @@ char *argv[];
 #define BLKSIZE (1024*4)
 char    refblock[BLKSIZE];
 char    readblock[BLKSIZE*LOOP_NB];
-
+char    emptyBlock[BLKSIZE]={0};
 void update_block(int b) {
   char string[64];
   int len;
@@ -217,7 +217,10 @@ char * getfilename(int idx) {
   sprintf(path_file_name,"%d", idx);
   return path_file_name;
 }
-
+char * getemptyfilename(int idx) {
+  sprintf(path_file_name,"empty%d", idx);
+  return path_file_name;
+}
 int delete() {
   int idx;
   char * fname;
@@ -272,7 +275,39 @@ int check() {
 	exit(-1);  
       } 
     }     
-  }        
+  }  
+  
+  update_block(LOOP_NB*BLKSIZE);
+  for (idx=1; idx< 16; idx++) {
+    fname = getemptyfilename(idx); 
+  	
+    fd = open(fname, O_RDONLY);
+    if (fd < 0) {
+      printf("CHECK open(%s) %s\n", fname, strerror(errno));
+      exit(-1);
+    }
+
+    ret = pread(fd, readblock, sizeof(readblock), 0);	
+    if (ret < 0) {
+      printf("CHECK pread(%s) %s\n", fname, strerror(errno));
+      exit(-1);
+    }
+    for (loop=0; loop < LOOP_NB; loop++) {
+    
+      if (loop == LOOP_NB*BLKSIZE) {     
+        if (memcmp(&readblock[loop*BLKSIZE],refblock,BLKSIZE)!=0) {
+	  printf("CHECK memcmp(%s) bad content block %d\n", fname, loop);
+	  exit(-1);  
+        } 
+      }
+      else {
+        if (memcmp(&readblock[loop*BLKSIZE],emptyBlock,BLKSIZE)!=0) {
+	  printf("CHECK memcmp(%s) bad content block %d\n", fname, loop);
+	  exit(-1);  
+        }       
+      }
+    }         
+  } 
 }
 int create() {
   int idx,loop;
@@ -303,8 +338,24 @@ int create() {
 	exit(-1);
       }
     }
-  }    
-}
+  }
+
+  update_block(LOOP_NB*BLKSIZE);
+  for (idx=1; idx< 16; idx++) {
+    fname = getemptyfilename(idx); 
+    fd = open(fname, O_CREAT | O_TRUNC | O_WRONLY, 0640);
+    if (fd < 0) {
+      printf("CREATE open(%s) %s\n", fname, strerror(errno));
+      exit(-1);
+    }
+    ret = pwrite(fd, refblock, BLKSIZE, LOOP_NB*BLKSIZE);
+    if (ret != BLKSIZE) {
+      printf("CREATE write(%s) size %d offset %d %s\n", fname, BLKSIZE, loop, strerror(errno));
+      exit(-1);
+    }
+    close(fd);
+  }
+}  
 
 
 int main(int argc, char **argv) {
