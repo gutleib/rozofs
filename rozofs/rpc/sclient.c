@@ -141,7 +141,70 @@ out:
     errno = xerrno;
     return status;
 }
+/*__________________________________________________________________________________
+* Write empty blocks during a rebuild
+*
+* @param clt          The RPC client context that is being rebuilt
+* @param cid          The cluster id of the file to rebuild
+* @param sid          The sid on want to rebuild 
+* @param layout       The layout of the file to rebuild
+* @param bsize        The block size of the file to rebuild
+* @param spare        Whether the target sid is spare for the file to rebuild
+* @param dist_set     The distribution set of the file to rebuild 
+* @param fid          The fid of the file to rebuild
+* @param bid          Starting block index to write
+* @param nb_proj      Number of empty blocks to write
+* @param rebuild_ref  The storio rebuild reference for this FID
+*
+* @retval -1 on error. 0 on success
+*/
+int sclient_write_empty_rbs(sclient_t * clt, cid_t cid, sid_t sid, uint8_t layout, uint32_t bsize,
+        uint8_t spare, sid_t dist_set[ROZOFS_SAFE_MAX], fid_t fid, uint32_t bid,
+        uint32_t nb_proj, 
+        uint32_t rebuild_ref) {
+    int                     status = -1;
+    sp_write_ret_t         *ret = 0;
+    sp_write_arg_no_bins_t  args;
+    int                     xerrno=0;
 
+    /* 
+    ** Build the write empty request
+    */
+    args.cid         = cid;
+    args.sid         = sid;
+    args.layout      = layout;
+    args.spare       = spare;
+    args.bsize       = bsize;
+    args.rebuild_ref = rebuild_ref;
+
+    memcpy(args.dist_set, dist_set, sizeof (sid_t) * ROZOFS_SAFE_MAX); 	
+    memcpy(args.fid, fid, sizeof (uuid_t));
+    args.bid         = bid;
+    args.nb_proj     = nb_proj;
+    args.len         = nb_proj * rozofs_get_max_psize_in_msg(layout,bsize);
+
+    if (!(clt->rpcclt.client) ||
+            !(ret = sp_write_empty_1(&args, clt->rpcclt.client))) {
+        clt->status = 0;
+        warning("sclient_write_empty_rbs failed: no response from storage server"
+                " (%s, %u, %u)", clt->host, clt->port, sid);
+        xerrno = EPROTO;
+        goto out;
+    }
+    if (ret->status != 0) {
+        xerrno = ret->sp_write_ret_t_u.error;
+        severe("sclient_write_empty_rbs %d failed: storage write response failure (%s)",
+                rebuild_ref, strerror(xerrno));
+        goto out;
+    }
+    status = 0;
+out:
+    if (ret) {
+        xdr_free((xdrproc_t) xdr_sp_write_ret_t, (char *) ret);
+    }    
+    errno = xerrno;
+    return status;
+}
 
 int sclient_read_rbs(sclient_t * clt, cid_t cid, sid_t sid, uint8_t layout, uint32_t bsize,
         uint8_t spare, sid_t dist_set[ROZOFS_SAFE_MAX], fid_t fid, bid_t bid,

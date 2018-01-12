@@ -38,6 +38,7 @@ storage_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		sp_standalone_setup_arg_t sp_standalone_setup_1_arg;
 		sp_read_standalone_arg_t sp_read_standalone_1_arg;
 		sp_write_standalone_arg_t sp_write_standalone_1_arg;
+		sp_write_arg_no_bins_t sp_write_empty_1_arg;
 	} argument;
 	char *result;
 	xdrproc_t _xdr_argument, _xdr_result;
@@ -150,6 +151,12 @@ storage_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_argument = (xdrproc_t) xdr_sp_write_standalone_arg_t;
 		_xdr_result = (xdrproc_t) xdr_sp_write_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) sp_write_standalone_1_svc;
+		break;
+
+	case SP_WRITE_EMPTY:
+		_xdr_argument = (xdrproc_t) xdr_sp_write_arg_no_bins_t;
+		_xdr_result = (xdrproc_t) xdr_sp_write_ret_t;
+		local = (char *(*)(char *, struct svc_req *)) sp_write_empty_1_svc;
 		break;
 
 	default:

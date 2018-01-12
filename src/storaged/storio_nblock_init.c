@@ -161,6 +161,7 @@ static void show_profile_storaged_io_display(char * argv[], uint32_t tcpRef, voi
     // Print master storaged process profiling values
     sp_display_io_probe(gprofiler, read);
     sp_display_io_probe(gprofiler, write);
+    sp_display_io_probe(gprofiler, write_empty);
     sp_display_io_probe_cond(gprofiler, truncate);
     sp_display_io_probe_cond(gprofiler, repair);
     sp_display_io_probe_cond(gprofiler, remove);
@@ -174,6 +175,7 @@ static void show_profile_storaged_io_display(char * argv[], uint32_t tcpRef, voi
       if (strcmp(argv[1],"reset")==0) {
 	sp_clear_io_probe(gprofiler, read);
 	sp_clear_io_probe(gprofiler, write);
+	sp_clear_io_probe(gprofiler, write_empty);
 	sp_clear_io_probe(gprofiler, truncate);
 	sp_clear_io_probe(gprofiler, repair);
 	sp_clear_io_probe(gprofiler, remove);

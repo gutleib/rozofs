@@ -453,7 +453,6 @@ static inline char * trace_device(char * pChar, storio_device_mapping_t * p) {
     }   
     if (dev == ROZOFS_EOF_CHUNK) break;
 
-
     if (dev == ROZOFS_EMPTY_CHUNK) {
       *pChar++ = 'E';
       *pChar++ = '/';          
@@ -828,7 +827,9 @@ void storage_release(storage_t * st);
 int storage_write_chunk(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
         uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty);
-	 
+int storage_write_chunk_empty(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+        uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, uint8_t version,
+        uint64_t *file_size, int * is_fid_faulty);	 
 static inline int storage_write(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
         uint8_t spare, fid_t fid, bid_t input_bid, uint32_t input_nb_proj, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty) {
@@ -891,6 +892,73 @@ static inline int storage_write(storage_t * st, storio_device_mapping_t * fidCtx
     ret2 = storage_write_chunk(st, fidCtx, layout, bsize, dist_set,
         		      spare, fid, chunk, bid, nb_proj, version,
         		      file_size, (bin_t*)pBins, is_fid_faulty); 
+    if (ret2 == -1) {
+      dbg("storage_write_chunk errno %s",strerror(errno));
+      return -1;			     
+    }
+    
+    return ret2+ret1;
+}
+static inline int storage_write_empty(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+        uint8_t spare, fid_t fid, bid_t input_bid, uint32_t input_nb_proj, uint8_t version,
+        uint64_t *file_size, int * is_fid_faulty) {
+    int ret1,ret2;
+    bid_t      bid;
+    uint32_t   nb_proj;
+    
+    dbg("write bid %d nb %d",input_bid,input_nb_proj);
+    int block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
+    int chunk                   = input_bid/block_per_chunk;
+
+    
+    if (chunk>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) { 
+      errno = EFBIG;
+      return -1;
+    }  
+    
+    bid = input_bid - (chunk * block_per_chunk);
+           
+    if ((bid+input_nb_proj) <= block_per_chunk){ 
+      /*
+      ** Every block can be written in one time in the same chunk
+      */
+      ret1 = storage_write_chunk_empty(st, fidCtx, layout, bsize, dist_set,
+        			 spare, fid, chunk, bid, input_nb_proj, version,
+        			 file_size, is_fid_faulty);
+      if (ret1 == -1) {
+        dbg("storage_write_chunk errno %s",strerror(errno));			     
+      }
+      return ret1;	 
+    }  
+
+    /* 
+    ** We have to write two chunks
+    */ 
+    
+    if ((chunk+1)>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) { 
+      errno = EFBIG;
+      return -1;
+    }        
+    
+    // 1rst chunk
+    nb_proj = block_per_chunk-bid;
+    ret1 = storage_write_chunk_empty(st, fidCtx, layout, bsize, dist_set,
+        		      spare, fid, chunk, bid, nb_proj, version,
+        		      file_size, is_fid_faulty); 
+    if (ret1 == -1) {
+      dbg("storage_write_chunk errno %s",strerror(errno));
+      return -1;			     
+    }
+	    
+      
+    // 2nd chunk
+    chunk++;         
+    bid     = 0;
+    nb_proj = input_nb_proj - nb_proj;
+
+    ret2 = storage_write_chunk_empty(st, fidCtx, layout, bsize, dist_set,
+        		      spare, fid, chunk, bid, nb_proj, version,
+        		      file_size, is_fid_faulty); 
     if (ret2 == -1) {
       dbg("storage_write_chunk errno %s",strerror(errno));
       return -1;			     

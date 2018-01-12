@@ -144,6 +144,9 @@ rozofs.set_file_distribution(4)
 # Disable self healing
 rozofs.set_self_healing(1)
 
+# Disable spare file restoration
+#rozofs.spare_restore_disable()
+
 # Modify number of listen port/ per storio
 # rozofs.set_nb_listen(4)
 
@@ -187,7 +190,7 @@ mapper     = 2
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 1
+nbclusters = 2
 
 # default is to have one mount point per site and export
 clients_nb = 1

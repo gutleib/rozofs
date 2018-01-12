@@ -615,6 +615,12 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       break;     
     }  
         
+    case STORIO_DISK_THREAD_WRITE_EMPTY:{
+      STOP_PROFILING_IO(write_empty,msg->size);
+      //update_write_detailed_counters(toc - tic);  
+      storio_update_write_counter(tv.tv_sec,msg->size);                      
+      break;     
+    }  
     case STORIO_DISK_THREAD_TRUNCATE:
     {
       STOP_PROFILING(truncate);

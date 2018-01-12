@@ -56,10 +56,7 @@ static inline void reset_serialization_counters(void) {
   memset(storage_unqueued_req,0, sizeof(storage_unqueued_req));
   memset(storage_direct_req,0, sizeof(storage_direct_req));
 }
-/*_______________________________________________________________________
-* Display opcode
-*/
-#include "storio_disk_thread_request_e2String.h"
+
 /*_______________________________________________________________________
 * Serialization debug function
 */
@@ -118,7 +115,6 @@ void serialization_counters_init(void) {
 extern int        af_unix_disk_pending_req_count;
 #define MAX_PENDING_REQUEST     64
 extern uint64_t   af_unix_disk_pending_req_tbl[];
-
 
 int storio_serialization_begin(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) {
 

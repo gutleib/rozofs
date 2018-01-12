@@ -136,6 +136,12 @@ int         exclude_symlink=1;
 int         exclude_regular=0;
 
 /*
+** Trash or not trash
+*/
+int         exclude_trash=0;
+int         only_trash=0;
+
+/*
 ** Whether to scan all tracking files or only those whose
 ** creation and modification time match the research date
 ** criteria
@@ -481,6 +487,19 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }       
   }
 
+  /*
+  ** Only trash
+  */
+  if ((only_trash)&&(!exp_metadata_inode_is_del_pending(inode_p->s.attrs.fid))) {
+    return 0;
+  }
+
+  /*
+  ** Exclude trash
+  */
+  if ((exclude_trash)&&(exp_metadata_inode_is_del_pending(inode_p->s.attrs.fid))) {
+    return 0;
+  }
 
   /*
   ** PFID must match equal_pfid
@@ -851,6 +870,8 @@ static void usage() {
     printf("\t\033[1m-d,--dir\033[0m\t\tis a directory.\n");
     printf("\t\033[1m-S,--slink\033[0m\t\tinclude symbolink links.\n");
     printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files.\n");
+    printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
+    printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
     printf("\n\033[1mFIELD:\033[0m\n");
     printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
     printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
@@ -1168,6 +1189,8 @@ int main(int argc, char *argv[]) {
         {"ne", required_argument, 0, '!'},
         {"dir", no_argument, 0, 'd'},
         {"all", no_argument, 0, 'a'},
+        {"trash", no_argument, 0, 't'},
+        {"notrash", no_argument, 0, 'T'},
         {"update", no_argument, 0, 'r'},
         {0, 0, 0, 0}
     };
@@ -1203,7 +1226,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSRar", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSRartT", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1281,6 +1304,22 @@ int main(int argc, char *argv[]) {
               break;                     
           case 'R':
               exclude_regular = 1;
+              if (only_trash) {
+                printf("\nonly trash (-t) and exclude trash (-T) are incompatible\n");     
+                usage();
+                exit(EXIT_FAILURE);              
+              }
+              break;                     
+          case 't':
+              only_trash = 1;
+              if (exclude_trash) {
+                printf("\nonly trash (-t) and exclude trash (-T) are incompatible\n");     
+                usage();
+                exit(EXIT_FAILURE);              
+              }
+              break;                     
+          case 'T':
+              exclude_trash = 1;
               break;                     
           /*
           ** Lower or equal

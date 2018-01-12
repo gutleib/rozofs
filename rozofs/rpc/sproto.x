@@ -445,5 +445,8 @@ program STORAGE_PROGRAM {
         sp_write_ret_t
         SP_WRITE_STANDALONE(sp_write_standalone_arg_t)        = 17;
 
-   }=1;
+       sp_write_ret_t
+        SP_WRITE_EMPTY(sp_write_arg_no_bins_t)        = 18;		
+
+    }=1;
 } = 0x20000002;

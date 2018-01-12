@@ -202,7 +202,14 @@ void storio_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
       size = sizeof (sp_write_arg_no_bins_t);
       break;
       
-    case SP_READ:
+    case SP_WRITE_EMPTY:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_write_arg_no_bins_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_write_ret_t;
+      local = sp_write_empty_1_svc_disk_thread;
+      size = sizeof (sp_write_arg_no_bins_t);
+      break;
+ 
+     case SP_READ:
       rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_sp_read_arg_t;
       rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_sp_read_ret_no_bins_t;
       local = sp_read_1_svc_disk_thread;
