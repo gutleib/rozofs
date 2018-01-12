@@ -1601,14 +1601,15 @@ def gruyere():
   ret = storageReset('gruyere_write')
   if ret != 0:  
     return ret
-  if rebuildCheck == True: 
-    return gruyere_reread()
   return 0
 #___________________________________________________
 def rebuild_1dev() :
 # test rebuilding device per device
 #___________________________________________________
   global sids
+
+  if rebuildCheck == True: 
+    gruyere()        
 
   ret=1 
   for s in sids:
@@ -1649,6 +1650,8 @@ def relocate_1dev() :
 # test rebuilding device per device
 #___________________________________________________
 
+  if rebuildCheck == True: 
+    gruyere()        
 
   ret=1 
   modulo=1
@@ -1793,6 +1796,9 @@ def rebuild_all_dev() :
 # test re-building all devices of a sid
 #___________________________________________________
 
+  if rebuildCheck == True: 
+    gruyere()        
+
   ret=1 
   for s in sids:
     
@@ -1824,6 +1830,9 @@ def rebuild_1node() :
 #___________________________________________________
   global hosts
   global sids
+
+  if rebuildCheck == True: 
+    gruyere()        
     
   ret=1 
   # Loop on every host
@@ -1862,6 +1871,9 @@ def rebuild_1node_parts() :
 #___________________________________________________
   global hosts
   global sids
+
+  if rebuildCheck == True: 
+    gruyere()        
     
   ret=1 
   # Loop on every host
@@ -1902,26 +1914,24 @@ def rebuild_1node_parts() :
     return ret
   return 0    
 #___________________________________________________
-def delete_rebuild() :
-# test re-building a whole storage
-#___________________________________________________
-  os.system("rm -rf %s/rebuild  1> /dev/null"%(exepath))
-  return 0
-#___________________________________________________
 def rebuild_fid() :
 # test rebuilding per FID
 #___________________________________________________
+
+  if rebuildCheck == True: 
+    gruyere()        
+    
   skip=0
 
-  for f in range(int(nbGruyere)/10):
+  list2rebuild = [ '1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','empty1','empty2','empty3','empty4','empty5','empty6','empty7' ]
+  for f in list2rebuild:
   
     skip=skip+1
     if skip == 4:
       skip=0  
 
     # Get the split of file on storages      
-#    string="./setup.py cou %s/rebuild/%d"%(mnt,f+1)
-    string="attr -g rozofs %s/rebuild/%d"%(mnt,f+1)
+    string="attr -g rozofs %s/rebuild/%s"%(mnt,f)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -1964,7 +1974,7 @@ def rebuild_fid() :
 
       clean_rebuild_dir()
       
-      backline("rebuild cid %s sid %s FID %s"%(cid,sid,fid))
+      backline("rebuild/%s cid %s sid %s FID %s"%(f,cid,sid,fid))
 	    	
       string="./setup.py sid %s %s rebuild --nolog -fg -f %s -o fid%s_cid%s_sid%s"%(cid,sid,fid,fid,cid,sid)
       ret = cmd_returncode(string)
@@ -2323,7 +2333,7 @@ parser.add_option("-S","--speed", action="store_true",dest="speed", default=Fals
 parser.add_option("-L","--long", action="store_true",dest="long", default=False, help="To run 2 times longer tests.")
 parser.add_option("-r","--repeat", action="store", type="string", dest="repeat", help="A repetition count.")
 parser.add_option("-m","--mount", action="store", type="string", dest="mount", help="A comma separated list of mount points to test on.")
-parser.add_option("-R","--rebuildCheck", action="store_true", dest="rebuildCheck", default=False, help="To request for stron rebuild check after each rebuild.")
+parser.add_option("-R","--rebuildCheck", action="store_true", dest="rebuildCheck", default=False, help="To request for strong rebuild checks on each rebuild.")
 parser.add_option("-e","--exepath", action="store", type="string", dest="exepath", help="re-exported path to run the test on.")
 parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, help="Running through NFS.")
 
@@ -2333,7 +2343,10 @@ TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr
 TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread']
 TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread']
 # Rebuild test list
+# In case of strong rebuild checks, gruyere is processed before eand gruyere_reread aftter each test
 TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
+TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts']
+
 # File locking
 TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race']
 TST_COMPIL=['compil_rozofs','compil_openmpi']
@@ -2415,7 +2428,10 @@ for arg in args:
   if arg == "all":
     list.extend(TST_BASIC)
     list.extend(TST_FLOCK)
-    list.extend(TST_REBUILD)
+    if rebuildCheck == True:
+      list.extend(TST_REBUILDCHECK)
+    else:  
+      list.extend(TST_REBUILD)
     list.extend(TST_COMPIL)    
     list.extend(TST_RW)
     append_circumstance_test_list(list,TST_RW,'storageFailed')
@@ -2437,7 +2453,10 @@ for arg in args:
   elif arg == "basic":
     list.extend(TST_BASIC)
   elif arg == "rebuild":
-    list.extend(TST_REBUILD) 
+    if rebuildCheck == True:
+      list.extend(TST_REBUILDCHECK)
+    else:  
+      list.extend(TST_REBUILD)
   elif arg == "flock":
     list.extend(TST_FLOCK)  
   elif arg == "compil":

@@ -1875,6 +1875,183 @@ out:
         
     return status;
 }
+char empty_block[16*1024] = { 0 };
+int storage_write_chunk_empty(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
+        uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, uint8_t version,
+        uint64_t *file_size, int * is_fid_faulty) {
+    int status = -1;
+    char path[FILENAME_MAX];
+    int fd = -1;
+    size_t nb_write = 0;
+    size_t length_to_write = 0;
+    off_t bins_file_offset = 0;
+    uint16_t rozofs_msg_psize;
+    uint16_t rozofs_disk_psize;
+    struct stat sb;
+    int open_flags;
+    int    device_id_is_given;
+    rozofs_stor_bins_file_hdr_t file_hdr;
+    storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
+    uint8_t   dev = storio_get_dev(fidCtx, chunk);
+
+    // No specific fault on this FID detected
+    *is_fid_faulty = 0; 
+
+    dbg("%d/%d Write chunk %d : ", st->cid, st->sid, chunk);
+   
+  
+    // If the device id is given as input, that proves that the file
+    // has been existing with that name on this device sometimes ago. 
+open:  
+    if ((dev != ROZOFS_EOF_CHUNK)&&(dev != ROZOFS_EMPTY_CHUNK)&&(dev != ROZOFS_UNKNOWN_CHUNK)) {
+      device_id_is_given = 1;
+      open_flags = ROZOFS_ST_NO_CREATE_FILE_FLAG;
+    }
+    // The file location is not known. It may not exist and should be created 
+    else {
+      device_id_is_given = 0;
+      open_flags = ROZOFS_ST_BINS_FILE_FLAG;
+    }        
+ 
+    // Build the chunk file name 
+    map_result = storage_dev_map_distribution_write(st, fidCtx, &dev, chunk, bsize, 
+                                        	    fid, layout, dist_set, 
+						    spare, path, 0, &file_hdr);
+    if (map_result == MAP_FAILURE) {
+      goto out;      
+    }  
+
+    // Open bins file
+    fd = open(path, open_flags, ROZOFS_ST_BINS_FILE_MODE);
+    if (fd < 0) {
+    
+        // Something definitively wrong on device
+        if (errno != ENOENT) {
+          storio_fid_error(fid, dev, chunk, bid, nb_proj,"open write");	
+	  storage_error_on_device(st,dev); 
+	  goto out;
+	}
+	
+        // If device id was not given as input, the file path has been deduced from 
+	// the header files or should have been allocated. This is a definitive error !!!
+	if (device_id_is_given == 0) {
+          storio_fid_error(fid, dev, chunk, bid, nb_proj,"open write");
+	  storage_error_on_device(st,dev); 
+	  goto out;
+	}
+	
+	// The device id was given as input so the file did exist some day,
+	// but the file may have been deleted without storio being aware of it.
+	// Let's try to find the file again without using the given device id.
+	dev = ROZOFS_EOF_CHUNK;
+	goto open;    
+    }
+
+    
+    /*
+    ** Retrieve the projection size in the message
+    ** and the projection size on disk 
+    */
+    storage_get_projection_size(spare, st->sid, layout, bsize, dist_set,
+                                &rozofs_msg_psize, &rozofs_disk_psize); 
+	       
+    // Compute the offset and length to write
+    
+    bins_file_offset = bid * rozofs_disk_psize;
+    length_to_write  = nb_proj * rozofs_disk_psize;
+
+    /*
+    ** If the file is smaller than the offset to start writing on,
+    ** one just need to truncate the file to extend it.
+    */
+    if (fstat(fd, &sb) == -1) {
+      storio_fid_error(fid, dev, chunk, bid, nb_proj,"fstat");       
+      storage_error_on_device(st,dev);
+      goto out;
+    }
+
+    if (bins_file_offset >= sb.st_size) {
+      /*
+      ** Let's truncate the file
+      */
+      status = ftruncate(fd, bins_file_offset+length_to_write);
+      if (status < 0) {
+	storio_fid_error(fid, dev, chunk, bid, nb_proj,"write trunc");       
+	storage_error_on_device(st,dev);
+      }
+      goto out;
+    }
+
+    /*
+    ** We have to write empty blocks to erase the file content
+    */
+    struct iovec       vector[ROZOFS_MAX_BLOCK_PER_MSG*2]; 
+    int                i;
+
+    if (nb_proj > (ROZOFS_MAX_BLOCK_PER_MSG*2)) {  
+      severe("storage_write more blocks than possible %d vs max %d",
+	      nb_proj,ROZOFS_MAX_BLOCK_PER_MSG*2);
+      errno = ESPIPE;	
+      goto out;
+    }
+    /*
+    ** Put as much empty blocks as required in the vector
+    */
+    for (i=0; i< nb_proj; i++) {
+      vector[i].iov_base = empty_block;
+      vector[i].iov_len  = rozofs_disk_psize;
+    }    
+
+    errno = 0;      
+    nb_write = pwritev(fd, vector, nb_proj, bins_file_offset);      
+    if (nb_write != length_to_write) {
+
+      if (errno==0) errno = ENOSPC;
+      storio_fid_error(fid, dev, chunk, bid, nb_proj,"write");
+
+      /*
+      ** Only few bytes written since no space left on device 
+      */
+      if ((errno==0)||(errno==ENOSPC)) {
+	errno = ENOSPC;
+	goto out;
+      }
+      storage_error_on_device(st,dev);
+      // A fault probably localized to this FID is detected   
+      *is_fid_faulty = 1;  
+      severe("pwrite(%s) size %llu expecting %llu offset %llu : %s",
+	      path, (unsigned long long)nb_write,
+	      (unsigned long long)length_to_write, 
+	      (unsigned long long)bins_file_offset, 
+	      strerror(errno));
+      goto out;
+    }
+
+    // Write is successful
+    status = nb_proj * rozofs_msg_psize;	
+
+out:
+    if (fd != -1) {
+      // Stat file for return the size of bins file after the write operation
+      if (fstat(fd, &sb) == -1) {
+        severe("fstat failed: %s", strerror(errno));
+        *file_size = 0;
+      }
+      else {      
+        *file_size = sb.st_blocks;
+      }
+      close(fd);
+    }
+
+    /*
+    ** Update device array in FID cache from header file
+    */    
+    if (map_result == MAP_COPY2CACHE) {
+      storio_store_to_ctx(fidCtx, file_hdr.nbChunks, file_hdr.devFromChunk);    
+    }
+        
+    return status;
+}
 char * storage_write_repair3_chunk(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t layout, uint32_t bsize, sid_t * dist_set,
         uint8_t spare, fid_t fid, uint8_t chunk, bid_t bid, uint32_t nb_proj, sp_b2rep_t * blk2repair, uint8_t version,
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty) {

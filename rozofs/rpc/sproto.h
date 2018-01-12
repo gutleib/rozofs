@@ -372,6 +372,9 @@ extern  sp_write_ret_t * sp_write_repair2_1_svc(sp_write_repair2_arg_t *, struct
 #define SP_WRITE_REPAIR3 11
 extern  sp_write_ret_t * sp_write_repair3_1(sp_write_repair3_arg_t *, CLIENT *);
 extern  sp_write_ret_t * sp_write_repair3_1_svc(sp_write_repair3_arg_t *, struct svc_req *);
+#define SP_WRITE_EMPTY 18
+extern  sp_write_ret_t * sp_write_empty_1(sp_write_arg_no_bins_t *, CLIENT *);
+extern  sp_write_ret_t * sp_write_empty_1_svc(sp_write_arg_no_bins_t *, struct svc_req *);
 extern int storage_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -411,6 +414,9 @@ extern  sp_write_ret_t * sp_write_repair2_1_svc();
 #define SP_WRITE_REPAIR3 11
 extern  sp_write_ret_t * sp_write_repair3_1();
 extern  sp_write_ret_t * sp_write_repair3_1_svc();
+#define SP_WRITE_EMPTY 18
+extern  sp_write_ret_t * sp_write_empty_1();
+extern  sp_write_ret_t * sp_write_empty_1_svc();
 extern int storage_program_1_freeresult ();
 #endif /* K&R C */
 

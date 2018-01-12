@@ -679,6 +679,131 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
 /*__________________________________________________________________________
 */
 /**
+*  Write data to a file
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
+static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
+  struct timeval     timeDay;
+  unsigned long long timeBefore, timeAfter;
+  storage_t *st = 0;
+  sp_write_arg_no_bins_t * args;
+  rozorpc_srv_ctx_t      * rpcCtx;
+  sp_write_ret_t           ret;
+  uint8_t                  version = 0;
+  int                      size;
+  int                      is_fid_faulty;
+  storio_device_mapping_t * fidCtx;
+    
+  
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeBefore = MICROLONG(timeDay);
+
+  ret.status = SP_FAILURE;          
+  
+  /*
+  ** update statistics
+  */
+  thread_ctx_p->stat.write_count++;
+  
+  rpcCtx = msg->rpcCtx;
+  args   = (sp_write_arg_no_bins_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+
+  fidCtx = storio_device_mapping_ctx_retrieve(msg->fidIdx);
+  if (fidCtx == NULL) {
+    ret.sp_write_ret_t_u.error = EIO;
+    severe("Bad FID ctx index %d",msg->fidIdx); 
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.write_error++ ;   
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }  
+
+  /*
+  ** Check that the received data length is consistent with the bins length
+  */
+  size = ruc_buf_getPayloadLen(rpcCtx->xmitBuf) - rpcCtx->position;
+  if (size != 0) {
+    severe("Inconsistent bins length SP_WRITE_EMPTY  %d = payloadLen(%d) - position(%d)",
+            size, ruc_buf_getPayloadLen(rpcCtx->xmitBuf), rpcCtx->position);
+    ret.sp_write_ret_t_u.error = EPIPE;
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.write_error++; 
+    storio_send_response(thread_ctx_p,msg,-1); 
+    return;   
+  }
+
+  /*
+  ** Check number of projection is consistent with the bins length
+  */
+  {
+     uint16_t proj_psize = rozofs_get_max_psize_in_msg(args->layout,args->bsize);  
+     size =  args->nb_proj * proj_psize;
+	    
+     if (size > args->len) {
+       severe("Inconsistent bins length %d < %d = nb_proj(%d) x proj_size(%d)",
+               args->len, size, args->nb_proj, proj_psize);
+       ret.sp_write_ret_t_u.error = EIO;
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+       thread_ctx_p->stat.write_error++; 
+       storio_send_response(thread_ctx_p,msg,-1); 
+       return;         
+     }	        
+  } 
+  
+
+  // Get the storage for the couple (cid;sid)
+  if ((st = storaged_lookup(args->cid, args->sid)) == 0) {
+    ret.sp_write_ret_t_u.error = errno;
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.write_badCidSid++ ;   
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }
+  
+  
+  // Write projections
+  size =  storage_write_empty(st, fidCtx, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
+          (unsigned char *) args->fid, args->bid, args->nb_proj, version,
+          &ret.sp_write_ret_t_u.file_size, &is_fid_faulty);
+  if (size < 0)  {
+    ret.sp_write_ret_t_u.error = errno;
+    if (errno == ENOSPC)
+      thread_ctx_p->stat.write_nospace++;
+    else   
+      thread_ctx_p->stat.write_error++; 
+    if (is_fid_faulty) {
+      storio_register_faulty_fid(thread_ctx_p->thread_idx,
+				 args->cid,
+				 args->sid,
+				 (uint8_t*)args->fid);
+    }       
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    storio_send_response(thread_ctx_p,msg,-1);
+    return;
+  }
+  msg->size = size;   
+    
+  ret.status = SP_SUCCESS;  
+  ret.sp_write_ret_t_u.file_size = 0;
+           
+  storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+  thread_ctx_p->stat.write_Byte_count += size;
+  storio_send_response(thread_ctx_p,msg,0);
+
+  /*
+  ** Update statistics
+  */
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeAfter = MICROLONG(timeDay);
+  thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+} 
+/*__________________________________________________________________________
+*/
+/**
 *  1rst write within a rebuild with relocation. The header re-write must
    be done now.
 
@@ -698,6 +823,7 @@ static inline void storio_disk_rebuild_start(rozofs_disk_thread_ctx_t *thread_ct
   int                       rebuildIdx;
   STORIO_REBUILD_T        * pRebuild;
   int                       res;  
+  int                       size;
   
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeBefore = MICROLONG(timeDay);
@@ -771,6 +897,10 @@ static inline void storio_disk_rebuild_start(rozofs_disk_thread_ctx_t *thread_ct
   /*
   ** Process to the write now
   */
+  size = ruc_buf_getPayloadLen(rpcCtx->xmitBuf) - rpcCtx->position;
+  if (size == 0) {
+    return storio_disk_write_empty(thread_ctx_p,msg);
+  }   
   return storio_disk_write(thread_ctx_p,msg);   
 
 out:           
@@ -1204,6 +1334,10 @@ void *storio_disk_thread(void *arg) {
         storio_disk_write(ctx_p,&msg);
         break;
 	
+      case STORIO_DISK_THREAD_WRITE_EMPTY:
+        storio_disk_write_empty(ctx_p,&msg);
+        break;
+	
       case STORIO_DISK_THREAD_TRUNCATE:
         storio_disk_truncate(ctx_p,&msg);
         break;
@@ -1379,6 +1513,10 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
 
        case STORIO_DISK_THREAD_WRITE:
          storio_disk_write(ctx_p,&msg);
+         break;
+
+       case STORIO_DISK_THREAD_WRITE_EMPTY:
+         storio_disk_write_empty(ctx_p,&msg);
          break;
 
        case STORIO_DISK_THREAD_TRUNCATE:

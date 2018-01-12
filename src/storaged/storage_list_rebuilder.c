@@ -233,16 +233,99 @@ static inline void enforce_throughput() {
   ** Check we are not ready too fast.
   ** If we are less than 10ms too fast just go ahead...
   */
-  if (enforcement_delay >= (delay + 10000L)) {
+  if (enforcement_delay >= (delay + 50000L)) {
     usleep(enforcement_delay-delay);
   }
 }
 /*-----------------------------------------------------------------------------
 **
-** Spare ile rebuilding
+** Data flush macro
+**
+** Used to flush either a sequence of empty blocks at the time a non empty block 
+** is detected, or a sequence of non empty blocks at the time an empty block is
+** detected
+**
+** @param firstBlock  First block to flush from *block_start
+** @param pBins       Address of the data to flush (NULL for empty blocks)
+** @param spare       0 for nominal files, 1 for spare files 
 **
 **----------------------------------------------------------------------------
 */
+#define rbs_restore_flush(firstBlock,pBins,spare) {                 \
+   /* Check a sequence has actualy been detected */                 \
+   if (firstBlock != -1) {                                          \
+     /* There is some data to flush  */                             \
+     if (pBins == NULL) {                                           \
+       /* Empty blocks are to be flushed */                         \
+       ret = sclient_write_empty_rbs(re->storages[local_idx],       \
+                                     st->cid, st->sid,              \
+	                             re->layout, re->bsize, spare,  \
+			             re->dist_set_current, re->fid, \
+			             firstBlock+*block_start,       \
+                                     nbBlocks,                      \
+			             rebuild_ref);                  \
+     }                                                              \
+     else {                                                         \
+       /* Data blocks are to be flushed  */                         \
+       ret = sclient_write_rbs(re->storages[local_idx],             \
+                               st->cid, st->sid,                    \
+	                       re->layout, re->bsize, spare,        \
+			       re->dist_set_current, re->fid,       \
+			       firstBlock+*block_start,             \
+                               nbBlocks,                            \
+			       (const bin_t *)pBins,                \
+			       rebuild_ref);                        \
+     }                                                              \
+                                                                    \
+     /* Handle error cases */                                       \
+     if (ret < 0) {                                                 \
+                                                                    \
+       /* rebuild has been broken by a normal concurrent write */   \
+       if (errno == EAGAIN) {                                       \
+         rbs_error.spare_write_broken++;                            \
+         *error = rozofs_rbs_error_rebuild_broken;                  \
+         status = RBS_EXE_BROKEN;                                   \
+         goto out;                                                  \
+       }                                                            \
+                                                                    \
+       /* Other unexpected error */                                 \
+       if (pBins == NULL) {                                         \
+         rbs_error.spare_write_empty++;                             \
+       }                                                            \
+       else {                                                       \
+         rbs_error.spare_write_proj++;                              \
+       }                                                            \
+       *error = rozofs_rbs_error_write_failed;	                    \
+       status = RBS_EXE_FAILED;                                     \
+       goto out;                                                    \
+     }                                                              \
+                                                                    \
+     /* Update written size */                                      \
+     *size_written += (nbBlocks*disk_block_size);                   \
+     firstBlock  = -1;                                              \
+     nbBlocks    = 0;                                               \
+   }                                                                \
+}
+
+/*-----------------------------------------------------------------------------
+**
+** Spare file rebuilding
+**
+** @param st           Context of the logical storage to rebuild (storio)
+** @param layout       Layout of the file
+** @param local_idx    Index of the storio within the storage array in re structure
+** @param relocate     Whether this is a rebuild with file relocation 
+** @param block_start  First block to rebuild. 
+** @param block_end    Last block to rebuild. 
+** @param re           Descriptor of the file to rebuild
+** @param spare_idx    Index of the storio to rebuild within the file SID distribution
+**                     Actualy should be equal to local_idx !
+** @param size_written To return the written bytes count                
+** @param size_read    To return the read bytes count
+** @param error        Returned error core
+**
+**----------------------------------------------------------------------------
+*/                               
 RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st, 
                                            uint8_t           layout,
                                 	   int               local_idx, 
@@ -268,9 +351,11 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
     char   *  pforward = NULL;
     rozofs_stor_bins_hdr_t * rozofs_bins_hdr_p;
     rozofs_stor_bins_footer_t * rozofs_bins_foot_p;
-//    rozofs_stor_bins_hdr_t * bins_hdr_local_p;    
     int    remove_file=0;
     uint32_t   rebuild_ref=0;
+    uint32_t   firstEmptyBlock = -1;
+    uint32_t   firstDataBlock  = -1;
+    uint32_t   nbBlocks        =  0;
             
     // Get rozofs layout parameters
     uint32_t bsize             = re->bsize;
@@ -278,7 +363,7 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
     uint8_t  rozofs_safe       = rozofs_get_rozofs_safe(layout);
     uint8_t  rozofs_forward    = rozofs_get_rozofs_forward(layout);
     uint8_t  rozofs_inverse    = rozofs_get_rozofs_inverse(layout);
-    uint16_t disk_block_size   = rozofs_get_max_psize_on_disk(layout,bsize);
+    uint16_t disk_block_size   = rozofs_get_max_psize_in_msg(layout,bsize);
     uint32_t requested_blocks  = ROZOFS_MAX_BLOCK_PER_MSG;
     uint32_t nb_blocks_read_distant = requested_blocks;
     uint32_t block_per_chunk = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(re->bsize);
@@ -296,6 +381,9 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
     if (block_end==0xFFFFFFFF) chunk_stop = 0xFFFFFFFF; // whole file
     else                       chunk_stop = chunk;      // one chunk
           
+    /*
+    ** Loop on chunks
+    */      
     while (chunk<=chunk_stop) {
 
       *block_start = chunk * block_per_chunk;
@@ -303,11 +391,17 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
       
       remove_file = 1; /* Should possibly remove the chunk at the end */
 
+      /*
+      ** Ask for a rebuild
+      */
       rebuild_ref = sclient_rebuild_start_rbs(re->storages[local_idx], st->cid, st->sid, re->fid,
-                                              relocate?SP_NEW_DEVICE:SP_SAME_DEVICE, chunk, 1 /* spare */, 
+                                              relocate?SP_NEW_DEVICE:SP_SAME_DEVICE, chunk, 1 , 
 					      *block_start, block_end);
+      /*
+      ** Rebuild is refused
+      */                                        
       if (rebuild_ref == 0) {
-	remove_file = 0;
+	remove_file = 0; // keep the file 
 	if (errno == EAGAIN) {
 	  rbs_error.spare_start_again++;
 	  *error = rozofs_rbs_error_file_to_much_running_rebuild;
@@ -322,20 +416,15 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
       // While we can read in the bins file
       while(*block_start <= block_end) {
 
-
-          // Clear the working context
-	  if (working_ctx.data_read_p) {
-            free(working_ctx.data_read_p);
-            working_ctx.data_read_p = NULL;	
-	  }	
-          // Free bins read in previous round
-	  for (i = 0; i < rozofs_safe; i++) {
-              if (working_ctx.prj_ctx[i].bins) {
-        	  free(working_ctx.prj_ctx[i].bins);
-		  working_ctx.prj_ctx[i].bins = NULL;
-	      }	   
-	      working_ctx.prj_ctx[i].prj_state = PRJ_READ_IDLE;
-	  }
+          /*
+          ** Allocate memory for projections
+          */
+          for (i = 0; i < rozofs_safe; i++) {
+            if (working_ctx.prj_ctx[i].bins == NULL) {
+               working_ctx.prj_ctx[i].bins = memalign(32,rozofs_msg_psize*(ROZOFS_MAX_BLOCK_PER_MSG+1));
+	    }	   
+            working_ctx.prj_ctx[i].prj_state = PRJ_READ_IDLE;
+          }
 
 
 	  if ((block_end-*block_start+1) < requested_blocks){
@@ -366,17 +455,22 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
 	  if (nb_blocks_read_distant == 0) break; // End of chunk
 	  
           if (nb_blocks_read_distant == -1) {
-  	     //char fidString[64];
 	     /*
 	     ** File has been deleted
 	     */
 	     errno = ENOENT;
 	     rbs_error.spare_read_enoent++;
 	     status = RBS_EXE_ENOENT;
-	     //rozofs_fid2string(re->fid,fidString);
-	     //warning("@rozofs_uuid@%s has no projection available",fidString); 
 	     goto out;
           }	  	
+
+          /*
+          ** No empty block sequence neither data blok sequence detected up to now 
+          ** in this read blocks since not yet inspected !!!!
+          */
+          firstEmptyBlock = -1;
+          firstDataBlock  = -1;
+          nbBlocks        =  0;
 
 	  // Loop on the received blocks
           pBlock = &working_ctx.block_ctx_table[0];	
@@ -398,41 +492,43 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
 	      }
 
 	      // All projections have been read. Nothing to regenerate for this block
-	      if (count >= rozofs_forward) continue;
-
+	      if (count >= rozofs_forward) {              
+                 /*
+                 ** If a sequence of empty blocks or a sequence of data block was detected up to here, 
+                 ** we need to write it now
+                 */
+                 rbs_restore_flush(firstEmptyBlock,NULL,1);
+                 rbs_restore_flush(firstDataBlock,pforward,1);
+                 continue;
+              }
 
               // Case of the empty block
               if (pBlock->timestamp == 0) {
-
-		 prj_ctx_idx = rbs_prj_idx_table[0];
-		 
-	         if (pforward == NULL) pforward = memalign(32,rozofs_msg_psize);
-                 memset(pforward,0,rozofs_msg_psize);
-		 
-        	 // Store the projection localy	
-        	 ret = sclient_write_rbs(re->storages[spare_idx], st->cid, st->sid,
-	                        	 layout, bsize, 1 /* Spare */,
-					 re->dist_set_current, re->fid,
-					 *block_start+block_idx, 1,
-					 (const bin_t *)pforward,
-					 rebuild_ref);
+              
         	 remove_file = 0;	// This file must exist   
-        	 if (ret < 0) {
-		   if (errno == EAGAIN) {
-		     rbs_error.spare_write_broken++;
-		     status = RBS_EXE_BROKEN;
-		     *error = rozofs_rbs_error_rebuild_broken;
-		   }
-		   else {
-		     rbs_error.spare_write_empty++;
-		     *error = rozofs_rbs_error_write_failed;		     
-		   }
-                   goto out;
-        	 }	
-	         *size_written += disk_block_size;
+                 
+                 /*
+                 ** If a sequence of data blocks was detected up to here, we need to write it now
+                 */
+                 rbs_restore_flush(firstDataBlock,pforward,1);
+                     
+                 /*
+                 ** We are starting a new empty block sequence, 
+                 ** or just continuing one
+                 */
+                 if (firstEmptyBlock == -1) {
+                   firstEmptyBlock = block_idx;
+                 }
+                 nbBlocks++;
 		 continue;
 	      } 
-
+              
+              /*
+              ** Here is a non empty block. 
+              ** If a sequence of empty blocks was detected up to here, we need to write it now
+              */
+              rbs_restore_flush(firstEmptyBlock,NULL,1);
+              
 	      // Need to regenerate a projection and need 1rst to regenerate initial data.	
 
 	      // Allocate memory for initial data
@@ -479,11 +575,18 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
 	          if (prj_id_present[projection_id] == 0) break;
 	      }
 
-	      // Allocate memory for regenerated projection
-	      if (pforward == NULL) {
-	        pforward = memalign(32,rozofs_msg_psize);
+     
+              /*
+              ** Allocate memory for regenerated projections
+              */
+     	      if (pforward == NULL) {
+	        pforward = memalign(32,rozofs_msg_psize*(ROZOFS_MAX_BLOCK_PER_MSG+1));
 	      }	
-	      rozofs_bins_hdr_p = (rozofs_stor_bins_hdr_t *) pforward;
+              
+              /*
+              ** Point to this block in the write message
+              */
+	      rozofs_bins_hdr_p  = (rozofs_stor_bins_hdr_t *) (pforward + (nbBlocks * rozofs_msg_psize));
 	      rozofs_bins_foot_p = (rozofs_stor_bins_footer_t*)((bin_t*)(rozofs_bins_hdr_p+1)+rozofs_get_psizes(layout,bsize,projection_id));	
 
 	      // Describe projection to rebuild 
@@ -508,34 +611,35 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
 
               rozofs_bins_foot_p->timestamp          = pBlock->timestamp;	
 
-              // Store the projection localy	
-              ret = sclient_write_rbs(re->storages[spare_idx], st->cid, st->sid,
-	                              layout, bsize, 1 /* Spare */,
-				      re->dist_set_current, re->fid,
-				      *block_start+block_idx, 1,
-				      (const bin_t *)rozofs_bins_hdr_p,
-				      rebuild_ref);
-              remove_file = 0;// This file must exist		   
-              if (ret < 0) {
-		if (errno == EAGAIN) {
-		  rbs_error.spare_write_broken++;
-		  status = RBS_EXE_BROKEN;
-		  *error = rozofs_rbs_error_rebuild_broken;		  
-		}
-		else {
-		  rbs_error.spare_write_proj++;
-        	  severe("sclient_write_rbs failed %s", strerror(errno));
-		  *error = rozofs_rbs_error_write_failed;		  		  		  
-		}
-                goto out;	      
-              }	
-	      *size_written += disk_block_size;	             
+              remove_file = 0;	// This file must exist   
+
+              /*
+              ** We are starting a new data block sequence, 
+              ** or just continuing one
+              */
+              if (firstDataBlock == -1) {
+                firstDataBlock = block_idx;
+              }
+              nbBlocks++;
           }
+          
+          /*
+          ** If a sequence of empty blocks was detected up to here, we need to write it now
+          */
+          rbs_restore_flush(firstEmptyBlock,NULL,1);
+          
+          /*
+          ** If a sequence of data blocks was detected up to here, we need to write it now
+          */
+          rbs_restore_flush(firstDataBlock,pforward,1);                           
 
 	  *block_start += nb_blocks_read_distant;
 
       }	
       
+      /*
+      ** Spare chunk no more be usefull
+      */
       if (remove_file) {
 	ret = sclient_remove_chunk_rbs(re->storages[local_idx], st->cid, st->sid, layout, 
 	                               1/*spare*/, re->bsize,
@@ -543,6 +647,19 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
       }
 
       if (rebuild_ref != 0) {
+        /*
+        ** If a sequence of empty blocks was detected up to here, we need to write it now
+        */
+        rbs_restore_flush(firstEmptyBlock,NULL,1);
+
+        /*
+        ** If a sequence of data blocks was detected up to here, we need to write it now
+        */
+        rbs_restore_flush(firstDataBlock,pforward,1);  
+
+        /*
+        ** Rebuild is successfull
+        */               
 	sclient_rebuild_stop_rbs(re->storages[local_idx], st->cid, st->sid, re->fid, 
 	                         rebuild_ref, SP_SUCCESS);
 				 
@@ -560,11 +677,14 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
       
     status = RBS_EXE_SUCCESS;
     			      
-out:
+out:                                  
 
     *block_start = chunk * block_per_chunk;    
     
     if (rebuild_ref != 0) {
+      /*
+      ** Rebuild is failed
+      */               
       sclient_rebuild_stop_rbs(re->storages[local_idx], st->cid, st->sid, re->fid, 
                                rebuild_ref, SP_FAILURE);
     }    
@@ -573,14 +693,21 @@ out:
     if (working_ctx.data_read_p) {
       free(working_ctx.data_read_p);
       working_ctx.data_read_p = NULL;	
-    }	    
+    }	 
+      
+    /*
+    ** Free memory allocated for pojection reading
+    */   
     for (i = 0; i < rozofs_safe; i++) {
         if (working_ctx.prj_ctx[i].bins) {
             free(working_ctx.prj_ctx[i].bins);
 	    working_ctx.prj_ctx[i].bins = NULL;
 	}	   
     }    
-
+     
+    /*
+    ** Free memory allocated for regenerated projections
+    */ 
     if (pforward) {
       free(pforward);
       pforward = NULL;
@@ -592,26 +719,21 @@ out:
 **
 ** Nominal file rebuilding
 **
+** @param st           Context of the logical storage to rebuild (storio)
+** @param layout       Layout of the file
+** @param local_idx    Index of the storio within the storage array in re structure
+** @param relocate     Whether this is a rebuild with file relocation 
+** @param block_start  First block to rebuild. 
+** @param block_end    Last block to rebuild. 
+** @param re           Descriptor of the file to rebuild
+** @param spare_idx    Index of the storio to rebuild within the file SID distribution
+**                     Actualy should be equal to local_idx !
+** @param size_written To return the written bytes count                
+** @param size_read    To return the read bytes count
+** @param error        Returned error core
+**
 **----------------------------------------------------------------------------
-*/
-#define RESTORE_ONE_RB_ENTRY_FREE_ALL \
-	for (i = 0; i < rozofs_safe; i++) {\
-            if (working_ctx.prj_ctx[i].bins) {\
-        	free(working_ctx.prj_ctx[i].bins);\
-		working_ctx.prj_ctx[i].bins = NULL;\
-	    }\
-	}\
-	if (working_ctx.data_read_p) {\
-          free(working_ctx.data_read_p);\
-          working_ctx.data_read_p = NULL;\
-	}\
-	if (saved_bins) {\
-	  free(saved_bins);\
-	  saved_bins = NULL;\
-	}\
-        memset(&working_ctx, 0, sizeof (working_ctx));
-	
-
+*/    
 RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st, 
                                         uint8_t           layout,
                         		int               local_idx, 
@@ -631,21 +753,35 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st,
     // Get rozofs layout parameters
     uint32_t bsize                  = re->bsize;
     uint16_t rozofs_disk_psize      = rozofs_get_psizes(layout,bsize,proj_id_to_rebuild);
+    uint16_t disk_block_size        = (rozofs_disk_psize+3) * 8;   
     uint8_t  rozofs_safe            = rozofs_get_rozofs_safe(layout);
     uint16_t rozofs_max_psize       = rozofs_get_max_psize_in_msg(layout,bsize);
     uint32_t requested_blocks       = ROZOFS_MAX_BLOCK_PER_MSG;
     uint32_t nb_blocks_read_distant = requested_blocks;
-    bin_t * saved_bins = NULL;
     int     i;   
     uint32_t block_per_chunk = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(re->bsize);
     uint32_t chunk           = *block_start / block_per_chunk;;
+    int      empty = 0;
+    uint32_t   firstEmptyBlock = -1;
+    uint32_t   firstDataBlock  = -1;
+    uint32_t   nbBlocks        =  0;
+    rbs_inverse_block_t * pBlock;
+    char                * pforward;
+    int                   block_idx;
        
     // Clear the working context
     memset(&working_ctx, 0, sizeof (working_ctx));
 
+
+    /*
+    ** Ask for a rebuild
+    */
     rebuild_ref = sclient_rebuild_start_rbs(re->storages[local_idx], st->cid, st->sid, re->fid, 
-                                            relocate?SP_NEW_DEVICE:SP_SAME_DEVICE, chunk, 0 /* spare */,  
+                                            relocate?SP_NEW_DEVICE:SP_SAME_DEVICE, chunk, 0 ,  
 					    *block_start, block_end);
+    /*
+    ** Rebuild is refused
+    */                                        
     if (rebuild_ref == 0) {
       if (errno == EAGAIN) {
         rbs_error.nom_start_again++;
@@ -657,13 +793,31 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st,
       }
       goto out;
     }
+
+    /*
+    ** Allocate memory for projections
+    */
+    for (i = 0; i < rozofs_safe; i++) {
+      working_ctx.prj_ctx[i].bins = memalign(32,rozofs_max_psize*(ROZOFS_MAX_BLOCK_PER_MSG+1));
+    }
+
+    /*
+    ** Allocate memory for the regenerated user data
+    */    
+    working_ctx.data_read_p = memalign(32,(ROZOFS_MAX_BLOCK_PER_MSG+1) * ROZOFS_BSIZE_BYTES(bsize));
         
     // While we can read in the bins file
     while(*block_start <= block_end) {
          
-        // Clear the working context
-	RESTORE_ONE_RB_ENTRY_FREE_ALL;
-	
+        /* 
+        ** Reset the working context
+        */
+	for (i = 0; i < rozofs_safe; i++) {
+          working_ctx.prj_ctx[i].prj_state = PRJ_READ_IDLE;
+	}
+        memset(&working_ctx.block_ctx_table, 0, sizeof (working_ctx.block_ctx_table));
+        working_ctx.redundancy_stor_idx_current = 0;	
+        
 	if ((block_end!=0xFFFFFFFF) && ((block_end-*block_start+1) < requested_blocks)) {
 	  requested_blocks = (block_end-*block_start+1);
 	}
@@ -678,40 +832,45 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st,
                 	      re->dist_set_current, re->fid, *block_start,
                 	      requested_blocks, &nb_blocks_read_distant, retries,
                 	      &working_ctx,
-			      size_read);
+			      size_read, 
+                              &empty);
 
         if (ret != 0) {
 	  rbs_error.nom_read++;
 	  *error = rozofs_rbs_error_read_error;	
 	  goto out;
 	}
+        
         if (nb_blocks_read_distant == 0) break; // End of file
+        
         if (nb_blocks_read_distant == -1) { // File deleted
-	   //char fidString[64];
 	   status = RBS_EXE_ENOENT;
 	   rbs_error.nom_read_enoent++;
-	   //rozofs_fid2string(re->fid,fidString);
-	   //warning("@rozofs_uuid@%s has no projection available",fidString);
 	   goto out;
         }
 	
         /*
-	** Check whether the projection to rebuild has been read
-	*/
-	if ((working_ctx.prj_ctx[proj_id_to_rebuild].bins != NULL)
-	&&  (working_ctx.prj_ctx[proj_id_to_rebuild].nbBlocks != 0)) {
-	  saved_bins = working_ctx.prj_ctx[proj_id_to_rebuild].bins;
-	  working_ctx.prj_ctx[proj_id_to_rebuild].bins = NULL;
-	} 
-	
-	if (working_ctx.prj_ctx[proj_id_to_rebuild].bins == NULL) {
-          // Allocate memory to store projection
-          working_ctx.prj_ctx[proj_id_to_rebuild].bins = memalign(32,rozofs_max_psize * requested_blocks);
-        }		  
+        ** In case all read blocks are empty, just ask for an empty write
+        */
+        if (empty) {
 
+            // Write empty blocks
+            nbBlocks        = nb_blocks_read_distant;
+            firstEmptyBlock = 0;
+            rbs_restore_flush(firstEmptyBlock,NULL,0);
+            
+	    *block_start += nb_blocks_read_distant;	
+            continue;             
+        }
+        
+        /*
+        ** Reset projection to rebuild
+        */
         memset(working_ctx.prj_ctx[proj_id_to_rebuild].bins, 0,rozofs_max_psize * requested_blocks);
 
-        // Generate projections to rebuild
+        /*
+        ** Re-generate projections to rebuild
+        */
         ret = rbs_transform_forward_one_proj(working_ctx.prj_ctx,
                 			     working_ctx.block_ctx_table,
                 			     layout,bsize,0,
@@ -724,53 +883,82 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st,
 	    *error = rozofs_rbs_error_transform_error;
             goto out;
         }
-	
-	/*
-	** Compare to read bins
-	*/
-#if 0		
-	if ((saved_bins) 
-	&&  (memcmp(working_ctx.prj_ctx[proj_id_to_rebuild].bins,
-	             saved_bins,
-		     rozofs_disk_psize*nb_blocks_read_distant*sizeof(bin_t)) == 0)
-	   ) {
-            /* No need to rewrites these blocks */
-	    *block_start += nb_blocks_read_distant;
+
+        /*
+        ** Loop on the re-generated blocks and split the writing into continuous sequences 
+        ** of empty blocks or non empty blocks 
+        */
+        pBlock = &working_ctx.block_ctx_table[0];		
+        for (block_idx = 0; block_idx < nb_blocks_read_distant; block_idx++,pBlock++) {           
+          /*
+          ** This is an empty block 
+          */
+          if (pBlock->timestamp == 0) {
+            /*
+            ** If a sequence of data blocks was detected up to here, we need to write it now
+            */
+            rbs_restore_flush(firstDataBlock,pforward,0);
+
+            /*
+            ** We are starting a new empty block sequence, 
+            ** or just continuing one
+            */
+            if (firstEmptyBlock == -1) {
+              firstEmptyBlock = block_idx;
+            }
+            nbBlocks++;
 	    continue;
-	}
-#endif
-	
-        // Store the projection localy	
-        ret = sclient_write_rbs(re->storages[local_idx], st->cid, st->sid,
-	                        layout, bsize, 0 /* Not spare */,
-				re->dist_set_current, re->fid,
-				*block_start, nb_blocks_read_distant,
-				working_ctx.prj_ctx[proj_id_to_rebuild].bins,
-				rebuild_ref);
-	if (ret < 0) {
-	  if (errno == EAGAIN) {
-	    rbs_error.nom_write_broken++;
-	    status = RBS_EXE_BROKEN;
-	    *error = rozofs_rbs_error_rebuild_broken;
-	  }
-	  else {
-	    rbs_error.nom_write++;
-	    *error = rozofs_rbs_error_write_failed;	    
-            severe("sclient_write_rbs failed: %s", strerror(errno));
-	  }
-          goto out;
-        }
-	*size_written += (nb_blocks_read_distant * (rozofs_disk_psize+3) * 8);
+	  } 
+
+          /*
+          ** This is not an empty block
+          ** If a sequence of empty blocks was detected up to here, we need to write it now
+          */
+          rbs_restore_flush(firstEmptyBlock,NULL,0);
+
+          if (firstDataBlock == -1) {
+            firstDataBlock = block_idx;
+            pforward       = (char *)working_ctx.prj_ctx[proj_id_to_rebuild].bins;
+            pforward       += (block_idx * rozofs_max_psize);
+          }
+          nbBlocks++;
+       }
+       
+       /*
+       ** If a sequence of data blocks was detected up to here, we need to write it now
+       */
+       rbs_restore_flush(firstDataBlock,pforward,0);
+       /*
+       ** If a sequence of empty blocks was detected up to here, we need to write it now
+       */
+       rbs_restore_flush(firstEmptyBlock,NULL,0);  
 				
-	*block_start += nb_blocks_read_distant;	             
+       *block_start += nb_blocks_read_distant;	             
     }
     status = RBS_EXE_SUCCESS;
 out:
     if (rebuild_ref != 0) {
       sclient_rebuild_stop_rbs(re->storages[local_idx], st->cid, st->sid, re->fid, rebuild_ref, 
                                (status==0)?SP_SUCCESS:SP_FAILURE);
-    }    
-    RESTORE_ONE_RB_ENTRY_FREE_ALL;   
+    }      
+    
+    /*
+    ** Free memory for the regenerated user data
+    */    
+    if (working_ctx.data_read_p) {
+      free(working_ctx.data_read_p);
+      working_ctx.data_read_p = NULL;
+    } 
+     
+    /*
+    ** Free memory for projections
+    */
+    for (i = 0; i < rozofs_safe; i++) {
+      if (working_ctx.prj_ctx[i].bins) {
+        free(working_ctx.prj_ctx[i].bins);
+        working_ctx.prj_ctx[i].bins = NULL;
+      }  
+    }     
     return status;
 }
 /*-----------------------------------------------------------------------------
@@ -873,6 +1061,9 @@ int storaged_rebuild_list(char * fid_list, char * statFilename) {
   int        failed,available;  
   uint64_t   size_written = 0;
   uint64_t   size_read    = 0;
+
+  // Initialize the list of cluster(s)
+  list_init(&cluster_entries);
         
   fdlist = open(fid_list,O_RDWR);
   if (fdlist < 0) {
@@ -898,8 +1089,6 @@ int storaged_rebuild_list(char * fid_list, char * statFilename) {
       goto error;
   }  
 
-  // Initialize the list of cluster(s)
-  list_init(&cluster_entries);
   
   memset(&rpcclt_export,0,sizeof(rpcclt_export));
 
@@ -1147,6 +1336,7 @@ int storaged_rebuild_list(char * fid_list, char * statFilename) {
     unlink(fid_list);
     close(fdstat);	
     REBUILD_MSG("  <- %s rebuild success of %d files",fid_list,nbSuccess);    
+    rbs_release_cluster_list(&cluster_entries);
     return 0;
   }
   
@@ -1168,7 +1358,10 @@ error:
   else {
     REBUILD_MSG("  <- %s rebuild failed. %d failed /%d.",fid_list,nbJobs-nbSuccess,nbJobs);
     display_rbs_errors();
-  }	
+  }
+  
+  rbs_release_cluster_list(&cluster_entries);
+	
   return 1;
 }
 /*-----------------------------------------------------------------------------

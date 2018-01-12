@@ -2147,6 +2147,7 @@ int rbs_do_list_rebuild(int cid, int sid, rbs_file_type_e ftype) {
     pid = fork();  
     if (pid == 0) {    
       pChar = cmd;
+//      pChar += rozofs_string_append(pChar,"valgrind --leak-check=full --track-origins=yes --log-file=/root/valgrind storage_list_rebuilder -c ");
       pChar += rozofs_string_append(pChar,"storage_list_rebuilder -c ");
       pChar += rozofs_u32_append(pChar,cid);
       pChar += rozofs_string_append(pChar," -s ");
@@ -3663,6 +3664,8 @@ void rbs_cath_sigusr(int sig){
 int main(int argc, char *argv[]) {
     int ret;
     int status = -1;
+    
+    memset(&rpcclt_export,0,sizeof(rpcclt_export));
     
     /*
     ** Change local directory to "/"

@@ -265,14 +265,7 @@ static inline int rozofs_get_max_psize_in_msg(uint8_t layout, uint32_t bsize) {
   @retval projection size
  */
 static inline int rozofs_get_max_psize_on_disk(uint8_t layout, uint32_t bsize) {
-    int sz;
- 
-     if (layout >= LAYOUT_MAX) return 0;
-    if (bsize > ROZOFS_BSIZE_MAX) return 0;    
-    sz = 2*rozofs_conf_layout_table[layout].sizes[bsize].rozofs_eff_psizes_max * sizeof (bin_t) 
-          + sizeof (rozofs_stor_bins_hdr_t) 
-          + sizeof(rozofs_stor_bins_footer_t);
-    return sz;	  
+  return rozofs_get_max_psize_in_msg(layout, bsize);	  
 }
 /**
   Get the redundancy coefficient for a given  layout and block size 

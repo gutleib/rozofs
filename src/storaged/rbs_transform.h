@@ -52,15 +52,7 @@ typedef enum {
 } rbs_write_req_state_e;
 
 typedef struct rbs_projection_ctx {
-    uint8_t valid_stor_idx : 1; /**< assert to 1 if the relative storage idx is valid */
-    uint8_t inuse_valid : 1; /**< assert to 1 if the inuse counter of the buffer has been incremented: just for write case */
-    uint8_t stor_idx : 6; /**< relative index of the storage                    */
-
-    uint8_t retry_cpt : 7; /**< current retry counter                                      */
-    uint8_t rebuild_req : 1; /**< a rebuild is needed for that storage for this projection   */
-
     uint8_t prj_state; /**< read state see rozofs_read_req_state_e enum      */
-    void *prj_buf; /**< ruc buffer that contains the payload             */
     bin_t *bins; /**< pointer to the payload (data read)               */
     uint32_t nbBlocks;
 } rbs_projection_ctx_t;
@@ -111,7 +103,7 @@ int rbs_transform_forward_one_proj(rbs_projection_ctx_t *prj_ctx_p,
         uint32_t first_block_idx, uint32_t number_of_blocks,
         tid_t projection_id, char *data);
 
-/** 
+/*_____________________________________________________________________________________
   Apply the transform to a buffer starting at "data". That buffer MUST be
   ROZOFS_BSIZE aligned.
   The first_block_idx is the index of a ROZOFS_BSIZE array in the output buffer
@@ -127,12 +119,13 @@ int rbs_transform_forward_one_proj(rbs_projection_ctx_t *prj_ctx_p,
  * @param number_of_blocks: number of blocks to write
  * @param *block_ctx_p: pointer to the working array of blocks
  * @param *data: pointer to the source data that must be transformed
+ * param  *empty: returns whether this is a whole set of empty blocks
  *
  * @return: 0 on success -1 otherwise
  */
 int rbs_transform_inverse(rbs_projection_ctx_t *prj_ctx_p, uint8_t layout,uint32_t bsize,
         uint32_t first_block_idx, uint32_t number_of_blocks,
-        rbs_inverse_block_t *block_ctx_p, char *data);
+        rbs_inverse_block_t *block_ctx_p, char *data, int * empty);
 
 /** 
   Make the list of coherent projections for a given reveive block, and

@@ -19,8 +19,8 @@
 cmake_minimum_required(VERSION 2.6)
 project(rozofs C)
 set(MAJOR "2")
-set(MINOR "2")
-set(REVISION "4")
+set(MINOR "3")
+set(REVISION "0")
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
