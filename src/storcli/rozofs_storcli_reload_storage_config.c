@@ -35,12 +35,14 @@
 #include <rozofs/rpc/mclient.h>
 #include <rozofs/core/north_lbg_api.h>
 #include <rozofs/core/rozofs_ip_utilities.h>
+#include <rozofs/core/rozofs_host_list.h>
 #include "rozofs_storcli_reload_storage_config.h"
 #include "storcli_main.h"
 #include "rozofs_storcli_lbg_cnf_supervision.h"
 #include <rozofs/rpc/storcli_lbg_prototypes.h>
 
 storcli_conf_ctx_t storcli_conf_ctx;      /**< statistics associated with exportd configuration polling and reload */
+static int current_host_index = 0;
 
 
 /*__________________________________________________________________________
@@ -189,6 +191,60 @@ fatal:
 
 /*__________________________________________________________________________
  */
+/**  Try to reconnect to the exportd with any available hostname when 
+**   connection is lost
+    
+ *
+ * @param exportd_context_p: pointer to the exportd Master data structure
+ */
+int storcli_exportd_config_supervision_reconnect(exportclt_t * clt) {
+  int    export_index=0;
+  char * pHost;
+  struct timeval timeout_exportd;  
+  
+  timeout_exportd.tv_sec  = 2;  
+  timeout_exportd.tv_usec = 0;    
+    
+  current_host_index--;
+    
+  /*
+  ** Loop on the configured export names/addresses 
+  */  
+  for (export_index=0; export_index < rozofs_host_list_get_number(); export_index++) { 
+    
+    current_host_index = (current_host_index+1) % rozofs_host_list_get_number();
+    
+    /*
+    ** Release RPC context
+    */
+    rpcclt_release(&clt->rpcclt);
+      
+    /*
+    ** Extract the name/address
+    */  
+    pHost = rozofs_host_list_get_host(current_host_index);
+    if (pHost == NULL) {
+      continue;
+    } 
+     
+    if (rpcclt_initialize
+            (&clt->rpcclt, pHost, EXPORT_PROGRAM, EXPORT_VERSION,
+            ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, timeout_exportd) == 0) {
+      /*
+      ** Connected 
+      */
+      return 0;
+    }  
+  }
+  
+  /*
+  ** Not able to connect to any host/address
+  */
+  rpcclt_release(&clt->rpcclt);
+  return -1;
+} 
+/*__________________________________________________________________________
+ */
 /**  Periodic thread whose aim is to detect a change in the configuration
     of the export and then to reload the lastest configuration of the exportd
     
@@ -220,6 +276,17 @@ void storcli_exportd_config_supervision_thread(void *exportd_context_p) {
  
  for(;;)
  {
+    STORCLI_CONF_STATS_INC(storcli_conf_ctx_p,poll_counter);
+
+    /*
+    ** Try to reconnect to any available host
+    */
+    if (storcli_exportd_config_supervision_reconnect(clt) != 0) {
+        STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,poll_counter);
+        errno = EPROTO;
+        goto out;
+    }
+
     ret_poll_p = NULL;
     ret_conf_p = NULL;
     
@@ -237,22 +304,17 @@ void storcli_exportd_config_supervision_thread(void *exportd_context_p) {
     status = -1;
     retry = 0;   
     ret_poll_p = NULL; 
-    STORCLI_CONF_STATS_INC(storcli_conf_ctx_p,poll_counter);
     while ((retry++ < clt->retries) &&
             (!(clt->rpcclt.client) ||
             !(ret_poll_p = ep_poll_conf_1(&arg_poll, clt->rpcclt.client)))) {
-
-        /*
-        ** release the sock if already configured to avoid losing fd descriptors
-        */
-        rpcclt_release(&clt->rpcclt);
         
-        if (rpcclt_initialize
-                (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
-            rpcclt_release(&clt->rpcclt);
+        /*
+        ** Try to reconnect to any available host
+        */
+        if (storcli_exportd_config_supervision_reconnect(clt) != 0) {
             STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,poll_counter);
             errno = EPROTO;
+            goto out;
         }
     }
     /*
@@ -297,18 +359,13 @@ void storcli_exportd_config_supervision_thread(void *exportd_context_p) {
     while ((retry++ < clt->retries) &&
             (!(clt->rpcclt.client) ||
             !(ret_conf_p = ep_conf_storage_1(&arg_conf, clt->rpcclt.client)))) {
-
         /*
-        ** release the sock if already configured to avoid losing fd descriptors
+        ** Try to reconnect to any available host
         */
-        rpcclt_release(&clt->rpcclt);
-        
-        if (rpcclt_initialize
-                (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
-            rpcclt_release(&clt->rpcclt);
+        if (storcli_exportd_config_supervision_reconnect(clt) != 0) {
             STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,conf_counter);
             errno = EPROTO;
+            goto out;
         }
     }
     /*
@@ -540,8 +597,19 @@ void storcli_exportd_config_supervision_thread_msite(void *exportd_context_p) {
  
  for(;;)
  {
+    STORCLI_CONF_STATS_INC(storcli_conf_ctx_p,poll_counter);
+
     ret_poll_p = NULL;
     ret_conf_p = NULL;
+    
+    /*
+    ** Try to reconnect to any available host
+    */
+    if (storcli_exportd_config_supervision_reconnect(clt) != 0) {
+        STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,poll_counter);
+        errno = EPROTO;
+        goto out;
+    }    
     
     /*
     ** step 1: poll the state of the current configuration of the exportd
@@ -557,22 +625,17 @@ void storcli_exportd_config_supervision_thread_msite(void *exportd_context_p) {
     status = -1;
     retry = 0;   
     ret_poll_p = NULL; 
-    STORCLI_CONF_STATS_INC(storcli_conf_ctx_p,poll_counter);
     while ((retry++ < clt->retries) &&
             (!(clt->rpcclt.client) ||
             !(ret_poll_p = ep_poll_conf_1(&arg_poll, clt->rpcclt.client)))) {
 
         /*
-        ** release the sock if already configured to avoid losing fd descriptors
+        ** Try to reconnect to any available host
         */
-        rpcclt_release(&clt->rpcclt);
-        
-        if (rpcclt_initialize
-                (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
-            rpcclt_release(&clt->rpcclt);
+        if (storcli_exportd_config_supervision_reconnect(clt) != 0) {
             STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,poll_counter);
             errno = EPROTO;
+            goto out;
         }
     }
     /*
@@ -619,16 +682,12 @@ void storcli_exportd_config_supervision_thread_msite(void *exportd_context_p) {
             !(ret_conf_p = ep_mount_msite_1(&arg_conf, clt->rpcclt.client)))) {
 
         /*
-        ** release the sock if already configured to avoid losing fd descriptors
+        ** Try to reconnect to any available host
         */
-        rpcclt_release(&clt->rpcclt);
-        
-        if (rpcclt_initialize
-                (&clt->rpcclt, clt->host, EXPORT_PROGRAM, EXPORT_VERSION,
-                ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 0, clt->timeout) != 0) {
-            rpcclt_release(&clt->rpcclt);
+        if (storcli_exportd_config_supervision_reconnect(clt) != 0) {
             STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,conf_counter);
             errno = EPROTO;
+            goto out;
         }
     }
     /*
