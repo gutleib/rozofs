@@ -828,8 +828,8 @@ class volume_class:
     d.set_column(3,"Export")
     d.set_column(4,"layout")
     d.end_separator()    
-    d.new_line()
     for v in volumes:
+      d.new_line()
       d.set_column(1,"%s"%(v.vid))
       string=""
       for c in v.cid: string += "%s "%(c.cid)
@@ -845,7 +845,7 @@ class volume_class:
 #____________________________________
 class exportd_class:
 
-  def __init__(self,hosts="localhost"):
+  def __init__(self,hosts="192.168.10.50/192.168.10.51"):
     self.export_host=hosts  
 
   def get_config_name(self): return "%s/export.conf"%(rozofs.get_config_path())
@@ -872,14 +872,19 @@ class exportd_class:
       if not "-i" in line: pid=line.split()[1]
     return pid
            
-  def start(self):
+  def start(self,add="50"):
     pid=self.pid()
     if pid != 0: 
       report("exportd is already started as process %s"%(pid))
       return
+    cmd_silent("ip addr del 192.168.10.50/32 dev %s"%(rozofs.interface))  
+    cmd_silent("ip addr del 192.168.10.51/32 dev %s"%(rozofs.interface))  
+    cmd_silent("ip addr add 192.168.10.%s/32 dev %s"%(add,rozofs.interface))
     os.system("exportd -c %s"%(self.get_config_name()))    
     
   def stop(self):
+    cmd_silent("ip addr del 192.168.10.50/32 dev %s"%(rozofs.interface))  
+    cmd_silent("ip addr del 192.168.10.51/32 dev %s"%(rozofs.interface))    
     pid=self.pid()
     if pid == 0: return
     os.system("kill %s"%(pid))
@@ -1445,8 +1450,9 @@ class rozofs_class:
     else:
       console("  . %-12s : %s MB (%s)"%("Device size",self.disk_size_mb,self.fstype))
         
-    if len(volumes) != int(0):
-      volumes[0].display()
+    for v in volumes:
+      v.display()  
+      break  
     if len(hosts) != int(0):
       hosts[0].display()
     if len(mount_points) != int(0):      
@@ -1902,7 +1908,9 @@ def test_parse(command, argv):
   elif command == "exportd"             :
        if len(argv) <= 2: syntax("export requires an action","export")  
        if argv[2] == "stop"        : exportd.stop()
-       if argv[2] == "start"       : exportd.start()     
+       if argv[2] == "start"       : 
+         if len(argv) == 3: exportd.start()
+         else:              exportd.start(argv[3])      
        if argv[2] == "reset"       : exportd.reset() 
        if argv[2] == "pid"         : exportd.process('-ap') 
        if argv[2] == "reload"      : exportd.reload() 
@@ -2063,7 +2071,7 @@ def test_init():
   global geomgr
   
   rozofs  = rozofs_class()
-  exportd = exportd_class("localhost1/localhost2")
+  exportd = exportd_class()
   geomgr  = geomgr_class()
   
 
