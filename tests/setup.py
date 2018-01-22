@@ -575,21 +575,18 @@ class mount_point_class:
     global rozofs
     options=""
     options += " -o rozofsnbstorcli=%s"%(rozofs.nb_storcli)
-    options += " -o rozofssparestoragems=%s"%(self.spare_tmr_ms)
+    options += ",rozofssparestoragems=%s"%(self.spare_tmr_ms)
     if self.rozofsexporttimeout != None: 
-      options += " -o rozofsexporttimeout=%s"%(self.rozofsexporttimeout)
+      options += ",rozofsexporttimeout=%s"%(self.rozofsexporttimeout)
     if self.rozofsstoragetimeout != None: 
-      options += " -o rozofsstoragetimeout=%s"%(self.rozofsstoragetimeout)
+      options += ",rozofsstoragetimeout=%s"%(self.rozofsstoragetimeout)
     if self.rozofsstorclitimeout != None: 
-      options += " -o rozofsstorclitimeout=%s"%(self.rozofsstorclitimeout)      
-    options += " -o auto_unmount"
-    options += " -o suid"
-    options += " -o numanode=%s"%(self.numanode)
-    options += " -o site=%s"%(self.site)
-    if self.instance != 0: options += " -o instance=%s"%(self.instance)
-    if rozofs.read_mojette_threads == True: options += " -o mojThreadRead=1"
-    if rozofs.write_mojette_threads == False: options += " -o mojThreadWrite=0"
-    if rozofs.mojette_threads_threshold != None: options += " -o mojThreadThreshold=%s"%(rozofs.mojette_threads_threshold)
+      options += ",rozofsstorclitimeout=%s"%(self.rozofsstorclitimeout)      
+    options += ",auto_unmount,suid,numanode=%s,site=%s"%(self.numanode,self.site)
+    if self.instance != 0: options += ",instance=%s"%(self.instance)
+    if rozofs.read_mojette_threads == True: options += ",mojThreadRead=1"
+    if rozofs.write_mojette_threads == False: options += ",mojThreadWrite=0"
+    if rozofs.mojette_threads_threshold != None: options += ",mojThreadThreshold=%s"%(rozofs.mojette_threads_threshold)
 
     os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_name(),self.get_mount_path(),options))
     os.system("chmod 0777 %s"%(self.get_mount_path()))
