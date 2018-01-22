@@ -2065,11 +2065,11 @@ int rozofs_check_instance(int instance) {
   /* Default instance number is 0. So get also the number of 
   ** rozofsmount started without instance number in its parameters */  
   if (instance==0) {
-    sprintf(cmd,"ps -o cmd= -C rozofsmount | awk '!/instance/||/instance=0/' | wc -l > %s",
+    sprintf(cmd,"ps -o cmd= -C rozofsmount | awk '!/instance/||/instance=0,/' | wc -l > %s",
             fname);  
   }
   else {
-    sprintf(cmd,"ps -o cmd= -C rozofsmount | awk '/instance=%d/' | wc -l > %s",
+    sprintf(cmd,"ps -o cmd= -C rozofsmount | awk '/instance=%d,/' | wc -l > %s",
             instance, fname);
   }	  
   
