@@ -258,8 +258,8 @@ void storcli_exportd_config_supervision_thread(void *exportd_context_p) {
  exportclt_t * clt = (exportclt_t*) exportd_context_p;
  ep_gateway_t  arg_poll;
  epgw_conf_stor_arg_t arg_conf;
- epgw_status_ret_t  *ret_poll_p;
- epgw_conf_ret_t   *ret_conf_p;
+ epgw_status_ret_t  *ret_poll_p = NULL;
+ epgw_conf_ret_t   *ret_conf_p = NULL;
  storcli_conf_ctx_t *storcli_conf_ctx_p = &storcli_conf_ctx;
  int status = -1;
  int retry = 0;
