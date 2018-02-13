@@ -439,7 +439,7 @@ def go_build_macros(struct_name):
   print ""  
   print "#define %s_SET_LONG(val,def) {\\"%(struct_name.upper())
   print "  long long         longval;\\"
-  print "  if (sscanf(def,\"ll%d\",&longval) != 1) {\\"
+  print "  if (sscanf(def,\"%lld\",&longval) != 1) {\\"
   print "    pChar += rozofs_string_append(pChar,\"long long integer value expected.\\n\");\\"  
   print "    return -1;\\"
   print "  }\\"  
