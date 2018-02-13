@@ -587,15 +587,26 @@ static inline int expthin_block_compute_hash_line( uint8_t * cnx_init, list_t * 
       else                  spare = 1;
       
       if (mstoraged_client_get_file_size(stor, entry->cid, entry->sids[i], entry->fid, spare,&mp_size_table[i]) != 0) {
-        warning("mclient_remove failed (cid: %u; sid: %u): %s",
-                entry->cid, entry->sids[i], strerror(errno));
-	/*
-	** Say this storage is down not to use it again 
-	** during this run; this would fill up the log file.
-	*/
-	stor->status = 0; 
-        continue; // Go to the next storage
+        if (errno != ENOENT) {
+          char msgString[128];
+          char * pChar = msgString;
+          pChar += sprintf(pChar,"mstoraged_client_get_file_size cid:%u sid:%u fid:", entry->cid, entry->sids[i]);
+          pChar += rozofs_fid_append(pChar,entry->fid);
+          pChar += sprintf(pChar," error %s", strerror(errno));
+          warning("%s",msgString);
+	  /*
+	  ** Say this storage is down not to use it again 
+	  ** during this run; this would fill up the log file.
+	  */
+	  stor->status = 0; 
+          continue;
+        }
+        /*
+        ** File does not exist
+        */  
+        memset(&mp_size_table[i], 0, sizeof(mp_size_table[i]));
       }
+      
       /*
       ** we got a positive response , so increment the inverse count and check if inverse has been rearched
       */
