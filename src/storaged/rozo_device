@@ -1,0 +1,759 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+from optparse import OptionParser
+import syslog
+
+
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import sys
+
+red = '\033[91m'
+green = '\033[92m'
+yellow = '\033[93m'
+blue = '\033[94m'
+purple = '\033[95m'
+cyan = '\033[96m'
+white = '\033[97m'
+endeffect = '\033[0m'
+bold = '\033[1m'
+underline = '\033[4m'
+blink = '\033[5m'
+reverse = '\033[7m'
+
+
+partitioned =  []
+
+#_______________________________________________
+class constants:
+
+  def joined_column(self): return "#Zis_IZ_a_JoInED_ColUMn"
+  
+#_______________________________________________
+class column_desc:
+
+  def __init__(self,shift):  
+    self.column_nb    = 0
+    self.column_sizes = []
+    self.shift        = shift
+     
+  def update_column(self, num, size):
+  
+    # Column number extension
+    if int(num) > self.column_nb:
+      for i in range(self.column_nb,num):
+        self.column_sizes.append('0')
+      self.column_nb = num 	
+	
+    # Column size extension
+    if int(self.column_sizes[int(num)-1]) < int(size):
+      self.column_sizes[int(num)-1] = int(size)
+
+    
+#_______________________________________________
+class big_title:
+
+  def __init__(self,text,effect=None):  
+    self.text   = text
+    self.effect = effect
+
+  def display(self,column_desc):
+    l=0
+    for col in range(column_desc.column_nb):
+      l += (column_desc.column_sizes[col]+3)
+    l -= (len(self.text) +3)
+    
+    line = ''    
+    for i in range(int(column_desc.shift)): line+=' '		
+    line+="| "
+    start = int(l)/2
+    end   = int(l)-start
+    
+    if self.effect != None:
+      line+=self.effect+bold+reverse
+    for i in range(start): line+=" "
+    line+=self.text
+    for i in range(end): line+=" " 
+    line+=endeffect
+    line+=" |"   
+    print line  
+#_______________________________________________
+class separator_line:
+
+  def __init__(self,extreme,separator,previous_line=None):  
+    self.extreme    = extreme  
+    self.separator  = separator
+    self.separators = []
+    if previous_line == None: return
+      
+    const = constants()    
+    self.separators.append(extreme)
+    skip=True
+    for col in previous_line.column:
+      if skip==True: 
+        skip=False
+	continue
+      if col == const.joined_column(): self.separators.append('_')
+      else:                            self.separators.append(separator)
+    self.separators.append(extreme) 
+    
+  def display(self,column_desc):
+
+    const = constants()
+    line = ''    
+    for i in range(int(column_desc.shift)): line+=' '
+    
+    if len(self.separators) != 0:
+      for c in range(column_desc.column_nb):
+	line += self.separators[c]
+	line+='_'	
+	for ci in range(int(column_desc.column_sizes[c])): line+='_'	
+	line+='_' 
+      line+=self.extreme 
+      print line
+      return       
+    
+    first=True
+    for c in range(column_desc.column_nb):
+      if first == True:
+        # 1rst line begins with extreme separator
+        first = False
+	line += self.extreme
+      else:	
+        # Not a fisrt line
+	line += self.separator
+      line+='_'	
+      for ci in range(int(column_desc.column_sizes[c])): line+='_'	
+      line+='_' 
+    line+=self.extreme   
+    print line    
+#_______________________________________________
+class display_element:
+
+  def __init__(self,value,effect=None):  
+    self.value  = value 
+    self.effect = effect
+     
+
+#_______________________________________________
+class display_line:
+
+  def __init__(self,centered=False):  
+    self.column     = []   
+    self.centered   = centered
+      
+  def set_column(self,column,value,effect=None):
+    # Extend column number
+    if int(column) > len(self.column):
+      for i in range(len(self.column),int(column)):
+        self.column.append(display_element(''))
+    self.column[int(column)-1] = display_element(value,effect)
+
+  def check_column(self,column,value):
+    # Extend column number
+    if int(column) > len(self.column): return False
+    if self.column[int(column)-1].value == value: return True
+    return False
+    
+  # Join a colum with its preceding column  
+  def join_preceding_column(self,column):
+    const = constants()
+    # Extend column number
+    if int(column) > len(self.column):
+      for i in range(len(self.column),int(column)):
+        self.column.append(display_element(''))
+    self.column[int(column)-1] = display_element(const.joined_column())
+
+  def display(self,column_desc):
+    const = constants()
+    line=''	
+    for i in range(int(column_desc.shift)): line+=' '		
+    line+="| "
+    for col in range(column_desc.column_nb):
+    
+      try:     elt=self.column[col]
+      except:  elt=display_element('')	
+      
+      val = elt.value
+      eff = elt.effect
+      
+      if val == const.joined_column(): continue
+
+      l = column_desc.column_sizes[col]-len(val)
+      joined = 0
+      for jc in range(col+1,column_desc.column_nb):
+        try:    next = self.column[jc].value
+	except: next = ''
+        if next != const.joined_column(): break
+	l += column_desc.column_sizes[jc]+3
+	joined += 1	
+      if self.centered == True:
+	start = int(l)/2
+	end   = int(l)-start
+      else:
+	try:
+	  float(val)	  
+          start=l
+	  end=0
+	except:
+	  start = 0
+	  end = l
+          
+      if eff != None: line+=eff+bold+reverse
+      for i in range(start): line+=" "
+      line+=val
+      for i in range(end): line+=" " 
+      line+=endeffect
+      line+=" | "  
+      col+=joined 
+    print line
+        
+#_______________________________________________
+class adaptative_tbl:
+
+  def __init__(self, shift, title=None,effect=None):  
+    self.row_nb      = int(0)
+    self.row         = [] 
+    self.current_row = None 
+    self.column_desc = column_desc(shift)   
+    if title == None: 
+      self.separator(' ',' ')      
+    else:
+      self.separator(' ','_')
+      self.row.append(big_title(title,effect)) 
+      self.row_nb += 1
+      self.separator('|','_')
+    
+  def add_line(self,centered):
+    line = display_line(centered)
+    self.row.append(line) 
+    self.row_nb += 1
+    self.current_row = line
+    
+  def new_line(self):    self.add_line(False)
+  def new_center_line(self): self.add_line(True)
+  
+  def separator(self,extreme,separator):
+    self.row.append(separator_line(extreme,separator,self.current_row)) 
+    self.row_nb = int(self.row_nb)+1
+    self.current_row = None
+            
+  def end_separator(self): self.separator('|','|')	 
+         
+  def set_column(self,column,value,effect=None):
+    self.current_row.set_column(column,value,effect)
+    self.column_desc.update_column(column,len(value))      
+
+  def join_preceding_column(self,column):
+    self.current_row.join_preceding_column(column)
+                	
+  def display(self):
+    # Must we add and end separator ?
+    if self.current_row != None: self.end_separator()  
+    for row in range(int(self.row_nb)):              
+      self.row[row].display(self.column_desc)
+      previous_line=self.row[row]
+
+#_____________________________________________  
+#
+# Builld list of partitioned devices
+#
+def rozo_get_partitionned_devices() :
+  global partitioned
+  
+  partitioned[:] = []
+  
+  # Get the name of the partitionned devices
+  string="lsblk -Po PKNAME"
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    val = line.split('"')[1].strip()
+    if val == '': continue
+    if not val in partitioned:
+      partitioned.append(val)
+
+#_____________________________________________  
+#
+# Return device, fs type as well as mountpoint
+# associated to a device when these data are 
+# meaningfull
+#
+def rozo_list_block_devices(blockDev=None) :
+  global partitioned
+  
+  tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
+  
+  # Create a display array
+  d = adaptative_tbl(2,"Block devices") 
+  d.new_center_line()
+  d.set_column(1,"Dev")
+  d.set_column(2,"size")
+  d.set_column(3,"FS")      
+  d.set_column(4,"Mount")
+  d.set_column(5,"Intf")
+  d.set_column(6,"Model[Vendor]")
+  d.set_column(7,"HCTL")
+  d.set_column(8,"Sched.")
+  d.set_column(9,"Rota")
+  d.set_column(10,"R.A")
+  d.end_separator()   
+  
+  # List every block device and find out a specific one
+  string="lsblk -Pndo NAME,SIZE,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA -x MOUNTPOINT"
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+
+    device = line.split('"')[1].strip()
+    
+    if device in partitioned: continue
+
+    if blockDev != None:
+      if blockDev != device:
+        continue
+      
+    size       = line.split('"')[3].strip()  
+    fs         = line.split('"')[5].strip()
+    mountpoint = line.split('"')[7].strip()  
+    scheduler  = line.split('"')[9].strip()
+    interface  = line.split('"')[11].strip()
+    model      = line.split('"')[13].strip()
+    if model == "": model ="?"
+    vendor     = line.split('"')[15].strip()
+    if vendor == "": vendor ="?" 
+    hctl       = line.split('"')[17].strip()
+    rota       = line.split('"')[19].strip()
+    if rota == "1": rota = "Yes"
+    else:           rota = "No"
+    ra        = line.split('"')[21].strip()
+    
+    d.new_line()
+    d.set_column(1,device)  
+    d.set_column(2,size)   
+    d.set_column(3,fs)
+    d.set_column(4,mountpoint)   
+    d.set_column(5,interface)   
+    d.set_column(6,"%s[%s]"%(model,vendor))   
+    d.set_column(7,hctl)   
+    d.set_column(8,scheduler)   
+    d.set_column(9,rota)   
+    d.set_column(10,ra)   
+    
+    # In case the device is not mounted 
+    if mountpoint == "":
+      # Mount adevice on temporary directory
+      if mount_temporary_dir(device,tmp) == 0: 
+        for file in os.listdir(tmp):
+          if file == "rozofs_spare":
+            d.set_column(4,"<<< "+file+" >>>")   
+            break
+          if "storage_c" in file:
+            d.set_column(4,"<<< "+file+" >>>")  
+            break                 
+      os.system("umount %s 2>/dev/null"%(tmp))
+  d.display() 
+  os.system("rmdir %s 2>/dev/null"%(tmp))
+
+#_____________________________________________  
+#
+# Return device, fs type as well as mountpoint
+# associated to a device when these data are 
+# meaningfull
+#
+def rozo_get_block_devices(dev) :
+  global partitioned
+  
+  # List every block device and find out a specific one
+  string="lsblk -Pndo NAME,FSTYPE,MOUNTPOINT"
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    device = line.split('"')[1] 
+    if device in partitioned: continue
+    if device == dev:
+      fstype = line.split('"')[3]   
+      if fstype == "": fstype = None
+      mountpoint = line.split('"')[5]
+      if mountpoint == "": mountpoint = None
+      return device, fstype, mountpoint
+      break
+  return None, None, None
+  
+#_____________________________________________  
+#
+# Tune a SSD device
+#
+def rozo_tune_ssd_devices(blockdev, nr_requests=None) :
+
+  path = "/sys/block/%s/queue"%(blockdev)
+  if not os.path.exists(path):
+    print "%s do not exists. Can not tune it !!!"
+    return 1
+
+  string = "echo noop > %s/scheduler"%(path)
+  os.system(string)
+
+  time.sleep(1)
+
+  string = "echo 0 > %s/rotational"%(path)
+  os.system(string)
+
+  if nr_requests == None: nr_requests = "32" 
+  string = "echo %s > %s/nr_requests"%(nr_requests,path)
+  os.system(string)
+  
+  string = "echo 1 > %s/nomerges"%(path)
+  os.system(string)
+  return 0  
+
+#_____________________________________________  
+#
+# Tune a HDDD device
+#
+def rozo_tune_hdd_devices(blockdev,nr_requests=None,read_expire=None,write_expire=None,fifo_batch=None,read_ahead_kb=None) :
+
+  path = "/sys/block/%s/queue"%(blockdev)
+  if not os.path.exists(path):
+    print "%s do not exists. Can not tune it !!!"
+    return 1
+    
+  string = "echo deadline > %s/scheduler"%(path)
+  os.system(string)
+  
+  time.sleep(1)
+
+  string = "echo 1 > %s/rotational"%(path)
+  os.system(string)
+
+  if nr_requests == None: nr_requests = "32" 
+  string = "echo %s > %s/nr_requests"%(nr_requests,path)
+  os.system(string)
+  
+  string = "echo 1 > %s/iosched/front_merges"%(path)
+  os.system(string)
+  
+  if read_expire == None: read_expire = "150"
+  string = "echo %s > %s/iosched/read_expire"%(read_expire,path)
+  os.system(string)
+  
+  if write_expire == None: write_expire = "1500"
+  string = "echo %s > %s/iosched/write_expire"%(write_expire,path)
+  os.system(string)
+
+  if fifo_batch == None: fifo_batch = "16"
+  string = "echo %s > %s/iosched/fifo_batch"%(fifo_batch,path)  
+  os.system(string)
+
+  if read_ahead_kb == None: read_ahead_kb = "768"
+  string = "echo %s > %s/read_ahead_kb"%(read_ahead_kb,path)
+  os.system(string)
+
+  string = "echo 0 > %s/nomerges"%(path)
+  os.system(string)
+  
+  return 0  
+#_____________________________________________  
+#
+# Display a configuration file
+#
+def rozo_print_file(file):
+  if not os.path.exists(file):
+    print "%50s = %s"%(file,"No such file")
+    return None
+    
+  try :
+    f = open(file,"r")
+  except:
+    print "%50s = %s"%(file,"Can not open")
+    return None
+  
+  val = f.read().rstrip()   
+  print "%50s = %s"%(file,val)
+  return val
+#_____________________________________________  
+#
+# Display disk tuning
+#  
+def rozo_list_tune_parameters(blockdev) :
+
+  if blockdev == None: return
+  
+  path = "/sys/block/%s/queue"%(blockdev)
+  if not os.path.exists(path):
+    print "%s do not exists !!!"%(blockdev)
+    return 1
+  
+  rozo_print_file("%s/rotational"%(path))
+   
+  val = rozo_print_file("%s/scheduler"%(path))
+  if "[deadline]" in val:
+    rozo_print_file("%s/iosched/read_expire"%(path))
+    rozo_print_file("%s/iosched/write_expire"%(path))
+    rozo_print_file("%s/iosched/fifo_batch"%(path))
+    rozo_print_file("%s/iosched/front_merges"%(path))
+    
+  rozo_print_file("%s/nr_requests"%(path))
+  rozo_print_file("%s/read_ahead_kb"%(path))
+  rozo_print_file("%s/nomerges"%(path))
+  return 0
+    
+  
+#_____________________________________________  
+#
+# Create a temporary directory and mount the device on it
+#
+def mount_temporary_dir(blockdev,tmp):  
+
+  # Create temporary directory when it does not exists
+  if not os.path.exists(tmp):
+    try:
+      os.mkdir(tmp)
+    except:
+      return 1
+  
+  # Mount device on this directory     
+  os.system("umount %s 2>/dev/null"%(tmp))
+  os.system("mount /dev/%s %s 2>/dev/null"%(blockdev ,tmp))
+  
+  # Check the device is actually mounted on the temporary directory
+  dev,fstype,mountpoint = rozo_get_block_devices(blockdev)
+  if dev == None:
+    return 1
+  if mountpoint != tmp:
+    return 1
+      
+  return 0  
+  
+  
+  
+#_____________________________________________  
+# 
+# Pormat a device 
+#
+def rozo_format_device(blockdev,extra) :
+  # Inlinde data requires inode of at least 256 bytes
+  INLINE="mkfs.ext4 -F -b 4096 -I 256 -m 0 -q -O dir_index,filetype,inline_data"
+  OTHER ="mkfs.ext4 -F -b 4096 -m 0 -q -O dir_index,filetype"
+  
+  # First try with inline_data 
+  string="%s "%(INLINE)
+  if extra != None :
+    string=string+extra    
+  string=string+" /dev/"+blockdev
+
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stderr:
+
+    if "inline_data" in line:
+      # Remove inline_data option and retry
+      print "inline_data not supported !!!"
+      string="%s "%(OTHER)
+      if extra != None :
+        string=string+extra    
+      string=string+" /dev/"+blockdev
+      parsed = shlex.split(string)
+      cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      for line in cmd.stderr:
+        print line
+        exit(-1)
+  syslog.syslog(string)	  
+  print string      
+  return 0
+#_____________________________________________  
+#
+# Write a regular mark on device
+#
+def rozo_mark_regular(tmp,blockdev) :
+
+  os.system("touch %s/storage_c%s_s%s_%s"%(tmp,options.cid,options.sid,options.device))  
+  print "%s formated for cid/sid/dev %s/%s/%s"%(blockdev,options.cid,options.sid,options.device)
+  
+#_____________________________________________  
+#
+# Write a spare mark on device
+#
+def rozo_mark_spare(tmp,blockdev) :  
+
+  if options.mark:        
+     os.system("echo  %s > %s/rozofs_spare"%(options.mark, tmp))   
+     print "%s formated for spare with \"%s\" mark"%(blockdev,options.mark)
+     return 
+  os.system("touch %s/rozofs_spare"%(tmp))   
+  print "%s formated for spare"%(blockdev)
+     
+#_____________________________________________     
+#
+# Mount device on a temporary directory in order
+# to write a mark file
+# 
+def rozo_mark_device(blockdev):
+  tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
+  
+  # Mount adevice on temporary directory
+  if mount_temporary_dir(blockdev,tmp) != 0: 
+    os.system("rmdir %s 2>/dev/null"%(tmp))
+    exit(-1)
+
+  # Write the requested mark file on it
+  if options.spare == True:
+    rozo_mark_spare(tmp,blockdev)
+  else:
+    rozo_mark_regular(tmp,blockdev)   
+    
+  # Unmount the temporary directory   
+  os.system("umount %s"%(tmp))  
+  os.system("rmdir %s 2>/dev/null"%(tmp))
+  exit(0)   
+     
+
+
+#_____________________________________________  
+def syntax(string=None) :
+
+  if string != None:
+    print "\n\033[1m!!! %s !!!\033[0m\n"%(string)
+  print "\033[4mUsage:\033[0m"
+  print "  To list the available devices"
+  print "       \033[1mrozo_device -l\033[0m"
+  print "  To get some disk tuning information for a block device"
+  print "       \033[1mrozo_device -l -b <sddev>\033[0m"
+  print "  To tune a block device"
+  print "       \033[1mrozo_device -t [hdd|ssd] -b <sddev> [ --nr_request <nr_request> ]\033[0m"
+  print "  To format a regular device use this command"
+  print "       \033[1mrozo_device [-f] -c <cid> -s <sid> -d <device> -b <sddev>\033[0m"
+  print "  To format a spare device use one of these commands"
+  print "       \033[1mrozo_device [-f] -S -b <sddev> \033[0m"
+  print "       \033[1mrozo_device [-f] -S -b <sddev> -m <mark> \033[0m"
+  print "  -f option must be added to re-format an already formated disk."
+  print ""
+  print "\033[4mExamples:\033[0m"
+  print ". This command lists information about all block devices"
+  print "  \033[1mrozo_device -l\033[0m"
+  print ". This command lists information about device sdm"
+  print "  \033[1mrozo_device -l -b sdm\033[0m"
+  print ". This command formats the block device /dev/sdl as device 3 of sid 4 of cluster 2."
+  print "  \033[1mrozo_device -c 2 -s 4 -d 3 -b sdl\033[0m"
+  print ". This command formats the block device /dev/sdm as a spare device."
+  print "  This spare device has an empty spare mark file. This is the usual"
+  print "  case when only one volume is configured."
+  print "  \033[1mrozo_device -S -b sdm\033[0m" 
+  print ". This command forces to re-format the block device /dev/sdn as a spare device."
+  print "  This spare device has a spare mark file containing the string \"NVME\"." 
+  print "  This must fit to the spare-mark parameter in storage.conf for such"
+  print "  type of devices when multiple volumes are configured."
+  print "  \033[1mrozo_device -fS -b sdn -m NVME\033[0m"
+  print ". This command tunes block device sdp in HDD mode"
+  print "  \033[1mrozo_device -t hdd -b sdp\033[0m"
+  print ""
+  print "Check man storage.conf."
+  exit(-1)    
+
+#_____________________________________________  
+#
+# M A I N
+#
+#_____________________________________________      
+
+  
+parser = OptionParser()
+parser.add_option("-c","--cid", action="store",type="string", dest="cid", help="The cluster identifier.")
+parser.add_option("-s","--sid", action="store",type="string", dest="sid", help="The logical storage identifier within the cluster.")
+parser.add_option("-d","--device", action="store",type="string", dest="device", help="The device identifier within the logical storage.")
+parser.add_option("-b","--blockdev", action="store",type="string", dest="blockdev", help="The block device name to format.")
+parser.add_option("-S","--spare", action="store_true",default=False, dest="spare", help="Format a spare device.")
+parser.add_option("-m","--mark", action="store",type="string", dest="mark", help="The mark to be written if any in the spare mark file.")
+parser.add_option("-e","--extra", action="store",type="string", dest="extra", help="extra mkfs options.")
+parser.add_option("-f","--force", action="store_true",default=False, dest="force", help="forces format when device is already formated.")
+parser.add_option("-l","--list", action="store_true",default=False, dest="list", help="List the available block devices in the node.")
+parser.add_option("-t","--tune", action="store",type="string",dest="tune", help="Tune a SSG or HDD device.")
+parser.add_option("-n","--nr_requests", action="store",type="string",dest="nr_requests", help="nr_request value to set.")
+parser.add_option("-r","--read_expire", action="store",type="string",dest="read_expire", help="read_expire value to set.")
+parser.add_option("-w","--write_expire", action="store",type="string",dest="write_expire", help="write_expire value to set.")
+parser.add_option("-a","--read_ahead", action="store",type="string",dest="read_ahead", help="read ahead KB value to set.")
+
+(options, args) = parser.parse_args()
+
+#
+# remove /dev/ from block device
+#
+if options.blockdev == None:
+  blockdev = None
+elif len(options.blockdev.split('/')) > 1:
+  blockdev = options.blockdev.split('/')[2].strip()
+else:
+  blockdev = options.blockdev.strip()
+
+# Make the list of partitionned devices
+rozo_get_partitionned_devices()
+
+#
+# Check block device exists when given as parameter
+#
+if blockdev != None:
+  dev,fstype,mountpoint = rozo_get_block_devices(blockdev)
+  if dev == None:
+    print "No such RozoFS block device %s"%(blockdev)
+    exit(-1)
+
+#
+# List one or all block devices 
+#
+if options.list == True:    
+  rozo_list_block_devices(blockdev)
+  rozo_list_tune_parameters(blockdev)  
+  exit(0)    
+
+
+if blockdev == None: 
+  syntax("Missing block device name")
+
+#
+# Tunea device
+#        
+if options.tune != None:
+
+  # Tuning a HDD
+  if options.tune == "ssd" or options.tune == "SSD":
+    rozo_tune_ssd_devices(blockdev, nr_requests=options.nr_requests)
+    rozo_list_tune_parameters(blockdev)  
+    exit(0)
+    
+  # Tuning a SSD
+  if options.tune == "hdd" or options.tune == "HDD":
+    rozo_tune_hdd_devices(blockdev, nr_requests=options.nr_requests, read_expire=options.read_expire, write_expire=options.write_expire, read_ahead_kb=options.read_ahead)
+    rozo_list_tune_parameters(blockdev)  
+    exit(0)
+    
+  syntax("Tuning requires either ssd or hdd")
+   
+
+#
+# Format a device
+#
+if mountpoint != None:
+  print "%s is mounted on %s !!!"%(blockdev,mountpoint)
+  exit(-1)  
+if fstype != None and options.force == False:
+  print "%s is already formated in %s !!!\n(use -f option to force format)"%(blockdev,fstype)
+  exit(-1)       
+
+# Check non spare options
+#  
+if options.spare == False:
+  if options.cid == None: syntax("Missing cid")
+  if options.sid == None: syntax("Missing sid")
+  if options.device == None: syntax("Missing device")
+
+rozo_format_device(blockdev,options.extra)  
+rozo_mark_device(blockdev)  
+  

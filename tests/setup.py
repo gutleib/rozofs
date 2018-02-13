@@ -329,11 +329,9 @@ class sid_class:
     try: os.makedirs(path)
     except: pass 
     
-    path="%s/%s"%(path,device)
-    mark="storage_c%s_s%s_%s"%(self.cid.cid,self.sid,device)
-    
+    path="%s/%s"%(path,device)    
     if os.path.exists(path): return
-    rozofs.create_loopback_device(path,mark)
+    rozofs.create_loopback_device_regular(path,self.cid.cid,self.sid,device)
 
   def delete_device_file(self,device,h):
 
@@ -1099,7 +1097,7 @@ class rozofs_class:
     self.threads = 0
     self.nb_core_file = 8
     self.crc32 = True
-    self.device_selfhealing_mode  = "relocate"
+    self.device_selfhealing_mode  = ""
     self.device_selfhealing_delay = 1
     self.nb_listen=1;
     self.storio_mode="multiple";
@@ -1136,7 +1134,6 @@ class rozofs_class:
   def set_site_number(self,number): self.site_number    
   def set_device_automount(self): 
     self.device_automount = True
-    self.device_selfhealing_mode = "spareOnly"
   def set_storaged_start_script(self,storaged_start_script):
     self.storaged_start_script = storaged_start_script
   def set_alloc_mb(self,alloc_mb): self.alloc_mb = alloc_mb    
@@ -1150,7 +1147,7 @@ class rozofs_class:
   def set_nb_listen(self,nb_listen):self.nb_listen = nb_listen  
   def set_nb_core_file(self,nb_core_file):self.nb_core_file = nb_core_file     
   def set_threads(self,threads):self.threads = threads  
-  def set_self_healing(self,delay,mode="spareOnly"):
+  def set_self_healing(self,delay,mode=""):
     self.device_selfhealing_delay = delay
     self.device_selfhealing_mode  = mode      
   def set_crc32(self,crc32):self.crc32 = crc32  
@@ -1208,10 +1205,10 @@ class rozofs_class:
   def layout_8_12_16(self)  : return 2
   def layout_4_6_9(self)    : return 3 
   def layout(self,val):
-    if val == 0: return "layout_2_3_4"
-    if val == 1: return "layout_4_6_8"
-    if val == 2: return "layout_8_12_16"
-    if val == 3: return "layout_4_6_9"
+    if int(val) == 0: return "layout_2_3_4"
+    if int(val) == 1: return "layout_4_6_8"
+    if int(val) == 2: return "layout_8_12_16"
+    if int(val) == 3: return "layout_4_6_9"
   def layout2int(self,val):
     if val == "layout_2_3_4": return 0
     if val == "layout_4_6_8": return 1
@@ -1238,14 +1235,7 @@ class rozofs_class:
     if val == 2: return "16K"
     if val == 3: return "32K"
 
-  def create_loopback_device(self,path,mark,content=None):  
-    if rozofs.disk_size_mb == None: return
-    
-    # Need a working directory
-    tmpdir="/tmp/setup"
-    os.system("umount -f %s  > /dev/null 2>&1"%(tmpdir))
-    os.system("mkdir -p %s "%(tmpdir))
-
+  def findout_loopback_device(self,path,size):
     # Find out a free loop back device to map on it
     string="losetup -f "
     parsed = shlex.split(string)
@@ -1253,36 +1243,41 @@ class rozofs_class:
     output = cmd.communicate()
     if len(output) < 1:
       log( "Can not find /dev/loop for %s %s"%(path,mark))
-      return
+      sys.exit(-1)
     loop=output[0].split('\n')[0]
-    if content == None:
-      report("%sMB %-12s %s %s"%(rozofs.disk_size_mb,loop,path,mark))
-    else:
-      report("%sMB %-12s %s %s(%s)"%(rozofs.disk_size_mb,loop,path,mark,content))
       
     # Create the file with the given path
-    os.system("truncate -s %s %s 2>&1"%(rozofs.disk_size_mb*1024*1024, path))
+    os.system("rm -f %s > /dev/null 2>&1"%(path))
+    os.system("truncate -s %s %s  > /dev/null 2>&1"%(rozofs.disk_size_mb*1024*1024, path))
     
     # Bind the loop back device to the file    
     string="losetup %s %s "%(loop,path)
     os.system(string)
     
-    # Format it and mount it on the working directory
-    os.system("%s %s"%(self.mkfscmd,loop))
-    os.system("mount %s %s"%(loop,tmpdir))
-
-    # Create the mark file  
-    if content == None:     		
-      os.system("touch %s/%s"%(tmpdir,mark))
+    report("%sMB %-12s %s"%(size,loop,path))
+    return loop
+    
+        
+  def create_loopback_device_spare(self,path,mark=None):  
+    if rozofs.disk_size_mb == None: return
+    
+    loop = self.findout_loopback_device(path,rozofs.disk_size_mb)    
+    if mark == None:
+      os.system("./setup.py cmd rozo_device -b %s -fS "%(loop))
+      syslog.syslog("Created %s -> %s spare"%(path,loop))	  
     else:
-      os.system("echo %s > %s/%s"%(content,tmpdir,mark))      
-    time.sleep(2)
-    # Umount the temporary directory
-    os.system("umount %s"%(tmpdir))	  
-    os.system("umount -f %s  > /dev/null 2>&1"%(tmpdir))
-    syslog.syslog("Created %s -> %s -> %s"%(path,loop,mark))	  
+      os.system("./setup.py cmd rozo_device -b %s -fS -m %s"%(loop,mark))         
+      syslog.syslog("Created %s -> %s spare(%s)"%(path,loop,mark))	  
     return  	 
 
+  def create_loopback_device_regular(self,path,cid,sid,dev):  
+    if rozofs.disk_size_mb == None: return   
+
+    loop = self.findout_loopback_device(path,rozofs.disk_size_mb)    
+    os.system("./setup.py cmd rozo_device -f -b %s -c %s -s %s -d %d"%(loop,cid,sid,dev))
+    syslog.syslog("Created %s -> %s (%s,%s,%s)"%(path,loop,cid,sid,dev))	  
+    return  	
+     
   def create_export_loopback_device(self,path,mount,sizeMB):  
     if sizeMB == None: return
     
@@ -1291,22 +1286,7 @@ class rozofs_class:
     os.system("mkdir -p %s "%(mount))
 
     # Find out a free loop back device to map on it
-    string="losetup -f "
-    parsed = shlex.split(string)
-    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output = cmd.communicate()
-    if len(output) < 1:
-      log( "Can not find /dev/loop for %s"%(path))
-      return
-    loop=output[0].split('\n')[0]
-    report("%sMB %-12s %s -> %s"%(sizeMB,loop,path,mount))
-      
-    # Create the file with the given path
-    os.system("dd if=/dev/zero of=%s bs=1MB count=%s > /dev/null 2>&1"%(path,sizeMB))
-    
-    # Bind the loop back device to the file    
-    string="losetup %s %s "%(loop,path)
-    os.system(string)
+    loop = self.findout_loopback_device(path,sizeMB)    
     
     # Format it and mount it on the working directory
     os.system("mkfs.ext4 -m 0 -q %s"%(loop))
@@ -1346,7 +1326,7 @@ class rozofs_class:
     for idx in range(0,4096):
       path="%s/devices/spare%s"%(self.get_config_path(),idx)
       if not os.path.exists(path):
-        rozofs.create_loopback_device(path,"rozofs_spare",mark)            
+        rozofs.create_loopback_device_spare(path,mark)            
         return
     report("No free spare number for spare device file")
                
@@ -1467,7 +1447,7 @@ class rozofs_class:
     os.system("rm -rf %s/devices"%(rozofs.get_config_path()))  
         
   def resume(self):
-#    self.create_config()  
+    self.pause();
     check_build()  
     os.system("rm -rf /root/tmp/export; mkdir -p /root/tmp/export; rm -rf /root/tmp/storage; mkdir -p /root/tmp/storage;")
     for h in hosts: h.start()
@@ -1512,6 +1492,7 @@ class rozofs_class:
     for m in mount_points: m.process(opt)
 
   def cou(self,f):
+    global rozofs
     if not os.path.exists(f):
       console( "%s does not exist"%(f))
       exit(1) 
@@ -1546,16 +1527,25 @@ class rozofs_class:
       if words[0] =="FID_SP": 
         st_name = words[2]
 	continue      	 
+      if words[0] =="LAYOUT": 
+        fwd = rozofs.layout(words[2]).split('_')[2]
+	continue      	 
 
     SID_LIST=dist.split('-')
     
     c = get_cid(int(cid))
     
-    for site in range(0,2):
+#    for site in range(0,2):
+    for site in range(0,1):
     
-      console("__________________Site %s"%(site)) 
+#      console("__________________Site %s"%(site)) 
+      sid_idx = int(0)
       for sid in SID_LIST:
-        console("")
+        sid_idx = sid_idx + int(1)
+        if int(sid_idx) > int(fwd):
+          console("** %s"%(sid))
+        else:
+          console("-- %s"%(sid))          
         s = c.sid[int(sid)-1]
 	path = s.get_site_root_path(site)
         string="find %s -name \"%s*\""%(path,st_name)
@@ -1565,8 +1555,8 @@ class rozofs_class:
 	  fname=line.split('\n')[0]
 	  sz=os.path.getsize(fname) 
           tm=datetime.datetime.fromtimestamp(os.path.getmtime(fname))
-          console("%10s  %s  %s"%(sz,tm,fname))	
-
+          console(" %9s %-27s %s"%(sz,tm,fname))	
+          
   def exe_from_core_dir(self,dir):
     if dir == "storio": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
     if dir == "stspare": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
