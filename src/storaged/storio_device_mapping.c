@@ -470,7 +470,7 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
       pChar += rozofs_string_append(pChar,"   ");
       pChar += rozofs_u32_padded_append(pChar, 7, rozofs_right_alignment, dev);
       pChar += rozofs_string_append(pChar," | ");
-      pChar += rozofs_string_padded_append(pChar, 7, rozofs_left_alignment, storage_device_status2string(pDev->status));
+      pChar += rozofs_string_padded_append(pChar, 7, rozofs_left_alignment, storage_device_status_e2String(pDev->status));
       pChar += rozofs_string_append(pChar,"|");
       pChar += rozofs_u32_padded_append(pChar, 9, rozofs_right_alignment, pDev->failure);
       pChar += rozofs_string_append(pChar," |");
@@ -644,7 +644,7 @@ uint32_t storio_device_mapping_allocate_device(storage_t * st) {
       ** Check that the device is usable
       */     
       if ((st->device_ctx[dev].status == storage_device_status_is)
-      ||  (st->device_ctx[dev].status == storage_device_status_rebuilding)) return dev;
+      ||  (st->device_ctx[dev].status == storage_device_status_rebuild)) return dev;
 
       /*
       ** Bad device. Get the next one

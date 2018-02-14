@@ -66,14 +66,144 @@ extern int      re_enumration_required;
 
 
 
+typedef enum _storio_selfHealing_mode_e {
+  storio_selfHealing_mode_spare,
+  storio_selfHealing_mode_relocate,
+  storio_selfHealing_mode_resecure,  
+} storio_selfHealing_mode_e;
+#include "storio_selfHealing_mode_e2String.h"
+
+typedef enum _storio_selfHealing_status_e {
+  storio_selfHealing_status_free,
+  storio_selfHealing_status_allocated,
+  storio_selfHealing_status_running,
+  storio_selfHealing_status_failed,  
+  storio_selfHealing_status_success  
+} storio_selfHealing_status_e;
+#include "storio_selfHealing_status_e2String.h"
+
+
 /*_____________________________________
-** Parameter of the relocate thread
+** Parameter of the self healing thread
 */
-typedef struct _storio_rebuild_ctx_t {
-  storage_t     * st;
-  int             dev;
-  int             spare; // On spare disk or relocate on other devices
-} storio_rebuild_ctx_t;
+typedef struct _storio_selfHealing_cxt_t {
+  storage_t                * st;
+  int                        dev;
+  storio_selfHealing_mode_e  mode; // On spare disk or relocate on other devices
+  storio_selfHealing_status_e status;
+  pid_t                      pid;
+  time_t                     date;
+} storio_selfHealing_cxt_t;
+
+#define STORIO_SELFHEALING_CTX_NB      64
+storio_selfHealing_cxt_t storio_selfHealing_tbl[STORIO_SELFHEALING_CTX_NB];
+/*
+**______________________________________________________________________________
+**
+** Get a free selfhealing context
+**
+**______________________________________________________________________________
+*/
+storio_selfHealing_cxt_t * storio_selfHealing_get_ctx() {
+  int i;
+  time_t now = time(NULL);
+  time_t oldest_date = now;
+  int    found   = -1;
+  
+  storio_selfHealing_cxt_t * p = storio_selfHealing_tbl;
+  
+  for (i=0; i<STORIO_SELFHEALING_CTX_NB; i++, p++) {
+    if (p->status == storio_selfHealing_status_free) {
+      found = i;
+      break;
+    }
+    if (p->status != storio_selfHealing_status_running) {
+      if (p->date < oldest_date) {
+        found       = i;
+        oldest_date = p->date;
+      }  
+    }
+  }
+  if (found==-1) return NULL;
+
+  p = &storio_selfHealing_tbl[found];
+  p->date   = now;
+  p->status = storio_selfHealing_status_allocated;
+  return p;
+}
+/*
+**______________________________________________________________________________
+**
+** Man selfHealing command
+**
+**______________________________________________________________________________
+*/
+void storio_selfHealing_man(char * pChar) {
+  pChar += rozofs_string_append_bold(pChar,"selfHealing\n");
+  pChar += rozofs_string_append     (pChar,"    Display selfHealing configuration as well as \n");  
+  pChar += rozofs_string_append     (pChar,"    running operations.\n");  
+}
+#define SELHEALING_DISPLAY_LOOP(condition) {\
+  int i;\
+  int first = 1;\
+  storio_selfHealing_cxt_t * p = storio_selfHealing_tbl; \
+  for (i=0; i<STORIO_SELFHEALING_CTX_NB; i++, p++) {\
+    if (condition) {\
+      if (first) {\
+        pChar += rozofs_string_append(pChar,"\n     {");\
+        first = 0;\
+      }\
+      else {\
+        pChar += rozofs_string_append(pChar,",\n     {");\
+      }\
+      pChar += rozofs_string_append(pChar,"\"id\" : ");\
+      pChar += rozofs_u32_append(pChar,p->pid);\
+      pChar += rozofs_string_append(pChar,", \"mode\" : \"");\
+      pChar += rozofs_string_append(pChar,storio_selfHealing_mode_e2String(p->mode));\
+      pChar += rozofs_string_append(pChar,"\", \"cid\" : ");\
+      pChar += rozofs_u32_append(pChar,p->st->cid);\
+      pChar += rozofs_string_append(pChar,", \"sid\" : ");\
+      pChar += rozofs_u32_append(pChar,p->st->sid);\
+      pChar += rozofs_string_append(pChar,", \"device\" : ");\
+      pChar += rozofs_u32_append(pChar,p->dev);\
+      pChar += rozofs_string_append(pChar,", \"date\" : \"");\
+      pChar += rozofs_time2string(pChar, p->date);\
+      pChar += rozofs_string_append(pChar,"\", \"status\" : \"");\
+      pChar += rozofs_string_append(pChar,storio_selfHealing_status_e2String(p->status));\
+      pChar += rozofs_string_append(pChar,"\"}");\
+    }\
+  }\
+}
+/*
+**______________________________________________________________________________
+**
+** selfHealing rozodiag Topic
+**
+**______________________________________________________________________________
+*/
+void storio_selfHealing_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char * pChar=uma_dbg_get_buffer();
+  
+  pChar += rozofs_string_append(pChar,"{  \"self healing configuration\" : {\n");
+  pChar += rozofs_string_append(pChar,"      \"exportd\" \t: \"");
+  pChar += rozofs_string_append(pChar,common_config.export_hosts);
+  pChar += rozofs_string_append(pChar,"\",\n      \"mode\" \t: \"");
+  pChar += rozofs_string_append(pChar,common_config.device_selfhealing_mode);
+  pChar += rozofs_string_append(pChar,"\",\n      \"delay\" \t: ");
+  pChar += rozofs_u32_append(pChar,common_config.device_selfhealing_delay);
+  pChar += rozofs_string_append(pChar,"\n   },\n");
+  pChar += rozofs_string_append(pChar,"   \"running\" : [");
+  SELHEALING_DISPLAY_LOOP(p->status == storio_selfHealing_status_running);
+  pChar += rozofs_string_append(pChar,"\n   ],\n");
+  pChar += rozofs_string_append(pChar,"   \"done\" : [");
+  SELHEALING_DISPLAY_LOOP(p->status == storio_selfHealing_status_success || p->status == storio_selfHealing_status_failed);  
+  pChar += rozofs_string_append(pChar,"\n   ]\n");
+  pChar += rozofs_string_append(pChar,"}\n");
+  
+  uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
+  return;         
+}
+
 
 /*
 **____________________________________________________
@@ -87,23 +217,31 @@ typedef struct _storio_rebuild_ctx_t {
 extern char storaged_config_file[];
 extern char * storaged_hostname;
 void * storio_device_rebuild_thread(void *arg) {
-  storio_rebuild_ctx_t    * pRebuild = arg;
+  storio_selfHealing_cxt_t    * pRebuild = arg;
   storage_device_ctx_t    * pDev = &pRebuild->st->device_ctx[pRebuild->dev];
-  char            cmd[256];
+  char            cmd[512];
   int             status;
   pid_t           pid;
-  int             ret;
   
   pid = fork();  
   if (pid == 0) {
     char * pChar = cmd;
  
-    pChar += rozofs_string_append(pChar,"storage_rebuild -fg --quiet -c ");
+    pChar += rozofs_string_append(pChar,"storage_rebuild -fg -c ");
     pChar += rozofs_string_append(pChar,storaged_config_file);
-    if (pRebuild->spare == 0) {
-      pChar += rozofs_string_append(pChar," -R ");
+    if (pRebuild->mode == storio_selfHealing_mode_relocate) {
+      pChar += rozofs_string_append(pChar," -R");
     }   
-    pChar += rozofs_string_append(pChar," -l 6 ");
+    if (pRebuild->mode == storio_selfHealing_mode_resecure) {
+      pChar += rozofs_string_append(pChar," -S");
+    } 
+
+#if 0
+#warning ROZOFS_SIMULATION flag is set
+    pChar += rozofs_string_append(pChar," -l 3 --simu /home/jean-pierre/rozoClients/hotfix/tests/SIMU/export.conf");
+#else    
+    pChar += rozofs_string_append(pChar," --quiet -l 6");
+#endif    
     pChar += rozofs_string_append(pChar," -p ");
     pChar += rozofs_u32_append(pChar,common_config.device_self_healing_process);
     pChar += rozofs_string_append(pChar," -t ");
@@ -120,6 +258,16 @@ void * storio_device_rebuild_thread(void *arg) {
     pChar += rozofs_u32_append(pChar,pRebuild->st->sid);
     pChar += rozofs_string_append(pChar,"_dev");
     pChar += rozofs_u32_append(pChar,pRebuild->dev);
+
+    if (pRebuild->mode == storio_selfHealing_mode_relocate) {
+      pChar += rozofs_string_append(pChar,".reloc");
+    }   
+    if (pRebuild->mode == storio_selfHealing_mode_resecure) {
+      pChar += rozofs_string_append(pChar,".resec");
+    }   
+    if (pRebuild->mode == storio_selfHealing_mode_spare) {
+      pChar += rozofs_string_append(pChar,".spare");
+    }   
     
     if (pHostArray[0] != NULL) {
       pChar += rozofs_string_append(pChar," -H ");
@@ -131,30 +279,30 @@ void * storio_device_rebuild_thread(void *arg) {
       }	
     }
             
-    errno = 0;	
-    status = system(cmd);
-    exit(status);
+    rozofs_run_until_exit(cmd);	
   }
+  
+  pRebuild->pid    = pid;  
+  pRebuild->status = storio_selfHealing_status_running;  
    
   /* Check for rebuild sub processes status */    
-  ret = waitpid(pid,&status,0);
-  
-  if ((ret == pid)&&(WEXITSTATUS(status)==0)) {
-    /* Relocate is successfull. Let's put the device Out of service */
-    if (pRebuild->spare == 0) {
-      pDev->status = storage_device_status_oos;
-    }
-    else {
-      pDev->status = storage_device_status_init;
-    }  
+  pid = waitpid(pid ,&status,0);
+  if (WEXITSTATUS(status)==0) {
+    pRebuild->status = storio_selfHealing_status_success;      
   }
   else {
-    /* Relocate has failed. Let's retry later */
-    pDev->failure /= 2;
-    pDev->status   = storage_device_status_failed;
+    /* Rebuild has failed. Let's retry later */
+    pRebuild->status = storio_selfHealing_status_failed;      
   }
-  
-  free(pRebuild);
+
+  /* Relocate is successfull. Let's put the device Out of service */
+  if ((pRebuild->mode == storio_selfHealing_mode_relocate)
+  ||  (pRebuild->mode == storio_selfHealing_mode_resecure)) {
+    pDev->status = storage_device_status_oos;
+  }
+  else {
+    pDev->status = storage_device_status_init;
+  }   
   pthread_exit(NULL); 
 }
 /*
@@ -163,42 +311,41 @@ void * storio_device_rebuild_thread(void *arg) {
 **  
 **  @param st    The storage context
 **  @param dev   The device number to rebuild
-**  @param spare Whether rebuild operates on spare disk or 
-**               relocate data on
+**  @param mode  Whether rebuild operates on spare disk or 
+**               is a relocate or resecure
 **   
 **  @retval 0 when the thread is succesfully started
 */
-int storio_device_rebuild(storage_t * st, int dev, int spare) {
+int storio_device_rebuild(storage_t * st, int dev, storio_selfHealing_mode_e mode) {
   pthread_attr_t             attr;
   int                        err;
   pthread_t                  thrdId;
-  storio_rebuild_ctx_t     * pRebuild;
+  storio_selfHealing_cxt_t     * pRebuild;
 
   if (common_config.export_hosts == NULL) {
     severe("storio_device_rebuild cid %d sid %d no export hosts",st->cid, st->sid);
     return -1;
   }
   
-  pRebuild = malloc(sizeof(storio_rebuild_ctx_t));
+  pRebuild = storio_selfHealing_get_ctx();
   if (pRebuild == NULL) {
-    severe("storio_device_rebuild malloc(%d) %s",(int)sizeof(storio_rebuild_ctx_t), strerror(errno));
+    severe("storio_selfHealing_get_ctx()");
     return -1;
   }  
-  pRebuild->st    = st;
-  pRebuild->dev   = dev;
-  pRebuild->spare = spare;
+  pRebuild->st      = st;
+  pRebuild->dev     = dev;
+  pRebuild->mode    = mode;
+  pRebuild->pid     = 0;
 
   err = pthread_attr_init(&attr);
   if (err != 0) {
     severe("storio_device_rebuild pthread_attr_init() %s",strerror(errno));
-    free(pRebuild);
     return -1;
   }  
 
   err = pthread_create(&thrdId,&attr,storio_device_rebuild_thread,pRebuild);
   if (err != 0) {
     severe("storio_device_rebuild pthread_create() %s", strerror(errno));
-    free(pRebuild);
     return -1;
   }    
   
@@ -403,7 +550,7 @@ out:
     /* 
     ** let's unmount the device that is not at the correct place
     */
-    if (umount2(path,MNT_FORCE)==-1) {}    
+    storage_umount(path);
   } 
     
   return status;  
@@ -585,6 +732,12 @@ void storio_monitor_automount() {
   storio_do_automount_devices(rozofs_storio_path,&count);
 
   /*
+  ** Unmount the working directory 
+  */
+  storage_umount(rozofs_storio_path);
+        
+
+  /*
   ** Some device has been mounted. Create sub directory structure when needed.
   */
   if (count!=0) {
@@ -621,6 +774,11 @@ void storio_monitor_enumerate() {
   p += rozofs_string_append(p, "/mnt_test");  
   
   storio_do_automount_devices(rozofs_storio_path, &count); 
+
+  /*
+  ** Unmount the working directory 
+  */
+  storage_umount(rozofs_storio_path);
 }   
 /*
 **____________________________________________________
@@ -691,13 +849,14 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
     */
     else for (dev = 0; dev < st->device_number; dev++) {
       pDev = &st->device_ctx[dev];
-      if (pDev->status == storage_device_status_relocating) {
-	rebuild_allowed = 0; /* No more than 1 rebuild at a time */
+      switch (pDev->status) {
+        case storage_device_status_reloc:
+        case storage_device_status_resec:
+        case storage_device_status_rebuild:
+	  rebuild_allowed = 0; /* No more than 1 rebuild at a time */
 	break;
-      }
-      if (pDev->status == storage_device_status_rebuilding) {
-	rebuild_allowed = 0; /* No more than 1 rebuild at a time */
-	break;
+        default:
+        break;
       }	
     }              
     
@@ -771,8 +930,9 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
         /*
 	** Wait for the end of the relocation to re initialize the device
 	*/
-        if ((pDev->status != storage_device_status_relocating)
-	&&  (pDev->status != storage_device_status_rebuilding)) {
+        if ((pDev->status != storage_device_status_reloc)
+	&&  (pDev->status != storage_device_status_resec)
+        &&  (pDev->status != storage_device_status_rebuild)) {
 	  pDev->action = STORAGE_DEVICE_NO_ACTION;
 	  pDev->status = storage_device_status_init;
 	}
@@ -807,7 +967,7 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	/*
 	** Device In Service. No fault up to now
 	*/ 
-        case storage_device_status_rebuilding: 
+        case storage_device_status_rebuild: 
         case storage_device_status_is:	
 
 	  /*
@@ -829,7 +989,7 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	  }
           else {
             if (pDev->diagnostic == DEV_DIAG_REBUILD_REQUIRED) {
-              pDev->status = storage_device_status_rebuilding;
+              pDev->status = storage_device_status_rebuild;
             }
             else {
               pDev->status = storage_device_status_is;
@@ -865,23 +1025,35 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	      ** Let's 1rst find a spare device
 	      */
 	      if (storage_replace_with_spare(st,dev) == 0) {
-	        pDev->status = storage_device_status_rebuilding;
-		if (storio_device_rebuild(st,dev,1) == 0) {
+	        pDev->status = storage_device_status_rebuild;
+		if (storio_device_rebuild(st,dev,storio_selfHealing_mode_spare) == 0) {
 	          rebuild_allowed = 0; /* On rebuild at a time */
 		}	
 		else {
 	          pDev->status = storage_device_status_failed;	        
 		}
-		break;	        
+		break;	       
 	      }
-	      	      
+              
+	      /*
+	      ** Let's resecure on spare storages if allowed
+	      */
+	      if (strcmp(common_config.device_selfhealing_mode,"resecure")==0) {	        
+	        pDev->status = storage_device_status_resec;
+	        if (storio_device_rebuild(st,dev,storio_selfHealing_mode_resecure) == 0) {
+	          rebuild_allowed = 0; /* On rebuild at a time */
+	        }	
+	        else {
+	          pDev->status = storage_device_status_failed;	        
+	        }
+	      }		      	      
 	    
 	      /*
 	      ** Let's relocate on other devices if allowed
 	      */
 	      if (strcmp(common_config.device_selfhealing_mode,"relocate")==0) {	        
-	        pDev->status = storage_device_status_relocating;
-	        if (storio_device_rebuild(st,dev,0) == 0) {
+	        pDev->status = storage_device_status_reloc;
+	        if (storio_device_rebuild(st,dev,storio_selfHealing_mode_relocate) == 0) {
 	          rebuild_allowed = 0; /* On rebuild at a time */
 	        }	
 	        else {
@@ -900,10 +1072,23 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	  break;
 
 
-	case storage_device_status_relocating:
+	case storage_device_status_reloc:
+	case storage_device_status_resec:
 	  break;
 
 	case storage_device_status_oos:
+	  /*
+	  ** Let's 1rst find a spare device
+	  */
+	  if (storage_replace_with_spare(st,dev) == 0) {
+	    pDev->status = storage_device_status_rebuild;
+	    if (storio_device_rebuild(st,dev,storio_selfHealing_mode_spare) == 0) {
+	      rebuild_allowed = 0; /* On rebuild at a time */
+	    }	
+	    else {
+	      pDev->status = storage_device_status_failed;	        
+	    }
+	  }        
 	  break;
 
 	default:
@@ -993,6 +1178,16 @@ int storio_device_mapping_monitor_thread_start() {
   ** to get the disk free space 
   */
   storio_device_monitor(FALSE);
+  
+  /*
+  ** Reset self healing contexts
+  */
+  memset(storio_selfHealing_tbl,0, sizeof(storio_selfHealing_tbl));
+  
+  /*
+  ** Add self healing rozodiag command
+  */
+  uma_dbg_addTopicAndMan("selfHealing", storio_selfHealing_diag, storio_selfHealing_man, 0); 
 
   /*
   ** Start monitoring thread

@@ -261,7 +261,7 @@ static void show_storage_device_status(char * argv[], uint32_t tcpRef, void *buf
 	  pChar += rozofs_string_append(pChar," |");
 	  pChar += rozofs_u32_padded_append(pChar, 2, rozofs_right_alignment, device);
 	  pChar += rozofs_string_append(pChar," | ");
-	  pChar += rozofs_string_padded_append(pChar, 7, rozofs_left_alignment, storage_device_status2string(pdev->status));
+	  pChar += rozofs_string_padded_append(pChar, 7, rozofs_left_alignment, storage_device_status_e2String(pdev->status));
 	  *pChar++ = '|';
 	  pChar += rozofs_bytes_padded_append(pChar,7,pdev->free);
 	  pChar += rozofs_string_append(pChar," |");
@@ -424,7 +424,7 @@ static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void
 	                          st->cid, st->sid, device, st->root, device,
                                   pdev->devName,  link,
                                   pdev->major, pdev->minor,
-                                  storage_device_status2string(pdev->status),
+                                  storage_device_status_e2String(pdev->status),
 			          (long long unsigned int)pdev->free ,(long long unsigned int)pdev->size);   
 	}
       }	

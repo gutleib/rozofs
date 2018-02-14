@@ -112,6 +112,7 @@ typedef struct rbs_monitor_s {
   int      list_building_sec;
   uint64_t nb_files;
   uint64_t done_files;
+  uint64_t resecured;
   uint64_t deleted;  
   uint64_t written_spare;
   uint64_t written;
@@ -162,7 +163,7 @@ char                rbs_monitor_file_path[ROZOFS_PATH_MAX]={0};
 int quiet=0;
 int sigusr_received=0;
 int nolog = 0;
-
+int verbose=0;
 
 /*________________________________________________
 *
@@ -186,6 +187,7 @@ typedef struct _rbs_parameter_t {
   int      parallel;
   int      storaged_geosite;
   int      relocate;
+  int      resecure;
   int      max_reloop;
   char   * output;
   int      clear;
@@ -218,6 +220,7 @@ static inline char * format_status_file(char * pJSON) {
   int    i;
   uint64_t nb_files=0;
   uint64_t done_files=0;
+  uint64_t resecured=0;
   uint64_t deleted=0;
   uint64_t written=0;
   uint64_t written_spare=0;
@@ -248,6 +251,9 @@ static inline char * format_status_file(char * pJSON) {
       if (parameter.relocate) {
         JSON_string("mode","relocate device");      
       }
+      else if (parameter.resecure) {
+        JSON_string("mode","resecure device");      
+      }      
       else {     
         JSON_string("mode","device");
       }	
@@ -257,7 +263,12 @@ static inline char * format_status_file(char * pJSON) {
         JSON_string("mode","node");     
       }
       else {
-        JSON_string("mode","storage");     
+        if (parameter.resecure) {
+          JSON_string("mode","storage resecure");        
+        }
+        else {
+          JSON_string("mode","storage");
+        }     
       }	 
     }
     
@@ -290,7 +301,7 @@ static inline char * format_status_file(char * pJSON) {
 
 	  nb_files   += rbs_monitor[i].nb_files;
 	  done_files += rbs_monitor[i].done_files;
-
+          resecured  += rbs_monitor[i].resecured;
 	  if (rbs_monitor[i].nb_files) {
 	    JSON_u32("percent done", rbs_monitor[i].done_files*100/rbs_monitor[i].nb_files); 
 	  }
@@ -298,6 +309,7 @@ static inline char * format_status_file(char * pJSON) {
 	    JSON_u32("percent done", 0); 
 	  }
 
+	  JSON_u64("files resecured", rbs_monitor[i].resecured);
 	  JSON_u64("deleted files", rbs_monitor[i].deleted);
 	  deleted += rbs_monitor[i].deleted;
 
@@ -327,6 +339,7 @@ static inline char * format_status_file(char * pJSON) {
 	JSON_u32("listing time", listing);	
 	JSON_u64("files to process", nb_files);
 	JSON_u64("files processed", done_files);
+	JSON_u64("files resecured", resecured);
 	if (nb_files) {
 	  JSON_u32("percent done", done_files*100/nb_files); 
 	}
@@ -449,6 +462,7 @@ void rbs_conf_init(rbs_parameter_t * par) {
   memset(par->fid2rebuild,0,sizeof(fid_t));
   par->parallel             = common_config.device_self_healing_process;
   par->relocate             = 0;
+  par->resecure             = 0;
   par->max_reloop           = DEFAULT_REBUILD_RELOOP;
   par->output               = NULL;
   par->clear                = 0;
@@ -514,6 +528,7 @@ void usage(char * fmt, ...) {
     printf("       --nominal             \tTo rebuild only nominal files on node or sid rebuild.\n");
     printf("   -g, --geosite             \tTo force site number in case of geo-replication\n");
     printf("   -R, --relocate            \tTo rebuild a device by relocating files\n");
+    printf("   -S, --reSecure            \tTo resecure files of a failed device on their spare location\n");
     printf("   -l, --loop                \tNumber of reloop in case of error (default %d)\n",DEFAULT_REBUILD_RELOOP);
     printf("   -q, --quiet               \tDo not display messages\n");
     printf("   -C, --clear               \tClear the status of the device after it has been set OOS\n");
@@ -539,6 +554,8 @@ void usage(char * fmt, ...) {
     printf("storage_rebuild -s 1/2\n\n");
     printf("Rebuilding only device 3 of sid 2 of cluster 1:\n");
     printf("storage_rebuild -s 1/2 -d 3\n\n");
+    printf("Rebuilding by resecuring files on spare storages, device 3 of sid 2 of cluster 1:\n");
+    printf("storage_rebuild -s 1/2 -d 3 --resecure\n\n");
     printf("Rebuilding by relocating device 3 of sid 2 of cluster 1 on other devices:\n");
     printf("storage_rebuild -s 1/2 -d 3 --relocate\n\n");
     printf("Puting a device back in service when it is replaced after\n");
@@ -645,6 +662,11 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       par->relocate = 1;     
       continue;
     } 
+      
+    if (IS_ARG(-S) || IS_ARG(--reSecure)) {
+      par->resecure = 1;     
+      continue;
+    } 
 
     if (IS_ARG(-C) || IS_ARG(--clear)) {
       par->clear = 1;     
@@ -677,6 +699,12 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       continue;
     }  
 
+
+    if (IS_ARG(--verbose)) {
+      verbose = 1;     
+      continue;
+    }  
+    
     if IS_ARG(--nolog) {
       nolog = 1;
       quiet = 1;     
@@ -811,7 +839,12 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
     */    
     par->rebuildRef = getpid();
   }
-
+  /*
+  ** Relocate & resecure re exclusive
+  */
+  if ((par->relocate) && (par->resecure)) {
+      usage("--relocate and --reSecure are exclusive options.");
+  }   
   /*
   ** When FID is given, eid and cid/sid is mandatory
   */ 
@@ -829,6 +862,15 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
         par->chunk = -1;
       }
     }  
+    /*
+    ** When resecure is requested, rebuild the whole file and not only a part of it
+    */
+    if (par->resecure) {
+      if (par->chunk != -1) {
+        severe("With resecure --chunk --bstart and --bstop are ignored");
+        par->chunk = -1;
+      }
+    }      
   }
   /*
   ** When relocate is set, cid/sid and device are mandatory 
@@ -841,6 +883,17 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       usage("--relocate option requires --device option too.");
     }
   }
+  /*
+  ** When resecure is set, cid/sid and device are mandatory 
+  */
+  if (par->resecure) {
+    if ((par->cid==-1)&&(par->sid==-1)) {
+      usage("--resecure option requires --sid option too.");
+    }
+    if (par->type != rbs_rebuild_type_device) {
+      usage("--resecure option requires --device option too.");
+    }
+  }  
   /*
   ** Clear errors and reinitialize disk
   */
@@ -1483,7 +1536,6 @@ uint64_t rbs_get_rb_entry_list_one_storage(rb_stor_t *rb_stor, cid_t cid, sid_t 
 	  memcpy(file_entry.fid,iterator->fid, sizeof (fid_t));
 	  file_entry.bsize       = iterator->bsize;
           file_entry.todo        = 1;    
-	  file_entry.relocate    = 0;		    
 	  file_entry.block_start = 0;  
 	  file_entry.block_end   = -1;
 	  file_entry.layout      = iterator->layout;
@@ -1984,7 +2036,6 @@ static int rbs_build_one_fid_list(cid_t cid, sid_t sid, uint8_t layout, uint8_t 
   memcpy(file_entry.fid, parameter.fid2rebuild, sizeof (fid_t));
   file_entry.bsize       = bsize;  
   file_entry.todo        = 1;      
-  file_entry.relocate    = parameter.relocate;
   /*
   ** Where to start rebuild from 
   */    
@@ -2046,6 +2097,7 @@ void periodic_stat_update(int * fd) {
     
   memcpy(&stat,&rbs_monitor[rbs_index], sizeof(stat));  
   stat.done_files      = 0;
+  stat.resecured       = 0;
   stat.deleted         = 0;    
   stat.written         = 0;
   stat.written_spare   = 0;
@@ -2055,6 +2107,7 @@ void periodic_stat_update(int * fd) {
   for (i=0; i< parameter.parallel; i++) {
     if (pread(fd[i], &counters, sizeof(counters), 0) == sizeof(counters)) {
       stat.done_files      += counters.done_files;
+      stat.resecured       += counters.resecured;
       stat.deleted         += counters.deleted;
       stat.written         += counters.written;
       stat.written_spare   += counters.written_spare;	
@@ -2158,6 +2211,12 @@ int rbs_do_list_rebuild(int cid, int sid, rbs_file_type_e ftype) {
       pChar += rozofs_u32_append(pChar,instance);
       pChar += rozofs_string_append(pChar," -f ");
       pChar += rozofs_string_append(pChar,rbs_file_type2string(ftype));
+      if (parameter.resecure) {
+	pChar += rozofs_string_append(pChar," --reSecure");      
+      }
+      if (parameter.relocate) {
+	pChar += rozofs_string_append(pChar," --relocate");            
+      }
       if (parameter.throughput) {
         pChar += rozofs_string_append(pChar," -t ");
         pChar += rozofs_u32_append(pChar,parameter.throughput);
@@ -2169,6 +2228,10 @@ int rbs_do_list_rebuild(int cid, int sid, rbs_file_type_e ftype) {
 	pChar += rozofs_string_append(pChar," --quiet");
       }
 
+      if (verbose) {
+	pChar += rozofs_string_append(pChar," --verbose");
+      }
+      
       pChar = cmd;
       idx   = 0;
       while ( idx < 31 ) {
@@ -2354,7 +2417,7 @@ static int rbs_build_device_missing_list_one_cluster(int   monitorIdx,
         }
 
 	// When not in a relocation case, rewrite the file header on this device if it should
-	if (!parameter.relocate) {
+	if ((!parameter.relocate)&&(!parameter.resecure)) {
           for (i=0; i < storage_to_rebuild->mapper_redundancy; i++) {
 	        int dev;
 
@@ -2397,7 +2460,6 @@ static int rbs_build_device_missing_list_one_cluster(int   monitorIdx,
 	    memcpy(file_entry.fid,file_hdr.fid, sizeof (fid_t));
 	    file_entry.bsize       = file_hdr.bsize;
             file_entry.todo        = 1;     
-	    file_entry.relocate    = parameter.relocate;
 	    file_entry.block_start = chunk * ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.bsize);  
 	    file_entry.block_end   = file_entry.block_start + ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(file_hdr.bsize) -1;  
             file_entry.error       = rozofs_rbs_error_none;
@@ -2675,7 +2737,7 @@ void storaged_rebuild_list_read(char * fid_list) {
           printf(",\n");
 	}
 	zecount++;
-	printf("    { \"FID\" : \"%s\", \"error\" : \"%s\" }",fidString, rozofs_rbs_error_2_string(file_entry.error));
+	printf("    { \"FID\" : \"%s\", \"error\" : \"%s\" }",fidString, ROZOFS_RBS_ERROR_E2String(file_entry.error));
       }
       else {
         printf("%s\n",fidString);
@@ -3220,6 +3282,7 @@ static int prepare_list_of_storage_to_rebuild() {
     rbs_monitor[nb_rbs_entry].sid        = parameter.sid;
     rbs_monitor[nb_rbs_entry].nb_files   = 0;	
     rbs_monitor[nb_rbs_entry].done_files = 0;
+    rbs_monitor[nb_rbs_entry].resecured  = 0;
     rbs_monitor[nb_rbs_entry].deleted    = 0;	
     rbs_monitor[nb_rbs_entry].ftype      = ftype;
     strcpy(rbs_monitor[nb_rbs_entry].status,"to do");
@@ -3296,6 +3359,7 @@ static int prepare_list_of_storage_to_rebuild() {
     rbs_monitor[nb_rbs_entry].sid        = sc->sid;
     rbs_monitor[nb_rbs_entry].nb_files   = 0;	
     rbs_monitor[nb_rbs_entry].done_files = 0;
+    rbs_monitor[nb_rbs_entry].resecured  = 0;
     rbs_monitor[nb_rbs_entry].deleted    = 0;	
     rbs_monitor[nb_rbs_entry].ftype      = ftype;
     strcpy(rbs_monitor[nb_rbs_entry].status,"to do");
@@ -3437,7 +3501,7 @@ static inline int rbs_rebuild_process() {
     /*
     ** Remove temporary directory
     */
-    if (status!=-1) {
+    if (status==0) {
       clean_dir(get_rebuild_directory_name(parameter.rebuildRef));
     } 
     
@@ -3544,6 +3608,7 @@ static inline int rbs_rebuild_resume() {
       rbs_monitor[nb_rbs_entry].ftype      = ftype;    
       rbs_monitor[nb_rbs_entry].nb_files   = rbs_read_file_count(parameter.rebuildRef,cid,sid,ftype); 
       rbs_monitor[nb_rbs_entry].done_files = 0;
+      rbs_monitor[nb_rbs_entry].resecured  = 0;
       rbs_monitor[nb_rbs_entry].deleted    = 0;	
       strcpy(rbs_monitor[nb_rbs_entry].status,"to do");
 

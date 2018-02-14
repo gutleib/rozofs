@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/mount.h>
 
 #include <rozofs/rozofs.h>
 #include <rozofs/rozofs_srv.h>
@@ -131,28 +132,17 @@ typedef struct _storage_device_free_blocks_t {
 
 
 typedef enum _storage_device_status_e {
-  storage_device_status_undeclared=0,
+  storage_device_status_none=0,
   storage_device_status_init,
   storage_device_status_is,
-  storage_device_status_rebuilding,
-  
-  storage_device_status_relocating,
+  storage_device_status_rebuild,
+  storage_device_status_reloc,
+  storage_device_status_resec,
   storage_device_status_failed,
   storage_device_status_oos
 } storage_device_status_e;
+#include "storage_device_status_e2String.h"
 
-static inline char * storage_device_status2string(storage_device_status_e status) {
-  switch(status) {
-    case storage_device_status_undeclared: return "NONE";
-    case storage_device_status_init:       return "INIT";
-    case storage_device_status_rebuilding: return "REBUILD";
-    case storage_device_status_is:         return "IS";
-    case storage_device_status_relocating: return "RELOC";
-    case storage_device_status_failed:     return "FAILED";
-    case storage_device_status_oos:        return "OOS";
-    default:                               return "???";
-  }
-}
 
 typedef enum _storage_device_diagnostic_e {
   DEV_DIAG_OK,
@@ -264,6 +254,44 @@ typedef struct storage {
     storage_share_t            * share; // share memory between storaged and storio          
 } storage_t;
 
+/*
+ *_______________________________________________________________________
+ *
+ * Umount some path
+ *
+ * @param path       Path to unmount
+ */
+static inline int storage_umount(char * path) {
+  int flag = MNT_DETACH;
+  int i;
+    
+  if (path == NULL) return -1;
+  
+  /*
+  ** 3 attempts to unmount the given path
+  */
+  for (i=0; i< 3; i++) {
+
+    errno = 0;
+   
+    /*
+    ** Request for unmount
+    */
+    if (umount2(path, flag)==-1) {}
+    
+    /*
+    ** Hurra. This is no more a mount point
+    */
+    if ((errno == ENOENT)||(errno == EINVAL)) return 0;
+
+    /*
+    ** Next time try a force umount
+    */
+    flag = MNT_FORCE;
+    usleep(1);
+  }
+  return -1;      
+} 
 /*_____________________________________________________________
 ** Array of storages
 */
@@ -332,30 +360,11 @@ typedef enum rozofs_rbs_error_e {
   rozofs_rbs_error_rebuild_broken,
   rozofs_rbs_error_write_failed,
   rozofs_rbs_error_not_enough_projection_read,
+  rozofs_rbs_error_no_spare_target_available,
    
   rozofs_rbs_error_unknown,
 } ROZOFS_RBS_ERROR_E;
-
-static inline char * rozofs_rbs_error_2_string(ROZOFS_RBS_ERROR_E e) {
-  switch(e) {
-  
-    case rozofs_rbs_error_none: return "None";
-    case rozofs_rbs_error_no_such_cluster: return "No such cluster id";
-    case rozofs_rbs_error_not_enough_storages_up: return "Not enough storages up";
-    case rozofs_rbs_error_file_deleted: return "File deleted";
-    case rozofs_rbs_error_file_to_much_running_rebuild: return "To much running rebuild";
-    case rozofs_rbs_error_rebuild_start_failed: return "Rebuild start failed";
-    case rozofs_rbs_error_read_error: return "Read error";
-    case rozofs_rbs_error_transform_error: return "Transform error";
-    case rozofs_rbs_error_rebuild_broken: return "Rebuild broken";
-    case rozofs_rbs_error_write_failed: return "Write failed";
-    case rozofs_rbs_error_not_enough_projection_read: return "Not enough projection read";
-    
-    case rozofs_rbs_error_unknown: return "Unknown";
-    default : return "???";
-  }
-}
- 
+#include "ROZOFS_RBS_ERROR_E2String.h"
 
 
 /** Get the file enty size from the layout

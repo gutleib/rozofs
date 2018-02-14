@@ -162,12 +162,12 @@ A spare device is an unmounted but formatted ext4/xfs disk with a "rorofs_spare"
 A logical storage (cid/sid) can use a given spare device if the "rozofs_spare" mark file content fits with its spare-mark parameter defined in storage.conf. 
 .RE
 -
-.B "relocate"
+.B "resecure"
 .RS
 Identical to 
 .B
 "spareOnly" 
-while some spare device is available. When no more spare device is available, files of failed devices are automatically relocated on remaining devices of the same sid.
+while some spare device is available. When no more spare device is available, files of failed devices are automatically resecured on their spare sids.
 .RE
 .RE
 
