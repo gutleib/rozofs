@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <dirent.h>
 void rebalance_config_read(char * fname);
 
 typedef struct _rebalance_config_t {
@@ -60,11 +61,13 @@ typedef struct _rebalance_config_t {
   // See the --newerm parameter of the CLI.
   int64_t     newer;
   // That option defines the file count threshold before triggering
-  // an effective file move 
+  // an effective file move. The move occurs when the scan has either 
+  // reached movesz or movecnt. 
   // See the --movecnt parameter of the CLI.
   int32_t     movecnt;
   // That option defines the file count threshold before triggering
-  // an effective file move 
+  // an effective file move. The move occurs when the scan has either 
+  // reached movesz or movecnt. 
   // See the --movesz parameter of the CLI.
   char *      movesz;
   // That option defines the maximun bandwidth in MB/s allocated to
@@ -79,6 +82,8 @@ typedef struct _rebalance_config_t {
   // That option when asserted sets the process in verbose mode
   // See --verbose parameter of the CLI.
   int32_t     verbose;
+  // That option gives the minimum size(in bytes) of an eligible file to rebalancing
+  int64_t     minfilesz;
 } rebalance_config_t;
 
 extern rebalance_config_t rebalance_config;

@@ -1175,6 +1175,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 	   divider = 8;
 	   break;
 	 default:
+           severe("EXIT : rozofs_fwd is %d",rozofs_fwd); 
 	   exit(-1);
       }
       blocksize = blocksize/divider;
@@ -1188,7 +1189,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       temp_p = malloc(sizeof(rz_cids_stats_t));
       if (temp_p == NULL)
       {
-	 fatal("Error while allocating %u bytes: %s\n",(unsigned int)sizeof(rz_cids_stats_t),strerror(errno));
+	 severe("EXIT : Error while allocating %u bytes: %s",(unsigned int)sizeof(rz_cids_stats_t),strerror(errno));
 	 exit(-1);
       }
       memset(temp_p,0,sizeof(rz_cids_stats_t));
@@ -1696,7 +1697,7 @@ void rozo_bal_read_configuration_file(void) {
   rozo_balancing_ctx.rebalance_frequency         = rebalance_config.frequency;
   rozo_balancing_ctx.max_scanned                 = rebalance_config.movecnt;
   rozo_balancing_ctx.throughput                  = rebalance_config.throughput;
-  
+  rozo_balancing_ctx.filesize_config             = rebalance_config.minfilesz;
   /*
   ** Take newer and older when valid
   */
@@ -1770,6 +1771,7 @@ static void usage() {
     */
     printf("\t--mode <rel|abs|fid>  \t\t\t\tuse relative, full path or fid while moving file (default is relative path)\n");
 #endif
+    printf("\t--minfilesz <size>[k|K|m|M|g|G] \t\tMinimum file size to move.(default:%d)\n",REBALANCE_MIN_FILE_SIZE);
     printf("\t--verbose \t\t\tset the rebalancing in verbose mode\n");
     printf("\t--movecnt <count> \t\tfile count threshold before triggering file move (default:%d)\n",REBALANCE_MAX_SCANNED);
     printf("\t--movesz <value>[k|K|m|M|g|G] \tcumulated file size threshold before triggering file move (default:%s)\n",
@@ -1867,6 +1869,7 @@ int main(int argc, char *argv[]) {
         {"throughput", required_argument, &long_opt_cur, 8},
         {"mode", required_argument, &long_opt_cur, 9},
         {"cfg", required_argument, &long_opt_cur, 10},
+        {"minfilesz", required_argument, &long_opt_cur, 11},
 
         {0, 0, 0, 0}
     };
@@ -1887,7 +1890,7 @@ int main(int argc, char *argv[]) {
 	   {
 	      case 0:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.older_time_sec_config)!= 1) {
-                  severe("Bad --olderm value: %s\n",optarg);	  
+                  severe("Bad --olderm value: %s",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1895,7 +1898,7 @@ int main(int argc, char *argv[]) {
 		break;
 	      case 1:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.older_time_sec_config)!= 1) {
-		  severe("Bad --older value: %s\n",optarg);	  
+		  severe("Bad --older value: %s",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1903,7 +1906,7 @@ int main(int argc, char *argv[]) {
 		break;
 	      case 2:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.newer_time_sec_config)!= 1) {
-		  severe("Bad --newerm value: %s\n",optarg);	  
+		  severe("Bad --newerm value: %s",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1911,7 +1914,7 @@ int main(int argc, char *argv[]) {
 		break;	      
 	      case 3:
         	if (sscanf(optarg,"%lld",(long long int *)&rozo_balancing_ctx.newer_time_sec_config)!= 1) {
-		  severe("Bad --newerm value: %s\n",optarg);	  
+		  severe("Bad --newerm value: %s",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1925,7 +1928,7 @@ int main(int argc, char *argv[]) {
 		break;   
 	      case 6:
         	if (sscanf(optarg,"%d",(int *)&rozo_balancing_ctx.max_scanned)!= 1) {
-		  severe("--throughput: Bad value: %s\n",optarg);	  
+		  severe("--throughput: Bad value: %s",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	} 
@@ -1933,7 +1936,7 @@ int main(int argc, char *argv[]) {
 	      case 7:
 		ret = get_size_value(optarg,&val64);
 		if (ret < 0) {
- 		   severe("--movesz: Bad value: %s\n",optarg);	  
+ 		   severe("--movesz: Bad value: %s",optarg);	  
         	   usage();
         	   exit(EXIT_FAILURE);     
 		}
@@ -1942,7 +1945,7 @@ int main(int argc, char *argv[]) {
 		break;
 	      case 8:
         	if (sscanf(optarg,"%d",&rozo_balancing_ctx.throughput)!= 1) {
-		  severe("Bad --throughput value: %s\n",optarg);	  
+		  severe("Bad --throughput value: %s",optarg);	  
         	  usage();
         	  exit(EXIT_FAILURE);			  
         	}  
@@ -1968,7 +1971,7 @@ int main(int argc, char *argv[]) {
 		  rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
 		  break;
 		}	
-	        severe("unsupported file_mode: %s\n",optarg);	  
+	        severe("unsupported file_mode: %s",optarg);	  
         	usage();
         	exit(EXIT_FAILURE);	
 		break;
@@ -1980,7 +1983,17 @@ int main(int argc, char *argv[]) {
                 ** Permanent balancer
                 */
 	        rozo_balancing_ctx.continue_on_balanced_state = 1;
-		break;                
+		break;  
+                              
+	      case 11:
+		ret = get_size_value(optarg,&val64);
+		if (ret < 0) {
+ 		   severe("--minfilesz: Bad value: %s",optarg);	  
+        	   usage();
+        	   exit(EXIT_FAILURE);     
+		}                
+                rozo_balancing_ctx.filesize_config = val64;
+		break;                  
                 
 	      default:
 	      break;	   
@@ -1996,27 +2009,27 @@ int main(int argc, char *argv[]) {
               break;
           case 'f':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.rebalance_frequency)!= 1) {
-              severe("Bad -f value %s\n",optarg);	  
+              severe("Bad -f value %s",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }  
 	    break;
           case 'v':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.volume_id)!= 1) {
-              severe("Bad -v value %s\n",optarg);	  
+              severe("Bad -v value %s",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }              
 	    break;
           case 't':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.rebalance_threshold_config)!= 1) {
-              severe("Bad -t value %s\n",optarg);	  
+              severe("Bad -t value %s",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }
 	    if ( rozo_balancing_ctx.rebalance_threshold_config > 100) 
 	    {
-              severe("Out of range value %d (0..100)\n",rozo_balancing_ctx.rebalance_threshold_config);
+              severe("Out of range value %d (0..100)",rozo_balancing_ctx.rebalance_threshold_config);
               usage();
               exit(EXIT_FAILURE);	
 	    } 
@@ -2024,13 +2037,13 @@ int main(int argc, char *argv[]) {
 	    break;
           case 'a':
             if (sscanf(optarg,"%d",&rozo_balancing_ctx.rebalance_threshold_trigger)!= 1) {
-              severe("Bad -t value %s\n",optarg);	  
+              severe("Bad -t value %s",optarg);	  
               usage();
               exit(EXIT_FAILURE);			  
             }              
 	    if ( rozo_balancing_ctx.rebalance_threshold_trigger > 100) 
 	    {
-              severe("Out of range value %d (0..100)\n",rozo_balancing_ctx.rebalance_threshold_trigger);
+              severe("Out of range value %d (0..100)",rozo_balancing_ctx.rebalance_threshold_trigger);
               usage();
               exit(EXIT_FAILURE);	
 	    }       
@@ -2051,7 +2064,7 @@ int main(int argc, char *argv[]) {
 
   if (rozo_balancing_ctx.volume_id == -1)
   {
-       severe("Volume identifier is missing\n");
+       severe("EXIT : Volume identifier is missing");
        usage();
        exit(EXIT_FAILURE);  
   }     
@@ -2066,7 +2079,7 @@ int main(int argc, char *argv[]) {
   
   if (rozo_balancing_ctx.rebalance_threshold == -1)
   {
-       severe("rebalance threshold is missing\n");
+       severe("EXIT : rebalance threshold is missing");
        usage();
        exit(EXIT_FAILURE);  
   } 
@@ -2077,7 +2090,7 @@ int main(int argc, char *argv[]) {
   {
      if (rozo_balancing_ctx.newer_time_sec_config < rozo_balancing_ctx.older_time_sec_config)
      {
-        severe("newer (%lld) delay must be greater than older delay (%lld)!\n",(long long int)rozo_balancing_ctx.newer_time_sec_config,
+        severe("newer (%lld) delay must be greater than older delay (%lld)!",(long long int)rozo_balancing_ctx.newer_time_sec_config,
                                                                                (long long int)rozo_balancing_ctx.older_time_sec_config); 
         usage();
         exit(EXIT_FAILURE);
@@ -2097,11 +2110,11 @@ int main(int argc, char *argv[]) {
   ** Read the configuration file
   */
   if (econfig_initialize(&exportd_config) != 0) {
-       fatal("can't initialize exportd config %s.\n",strerror(errno));
+       severe("EXIT : can't initialize exportd config %s.",strerror(errno));
        exit(EXIT_FAILURE);  
   }    
   if (econfig_read(&exportd_config, rozo_balancing_ctx.configFileName) != 0) {
-       fatal("failed to parse configuration file %s %s.\n",rozo_balancing_ctx.configFileName,strerror(errno));
+       severe("EXIT : failed to parse configuration file %s %s.",rozo_balancing_ctx.configFileName,strerror(errno));
        exit(EXIT_FAILURE);  
   }   
   /**
@@ -2110,13 +2123,13 @@ int main(int argc, char *argv[]) {
   ret = get_volume(rozo_balancing_ctx.volume_id);
   if (ret < 0)
   {
-       fatal("volume identified (%d) is not defined in the exportd configuration file (%s)\n",rozo_balancing_ctx.volume_id,rozo_balancing_ctx.configFileName);
+       severe("EXIT : volume identified (%d) is not defined in the exportd configuration file (%s)",rozo_balancing_ctx.volume_id,rozo_balancing_ctx.configFileName);
        exit(EXIT_FAILURE);  
   }    
   rozo_balancing_ctx.number_of_eid_in_volume = build_eid_table_associated_with_volume(rozo_balancing_ctx.volume_id); 
   if ( rozo_balancing_ctx.number_of_eid_in_volume <=0)
   {
-       fatal("there is no eid associated with volume identified (%d) in the exportd configuration file (%s)\n",rozo_balancing_ctx.volume_id,rozo_balancing_ctx.configFileName);
+       severe("EXIT : sthere is no eid associated with volume identified (%d) in the exportd configuration file (%s)",rozo_balancing_ctx.volume_id,rozo_balancing_ctx.configFileName);
        exit(EXIT_FAILURE);  
   }
   rozo_balancing_ctx.current_eid_idx = -1;
@@ -2236,6 +2249,7 @@ reloop:
       {
          printf("Rebalance trigger threshold not reached (%d)\n",rozo_balancing_ctx.rebalance_threshold_trigger);
 	 if (rozo_balancing_ctx.continue_on_balanced_state) continue;
+         info("EXIT : rebalance_trigger_score %d not reached",rozo_balancing_ctx.rebalance_threshold_trigger);
 	 goto end;
       }
 
@@ -2253,6 +2267,7 @@ reloop:
       {
          if (rozo_balancing_ctx.verbose) info("Nothing to re-balance min/max:%d/%d\n",rozo_balancing_ctx.max_cid_score,rozo_balancing_ctx.min_cid_score);
 	 if (rozo_balancing_ctx.continue_on_balanced_state) continue;
+         info("EXIT : rebalance state is reached");
 	 goto end;
       }
       if (rozo_balancing_ctx.verbose) info(" current threshold : %d\n",rozo_balancing_ctx.rebalance_threshold);
@@ -2277,13 +2292,13 @@ reloop:
 	 root_path = get_export_root_path( volume_export_table[rozo_balancing_ctx.current_eid_idx]);
 	 if (root_path == NULL)
 	 {
-	   fatal("eid %d does not exist \n", volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+	   severe("EXIT : eid %d does not exist", volume_export_table[rozo_balancing_ctx.current_eid_idx]);
 	   exit(EXIT_FAILURE); 
 	 } 	    
 	 rozofs_export_p = rz_inode_lib_init(root_path);
 	 if (rozofs_export_p == NULL)
 	 {
-	   fatal("RozoFS: error while reading %s\n",root_path);
+	   severe("EXIT : RozoFS: error while reading %s",root_path);
 	   exit(EXIT_FAILURE);  
 	 }
 	 /*
@@ -2369,13 +2384,13 @@ reloop:
 	root_path = get_export_root_path( volume_export_table[rozo_balancing_ctx.current_eid_idx]);
 	if (root_path == NULL)
 	{
-	  fatal("eid %d does not exist \n", volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+	  severe("EXIT : eid %d does not exist", volume_export_table[rozo_balancing_ctx.current_eid_idx]);
 	  exit(EXIT_FAILURE); 
 	} 	    
 	rozofs_export_p = rz_inode_lib_init(root_path);
 	if (rozofs_export_p == NULL)
 	{
-	  fatal("RozoFS: error while reading %s\n",root_path);
+	  severe("EXIT : RozoFS: error while reading %s",root_path);
 	  exit(EXIT_FAILURE);  
 	}
 	/*

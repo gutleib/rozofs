@@ -292,7 +292,7 @@ DEFAULT_CFG_NAME="monitor.cfg"
 DEFAULT_PLUGIN_PATH="../contrib/nagios/plugins"   
 DEFAULT_SMTP_SERVER="localhost"   
 DEFAULT_NAME=socket.gethostname() 
-DEFAULT_PERIOD="1m"
+DEFAULT_PERIOD="10s"
 
 rozofs_status="OK"
 

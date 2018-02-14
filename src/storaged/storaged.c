@@ -164,8 +164,8 @@ out:
   
    @param st: storage context
 */
-uint32_t storio_device_mapping_allocate_device(storage_t * st) {
-  severe("storaged should not call storio_device_mapping_allocate_device");
+uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib) {
+  severe("storio_device_mapping_allocate_device");
   return -1;
 }
 
@@ -250,6 +250,13 @@ void storaged_automount_devices() {
   ** Try to mount the devices
   */
   storaged_do_automount_devices(rozofs_storaged_path,&count);  
+  
+  
+  /*
+  ** Unmount the working directory 
+  */
+  storage_umount(rozofs_storaged_path);
+        
 }
 char storage_process_filename[NAME_MAX];
 

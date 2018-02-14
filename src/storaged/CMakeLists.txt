@@ -194,3 +194,4 @@ install(TARGETS rozodump
 
 install(FILES storage.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
 install(FILES storage.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
+install(PROGRAMS rozo_device DESTINATION bin)

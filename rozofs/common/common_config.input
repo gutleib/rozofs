@@ -28,7 +28,7 @@
 #
 #_______________________________________________________________________________________
 
-// Number of core files that each module is allowed to keep.
+// Number of core files that the system is allowed to keep for all the modules of this server.
 // Older core files are kept while newest are removed.	
 INT 	global 	nb_core_file		        1 0:8
 // Directory where the core files are stored.
@@ -42,8 +42,9 @@ INT	global 	storio_slice_number		1024 8:(32*1024)
 // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
 // 0      = size balancing
 // 1      = weigthed round robin
-// 2 or 3 = strict round robin
-INT	global 	file_distribution_rule		0 0:10
+// 2 & 3  = strict round robin
+// 4      = read round robin
+INT	global 	file_distribution_rule		0 0:100
 // DSCP for exchanges from/to the STORIO.
 INT	global 	storio_dscp  			46 0:46
 // DSCP for exchanges from/to the EXPORTD.
@@ -142,6 +143,8 @@ INT     storage device_selfhealing_read_throughput        20 0:10000
 // self healing : possible modes
 // spareOnly  only self repair on a spare disk
 // relocate   also repair on remaining disks when no spare available
+// resecure   repair on spare device when available, and then resecure files on
+//            spare storages when no spare device is available
 STRING  storage device_selfhealing_mode        "spareOnly"
 // Export host names or IP addresses separated with / 
 // Required for selfhealing.

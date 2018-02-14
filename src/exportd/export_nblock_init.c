@@ -531,7 +531,7 @@ void show_quota_wb(char * argv[], uint32_t tcpRef, void *bufRef) {
 *   Format the ouput for the file distribution rule
 */
 char * show_file_distibution_rule(char * pBuf) {
-  pBuf += sprintf(pBuf,"File distibution rule = %s\n",rozofs_file_distribution_rule2sting(common_config.file_distribution_rule)); 
+  pBuf += sprintf(pBuf,"File distibution rule = %s\n",rozofs_file_distribution_rule_e2String(common_config.file_distribution_rule)); 
   pBuf += sprintf(pBuf,"File estimated weigth = %d MB\n",common_config.alloc_estimated_mb);
   return pBuf;
 }   

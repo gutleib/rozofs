@@ -19,8 +19,8 @@
 cmake_minimum_required(VERSION 2.6)
 project(rozofs C)
 set(MAJOR "2")
-set(MINOR "3")
-set(REVISION "2")
+set(MINOR "4")
+set(REVISION "0")
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
@@ -49,6 +49,7 @@ find_package(READLINE REQUIRED)
 find_package(SWIG REQUIRED)
 find_package(NUMA REQUIRED)
 find_package(Doxygen QUIET)
+find_package(PCRE REQUIRED)
 
 find_program(PYTHON NAMES python2.7)
 if(NOT PYTHON)

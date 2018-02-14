@@ -62,13 +62,15 @@ LONG global newer              -1
 
 
 // That option defines the file count threshold before triggering
-// an effective file move 
+// an effective file move. The move occurs when the scan has either 
+// reached movesz or movecnt. 
 // See the --movecnt parameter of the CLI.
 INT   global movecnt            10
 
 
 // That option defines the file count threshold before triggering
-// an effective file move 
+// an effective file move. The move occurs when the scan has either 
+// reached movesz or movecnt. 
 // See the --movesz parameter of the CLI.
 STRING global movesz            "1G"
 
@@ -89,3 +91,6 @@ STRING global mode             "fid"
 // That option when asserted sets the process in verbose mode
 // See --verbose parameter of the CLI.
 BOOL   global verbose           False
+
+// That option gives the minimum size(in bytes) of an eligible file to rebalancing
+LONG global minfilesz           10485760

@@ -30,16 +30,21 @@ rebalance_config_t rebalance_config;
 void show_rebalance_config(char * argv[], uint32_t tcpRef, void *bufRef);
 void rebalance_config_read(char * fname) ;
 
-
+char   myBigBuffer[1024*1024];
 static int isDefaultValue;
-#define REBALANCE_CONFIG_SHOW_NAME(val) {\
+#define REBALANCE_CONFIG_SHOW_NAME(val,def) {\
   if (isDefaultValue) {\
     pChar += rozofs_string_append(pChar,"// ");\
+    pChar += rozofs_string_padded_append(pChar, 50, rozofs_left_alignment, #val);\
+    pChar += rozofs_string_append(pChar, " = ");\
   } else {\
+    pChar += rozofs_string_append(pChar,"// default is ");\
+    pChar += rozofs_string_append(pChar, #def);\
+    pChar += rozofs_eol(pChar);\
     pChar += rozofs_string_append(pChar,"   ");\
+    pChar += rozofs_string_padded_append(pChar, 50, rozofs_left_alignment, #val);\
+    pChar += rozofs_string_append(pChar, " = ");\
   }\
-  pChar += rozofs_string_padded_append(pChar, 50, rozofs_left_alignment, #val);\
-  pChar += rozofs_string_append(pChar, " = ");\
 }
 
 #define  REBALANCE_CONFIG_SHOW_NEXT \
@@ -62,7 +67,7 @@ static int isDefaultValue;
     isDefaultValue = 1;
 
 #define REBALANCE_CONFIG_SHOW_BOOL(val,def)  {\
-  REBALANCE_CONFIG_SHOW_NAME(val)\
+  REBALANCE_CONFIG_SHOW_NAME(val,def)\
   if (rebalance_config.val) pChar += rozofs_string_append(pChar, "True");\
   else        pChar += rozofs_string_append(pChar, "False");\
   REBALANCE_CONFIG_SHOW_END\
@@ -73,7 +78,7 @@ static int isDefaultValue;
   if (strcmp(rebalance_config.val,def)==0) isDefaultValue = 1;
 
 #define REBALANCE_CONFIG_SHOW_STRING(val,def)  {\
-  REBALANCE_CONFIG_SHOW_NAME(val)\
+  REBALANCE_CONFIG_SHOW_NAME(val,def)\
   *pChar++ = '\"';\
   if (rebalance_config.val!=NULL) pChar += rozofs_string_append(pChar, rebalance_config.val);\
   *pChar++ = '\"';\
@@ -85,28 +90,28 @@ static int isDefaultValue;
   if (rebalance_config.val == def) isDefaultValue = 1;
 
 #define REBALANCE_CONFIG_SHOW_INT(val,def)  {\
-  REBALANCE_CONFIG_SHOW_NAME(val)\
+  REBALANCE_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i32_append(pChar, rebalance_config.val);\
   REBALANCE_CONFIG_SHOW_END\
 }
 
 #define REBALANCE_CONFIG_IS_DEFAULT_INT_OPT(val,def)  REBALANCE_CONFIG_IS_DEFAULT_INT(val,def)
 #define REBALANCE_CONFIG_SHOW_INT_OPT(val,def,opt)  {\
-  REBALANCE_CONFIG_SHOW_NAME(val)\
+  REBALANCE_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i32_append(pChar, rebalance_config.val);\
   REBALANCE_CONFIG_SHOW_END_OPT(opt)\
 }
 
 #define REBALANCE_CONFIG_IS_DEFAULT_LONG(val,def)  REBALANCE_CONFIG_IS_DEFAULT_INT(val,def)
 #define REBALANCE_CONFIG_SHOW_LONG(val,def)  {\
-  REBALANCE_CONFIG_SHOW_NAME(val)\
+  REBALANCE_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i64_append(pChar, rebalance_config.val);\
   REBALANCE_CONFIG_SHOW_END\
 }
 
 #define REBALANCE_CONFIG_IS_DEFAULT_LONG_OPT(val,def)  REBALANCE_CONFIG_IS_DEFAULT_INT(val,def)
 #define REBALANCE_CONFIG_SHOW_LONG_OPT(val,def,opt)  {\
-  REBALANCE_CONFIG_SHOW_NAME(val)\
+  REBALANCE_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i64_append(pChar, rebalance_config.val);\
   REBALANCE_CONFIG_SHOW_END_OPT(opt)\
 }
@@ -121,6 +126,26 @@ static int isDefaultValue;
   if (config_lookup_bool(&cfg, #val, &boolval)) { \
     rebalance_config.val = boolval;\
   }\
+}
+#define REBALANCE_CONFIG_SET_BOOL(val,def)  {\
+  if (strcmp(def,"True")==0) {\
+    rebalance_config.val = 1;\
+    pChar += rozofs_string_append(pChar,#val);\
+    pChar += rozofs_string_append(pChar," set to value ");\
+    pChar += rozofs_string_append(pChar,def);\
+    pChar += rozofs_eol(pChar);\
+    return 0;\
+  }\
+  if (strcmp(def,"False")==0) {\
+    rebalance_config.val = 0;\
+    pChar += rozofs_string_append(pChar,#val);\
+    pChar += rozofs_string_append(pChar," set to value ");\
+    pChar += rozofs_string_append(pChar,def);\
+    pChar += rozofs_eol(pChar);\
+    return 0;\
+  }\
+  pChar += rozofs_string_append(pChar,"True or False value expected.\n");\
+  return -1;\
 }
 
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
@@ -145,11 +170,47 @@ static long int          intval;
   }\
 }
 
+#define REBALANCE_CONFIG_SET_INT_MINMAX(val,def,mini,maxi)  {\
+  int valint;\
+  if (sscanf(def,"%d",&valint) != 1) {\
+    pChar += rozofs_string_append(pChar,"integer value expected.\n");\
+    return -1;\
+  }\
+  if (valint<mini) {\
+    pChar += rozofs_string_append(pChar,"value lower than minimum.\n");\
+    return -1;\
+  }\
+  if (valint>maxi) { \
+    pChar += rozofs_string_append(pChar,"value bigger than maximum.\n");\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  rebalance_config.val = valint;\
+  return 0;\
+}
+
 #define REBALANCE_CONFIG_READ_INT(val,def) {\
   rebalance_config.val = def;\
   if (config_lookup_int(&cfg, #val, &intval)) { \
     rebalance_config.val = intval;\
   }\
+}
+
+#define REBALANCE_CONFIG_SET_INT(val,def)  {\
+  int valint;\
+  if (sscanf(def,"%d",&valint) != 1) {\
+    pChar += rozofs_string_append(pChar,"integer value expected.\n");\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar, #val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  rebalance_config.val = valint;\
+  return 0;\
 }
 
 #define REBALANCE_CONFIG_READ_LONG(val,def) {\
@@ -158,6 +219,20 @@ static long int          intval;
   if (config_lookup_int64(&cfg, #val, &longval)) { \
     rebalance_config.val = longval;\
   }\
+}
+
+#define REBALANCE_CONFIG_SET_LONG(val,def) {\
+  long long         longval;\
+  if (sscanf(def,"%lld",&longval) != 1) {\
+    pChar += rozofs_string_append(pChar,"long long integer value expected.\n");\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  rebalance_config.val = longval;\
+  return 0;\
 }
 
 
@@ -177,6 +252,28 @@ static long int          intval;
   }\
 }
 
+
+#define REBALANCE_CONFIG_SET_LONG_MINMAX(val,def,mini,maxi)  {\
+  long long         longval;\
+  if (sscanf(def,"%lld",&longval) != 1) {\
+    pChar += rozofs_string_append(pChar,"long long integer value expected.\n");\
+    return -1;\
+  }\
+  if (longval<mini) {\
+    pChar += rozofs_string_append(pChar,"value lower than minimum.\n");\
+    return -1;\
+  }\
+  if (longval>maxi) { \
+    pChar += rozofs_string_append(pChar,"value bigger than maximum.\n");\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  rebalance_config.val = longval;\
+  return 0;\
+}
 #define REBALANCE_CONFIG_READ_STRING(val,def)  {\
   const char * charval;\
   if (rebalance_config.val) free(rebalance_config.val);\
@@ -185,6 +282,16 @@ static long int          intval;
   } else {\
     rebalance_config.val = strdup(def);\
   }\
+}
+
+#define REBALANCE_CONFIG_SET_STRING(val,def)  {\
+  if (rebalance_config.val) free(rebalance_config.val);\
+  rebalance_config.val = strdup(def);\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  return 0;\
 }
 
 

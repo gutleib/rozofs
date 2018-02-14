@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <dirent.h>
 void common_config_read(char * fname);
 
 typedef struct _common_config_t {
@@ -36,7 +37,7 @@ typedef struct _common_config_t {
   ** global scope configuration parameters
   */
 
-  // Number of core files that each module is allowed to keep.
+  // Number of core files that the system is allowed to keep for all the modules of this server.
   // Older core files are kept while newest are removed.	
   int32_t     nb_core_file;
   // Directory where the core files are stored.
@@ -50,7 +51,8 @@ typedef struct _common_config_t {
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
   // 0      = size balancing
   // 1      = weigthed round robin
-  // 2 or 3 = strict round robin
+  // 2 & 3  = strict round robin
+  // 4      = read round robin
   int32_t     file_distribution_rule;
   // DSCP for exchanges from/to the STORIO.
   int32_t     storio_dscp;
@@ -192,6 +194,8 @@ typedef struct _common_config_t {
   // self healing : possible modes
   // spareOnly  only self repair on a spare disk
   // relocate   also repair on remaining disks when no spare available
+  // resecure   repair on spare device when available, and then resecure files on
+  //            spare storages when no spare device is available
   char *      device_selfhealing_mode;
   // Export host names or IP addresses separated with / 
   // Required for selfhealing.

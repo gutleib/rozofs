@@ -488,6 +488,13 @@ int sconfig_validate(sconfig_t *config) {
             goto out;
 	}
 
+	if (e1->device.redundancy <= 0) {
+            severe("device redundancy is %d", 
+	           e1->device.redundancy);
+            errno = EINVAL;
+            goto out;
+	}
+        
 	if (e1->device.redundancy > e1->device.mapper) {
             severe("device redundancy is %d and mapper is %d", 
 	           e1->device.redundancy, e1->device.mapper);

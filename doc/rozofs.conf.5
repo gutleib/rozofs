@@ -39,11 +39,20 @@ This parameter enables to choose the file distribution rule at file creation. Th
   The devices are allocated in a round robin manner within a storio.
   The clusters and storages are re-ordered in decreasing cluster and storage available disk space order every 12s.
 .RE
-- 2 "strict round robin"
+- 2 or 3 "strict round robin"
 .RS
   The clusters are selected in a round robin manner.
   The SIDs are chosen in round robin manner.
   The devices are allocated in a round robin manner within a storio.
+.RE
+- 4 "read round robin"
+.RS
+  The clusters are distributed in a round robin manner.
+  The storages within the cluster are then chosen in round robin manner.
+  The devices of the storages within the inverse storages of the file distribution 
+    are allocated in a round robin manner to favor reading on all the devices.
+  The devices of the storages within the forward and safe storages of the file distribution 
+    are allocated in a size balancing manner to equalize the devices occupancy.
 .RE
 .RE	    
 
@@ -162,12 +171,12 @@ A spare device is an unmounted but formatted ext4/xfs disk with a "rorofs_spare"
 A logical storage (cid/sid) can use a given spare device if the "rozofs_spare" mark file content fits with its spare-mark parameter defined in storage.conf. 
 .RE
 -
-.B "relocate"
+.B "resecure"
 .RS
 Identical to 
 .B
 "spareOnly" 
-while some spare device is available. When no more spare device is available, files of failed devices are automatically relocated on remaining devices of the same sid.
+while some spare device is available. When no more spare device is available, files of failed devices are automatically resecured on their spare sids.
 .RE
 .RE
 
