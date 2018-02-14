@@ -51,7 +51,8 @@ typedef struct _common_config_t {
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
   // 0      = size balancing
   // 1      = weigthed round robin
-  // 2 or 3 = strict round robin
+  // 2 & 3  = strict round robin
+  // 4      = read round robin
   int32_t     file_distribution_rule;
   // DSCP for exchanges from/to the STORIO.
   int32_t     storio_dscp;

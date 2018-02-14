@@ -52,7 +52,7 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
     COMMON_CONFIG_SET_INT_MINMAX(storio_slice_number,value,8,(32*1024));
   }
   if (strcmp(parameter,"file_distribution_rule")==0) {
-    COMMON_CONFIG_SET_INT_MINMAX(file_distribution_rule,value,0,10);
+    COMMON_CONFIG_SET_INT_MINMAX(file_distribution_rule,value,0,100);
   }
   if (strcmp(parameter,"storio_dscp")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(storio_dscp,value,0,46);
@@ -304,8 +304,9 @@ char * show_common_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.\n");
   pChar += rozofs_string_append(pChar,"// 0      = size balancing\n");
   pChar += rozofs_string_append(pChar,"// 1      = weigthed round robin\n");
-  pChar += rozofs_string_append(pChar,"// 2 or 3 = strict round robin\n");
-  COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:10");
+  pChar += rozofs_string_append(pChar,"// 2 & 3  = strict round robin\n");
+  pChar += rozofs_string_append(pChar,"// 4      = read round robin\n");
+  COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:100");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_INT(storio_dscp,46);
@@ -770,8 +771,9 @@ char * save_common_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.\n");
   pChar += rozofs_string_append(pChar,"// 0      = size balancing\n");
   pChar += rozofs_string_append(pChar,"// 1      = weigthed round robin\n");
-  pChar += rozofs_string_append(pChar,"// 2 or 3 = strict round robin\n");
-  COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:10");
+  pChar += rozofs_string_append(pChar,"// 2 & 3  = strict round robin\n");
+  pChar += rozofs_string_append(pChar,"// 4      = read round robin\n");
+  COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:100");
 
   COMMON_CONFIG_IS_DEFAULT_INT(storio_dscp,46);
   pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the STORIO.\n");
@@ -1310,8 +1312,9 @@ static inline void common_config_generated_read(char * fname) {
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual. 
   // 0      = size balancing 
   // 1      = weigthed round robin 
-  // 2 or 3 = strict round robin 
-  COMMON_CONFIG_READ_INT_MINMAX(file_distribution_rule,0,0,10);
+  // 2 & 3  = strict round robin 
+  // 4      = read round robin 
+  COMMON_CONFIG_READ_INT_MINMAX(file_distribution_rule,0,0,100);
   // DSCP for exchanges from/to the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(storio_dscp,46,0,46);
   // DSCP for exchanges from/to the EXPORTD. 

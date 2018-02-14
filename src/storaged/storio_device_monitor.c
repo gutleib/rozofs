@@ -1169,7 +1169,8 @@ int storio_device_mapping_monitor_thread_start() {
   /*
   ** Set the polling periodicity in seconds
   */
-  if (common_config.file_distribution_rule != rozofs_file_distribution_size_balancing) {
+  if ((common_config.file_distribution_rule != rozofs_file_distribution_size_balancing)
+  &&  (common_config.file_distribution_rule != rozofs_file_distribution_read_round_robin))  {
     STORIO_DEVICE_PERIOD = 10;
   }
   

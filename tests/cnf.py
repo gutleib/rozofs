@@ -114,7 +114,7 @@ rozofs.set_deletion_delay(12)
 #--------------STORIO GENERAL
 
 # Set original RozoFS file distribution
-rozofs.set_file_distribution(2)
+rozofs.set_file_distribution(4)
 
 # Set single storio mode
 # rozofs.storio_mode_single()

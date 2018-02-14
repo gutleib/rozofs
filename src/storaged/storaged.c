@@ -164,8 +164,8 @@ out:
   
    @param st: storage context
 */
-uint32_t storio_device_mapping_allocate_device(storage_t * st) {
-  severe("storaged should not call storio_device_mapping_allocate_device");
+uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib) {
+  severe("storio_device_mapping_allocate_device");
   return -1;
 }
 

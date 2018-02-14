@@ -223,7 +223,7 @@ static long int          intval;
 
 #define COMMON_CONFIG_SET_LONG(val,def) {\
   long long         longval;\
-  if (sscanf(def,"ll%d",&longval) != 1) {\
+  if (sscanf(def,"%lld",&longval) != 1) {\
     pChar += rozofs_string_append(pChar,"long long integer value expected.\n");\
     return -1;\
   }\
