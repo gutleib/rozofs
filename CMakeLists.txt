@@ -21,7 +21,8 @@ project(rozofs C)
 
 set(MAJOR "3")
 set(MINOR "0")
-set(REVISION "~alpha6")
+set(REVISION "~alpha7")
+
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
@@ -52,7 +53,7 @@ find_package(NUMA REQUIRED)
 find_package(Doxygen QUIET)
 find_package(RDMA QUIET)
 find_package(INFINIBAND QUIET)
-
+find_package(PCRE REQUIRED)
 
 find_program(PYTHON NAMES python2.7)
 if(NOT PYTHON)

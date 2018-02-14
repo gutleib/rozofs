@@ -51,21 +51,20 @@ The delay is defined in minutes.
 See the --newerm parameter of the CLI.
 .SS movecnt
 That option defines the file count threshold before triggering
-an effective file move 
+an effective file move  The move occurs when the scan has either reached 
+movesz or movecnt.
 See the --movecnt parameter of the CLI.
 .SS movesz
-That option defines the file count threshold before triggering
-an effective file move 
+that option defines the cumulated file size threshold before triggering
+an effective file move. The move occurs when the scan has either reached 
+movesz or movecnt.
 See the --movesz parameter of the CLI.
 .SS throughput
 That option defines the maximun bandwidth in MB/s allocated to
 the file mover.
 See the --throughput parameter of the CLI.
-.SS mode
-That option indicates the access mode used by the storage balancer for moving the file:
-- rel: use relative mode (parent/child)
-- abs: use full pathname mode
-- fid: use i-node mode 
+.SS minfilesize
+That option gives the minimum size(in bytes) of an eligible file to rebalancing.
 .SS verbose
 That option indicates the access mode used by the storage balancer for moving the file:
 - rel: use relative mode (parent/child)

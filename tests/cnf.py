@@ -100,7 +100,7 @@ def addExport(vol,layout=None):
       else:	
         for site in range(0,rozofs.site_number+1): 
           m1 = e.add_mount(site)
-        
+  return e        
 
     
 #_____________________________________ 
@@ -141,8 +141,9 @@ rozofs.set_file_distribution(4)
 # Disable CRC32
 # rozofs.set_crc32(False)
 
-# Disable self healing
-rozofs.set_self_healing(1)
+# Enaable self healing
+#rozofs.set_self_healing(1,"resecure")
+rozofs.set_self_healing(1,"spareOnly")
 
 # Disable spare file restoration
 #rozofs.spare_restore_disable()
@@ -154,7 +155,7 @@ rozofs.set_self_healing(1)
 #rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
-#rozofs.set_ext4(320)
+rozofs.set_ext4(320)
 #rozofs.set_xfs(1000,None)
 #rozofs.set_xfs(1000,"4096")
 #rozofs.set_xfs(1000,"64K")
@@ -201,7 +202,10 @@ setLayout(1)
 # Define volume 1 on some hosts
 vol = setVolumeHosts(4)
 # Create an export on this volume with layout 1
-addExport(vol,1)
+e = addExport(vol,1)
+# Set thin provisionning
+#e.set_thin()
+
 # Add an other export on this volume with layout 1
 #addExport(vol,1)
 

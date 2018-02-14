@@ -169,9 +169,35 @@ static inline int ROZOFS_BITMAP64_NB_BIT0_FUNC(uint8_t * p8, int sz8)  {
 }
 #define ROZOFS_BITMAP64_NB_BIT0(bitmap)  ROZOFS_BITMAP64_NB_BIT0_FUNC((uint8_t *)bitmap, sizeof(bitmap))
 
-/*___________________________________________________________________________________*/
+/*___________________________________________________________________________________
+*
+* Run a command and exit
+*
+* @param cmd  The command to run
+*
+*/
+static inline void rozofs_run_until_exit(char * cmd) {
+  int    idx;
+  char * pChar = cmd;
+  char * argv[64];
+    
+  while (*pChar == ' ') pChar++;    
 
+  idx   = 0;
+  while ( idx < 62 ) {
+    argv[idx++] = pChar;
+    while ((*pChar != ' ') && (*pChar != 0)) pChar++;
+    if (*pChar == 0) break;
+    *pChar = 0;
+    pChar++;
+    while (*pChar == ' ') pChar++;    
+  }  
+  argv[idx] = NULL;
 
+  execvp(argv[0],&argv[0]);
+  int error = errno;
+  exit(error); 
+}
 
 
 
@@ -785,7 +811,6 @@ typedef struct _rozofs_rebuild_entry_file_t {
     uint8_t   layout:4;    //< layout
     uint8_t   bsize:2;     //< Block size 0=4K / 1=8K / 2=16K / 3=32K    
     uint8_t   todo:1;      //< 1 when rebuild not yet done
-    uint8_t   relocate:1;  //< 1 when relocation is required
     uint8_t   error;       //< error code. See ROZOFS_RBS_ERROR_E
     /*
     ** Warning : this field has to be the last since only the 

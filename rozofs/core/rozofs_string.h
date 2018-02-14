@@ -38,6 +38,34 @@ typedef enum _rozofs_alignment_e {
 
 
 
+
+/*
+ *_______________________________________________________________________
+ *  Build a string from a date given by time() API
+ *
+ *  @param pChar : where to store the formated date
+ *  
+ *  @retval the formated size
+ *_______________________________________________________________________
+ */
+static inline int rozofs_time2string(char * pChar, time_t loc_time) {
+  struct tm date;
+  int       len;
+
+  localtime_r(&loc_time,&date); 
+  ctime_r(&loc_time,pChar);
+  len = strlen(pChar) - 1;
+  pChar[len] = 0;
+  return len;
+}      
+
+
+
+
+
+
+
+
 /*
 ** ===================== FID ==================================
 */

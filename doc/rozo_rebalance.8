@@ -83,13 +83,18 @@ that option indicates the access mode used by the storage balancer for moving th
 .RS
 that option sets the storage balancing process in verbose mode.
 .RE
+.IP "--minfilesz <value>[k|K|m|M|g|G]"
+.RS
+That option gives the minimum size of an eligible file to rebalancing.
+.RE
 .IP "--movecnt count"
 .RS
-that option defines the file count threshold before triggering an effective file move (default:10).
+that option defines the file count threshold before triggering an effective file move (default:10). The move occurs when the scan has either reached movesz or movecnt.
 .RE
 .IP "--movesz value[k|K|m|M|g|G]"
 .RS
 that option defines the cumulated file size threshold before triggering an effective file move (default:1G). The size can be given in bytes, kilobytes(k,K), megabytes (m,M) or gigabytes (g,G).
+The move occurs when the scan has either reached movesz or movecnt
 .RE
 .IP "--throughput value"
 .RS

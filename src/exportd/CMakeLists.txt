@@ -261,7 +261,7 @@ add_executable(rozo_scan_by_criteria
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h 
 )
-target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${PCRE_LIBRARY})
 #________________________________________________________
 add_executable(rozo_rebalance
     rozo_rebalance.c  

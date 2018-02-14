@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <pcre.h>
 #include <rozofs/rozofs.h>
 #include <rozofs/common/mattr.h>
 #include "export.h"
@@ -120,6 +121,7 @@ fid_t       pfid_equal = {0};
 /*
 ** FNAME
 */
+pcre      * pRegex = NULL;
 char      * fname_equal = NULL;
 char      * fname_bigger = NULL;
 
@@ -238,7 +240,113 @@ char * exp_read_fname_from_inode(char        * rootPath,
   * len = pentry->len;
   pentry->name[*len] = 0;
   return pentry->name;
-}    
+}
+/* 
+**__________________________________________________________________
+**
+** Check whether names matches regex
+  
+  @param rootPath : export root path
+  @param inode_p  : the inode to check
+  @param name     : the name to check
+*/
+int exp_check_regex(char        * rootPath,
+                    ext_mattr_t * inode_p,
+                    pcre        * fname_equal)
+{
+  char             pathname[ROZOFS_PATH_MAX+1];
+  char           * p = pathname;
+  rozofs_inode_t * fake_inode;
+  int              fd;
+  off_t            offset;
+  size_t           size;
+  mdirents_name_entry_t * pentry;
+  
+  /*
+  ** Short names are stored in inode
+  */
+  if (inode_p->s.fname.name_type == ROZOFS_FNAME_TYPE_DIRECT) {
+    /*
+    ** Compare the names
+    */
+    if (pcre_exec (fname_equal, NULL, inode_p->s.fname.name, inode_p->s.fname.len, 0, 0, NULL, 0) == 0) {
+      return 1;
+    }  
+    return 0;
+  }
+  
+  /*
+  ** When name length is bigger than ROZOFS_OBJ_NAME_MAX
+  ** indirect mode is used
+  */
+  pentry = &bufferName;
+
+  /*
+  ** Name is too big and is so in the direntry
+  */
+
+  size = inode_p->s.fname.s.name_dentry.nb_chunk * MDIRENTS_NAME_CHUNK_SZ;
+  
+  offset = DIRENT_HASH_NAME_BASE_SECTOR * MDIRENT_SECTOR_SIZE
+         + inode_p->s.fname.s.name_dentry.chunk_idx * MDIRENTS_NAME_CHUNK_SZ;
+
+  /*
+  ** Start with the export root path
+  */   
+  p += rozofs_string_append(p,rootPath);
+  p += rozofs_string_append(p, "/");
+
+  /*
+  ** Add the parent slice
+  */
+  fake_inode = (rozofs_inode_t *) inode_p->s.pfid;
+  p += rozofs_u32_append(p, fake_inode->s.usr_id);
+  p += rozofs_string_append(p, "/");
+
+  /*
+  ** Add the parent FID
+  */
+  p += rozofs_fid_append(p, inode_p->s.pfid);
+  p += rozofs_string_append(p, "/d_");
+
+  /*
+  ** Add the root idx
+  */
+  p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.root_idx);
+
+  /*
+  ** Add the collision idx
+  */
+  if (inode_p->s.fname.s.name_dentry.coll) {
+    p += rozofs_string_append(p, "_");
+    p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.coll_idx);
+  }   
+
+  /*
+  ** Open the file
+  */
+  fd = open(pathname,O_RDONLY);
+  if (fd < 0) {
+    return 0;
+  }
+  
+  /*
+  ** Read the file
+  */
+  int ret = pread(fd, &bufferName, size, offset);
+  close(fd);
+  
+  if (ret != size) {
+    return 0;
+  }
+  /*
+  ** Compare the names
+  */
+  if (pcre_exec (fname_equal, NULL, pentry->name, pentry->len, 0, 0, NULL, 0) == 0) {
+    return 1;
+  }  
+  return 0;  
+}      
 /*
 **__________________________________________________________________
 **
@@ -519,6 +627,14 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }  
   }
   
+  /*
+  ** Name must match regex
+  */
+  if (pRegex) {
+    if (!exp_check_regex(e->root,inode_p,pRegex)) {
+      return 0;
+    }  
+  }  
   /*
   ** Name must include fname_bigger
   */
@@ -855,21 +971,21 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
  */
 static void usage() {
     printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
-    printf("This RozoFS utility enables to scan for files or directories in a RozoFS file system\naccording to one or several criteria.\n");
+    printf("This RozoFS utility enables to scan for files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
     printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan_by_criteria <MANDATORY> [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
     printf("\n\033[1mMANDATORY:\033[0m\n");
-    printf("\t\033[1m-p,--path <export_root_path>\033[0m\t\texportd root path.\n");
-    printf("or\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier.\n");
+    printf("either\t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
+    printf("or\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
     printf("\n\033[1mOPTIONS:\033[0m\n");
     printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
     printf("\t\033[1m-h,--help\033[0m\t\tprint this message and exit.\n");
     printf("\t\033[1m-a,--all\033[0m\t\tScan all tracking files and not only those matching time criteria.\n");
     printf("\n\033[1mCRITERIA:\033[0m\n");
-    printf("\t\033[1m-x,--xattr\033[0m\t\twith xattribute.\n");
-    printf("\t\033[1m-X,--noxattr\033[0m\t\twithout xattribute.\n");    
-    printf("\t\033[1m-d,--dir\033[0m\t\tis a directory.\n");
-    printf("\t\033[1m-S,--slink\033[0m\t\tinclude symbolink links.\n");
-    printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files.\n");
+    printf("\t\033[1m-x,--xattr\033[0m\t\tfile/directory must have extended attribute.\n");
+    printf("\t\033[1m-X,--noxattr\033[0m\t\tfile/directory must not have extended attribute.\n");    
+    printf("\t\033[1m-d,--dir\033[0m\t\tscan directories only. Without this options only files are scanned.\n");
+    printf("\t\033[1m-S,--slink\033[0m\t\tinclude symbolink links in the scan. Default is not to scan symbolic links.\n");
+    printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files from the scan.\n");
     printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
     printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
     printf("\n\033[1mFIELD:\033[0m\n");
@@ -880,19 +996,21 @@ static void usage() {
     printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
     printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
     printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (1).\n"); 
-    printf("\t\033[1m-l,--link\033[0m\t\tnumber of link.\n"); 
+    printf("\t\033[1m-l,--link\033[0m\t\tnumber of links.\n"); 
     printf("\t\033[1m-b,--children\033[0m\t\tnumber of children.\n"); 
     printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
-    printf("\t\033[1m-n,--name\033[0m\t\tfile name (3).\n");
+    printf("\t\033[1m-n,--name\033[0m\t\tfile/directory name (3).\n");
     printf("(1) only --eq or --ne conditions are supported.\n");
     printf("(2) only --eq condition is supported.\n");
-    printf("(3) only --eq or --ge conditions are supported.\n");
+    printf("(3) only --eq, --ge or --regex conditions are supported.\n");
     printf("\n\033[1mCONDITIONS:\033[0m\n");              
     printf("\t\033[1m--lt <val>\033[0m\t\tField must be lower than <val>.\n");
     printf("\t\033[1m--le <val>\033[0m\t\tField must be lower or equal than <val>.\n");
     printf("\t\033[1m--gt <val>\033[0m\t\tField must be greater than <val>.\n");
     printf("\t\033[1m--ge <val>\033[0m\t\tField must be greater or equal than <val>.\n");
     printf("\t\t\t\tFor --name search files whoes name contains <val>.\n");
+    printf("\t\033[1m--regex <regexfile>\033[0m\tOnly valid for --name.\n");
+    printf("\t\t\t\t<regexfile> is the name of the text file containing the Perl regex to match.\n");
     printf("\t\033[1m--eq <val>\033[0m\t\tField must be equal to <val>.\n");
     printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
     printf("\nDates must be expressed as:\n");
@@ -904,10 +1022,13 @@ static void usage() {
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
     printf("Searching files created by user 4501 on 2015 January the 10th in the afternoon.\n");
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
-    printf("Searching files owned by group 4321 in directory 00000000-0000-4000-1800-000000000018.\n");
+    printf("Searching files owned by group 4321 in directory with FID 00000000-0000-4000-1800-000000000018.\n");
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
     printf("Searching files whoes name constains captainNemo.\n");
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --name --ge captainNemo\033[0m\n");
+    printf("Searching directories whoes name starts by a \'Z\', ends with \".DIR\" and constains at least one decimal number.\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --dir --name --regex /tmp/regex\033[0m\n");
+    printf("  With /tmp/regex containing regex string \033[1m^Z.*\\d.*\\.DIR$\033[0m\n");    
     printf("Searching directories with more than 100K entries.\n");
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --dir --children --ge 100000\033[0m\n");
     printf("Searching all symbolic links.\n");
@@ -1160,6 +1281,7 @@ int main(int argc, char *argv[]) {
     int   expect_comparator = 0;
     int   date_criteria_is_set = 0;
     check_inode_pf_t date_criteria_cbk;
+    char  regex[1024];
      
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -1186,6 +1308,7 @@ int main(int argc, char *argv[]) {
         {"gt", required_argument, 0, '>'},
         {"ge", required_argument, 0, '+'},
         {"eq", required_argument, 0, '='},
+        {"regex", required_argument, 0, '*'},
         {"ne", required_argument, 0, '!'},
         {"dir", no_argument, 0, 'd'},
         {"all", no_argument, 0, 'a'},
@@ -1226,7 +1349,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:hvcmsguClxXdbfnSRartT", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:*:hvcmsguClxXdbfnSRartT", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1768,7 +1891,67 @@ int main(int argc, char *argv[]) {
                   usage();
                   exit(EXIT_FAILURE);
               }
+          /*
+          ** Regex
+          */    
+          case '*':
+              expect_comparator = 0;          
+              comp = "--regex";        
+              switch (scan_criteria) {
+              
+                case SCAN_CRITERIA_FNAME:
+                {  
+                  FILE*       f;
+                  const char *pcreErrorStr;     
+                  int         pcreErrorOffset;
+                  int         index;
+                  
+                  /*
+                  ** Open regex file
+                  */
+                  f = fopen(optarg, "r");
+                  if (f == NULL) {
+                    printf("Can not open file %s (%s)\n", optarg, strerror(errno));
+                    usage();
+                    exit(EXIT_FAILURE);                    
+                  } 
+                  /*
+                  ** Read regex
+                  */
+                  if (fread(regex, sizeof(regex), 1, f) != 0) {                
+                    printf("Can not read file %s (%s)\n", optarg, strerror(errno));
+                    fclose(f);
+                    usage();
+                    exit(EXIT_FAILURE);                    
+                  } 
+                  fclose(f);
+                  /*
+                  ** Compile the regex
+                  */
+                  index = 0;
+                  while (regex[index] != 0) {
+                    if (regex[index] == '\n') {
+                      regex[index] = 0;
+                      break;
+                    }
+                    index++;
+                  }    
+                  pRegex = pcre_compile(regex, 0, &pcreErrorStr, &pcreErrorOffset, NULL);
+                  if(pRegex == NULL) {
+                    printf("Bad regex \"%s\" at offset %d : %s\n", regex, pcreErrorOffset, pcreErrorStr);  
+                    usage();
+                    exit(EXIT_FAILURE);
+                  }
+                }  
+                break; 
+                                                                         
+                default:
+                  printf("\nNo criteria defined prior to %s\n",comp);     
+                  usage();
+                  exit(EXIT_FAILURE);
+              }
               break;  
+
           /*
           ** Different
           */    
@@ -1953,7 +2136,6 @@ int main(int argc, char *argv[]) {
   else {
     rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
-  
   exit(EXIT_SUCCESS);  
   return 0;
 }

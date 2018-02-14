@@ -3597,9 +3597,9 @@ typedef struct _storage_enumerated_device_t {
   char      name[32];     // Device name
   time_t    date;         // Date of the mark file that gave cid/sid/device
   
-  int       mounted:1;    // Is it mounted 
-  int       ext4:1;       // Is it ext4 (else xfs)
-  int       spare:1;      // Is it a spare drive (cid/sid/device are meaningless)
+  uint32_t  mounted:1;    // Is it mounted 
+  uint32_t  ext4:1;       // Is it ext4 (else xfs)
+  uint32_t  spare:1;      // Is it a spare drive (cid/sid/device are meaningless)
   char *    spare_mark;   // String written in spare mark file in case of a spare device
 } storage_enumerated_device_t;
 
@@ -3607,6 +3607,7 @@ typedef struct _storage_enumerated_device_t {
 
 storage_enumerated_device_t * storage_enumerated_device_tbl[STORAGE_MAX_DEV_PER_NODE]={0};
 int                           storage_enumerated_device_nb=0;
+
 
 /*
  *_______________________________________________________________________
@@ -3909,7 +3910,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   /*
   ** Unmount the working directory, just in case
   */
-  if (umount2(workDir,MNT_FORCE)==-1) {}    
+  storage_umount(workDir);    
       
   /*
   ** Build the list of block devices available on the system
@@ -3942,8 +3943,8 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     /*
     ** Unmount the working directory 
     */
-    if (umount2(workDir,MNT_FORCE)==-1) {}
-        
+    storage_umount(workDir);    
+            
     /*
     ** Get device name from the result file
     */
@@ -4037,9 +4038,9 @@ int storage_enumerate_devices(char * workDir, int unmount) {
         /*
         ** Spare device should not be mounted 
         */
-        if (umount2(pMount,MNT_FORCE)==0) {
+        if (storage_umount(pMount)==0) {   
 	  pDev->mounted = 0;
-	}
+	}       
         
         /*
         ** Check if someone cares about this spare file in this module        
@@ -4091,7 +4092,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       ** Umount it when requested
       */
       if (unmount) {
-        if (umount2(pMount,MNT_FORCE)==0) {
+        if (storage_umount(pMount)==0) {
 	  pDev->mounted = 0;
 	}
 	/*
@@ -4110,7 +4111,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       *pt++ = '/';
       pt += rozofs_u32_append(pt,pDev->dev);
       if (strcmp(cmd,pMount)!=0) {
-        if (umount2(pMount,MNT_FORCE)==0) {
+        if (storage_umount(pMount)==0) {
 	  pDev->mounted = 0;
 	}
       }	
@@ -4134,6 +4135,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
 	      strerror(errno));
       CONT;
     }
+    
     /*
     ** Read the mark file
     */
@@ -4142,7 +4144,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     /*
     ** unmount directory to remount it at the convenient place
     */
-    if (umount2(workDir,MNT_FORCE)==-1) {}
+    storage_umount(workDir);
     
     if (ret < 0) {
       CONT;
@@ -4226,7 +4228,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   /*
   ** Unmount the directory
   */
-  if (umount2(workDir,MNT_FORCE)==-1) {}
+  storage_umount(workDir);
   
   /*
   ** Remove working directory
@@ -4400,16 +4402,8 @@ void storage_show_enumerated_devices(char * argv[], uint32_t tcpRef, void *bufRe
     }
     pChar += rozofs_string_append(pChar,"\n    }");
   }
-  pChar += rozofs_string_append(pChar,"\n  ],\n");
-  
-  pChar += rozofs_string_append(pChar,"  \"device self healing\" : {\n");
-  pChar += rozofs_string_append(pChar,"    \"exportd\" \t: \"");
-  pChar += rozofs_string_append(pChar,common_config.export_hosts);
-  pChar += rozofs_string_append(pChar,"\",\n    \"mode\" \t: \"");
-  pChar += rozofs_string_append(pChar,common_config.device_selfhealing_mode);
-  pChar += rozofs_string_append(pChar,"\",\n    \"delay\" \t: ");
-  pChar += rozofs_u32_append(pChar,common_config.device_selfhealing_delay);
-  pChar += rozofs_string_append(pChar,"\n  }\n}\n");
+  pChar += rozofs_string_append(pChar,"\n  ]\n}\n");
+
   uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer()); 
 } 
 /*
@@ -4483,7 +4477,7 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev) {
   /*
   ** Umount this directory, just in case
   */
-  if (umount2(cmd,MNT_FORCE)==-1) {}   
+  storage_umount(cmd);   
   
   /*
   ** Mount the device at this place
@@ -4521,7 +4515,7 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev) {
       /*
       ** Umount this directory
       */
-      if (umount2(cmd,MNT_FORCE)==-1) {}   
+      storage_umount(cmd); 
       return -1;     
     }    
     close(fd);

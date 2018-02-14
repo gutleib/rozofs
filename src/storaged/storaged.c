@@ -250,6 +250,13 @@ void storaged_automount_devices() {
   ** Try to mount the devices
   */
   storaged_do_automount_devices(rozofs_storaged_path,&count);  
+  
+  
+  /*
+  ** Unmount the working directory 
+  */
+  storage_umount(rozofs_storaged_path);
+        
 }
 char storage_process_filename[NAME_MAX];
 
