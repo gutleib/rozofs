@@ -272,7 +272,7 @@ expthin_ctx_t *expthin_allocate_context(export_t *e,lv2_entry_t *lv2_entry_p)
   ** compute the rozofs quota on the fly without indexing the full exportd
   */
   ctx_p->timestamp = lv2_entry_p->attributes.s.attrs.mtime;
-  ctx_p->nb_4KB_blocks = lv2_entry_p->attributes.s.attrs.children;
+  ctx_p->nb_4KB_blocks = lv2_entry_p->attributes.s.hpc_reserved.reg.nb_blocks_thin;
   ctx_p->state = EXPTHIN_ST_IDLE;
   list_init(&ctx_p->list);
   /*
@@ -346,29 +346,29 @@ int expthin_check_entry(export_t *e,lv2_entry_t *lv2_entry_p,int write_block_fla
    /*
    ** Check if there is a change in the number of blocks
    */
-   if ( ctx_p->nb_4KB_blocks != lv2_entry_p->attributes.s.attrs.children)
+   if ( ctx_p->nb_4KB_blocks != lv2_entry_p->attributes.s.hpc_reserved.reg.nb_blocks_thin)
    {
    
       /*
       ** need to compute the delta in order to update the rozofs quota
       */
-      if (ctx_p->nb_4KB_blocks > lv2_entry_p->attributes.s.attrs.children)
+      if (ctx_p->nb_4KB_blocks > lv2_entry_p->attributes.s.hpc_reserved.reg.nb_blocks_thin)
       {
          *dir_p = 1;
-	 *nb_block_p = ctx_p->nb_4KB_blocks - lv2_entry_p->attributes.s.attrs.children;
+	 *nb_block_p = ctx_p->nb_4KB_blocks - lv2_entry_p->attributes.s.hpc_reserved.reg.nb_blocks_thin;
       }
       else
       {
          *dir_p = -1;
-	 *nb_block_p = lv2_entry_p->attributes.s.attrs.children - ctx_p->nb_4KB_blocks;      
+	 *nb_block_p = lv2_entry_p->attributes.s.hpc_reserved.reg.nb_blocks_thin - ctx_p->nb_4KB_blocks;      
       }
-      lv2_entry_p->attributes.s.attrs.children = ctx_p->nb_4KB_blocks;
+      lv2_entry_p->attributes.s.hpc_reserved.reg.nb_blocks_thin = ctx_p->nb_4KB_blocks;
       update = 1;
    }
    /*
    ** check if a size recomputation is required
    */
-   if ((write_block_flag) || lv2_entry_p->attributes.s.attrs.children==0)
+   if ((write_block_flag) || lv2_entry_p->attributes.s.hpc_reserved.reg.nb_blocks_thin==0)
    {
      /*
      ** inform the thread that the number of block must be recomputed

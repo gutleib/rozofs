@@ -4413,7 +4413,7 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
    {
      if (export_attr_thread_check_context(lv2)==0) lv2_cache_del(e->lv2_cache, child_fid);
    }
-   plv2->attributes.s.hpc_reserved--;    
+   plv2->attributes.s.hpc_reserved.dir.nb_deleted_files--;    
 }
 /*
 **__________________________________________________________________
@@ -4713,7 +4713,7 @@ duplicate_deleted_file:
 	      */
 	      if (e->thin)
 	      {
-	        expthin_update_blocks(e,(uint32_t)lv2->attributes.s.attrs.children,-1);
+	        expthin_update_blocks(e,(uint32_t)lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin,-1);  // Thin prov fix
 	      }
 	      /*
 	      ** Update the directory statistics
@@ -4780,7 +4780,7 @@ duplicate_deleted_file:
     */
     if (rename == 1)
     {
-      plv2->attributes.s.hpc_reserved++;    
+      plv2->attributes.s.hpc_reserved.dir.nb_deleted_files++;    
     }
     else
     {
@@ -4790,7 +4790,7 @@ duplicate_deleted_file:
       */
       if ((parent_state==1) ||(parent_state==2)||(parent_state==3))
       {
-	 plv2->attributes.s.hpc_reserved--;          
+	 plv2->attributes.s.hpc_reserved.dir.nb_deleted_files--;          
       }    
     }
 
@@ -4862,7 +4862,7 @@ duplicate_deleted_file:
 	 ** turning off the rename flag implies that the file will be deleted
 	 ** clear the update_children flag since the count of file within the directory has already been updated on the first pass.
 	 */
-	 plv2->attributes.s.hpc_reserved--;
+	 plv2->attributes.s.hpc_reserved.dir.nb_deleted_files--;
 	 rename = 0;
 	 update_children = 0;
 	 goto duplicate_deleted_file;  
@@ -5659,7 +5659,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     }
     if (rename == 0)
     {
-      if (lv2->attributes.s.hpc_reserved != 0) {
+      if (lv2->attributes.s.hpc_reserved.dir.nb_deleted_files != 0) {
           /*
 	  ** Check if the remove is done on the active directory: if it is the case we move it directory
 	  ** in the local trash of the current directory even if that directory has no associated trash
@@ -5679,7 +5679,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     /*
     ** effective delete of the directory if that one is empty
     */
-    if ((lv2->attributes.s.hpc_reserved == 0) && (rename==1))
+    if ((lv2->attributes.s.hpc_reserved.dir.nb_deleted_files == 0) && (rename==1))
     {
       rename = 0;
       update_children = 1;    
@@ -5726,7 +5726,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     }
     if (rename==1)
     {
-      plv2->attributes.s.hpc_reserved++;        
+      plv2->attributes.s.hpc_reserved.dir.nb_deleted_files++;        
     }
     else
     {
@@ -5736,7 +5736,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
       */
       if ((parent_state==1) ||(parent_state==2)||(parent_state==3))
       {
-	 plv2->attributes.s.hpc_reserved--;          
+	 plv2->attributes.s.hpc_reserved.dir.nb_deleted_files--;          
       }     
     }
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
@@ -6219,7 +6219,7 @@ int export_rename_trash(export_t *e, fid_t pfid, char *name, fid_t npfid,
     /*
     ** check if the directory is empty
     */       
-    if ((lv2_to_rename->attributes.s.hpc_reserved!=0) || (lv2_to_rename->attributes.s.attrs.children!=0))
+    if ((lv2_to_rename->attributes.s.hpc_reserved.dir.nb_deleted_files!=0) || (lv2_to_rename->attributes.s.attrs.children!=0))
     {
       /*
       ** not empty
@@ -6620,7 +6620,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
           if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {	
 	    lv2_new_parent->attributes.s.attrs.nlink++;
 	  }
-	  lv2_old_parent->attributes.s.hpc_reserved--;		  
+	  lv2_old_parent->attributes.s.hpc_reserved.dir.nb_deleted_files--;		  
 	}
 	else
 	{	
@@ -6661,7 +6661,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	*/
 	if (deleted_object)
 	{
-	  lv2_old_parent->attributes.s.hpc_reserved--;
+	  lv2_old_parent->attributes.s.hpc_reserved.dir.nb_deleted_files--;
           lv2_new_parent->attributes.s.attrs.children++;
           if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
               lv2_new_parent->attributes.s.attrs.nlink++;
@@ -7355,7 +7355,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     DISPLAY_ATTR_UINT("CHILDREN",lv2->attributes.s.attrs.children);
     DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
     DISPLAY_ATTR_ULONG("SIZE",lv2->attributes.s.attrs.size);
-    DISPLAY_ATTR_ULONG("DELETED",lv2->attributes.s.hpc_reserved);
+    DISPLAY_ATTR_ULONG("DELETED",lv2->attributes.s.hpc_reserved.dir.nb_deleted_files);
     /*
     ** display the directory statistics (update time & nb bytes)
     */
@@ -7370,7 +7370,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   }  
   else {
     DISPLAY_ATTR_TXT("MODE", "REGULAR FILE");
-    if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.attrs.children);
+    if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin); // Thin prov fix
     DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
   }
   
