@@ -169,12 +169,30 @@ typedef union
 {
   uint32_t u32;
   struct {
-  uint8_t filler1;
+  uint8_t vid_fast;     /**< index of the fast volume: 0-> not significant  */
   uint8_t filler2;
   uint8_t mover_idx;   /**< index of the mover FID for storage usage   */
   uint8_t primary_idx; /**< index of the normal FID for storage usage  */
   } fid_st_idx;
 } rozofs_mover_children_t;
+
+
+/**
+*  the following structure is mapped on the hpc_reserved field of the mattr_t
+*  to address the case of the file mover
+*/
+typedef union
+{
+  uint64_t u64;
+  struct {
+  uint64_t nb_deleted_files; /**< number of deleted files within the directory  */
+  } dir;
+  struct {
+  uint32_t filler;   /**< for future usage   */
+  uint32_t nb_blocks_thin; /**< number of 4KB blocks of a file  */
+  } reg;
+} rozofs_hpc_reserved_t;
+
 
 /**
 *  structure used for the case of the file mover: only for regular file type:
@@ -243,7 +261,7 @@ typedef union
      uint8_t filler6;  /**<reserve for future use */
      uint64_t i_file_acl;  /**< extended inode */
      uint64_t i_link_name;  /**< symlink block */
-     uint64_t hpc_reserved;  /**< reserved for hpc */
+     rozofs_hpc_reserved_t hpc_reserved;  /**< reserved for hpc */
      rozofs_inode_fname_t fname;  /**< reference of the name within the dentry file */
    } s;
 } ext_mattr_t;
