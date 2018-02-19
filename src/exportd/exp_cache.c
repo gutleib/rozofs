@@ -47,6 +47,7 @@ int rozofs_export_host_id = 0;   /**< reference between 0..7: default 0  */
 */
 export_tracking_table_t * export_tracking_table[EXPGW_EID_MAX_IDX+1] = { 0 };
 
+time_t exp_lv2_last_locked_entry_in_lru = 0;
 
 /**
  * hashing function used to find lv2 entry in the cache
@@ -380,19 +381,60 @@ lv2_entry_t *lv2_cache_put(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache,
       lv2_entry_t *lru;
 		
 	  lru = list_entry(cache->lru.prev, lv2_entry_t, list);  
- 	  if (lru->nb_locks != 0) {
-	    severe("lv2 with %d locks in lru",lru->nb_locks);
- 	  }
+          
           /*
-	  **  Exit from the LRU deletion loop if the current entry is
-	  **  locked in the cache
+          ** An entry with a lock is in the LRU list
+          ** This should not happen !
+          */
+ 	  if (lru->nb_locks != 0) {
+            {
+              char     msgString[128];
+              char *   pChar = msgString;
+              pChar += sprintf(pChar,"lv2 with lock in LRU ");
+              pChar += rozofs_fid_append(pChar,lru->attributes.s.attrs.fid);
+              severe("%s",msgString);
+            }  
+            /*
+            ** Replace it the right list
+            */
+            lv2_cache_update_lru(cache,lru);
+ 	  }
+          
+          /*
+	  ** This is suprising that a locked in cache entry (moved by rebalancer)
+          ** is at the end of the lru. This is worth a warning. 
 	  */
-	  if (lru->locked_in_cache) break;
-           
-	  htable_del(&cache->htable, lru->attributes.s.attrs.fid);
-	  lv2_cache_unlink(cache,lru);
-	  cache->lru_del++;
+	  else if (lru->locked_in_cache) {
+            time_t now = time(NULL);
 
+            /*
+            ** avoid too much syslog
+            */
+            if (now-exp_lv2_last_locked_entry_in_lru > 30) {
+              {
+                char     msgString[128];
+                char *   pChar = msgString;            
+                pChar += sprintf(pChar,"locked_in_cache entry ");
+                pChar += rozofs_fid_append(pChar,lru->attributes.s.attrs.fid);
+                warning("%s",msgString);
+              }
+              exp_lv2_last_locked_entry_in_lru = now;
+            } 
+            /*
+            ** Push the entry up
+            */
+            lv2_cache_update_lru(cache,lru);
+          }
+          
+          /*
+          ** Remove this old entry from the cache
+          */
+          else {
+  	    htable_del(&cache->htable, lru->attributes.s.attrs.fid);
+	    lv2_cache_unlink(cache,lru);
+	    cache->lru_del++;
+          }
+          
 	  count++;
 	  if (count >= 3) break;
     }
@@ -468,19 +510,59 @@ lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *att
       lv2_entry_t *lru;
 		
 	  lru = list_entry(cache->lru.prev, lv2_entry_t, list);  
- 	  if (lru->nb_locks != 0) {
-	    severe("lv2 with %d locks in lru",lru->nb_locks);
- 	  }
+          
           /*
-	  **  Exit from the LRU deletion loop if the current entry is
-	  **  locked in the cache
+          ** An entry with a lock is in the LRU list
+          ** This should not happen !
+          */
+ 	  if (lru->nb_locks != 0) {
+            {
+              char     msgString[128];
+              char *   pChar = msgString;
+              pChar += sprintf(pChar,"lv2 with lock in LRU ");
+              pChar += rozofs_fid_append(pChar,lru->attributes.s.attrs.fid);
+              severe("%s",msgString);
+            }  
+            /*
+            ** Replace it the right list
+            */
+            lv2_cache_update_lru(cache,lru);
+ 	  }
+          
+          /*
+	  ** This is suprising that a locked in cache entry (moved by rebalancer)
+          ** is at the end of the lru. This is worth a warning. 
 	  */
-	  if (lru->locked_in_cache) break;
-           
-	  htable_del(&cache->htable, lru->attributes.s.attrs.fid);
-	  lv2_cache_unlink(cache,lru);
-	  cache->lru_del++;
+	  else if (lru->locked_in_cache) {
+            time_t now = time(NULL);
 
+            /*
+            ** avoid too much syslog
+            */
+            if (now-exp_lv2_last_locked_entry_in_lru > 30) {
+              {
+                char     msgString[128];
+                char *   pChar = msgString;            
+                pChar += sprintf(pChar,"locked_in_cache entry ");
+                pChar += rozofs_fid_append(pChar,lru->attributes.s.attrs.fid);
+                warning("%s",msgString);
+              }
+              exp_lv2_last_locked_entry_in_lru = now;
+            } 
+            /*
+            ** Push the entry up
+            */
+            lv2_cache_update_lru(cache,lru);
+          }
+          
+          /*
+          ** Remove this old entry from the cache
+          */
+          else {
+	    htable_del(&cache->htable, lru->attributes.s.attrs.fid);
+	    lv2_cache_unlink(cache,lru);
+	    cache->lru_del++;
+          }
 	  count++;
 	  if (count >= 3) break;
     }
