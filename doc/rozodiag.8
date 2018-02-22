@@ -5,44 +5,109 @@
 .SH NAME
 rozodiag \- RozoFS diagnostic tool
 .SH SYNOPSIS
-.B rozodiag
-.I target
-[
-.I option
-]
+.B rozodiag TARGET... [ OPTIONS ]
 .B
 .SH DESCRIPTION
 .B rozodiag
 is the diagnostic interface to the RozoFS processes.
 .SH TARGET
 .P 
-[ -i <hostname|IP@> ] -p <port>
-.P 
-[ -i <hostname|IP@> ] -T <process>
-.IP
-A target is defined by its IP address or hostname and port it listens to for diagnostic requests.
-The IP address or hostname can be omitted when targeting the local host. The destination TCP port
-is mandatory and is either given explicitly thanks to 
-.I -p <port>
-, or implicitly thanks to
-.I -T <process>. 
-.IP
-The 
-.I <process> 
-of the 
-.I -T
-option can take the following values depending on the targeted process:
-   export                           (master exportd)
-   export:<slave>                   (slave exportd)
-   storaged                         (storaged)
-   storio:<cid>                     (storio)
-   mount:<mount instance>           (rozofsmount)
-   mount:<mount instance>:<1|2>     (storcli of rozofsmount)
-   geomgr                           (geomgr)
-   geocli:<geocli instance>         (geocli)
-   geocli:<geocli instance>:<1|2>   (storcli of geomgr)
-   rebalancer[:<instance>]          (rebalancer)    
-
+ Several diagnostic targets can be specified. 
+.P
+.RS 
+.B TARGET = [ -i <nodes> ] { -p <NPorts> | -T <LPorts> }
+.RE
+.P
+ Each target names one or several node (-i) and their numeric (-p) or logical (-T) diagnostic ports.
+ <nodes> can be a hostname or an IP address or a range or a list of hostnames or IP addresses.
+ When the <nodes> is omitted in a TARGET, it takes the value of the previous TARGET. 
+ When no previous target, local address 127.0.0.1 is used as <nodes>.
+ At least one -p or -T option must be set.
+.P
+.RS 
+.B <nodes> = { <hosts> | <IP@> }
+.RE
+.RS
+.B <hosts> = { <hostname> | <hostname>:<N>-<P> | <hostname>:<N>,..,<P> }
+.RE
+.RS
+.B <IP@> = { <a>.<b>.<c>.<N> | <a>.<b>.<c>.:<N>-<P> | <a>.<b>.<c>.:<N>,..,<P> } 
+.RE
+.P
+ The numeric port is either one single numeric value or a list of numeric values or a range of numeric values.
+.P
+.RS
+.B <NPorts> = { <port> | <firstPort>,..,<lastPort> | <firstPort>-<lastPort> }
+.RE
+.P
+ The logical port is a logical naming of the destination process diagnostic port.
+.P
+.RS
+.B <LPorts> = { 
+.RE
+.RS
+.B | export | export:0                
+(master exportd)  
+.RE
+.RS
+.B | export:<slave>                   
+(a slave exportd)
+.RE
+.RS
+.B | export:<slave1>,..,<slaveN>      
+(a list of slave exportd)
+.RE
+.RS
+.B | export:<slave1>-<slaveN>         
+(a range of slave exportd)
+.RE
+.RS
+.B | storaged | storio:0                        
+(a storaged)
+.RE
+.RS
+.B | storio:<cid>                     
+(the storio of cluster <cid>)
+.RE
+.RS
+.B | storio:<cid1>,...,<cidN>         
+(storios of a list of cluster)
+.RE
+.RS
+.B | storio:<cid1>-<cidN>             
+(storios of a range of cluster)
+.RE
+.RS
+.B | mount:<m> | mount:<m>:0          
+(a rozofsmount instance)
+.RE
+.RS
+.B | mount:<m1>,..,<mN>               
+(a list of rozofsmount instances)
+.RE
+.RS
+.B | mount:<m1>-<mN>                  
+(a range of rozofsmount instances)
+.RE
+.RS
+.B | mount:<m>:<s>                    
+(instance <s> of storcli of rozofsmount instance <m>)
+.RE
+.RS
+.B | mount:<m>:<s1>,...<sN>           
+(a list of instances of storcli of rozofsmount instance <m>)
+.RE
+.RS
+.B | mount:<m>:<s1>-<sN>              
+(a range of instances of storcli of rozofsmount instance <m>)
+.RE
+.RS
+.B | rebalancer[:<instance>]          
+(rebalancer)  
+.RE
+.RS
+.B }
+.RE         
 .SH OPTIONS
 .IP "-h, --help"
 .RS
@@ -69,6 +134,26 @@ the rozodiag tools connects to the target in interactive mode.
 .I seconds
 gives the periodicity in seconds to run the diagnostic commands given either
 through the -c or the -f option. 
+.SH EXAMPLES
+.P
+Interrogating procedure statistics of export slave 1 on node 192.168.2.1 
+.RS
+rozodiag -i 192.168.2.21 -T export:1 -c profiler
+.RE
+.P
+Getting disk statuses from the storaged of 4 nodes
+.RS
+rozodiag -i 192.168.2.:21-24 -T storaged -c dstatus
+.RE
+.P
+Getting periodicaly storios throughput for the 6 clusters of one node
+.RS
+rozodiag -i 192.168.2.21 -T storio:1-6 -c throughput -period 30
+.RE
+.P
+Getting the uptime of rozofsmount instance 2 and its 4 STORCLIs on 2 nodes
+.RS
+rozodiag -i 192.168.2.:21,23 -T mount:2:0-4 -c uptime
 .RE
 .\".SH ENVIRONMENT
 .\".SH DIAGNOSTICS

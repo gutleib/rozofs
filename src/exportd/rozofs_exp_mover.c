@@ -90,7 +90,79 @@ int rozofs_mover_file_create (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,
    lv2_cache_lock_entry_in_cache(lv2);
    return 0;
 }
+/*
+**__________________________________________________________________
+*/
+/**
+*  Invalidate a file move. 
+   The mover destination must be put to tbe trash
+   
+   @param lv2: level 2 cache entry associated with the file to move
+   @param trash_mv_p : pointer to the trash context associated with the former file mover
+   
+   @retval 0 on success
+   @retval -1 on error (see errno for details)
+   
+*/
+int rozofs_mover_file_invalidate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p)
+{
+   ext_mattr_t *attr_p;
+   rozofs_mover_sids_t *dist_mv_p;   
+   rozofs_mover_children_t mover_idx;  
+   int status;
+   
+   attr_p = &lv2->attributes;
+   mover_idx.u32 = attr_p->s.attrs.children;
+   
+   trash_mv_p->cid = 0;
+   
+   if (mover_idx.fid_st_idx.mover_idx == mover_idx.fid_st_idx.primary_idx)
+   {
+      /*
+      ** nothing to do
+      */
+      errno = EINVAL;
+      return -1;
+   }
+   dist_mv_p = (rozofs_mover_sids_t*)&attr_p->s.attrs.sids;
+   if (dist_mv_p->dist_t.mover_cid == 0)
+   {
+     /*
+     ** no move pending
+     */
+     errno = EINVAL;
+     return -1;
+   }
 
+   /*
+   ** Recopy the mover distribution to the trash entry
+   */
+   trash_mv_p->mov_idx = mover_idx.fid_st_idx.mover_idx;
+   trash_mv_p->cid = dist_mv_p->dist_t.mover_cid;
+   memcpy(trash_mv_p->sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI);   
+
+   /*
+   ** Clear the mover distribution in the attribute
+   */
+   dist_mv_p->dist_t.mover_cid = 0;
+   memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
+   
+   /*
+   ** Unlock the lv2 entry
+   */
+   lv2_cache_unlock_entry_in_cache(lv2);
+   
+   /*
+   ** Reset moving status
+   */
+   lv2->mover_state = ROZOFS_MOVER_IDLE;
+   
+   /*
+   ** remove from the move_list
+   */
+   list_remove(&lv2->move_list);  
+   return 0;  	
+}
 /*
 **__________________________________________________________________
 */
@@ -145,17 +217,7 @@ int rozofs_mover_file_validate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_
           /*
 	  ** need to flush the distribution of the mover
 	  */
-	  trash_mv_p->mov_idx = mover_idx.fid_st_idx.mover_idx;
-	  trash_mv_p->cid = dist_mv_p->dist_t.mover_cid;
-	  memcpy(trash_mv_p->sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI);   
-	  dist_mv_p->dist_t.mover_cid = 0;
-	  memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
-	  lv2_cache_unlock_entry_in_cache(lv2);
-	  lv2->mover_state = ROZOFS_MOVER_IDLE;
-	  /*
-	  ** remove from the move_list
-	  */
-	  list_remove(&lv2->move_list);  
+          rozofs_mover_file_invalidate (lv2,trash_mv_p);
 	  errno = EACCES;
 	  return -1;   	
 
@@ -166,17 +228,7 @@ int rozofs_mover_file_validate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_
 	    /*
 	    ** there was some access during the move of the file-> reject
 	    */
-	    trash_mv_p->mov_idx = mover_idx.fid_st_idx.mover_idx;
-	    trash_mv_p->cid = dist_mv_p->dist_t.mover_cid;
-	    memcpy(trash_mv_p->sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI);   
-	    dist_mv_p->dist_t.mover_cid = 0;
-	    memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
-	    lv2_cache_unlock_entry_in_cache(lv2);
-	    lv2->mover_state = ROZOFS_MOVER_IDLE;
-	    /*
-	    ** remove from the move_list
-	    */
-	    list_remove(&lv2->move_list);  
+	    rozofs_mover_file_invalidate (lv2,trash_mv_p);
 	    errno = EACCES;
 	    return -1;
 	  } 
@@ -235,18 +287,8 @@ int rozofs_mover_file_validate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_
         /*
 	** need to flush the distribution of the mover
 	*/
-	trash_mv_p->mov_idx = mover_idx.fid_st_idx.mover_idx;
-	trash_mv_p->cid = dist_mv_p->dist_t.mover_cid;
-	memcpy(trash_mv_p->sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI);   
-	dist_mv_p->dist_t.mover_cid = 0;
-	memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
-	lv2_cache_unlock_entry_in_cache(lv2);
-	lv2->mover_state = ROZOFS_MOVER_IDLE;
+	rozofs_mover_file_invalidate (lv2,trash_mv_p);
 	errno = EACCES;
-	/*
-	** remove from the move_list
-	*/
-	list_remove(&lv2->move_list);  
 	status = -1;   
 	break;	
       
@@ -262,18 +304,8 @@ int rozofs_mover_file_validate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_
 	  /*
 	  ** there was some access during the move of the file-> reject
 	  */
-	  trash_mv_p->mov_idx = mover_idx.fid_st_idx.mover_idx;
-	  trash_mv_p->cid = dist_mv_p->dist_t.mover_cid;
-	  memcpy(trash_mv_p->sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI);   
-	  dist_mv_p->dist_t.mover_cid = 0;
-	  memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
-	  lv2_cache_unlock_entry_in_cache(lv2);
-	  lv2->mover_state = ROZOFS_MOVER_IDLE;
+          rozofs_mover_file_invalidate (lv2,trash_mv_p);
 	  errno = EACCES;
-	  /*
-	  ** remove from the move_list
-	  */
-	  list_remove(&lv2->move_list);  
 	  status = -1;
 	  break;
 	} 
@@ -498,6 +530,38 @@ int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,uint64_t guard_time)
   ret = export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* no sync */);
 
   errno = xerrno;
+  return ret;
+}
+/*
+**__________________________________________________________________
+**
+**   scanning of the mover file invalidation
+
+    @param lv2: pointer to the cache entry that contains the i-node data.
+    @param e: pointer to the exportd context.
+    @param unused     Unused up to now
+    
+    @retval 0 on success
+    @retval -1 on error (see errno for details)
+*/
+int rozofs_mover_invalid_scan(export_t *e,lv2_entry_t *lv2,uint64_t unused)
+{
+  int ret;
+  rozofs_mv_idx_dist_t trash_mv;
+
+  errno = 0;
+  ret = rozofs_mover_file_invalidate (lv2,&trash_mv);
+  if (ret < 0) 
+  {
+    return ret;
+  }
+  /*
+  ** push to the trash the old distribution and storage fid
+  */
+  rozofs_mover_put_trash(e,lv2,&trash_mv);    
+
+  ret = export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* no sync */);
+
   return ret;
 }
 

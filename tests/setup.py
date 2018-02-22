@@ -1248,7 +1248,7 @@ class rozofs_class:
       
     # Create the file with the given path
     os.system("rm -f %s > /dev/null 2>&1"%(path))
-    os.system("truncate -s %s %s  > /dev/null 2>&1"%(rozofs.disk_size_mb*1024*1024, path))
+    os.system("dd if=/dev/zero of=%s bs=1M count=%s  > /dev/null 2>&1"%(path, rozofs.disk_size_mb))
     
     # Bind the loop back device to the file    
     string="losetup %s %s "%(loop,path)

@@ -81,6 +81,7 @@ static int          src=-1;
 static int          dst=-1;  
 static char         tmp_fname[256]={0};
 static char         mount_path[128]={0};
+static char         src_fname[128];
 
 
 /*-----------------------------------------------------------------------------
@@ -809,7 +810,6 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   uint64_t     begin;
   
   tmp_fname[0] = 0;
-  char src_fname[128];
   char dst_fname[128];
   char buf_fid[64];
   
@@ -854,11 +854,11 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   }
   if (setxattr(dst_fname, "user.rozofs", buf, strlen(buf),0)<0) {
     if (errno==EINVAL) {
-      severe("invalid distibution %s:%s",tmp_fname,buf);
+      severe("invalid distibution %s:%s",dst_fname,buf);
       goto generic_error;   
     }
     
-    severe("fsetxattr(%s) %s",buf,strerror(errno));   
+    severe("fsetxattr(%s) %s",dst_fname,strerror(errno));   
     goto generic_error;
   }
   
@@ -868,7 +868,7 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   dst = open(dst_fname,O_RDWR,0766);
   if (dst < 0) {
     severe("open(%s) %s",dst_fname,strerror(errno));
-    goto generic_error;    
+    goto abort;    
   }   
   /*
   ** When troughput limitation is set, compute allowed time for
@@ -893,7 +893,7 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
     size = pread(src, buf, ROZOFS_MOVER_BUFFER_SIZE, offset);
     if (size < 0) {
       severe("pread(%s) %s",src_fname,strerror(errno)); 
-      goto generic_error;         
+      goto abort;         
     }
     
     /*
@@ -905,8 +905,8 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
     ** Write the data
     */      
     if (pwrite(dst, buf, size, offset)<0) {
-      severe("pwrite(%d) %s",size,strerror(errno));     
-      goto generic_error;       
+      severe("pwrite(%s,%d) %s",dst_fname,size,strerror(errno));     
+      goto abort;       
     }
     
     offset += size;
@@ -942,7 +942,7 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
        stats.updated++;
        goto specific_error;
     }
-    severe("fsetxattr(%s) %s",buf,strerror(errno));   
+    severe("fsetxattr(%s,%s) %s",dst_fname,buf,strerror(errno));   
     goto generic_error;
   }
   stats.success++;
@@ -952,6 +952,11 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   ** Done
   */
   return 0;
+
+abort:
+  if (setxattr(dst_fname, "user.rozofs", "mover_invalidate = 0", strlen("mover_invalidate"),0)<0) {
+    severe("fsetxattr(%s,mover_invalidate) %s",dst_fname,strerror(errno));   
+  }
   
 generic_error:
   stats.error++;
@@ -1074,6 +1079,7 @@ void rozofs_mover_print_stat(char * pChar) {
   pChar += sprintf(pChar,"     \"other error\"    : %llu,\n",(unsigned long long)stats.error);
   pChar += sprintf(pChar,"     \"success\"        : %llu,\n",(unsigned long long)stats.success);
   pChar += sprintf(pChar,"     \"bytes moved\"    : %llu\n",(unsigned long long)stats.bytes);
+  pChar += sprintf(pChar,"     \"last moved\"     : %s\n",src_fname);
   pChar += sprintf(pChar,"   }\n}\n");
 }  
 /*-----------------------------------------------------------------------------

@@ -58,7 +58,7 @@ typedef struct  msg_s {
 MSG_S msg;
 
 #define MAX_CMD 1024
-#define MAX_TARGET  20
+#define MAX_TARGET  128
 int                 nbCmd=0;
 const char      *   cmd[MAX_CMD];
 uint32_t            nbTarget=0;
@@ -74,27 +74,34 @@ char prompt[64];
 */
 void syntax_display() {
   printf("\n%s - RozoFS %s\n\n", prgName, VERSION);
-  printf("%s ([-i <hostname>] {-p <port>|-T <target>})... [-c <cmd|all>]... [-f <cmd file>]... [-period <seconds>] [-t <seconds>]\n\n",prgName);
-  printf("Several diagnostic targets can be specified ( [-i <hostname>] {-p <port>|-T <target>} )...\n");
-  printf("  -i <hostname>  IP address or hostname of the diagnostic target.\n");
-  printf("                 When omitted previous -i value in the command line is taken as default\n");
-  printf("                 or 127.0.0.1 when no previous -i option is set.\n");
-  printf("    -p <port>      Port number of the diagnostic target.\n");
+  printf("%s ([-i <nodes>] {-p <NPorts>|-T <LPorts>})... [-c <cmd|all>]... [-f <cmd file>]... [-period <seconds>] [-t <seconds>]\n\n",prgName);
+  printf("Several diagnostic targets can be specified ( [-i <nodes>] {-p <NPorts>|-T <LPorts>} )...\n");
+  printf("    -i <nodes>     IP address or hostname of the diagnostic targets.\n");
+  printf("                   When omitted in a target definition, the -i value of the previous target is used.\n");
+  printf("                   or 127.0.0.1 when no previous -i option is set.\n");
+  printf("                   A range or list of hostnames or IP addresses can be specified this way:\n");
+  printf("                   - range: localhost:1-4 or 172.20.10.:21-28\n");
+  printf("                   - list: localhost:1,3 or 172.20.10.:21,22,26\n");
+  printf("       <nodes> = { <hosts> | <IP@> }\n");
+  printf("       <hosts> = { <hostname> | <hostname>:<N>-<P> | <hostname>:<N>,..,<P> }\n");
+  printf("       <IP@>   = { <a>.<b>.<c>.<N> | <a>.<b>.<c>.:<N>-<P> | <a>.<b>.<c>.:<N>,..,<P> }\n");
+  printf("\n    -p <NPorts>    Numeric port number or list or range of numeric port values of the diagnostic targets.\n");
+  printf("       <NPorts> = { <port> | <port1>,..,<portN> | <port1>-<portN> }\n");
   printf(" or\n");
-  printf("    -T <target>    The diagnostic target in the format:\n");
-  printf("                     export                               for an export\n");
-  printf("                     storaged                             for a storaged\n");
-  printf("                     stspare                              for a storaged spare restorer\n");
-  printf("                     storio[:<instance>]                  for a storio\n");
-  printf("                     mount[:<mount instance>]             for a rozofsmount\n");
-  printf("                     mount[:<mount instance>[:<1|2>]]     for a storcli of a rozofsmount\n");
-  printf("                     geomgr                               for a geomgr\n");
-  printf("                     geocli[:<geocli instance>]           for a geo-replication client\n");
-  printf("                     geocli[:<geocli instance>[:<1|2>]]   for a storcli of a geo-replication client\n");    
-  printf("                     rebalancer[:<instance>]              for rebalancer instance <instance>\n");    
-  printf("                     rcmd                                 for remote command server\n");    
-  printf(" At least one -p or -m value must be given.\n");
-  printf("\nOptionnaly a list of command to run can be specified:\n");
+  printf("    -T <LPorts>    The logical ports are given in the format:\n");
+  printf("       export or export:0                for master export\n");
+  printf("       export:<i>                        for slave export <i>\n");
+  printf("       export:<i>,..,<j>                 for a list of export\n");
+  printf("       export:<i>-<j>                    for a range of export\n");
+  printf("       stspare                           for spare restorer\n");
+  printf("       storaged or storio:0              for storaged\n");
+  printf("       storio:<i>    or storio:<i>,..,<j>       or storio:<i>-<j>       for storios\n");
+  printf("       mount:<i>     or mount:<i>,..,<j>        or mount:<i>-<j>        for rozofsmounts\n");
+  printf("       mount:<i>:<j> or mount:<i>:<j>,..,<k>    or mount:<i>:<j>-<k>    for storclis\n");;
+  printf("       rebalancer[:<instance>]\n");    
+  printf("       rcmd\n");    
+  printf(" At least one -p or -T value must be given.\n");
+  printf("\nOptionnaly a list of command to run can be specified in command line mode:\n");
   printf("  [-c <cmd|all>]...\n"); 
   printf("         Every word after -c is interpreted as a word of a command until end of line or new option.\n");
   printf("         Several -c options can be set.\n");                 
@@ -106,8 +113,15 @@ void syntax_display() {
   printf("\nMiscellaneous options:\n");
   printf("  -t <seconds>     Timeout value to wait for a response (default %d seconds).\n",DEFAULT_TIMEOUT);
   printf("  -reserved_ports  Displays model for port reservation\n");        
-  printf("\ne.g\n%s -i 192.168.1.1 -p 50003 -p 50004 -p 50005 -c profiler reset\n",prgName) ;          
-  printf("%s -i 192.168.1.1 -p 50003 -i 192.168.1.2 -p 50003 -c profiler -period 10\n",prgName) ;          
+  printf("\ne.g:\n");
+  printf("  Get the profiler counters of the 4 instances of storcli of RozoFS mountpoint 2.\n");
+  printf("    %s -i 192.168.1.1 -T mount:2:1-4 -c profiler\n",prgName) ;          
+  printf("  Get the profiler counters of the export slave 1 every 10 seconds and reset them.\n");
+  printf("    %s -T export:1 -c profiler reset -period 10\n",prgName) ;          
+  printf("  Get the throughput history of the 3 local storio .\n");
+  printf("    %s -T storio:1-3 -c throughput\n",prgName) ;          
+  printf("  Get the device statuses of the storio of some nodes.\n");
+  printf("    %s -i rozofs-node:1,3 -T storio:1-3 -c device\n",prgName) ;          
   exit(0);
 }
 void stop_on_error(char *fmt, ... ) {
@@ -181,7 +195,15 @@ int debug_receive(int socketId, int silent) {
       recvLen += ret;
     }
     if (silent == NOT_SILENT) {
-      printf("%s", msg.buffer);
+      char * pMsg = msg.buffer;
+      if (nbCmd == 0) {
+        while ((*pMsg != 0) && (*pMsg != '\n')) pMsg++;
+        if (*pMsg == '\n') pMsg++;
+      }
+      else {
+        printf("%s", prompt);
+      }  
+      printf("%s", pMsg);
     }  
     if (msg.header.end) return 1;
   }
@@ -284,11 +306,9 @@ void uma_dbg_read_prompt(int socketId, char * pr) {
     if (strncmp(pt,SYSTEM_HEADER, strlen(SYSTEM_HEADER)) == 0) {
 
       pt += strlen(SYSTEM_HEADER);
-
+      *c++ = ' ';
       while((*pt != '\n')&&(*pt != 0)) {
-	*c = *pt;
-	c++;
-	pt++;
+	*c++ = *pt++;
       }
     }
   }  
@@ -335,7 +355,9 @@ void debug_interactive_loop(int socketId) {
   char *mycmd = NULL; 
 //  int len;
 //  int fd;
-  
+
+  uma_dbg_read_prompt(socketId,prompt + strlen(prompt)); 
+   
 //  fd = open("/dev/stdin", O_RDONLY);
   using_history();
   rl_bind_key('\t',rl_complete);   
@@ -376,9 +398,159 @@ void debug_run_command_list(int socketId) {
     if (debug_run_this_cmd(socketId, cmd[idx], NOT_SILENT) < 0)  break;
   }
 } 
+/*
+**_______________________________________________________________________
+** Scan for a a host in the formmat 
+**
+** <hostname>
+** or @IP
+** or <hostname>:N-P 
+** or <hostname>:N,...,P
+** or x.y.z.:N-P
+** or x.y.z.:N,...,P
+**
+** @param str      The string that contains the host
+** @param ip       The returned array of IP addresses
+**
+** @retval         The number of IP addresses
+*/
+static inline int scan_host(char * hostStr, uint32_t * ip) {
+  uint32_t  val1,val2;
+  int       ret;
+  char      hostname[128];
+  int       nbHost = 0;   
+  char    * str = hostStr;
+  int       idx;
+  
+   
+  while ((*str != 0)&&(*str != ':')) str++;
+  
+  /*
+  ** Only one host 
+  */
+  if (*str == 0) {
+    if (rozofs_host2ip_netw(hostStr,ip)<0) {
+      return 0;
+    }
+    return 1;
+  }
+  
+  *str = 0;
+  str++;
+  if (*str == 0) return 0;
+    
+  ret = sscanf(str,"%u",&val1);
+  if (ret != 1) return 0;
 
+  while ((*str != '-')&&(*str != ',')&&(*str != 0)) str++;
+  if (*str == 0) return 0;
+  
+  /*
+  ** List
+  */
+  if (*str == ',') {
 
+    sprintf(hostname,"%s%d",hostStr,val1);
+    if (rozofs_host2ip_netw(hostname,ip)<0) {
+      return 0;
+    }
+    nbHost++;
+    ip++;
+  
+    while (*str != 0) {
+    
+      str++;
+      if (*str == 0) return 0;
+    
+      ret = sscanf(str,"%u",&val1);
+      if (ret != 1) return 0;
+    
+      sprintf(hostname,"%s%d",hostStr,val1);
+      if (rozofs_host2ip_netw(hostname,ip)<0) {
+        return 0;
+      }
+      nbHost++;
+      ip++;
+      
+      while ((*str != ',')&&(*str != 0)) str++;
+    }
+    return nbHost;
+  }
+  
+  /*
+  ** Range
+  */  
+  str++;
+  if (*str == 0) return 0;
+  ret = sscanf(str,"%u",&val2);
+  if (ret != 1) return 0;
+  if (val2 < val1) return -1;
+  
+  nbHost = (val2-val1) + 1;
+  if (nbHost > MAX_TARGET) return 0;
+  
+  for (idx=0; idx <nbHost; idx++) {
+  
+    sprintf(hostname,"%s%d",hostStr,idx+val1);
+    if (rozofs_host2ip_netw(hostname,ip)<0) {
+      return 0;
+    }
+    ip++;    
+  }
+  return nbHost;
+  
+}
+/*
+** Scan for either x  x-y x,y,..
+*/
+static inline int scan_ports(char * str, uint32_t * values) {
+  int      nbValues = 0;
+  uint32_t val2;
+  int      ret;
+  int      idx;
+  
+  while (*str == ' ') str++;
+  
+  ret = sscanf(str,"%u",values);
+  if (ret != 1) return 0;
+  nbValues = 1;
 
+  while ((*str != 0) && (*str != ',') && (*str != '-') && (*str != ':')) str++;
+  if (*str == 0) return 1;
+  if (*str == ':') return nbValues;
+
+  if (*str == '-') {
+    str++;
+    if (*str == 0) return 0;
+    
+    ret = sscanf(str,"%u",&val2);
+    if (ret != 1) return 0;
+    
+    if (val2 <= *values) return 0;  
+    nbValues = (val2-*values) + 1;
+    if (nbValues > MAX_TARGET) return 0;
+    
+    for (idx=1; idx<nbValues; idx++) {
+      *(values+1) = (*values)+1;
+      values++;
+    }
+    return nbValues;
+  }
+ 
+  values++;
+  while (*str == ',') {
+    str++;
+    if (*str == 0) return nbValues;
+  
+    ret = sscanf(str,"%u",values);
+    if (ret != 1) return 0;
+    nbValues++;
+    values++;
+    while ((*str != 0) && (*str != ',')) str++;        
+  }
+  return nbValues;
+  
+}
 void read_parameters(argc, argv)
 int argc;
 char *argv[];
@@ -387,9 +559,17 @@ char *argv[];
   uint32_t            idx;
   uint32_t            port32;
   uint32_t            val32;
-  int                 status;
   char              * pt;
+  uint32_t            ports[MAX_TARGET];
+  int                 nbPorts;
+  int                 localPort;
+  int                 hostNb;
+  int                 localIP;
+  uint32_t            IPs[MAX_TARGET];
 
+  /* Pre-initialize 1rst IP address */ 
+  hostNb = scan_host("127.0.0.1",IPs); 
+  
   /*
   ** Change local directory to "/"
   */
@@ -412,11 +592,9 @@ char *argv[];
       if (idx == argc) {
 	stop_on_error ("%s option but missing value !!!\n",argv[idx-1]);
       }
-//      ipAddr = inet_addr(argv[idx]);
-      status = rozofs_host2ip_netw(argv[idx],&ipAddr[nbTarget]);
-      if (status < 0) 
-      {
-	stop_on_error ("Bad -i value \"%s\" !!!\n",argv[idx]);
+      hostNb = scan_host(argv[idx],IPs); 
+      if (hostNb == 0) {
+	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
       }
       idx++;
       continue;
@@ -442,18 +620,17 @@ char *argv[];
       if (idx == argc) {
 	stop_on_error ("%s option but missing value !!!\n",argv[idx-1]);
       }
-      ret = sscanf(argv[idx],"%u",&port32);
-      if (ret != 1) {
+      nbPorts = scan_ports(argv[idx],ports);
+      if (nbPorts <= 0) {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
       }	
-      if ((port32<0) || (port32>0xFFFF)) {
-	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-      }
-      
-      serverPort[nbTarget] = (uint16_t) port32;
-      nbTarget++;
-      /* Pre-initialize next IP address */ 
-      ipAddr[nbTarget] = ipAddr[nbTarget-1];             
+      for (localIP=0;localIP<hostNb; localIP++) {
+        for (localPort=0; localPort < nbPorts; localPort++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t) ports[localPort];
+          nbTarget++;
+        }
+      }  
       idx++;
       continue;
     }
@@ -468,44 +645,128 @@ char *argv[];
     ** storcli of geocli      : -f geocli[:<geocli instance>[:<1|2>]]
     */
     if (strcmp(argv[idx],"-T")==0) {
+    
       idx++;
       if (idx == argc) {
 	stop_on_error ("%s option but missing value !!!\n",argv[idx-1]);
       }
       pt = argv[idx];
+      
+      /*
+      ** storio:<idx>
+      */
       if (strncasecmp(pt,"storio",strlen("storio"))==0) {
         port32 = 0;
 	pt += strlen("storio");
-        if (*pt == ':') {
-	  pt++;
-	  ret = sscanf(pt,"%u",&port32);
-	  if (ret != 1) {
+	if (*pt == ':') {
+          pt++;
+          nbPorts = scan_ports(pt,ports);
+          if (nbPorts <= 0) {
 	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-          }		  
+          }	
+          for (localIP=0;localIP<hostNb; localIP++) {
+            for (localPort=0; localPort < nbPorts; localPort++) {
+              ipAddr[nbTarget]     = IPs[localIP];        
+              serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_storio_diag(ports[localPort]);;
+              nbTarget++;
+            }
+          }       
+          idx++;
+          continue;   
 	}
-        port32 = rozofs_get_service_port_storio_diag(port32);
-	
+	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
       }
-      else if (strncasecmp(pt,"storaged",strlen("storaged"))==0) {
-        port32 = rozofs_get_service_port_storaged_diag();
+      
+      /*
+      ** mount:
+      */
+      if (strncasecmp(pt,"mount",strlen("mount"))==0) {
+	pt += strlen("mount");
+        if (*pt != ':') { 
+	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+	}  
+	pt++;
+        nbPorts = scan_ports(pt,ports);
+        if (nbPorts <= 0) {
+	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+        }
+        while ((*pt!=0) && (*pt!=':')) pt++;
+        if (*pt == 0) {
+          for (localIP=0;localIP<hostNb; localIP++) {
+            for (localPort=0; localPort < nbPorts; localPort++) {
+              ipAddr[nbTarget]     = IPs[localIP];        
+              serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_fsmount_diag(ports[localPort]);
+              nbTarget++;
+            }
+          }   
+          idx++;
+          continue;                       
+        } 
+        
+        if (nbPorts != 1) {   
+	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+        } 
+        port32 = ports[0];               
+	pt++;
+        nbPorts = scan_ports(pt,ports);
+        if (nbPorts <= 0) {
+	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+        }	
+        for (localIP=0;localIP<hostNb; localIP++) {
+          for (localPort=0; localPort < nbPorts; localPort++) {
+            ipAddr[nbTarget]     = IPs[localIP];        
+            serverPort[nbTarget] = (uint16_t)rozofs_get_service_port_fsmount_storcli_diag(port32,ports[localPort]);
+            nbTarget++;
+          }
+        }             
+        idx++;
+        continue;            
       }
+              
+      /*
+      ** storaged 
+      */
+      if (strncasecmp(pt,"storaged",strlen("storaged"))==0) {
+        port32 = rozofs_get_service_port_storaged_diag();  
+        nbPorts = 1;             
+      }
+      
+      /*
+      ** stspare
+      */
       else if (strncasecmp(pt,"stspare",strlen("stspare"))==0) {
         port32 = rozofs_get_service_port_stspare_diag();
-      }      
+        nbPorts = 1;                     
+      }     
+      /*
+      ** export
+      */ 
       else if (strncasecmp(pt,"export",strlen("export"))==0) {
         pt += strlen("export");
 	if (*pt == ':') {
-	  pt++;
-	  ret = sscanf(pt,"%u",&port32);
-	  if (ret != 1) {
+          pt++;
+          nbPorts = scan_ports(pt,ports);
+          if (nbPorts <= 0) {
 	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
           }
-	  port32 = rozofs_get_service_port_export_slave_diag(port32);	  
+          for (localIP=0;localIP<hostNb; localIP++) {
+            for (localPort=0; localPort < nbPorts; localPort++) {
+              ipAddr[nbTarget]     = IPs[localIP];        
+              serverPort[nbTarget] = (uint16_t)rozofs_get_service_port_export_slave_diag(ports[localPort]);
+              nbTarget++;
+            }
+          }           	        
+          idx++;
+          continue;   
 	}
-	else port32 = rozofs_get_service_port_export_master_diag();	  	
+	else {
+          port32 = rozofs_get_service_port_export_master_diag();
+          nbPorts = 1;             
+        }	  	
       }    
       else if (strncasecmp(pt,"geomgr",strlen("geomgr"))==0) {
-	port32 = rozofs_get_service_port_geomgr_diag();	  	
+	port32 = rozofs_get_service_port_geomgr_diag();	
+        nbPorts = 1;                       	
       }  
       else if (strncasecmp(pt,"geocli",strlen("geocli"))==0) {
 	pt += strlen("geocli");  	
@@ -529,32 +790,10 @@ char *argv[];
           }	
 	  // storcli:x:y 
 	  port32 = rozofs_get_service_port_geocli_storcli_diag(port32,val32);
+          nbPorts = 1;                       	
 	}
       }  
-      else if (strncasecmp(pt,"mount",strlen("mount"))==0) {
-	pt += strlen("mount");
-        if (*pt != ':') { 
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-	}  
-	pt++;
-	ret = sscanf(pt,"%u",&port32);
-	if (ret != 1) {
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-        }
-	while ((*pt != 0)&&(*pt != ':')) pt++;
-	if (*pt == 0) { 
-	  port32 = rozofs_get_service_port_fsmount_diag(port32);
-	}    
-	else { // geocli:x: ...
-	  pt++;
-	  ret = sscanf(pt,"%u",&val32);
-	  if (ret != 1) {
-	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-            	  }	
-	  // storcli:x:y 
-	  port32 = rozofs_get_service_port_fsmount_storcli_diag(port32,val32);
-	}
-      }  
+
       else if (strncasecmp(pt,"rebalancer",strlen("rebalancer"))==0) {
       
 	pt += strlen("rebalancer");
@@ -572,10 +811,12 @@ char *argv[];
 	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
           }
           port32 = rozofs_get_service_port_rebalancing_diag(port32);
+          nbPorts = 1;                       	
 	}
       }                
       else if (strncasecmp(pt,"rcmd",strlen("rcmd"))==0) {
         port32 = rozofs_get_service_port_export_rcmd_diag();
+        nbPorts = 1;                       	
       }    
       else {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);       
@@ -584,11 +825,14 @@ char *argv[];
       if ((port32<0) || (port32>0xFFFF)) {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
       }
-      
-      serverPort[nbTarget] = (uint16_t) port32;
-      nbTarget++;
-      /* Pre-initialize next IP address */ 
-      ipAddr[nbTarget] = ipAddr[nbTarget-1];             
+
+      for (localIP=0;localIP<hostNb; localIP++) {
+        for (localPort=0; localPort < nbPorts; localPort++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t)port32;;
+          nbTarget++;
+        }
+      }           
       idx++;
       continue;
     }    
@@ -734,15 +978,20 @@ int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
   vSckAddr.sin_port   = htons(serverPort);
   memcpy(&vSckAddr.sin_addr.s_addr, &ipAddr, 4); 
   if (connect(socketId,(struct sockaddr *)&vSckAddr,sizeof(struct sockaddr_in)) == -1) {
-    printf("error on connect %s!!!\n", strerror(errno));
-    exit(2);
+    printf("____[%u.%u.%u.%u:%u] error on connect %s!!!\n", 
+            (unsigned int)ipAddr&0xFF, 
+            (unsigned int)(ipAddr>>8)&0xFF, 
+            (unsigned int) (ipAddr>>16)&0xFF, 
+            (unsigned int) (ipAddr>>24)&0xFF, 
+            (unsigned int)serverPort, 
+            strerror(errno));
+    return-1;
   }
   return socketId;
 }
 int main(int argc, const char **argv) {
   int                 socketId; 
   int                 idx; 
-  char              * p;
   uint32_t            ip;
    
   prgName = argv[0];
@@ -751,8 +1000,6 @@ int main(int argc, const char **argv) {
   memset(serverPort,0,sizeof(serverPort)); 
   memset(ipAddr,0,sizeof(ipAddr));
   nbTarget = 0;
-  /* Pre-initialize 1rst IP address */ 
-  ipAddr[nbTarget] = inet_addr("127.0.0.1");  
   period        = 0;
   nbCmd         = 0;
   allCmd        = 0;
@@ -765,16 +1012,11 @@ reloop:
   for (idx = 0; idx < nbTarget; idx++) {
    
     socketId = connect_to_server(ipAddr[idx],serverPort[idx]);
-
+    if (socketId < 0) continue;
     
-    p = prompt;
     ip = ntohl(ipAddr[idx]);
-    p += sprintf(prompt,"[%u.%u.%u.%u:%d] ",(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF,ip&0xFF, serverPort[idx]);
-    uma_dbg_read_prompt(socketId,p);
-      
-    if (nbTarget > 1) {
-      printf("%s\n",prompt);
-    } 
+    sprintf(prompt,"____[%u.%u.%u.%u:%d]",(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF,ip&0xFF, serverPort[idx]);
+    //uma_dbg_read_prompt(socketId,p);
      
     if (allCmd) uma_dbg_read_all_cmd_list(socketId);
 

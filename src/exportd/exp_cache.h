@@ -215,6 +215,16 @@ void lv2_cache_del(lv2_cache_t *cache, fid_t fid) ;
 **__________________________________________________________________
 */
 /**
+*   Remove an entry from the attribute cache without deleting it
+
+    @param cache: pointer to the level 2 cache
+    @param fid : key of the entry to remove
+*/
+void lv2_cache_remove_hash(lv2_cache_t *cache, fid_t fid);
+/*
+**__________________________________________________________________
+*/
+/**
 *   The purpose of that service is to read object attributes and store them in the attributes cache
 
   @param trk_tb_p: export attributes tracking table
