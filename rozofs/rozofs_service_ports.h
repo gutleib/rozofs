@@ -149,7 +149,6 @@ static inline uint16_t rozofs_get_service_port_stspare_diag(void) {
 ** Storio ports
 */
 static inline uint16_t rozofs_get_service_port_storio_diag(int idx) {
-  if (idx == 0) idx = 1;
   return rozofs_get_service_port_storaged_diag()+idx;
 }
 /*
