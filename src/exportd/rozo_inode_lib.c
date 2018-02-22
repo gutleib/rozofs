@@ -179,6 +179,7 @@ int wbuf_write_check(buf_work_t *buf_p)
   }
   if (buf_p->bufdisk == NULL)
   {
+     severe("Out of memory");
      printf("Out of memory!!\n");
      exit(-1);
   }
@@ -356,7 +357,10 @@ int wbuf_write_check(buf_work_t *buf_p)
     */
     if (buf_p->len_disk == 0) return 0;
     ssize_t size_wr = pwrite(buf_p->fd,buf_p->bufdisk,buf_p->len_disk,buf_p->offset);
-    if (size_wr != buf_p->len_disk) exit(0);
+    if (size_wr != buf_p->len_disk) {
+      severe("exit");
+      exit(0);
+    }  
     buf_p->offset +=buf_p->len_disk;
     buf_p->cur_len = 0;  
     buf_p->len_disk = 0; 
@@ -404,7 +408,10 @@ int wbuf_write(buf_work_t *buf_p,char *name,fid_t fid)
        */
 
        size = pwrite(buf_p->fd,buf_p->buf,buf_p->cur_len,buf_p->offset);
-       if (size != buf_p->cur_len) exit(0);
+       if (size != buf_p->cur_len) {
+         severe("exit");    
+         exit(0);
+       }  
      }
      else
      {
@@ -462,6 +469,7 @@ int wbuf_read(buf_work_t *buf_p,char *name,fid_t fid)
        /*
        ** error while reading
        */
+       severe("exit");
        exit(0);
      }
      if (size == 0)
@@ -518,7 +526,10 @@ int wbuf_flush(buf_work_t *buf_p)
        ** push data on disk
        */
        size = pwrite(buf_p->fd,buf_p->buf,buf_p->cur_len,buf_p->offset);
-       if (size != buf_p->cur_len) exit(0);
+       if (size != buf_p->cur_len) {
+         severe("exit");    
+         exit(0);
+       }  
   //     printf("FDL flush size %u \n",size);
      }
      else
@@ -1170,6 +1181,7 @@ int export_readdir_internal(export_t * e, fid_t fid, uint64_t * cookie,
        */
        uuid_unparse(fid,buf_fid);
        printf("(%d)Cannot open directory for fid:%s\n",__LINE__,buf_fid);
+       severe("EXIT Cannot open directory for fid:%s",buf_fid);
        exit(0);
       goto out;
     }
@@ -1521,7 +1533,7 @@ rozofs_pred_timewindow(struct timespec ts, rzcheck_time_val *pred_ptr)
 */
 static char bufchunk[2048];
 
-int get_name_from_direntchunk(char *root_path,fid_t fid,mdirent_fid_name_info_t *p,char *bufname)
+int get_name_from_direntchunk(fid_t fid_child, char *root_path,fid_t fid,mdirent_fid_name_info_t *p,char *bufname)
 {
     char str[37];
     char path[1024];
@@ -1545,7 +1557,7 @@ int get_name_from_direntchunk(char *root_path,fid_t fid,mdirent_fid_name_info_t 
 
     if ((fd = open(path, flag, S_IRWXU)) == -1)
     {
-        printf("Cannot open the file %s: %s\n",path,strerror(errno));
+        //printf("Cannot open the file %s: %s\n",path,strerror(errno));
         goto out;
     }
     /*
@@ -1556,10 +1568,19 @@ int get_name_from_direntchunk(char *root_path,fid_t fid,mdirent_fid_name_info_t 
     size = MDIRENTS_NAME_CHUNK_SZ*p->nb_chunk;
     if (pread(fd,bufchunk,size,offset)!=size)
     {
-       printf("error while reading %s:%s",path,strerror(errno));
+       //printf("error while reading %s:%s",path,strerror(errno));
        goto out;
     } 
+        
     buf = (mdirents_name_entry_t*)bufchunk;
+    /*
+    ** Check that the chunk is still allocated to this FID
+    */
+    if (memcmp(fid_child, buf->fid, sizeof (fid_t))!=0) {
+      goto out; 
+    }
+
+
     memcpy(bufname,buf->name,buf->len);
     bufname[buf->len]=0;
     
@@ -1617,13 +1638,14 @@ static inline void rozofs_fid2string(uuid_t fid, char * pChar) {
 /**
 *  Get the name of the object
 
+   @param fid_child: FID of the file which name is loooked up
    @param fname: pointer to the description of the object name
    @param bufout : output buffer;
    @param pfid :parent fid
    
    @retval pointer to the output buffer
 */
-char *_get_fname(export_t *e,char *bufout,rozofs_inode_fname_t *fname,fid_t pfid)
+char *_rozolib_get_fname(fid_t fid_child, export_t *e,char *bufout,rozofs_inode_fname_t *fname,fid_t pfid)
 {
    if (fname->name_type == ROZOFS_FNAME_TYPE_DIRECT)
    {
@@ -1634,10 +1656,13 @@ char *_get_fname(export_t *e,char *bufout,rozofs_inode_fname_t *fname,fid_t pfid
    /*
    ** get it from dentry chunk
    */
-   get_name_from_direntchunk(e->root,pfid,&fname->s.name_dentry,bufout);
+   get_name_from_direntchunk(fid_child, e->root,pfid,&fname->s.name_dentry,bufout);
    return bufout;
 }
-
+char *rozolib_get_fname(fid_t child_fid, void *e,char *bufout,void *fname,fid_t pfid)
+{
+  return _rozolib_get_fname(child_fid, (export_t *)e,bufout,(rozofs_inode_fname_t*)fname,pfid);
+}
 /*
  *_______________________________________________________________________
  */
@@ -1692,7 +1717,7 @@ char *rozolib_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax
    ** get the object name
    */
    name[0] = 0;     
-   get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+   rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
    if (name[0]== 0)
    {
      uuid_unparse(inode_attr_p->s.attrs.fid,buf_fid);
@@ -1706,10 +1731,7 @@ char *rozolib_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax
    return buf;
 }
 
-char *get_fname(void *e,char *bufout,void *fname,fid_t pfid)
-{
-  return _get_fname((export_t *)e,bufout,(rozofs_inode_fname_t*)fname,pfid);
-}
+
 /*
 **__________________________________________________________________
 */
@@ -1769,6 +1791,7 @@ int exp_metadata_read_all_attributes(exp_trck_top_header_t *top_hdr_p,int usr_id
    }
    if (stats.st_size <  sizeof(exp_trck_file_header_t))
    {
+      severe("%s file too small %d/%d\n",pathname,sizeof(stats.st_size),sizeof(exp_trck_file_header_t));
       /*
       ** the file is corrupted
       */
@@ -1897,6 +1920,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
     metadata_buf_p = malloc(alloc_size);
     if (metadata_buf_p == NULL)
     {
+      severe("Out of memory");
       printf("Out of memory: cannot allocate %d\n",alloc_size);
       exit(-1);
     }
@@ -1937,6 +1961,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
 	 {
 	   if (errno != ENOENT)
 	   {
+              severe("EXIT error while reading metadata header %s",strerror(errno));
               printf("error while reading metadata header %s\n",strerror(errno));
 	      exit(-1);
 	   }
@@ -1968,8 +1993,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
 	 if (ret < 0)
 	 {
             printf("error while reading metadata file %s\n",strerror(errno));
-	    exit(-1);
-    	    break;	   
+	    continue;	   
 	 }
          /*
 	 ** update the number of objects
@@ -2127,7 +2151,7 @@ char *rozo_get_parent_child_path(void *exportd,void *inode_p,char *buf)
     
     }
       buf[offset]='/';
-      get_fname(e,&buf[offset+1],&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+      rozolib_get_fname(inode_attr_p->s.attrs.fid,e,&buf[offset+1],&inode_attr_p->s.fname,inode_attr_p->s.pfid);
     return buf;
 }
 	       

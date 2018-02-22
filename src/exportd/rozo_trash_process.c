@@ -466,7 +466,7 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
       ** get the name of the directory
       */
       name[0]=0;
-      get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+      rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
       name_len = strlen(name);
       if (name_len == 0) break;
       if (first == 1) {
@@ -538,7 +538,7 @@ char *rozo_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax)
    ** get the object name
    */
    name[0] = 0;     
-   get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+   rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
    if (name[0]== 0)
    {
      uuid_unparse(inode_attr_p->s.attrs.fid,buf_fid);
@@ -576,7 +576,7 @@ int rozo_trash_delete_file(void *exportd,void *inode_p)
    ** get the object name
    */
    name[0] = 0;     
-   get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+   rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
    if (name[0]== 0)
    {
      errno = ENOENT;
@@ -628,7 +628,7 @@ int rozo_trash_delete_dir(void *exportd,void *inode_p)
    ** get the object name
    */
    name[0] = 0;     
-   get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+   rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
    if (name[0]== 0)
    {
      errno = ENOENT;

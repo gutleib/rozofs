@@ -285,13 +285,14 @@ void rozofs_get_file_distribution(void *inode_p,rozofs_file_distribution_t *p);
 /**
 *  Get the name of the object
 
+   @param fid_child: FID of the file which name is loooked up
    @param fname: pointer to the description of the object name
    @param bufout : output buffer;
    @param pfid :parent fid
    
    @retval pointer to the output buffer
 */
-char *get_fname(void *e,char *bufout,void *fname,fid_t pfid);
+char *rozolib_get_fname(fid_t child_fid, void *e,char *bufout,void *fname,fid_t pfid);
 
 /*
 **_______________________________________________________________________________

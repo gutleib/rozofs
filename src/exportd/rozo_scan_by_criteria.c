@@ -518,7 +518,7 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
       ** get the name of the directory
       */
       name[0]=0;
-      get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+      rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
       name_len = strlen(name);
       if (name_len == 0) break;
       if (first == 1) {
@@ -1891,6 +1891,7 @@ int main(int argc, char *argv[]) {
                   usage();
                   exit(EXIT_FAILURE);
               }
+              break; 
           /*
           ** Regex
           */    
