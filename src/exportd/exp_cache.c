@@ -613,6 +613,27 @@ void lv2_cache_del(lv2_cache_t *cache, fid_t fid)
     }
 //    STOP_PROFILING(lv2_cache_del);
 }
+/*
+**__________________________________________________________________
+*/
+/**
+*   Remove an entry from the attribute cache without deleting it
+
+    @param cache: pointer to the level 2 cache
+    @param fid : key of the entry to remove
+*/
+void lv2_cache_remove_hash(lv2_cache_t *cache, fid_t fid) 
+{
+    lv2_entry_t *entry = 0;
+
+    if ((entry = htable_del(&cache->htable, fid)) != 0) {
+        /*
+        ** De assert locked_in_cache, otherwise the entry an be stuck in
+        ** the lru for ever
+        */
+	lv2_cache_unlock_entry_in_cache(entry);
+    }
+}
 
 /*
 **__________________________________________________________________

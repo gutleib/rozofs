@@ -50,6 +50,7 @@
 #include <rozofs/core/af_unix_socket_generic_api.h>
 #include "rozo_balance.h"
 
+extern int scanned_current_count;
 
 int volatile expgwc_non_blocking_thread_started;
 

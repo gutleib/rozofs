@@ -32,6 +32,7 @@
 #include <rozofs/rozofs_service_ports.h>
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/core/rozofs_core_files.h>
+#include <rozofs/common/common_config.h>
 #include "export.h"
 #include "rozo_inode_lib.h"
 #include "exp_cache.h"
@@ -569,7 +570,7 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
       ** get the name of the directory
       */
       name[0]=0;
-      get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+      rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
       name_len = strlen(name);
       if (name_len == 0) break;
       if (first == 1) {
@@ -602,58 +603,6 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
     return pbuf;
 }
 
-/*
- *_______________________________________________________________________
- */
- /**
-*   That function is intended to return the relative path to an object:
-    @rozofs_uuid@<FID_parent>/<child_name>
-    example:
-    @rozofs_uuid@1b4e28ba-2fa1-11d2-883f-0016d3cca427
-    
-    @param exportd: pointer to exportd data structure
-    @param inode_p: pointer to the inode
-    @param buf : pointer to the output buffer
-    @param lenmax: max length of the output buffer
-*/
-char *rozo_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax)
-{
-   char name[1024];
-   char *pbuf = buf;
-   char buf_fid[64];
-   ext_mattr_t *inode_attr_p = inode_p;
-   rozofs_inode_t *inode_val_p;
-   
-   
-   export_t *e= exportd;
-   
-   inode_val_p = (rozofs_inode_t*)inode_attr_p->s.pfid;
-   if ((inode_val_p->fid[0]==0) && (inode_val_p->fid[1]==0))
-   {
-      pbuf += sprintf(pbuf,"./"); 
-   } 
-   else
-   {
-     uuid_unparse(inode_attr_p->s.pfid,buf_fid);
-     pbuf += sprintf(pbuf,"./@rozofs_uuid@%s/",buf_fid); 
-   } 
-   /*
-   ** get the object name
-   */
-   name[0] = 0;     
-   get_fname(e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
-   if (name[0]== 0)
-   {
-     uuid_unparse(inode_attr_p->s.attrs.fid,buf_fid);
-     pbuf += sprintf(pbuf,"@rozofs_uuid@%s",buf_fid);    
-   
-   }
-   else
-   {
-     pbuf += sprintf(pbuf,"%s",name);       
-   }
-   return buf;
-}
 /*
 **__________________________________________________________
 */
@@ -1285,7 +1234,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   {
     case REBALANCE_MODE_REL:
     case REBALANCE_MODE_FID:
-      bufout = rozo_get_relative_path(exportd,inode_p,bufall,1023);
+      uuid_unparse(inode_p->s.attrs.fid,bufall);
+      bufout = bufall;
       break;
     case REBALANCE_MODE_ABS:
       bufout = rozo_get_full_path(exportd,inode_p,bufall,1023);
@@ -1752,6 +1702,7 @@ void rozo_bal_read_configuration_file(void) {
 */
 static void usage() {
     char bufall[64];
+    printf("RozoFS volume rebalancer - %s\n", VERSION);    
     printf("\nUsage: rozo_rebalance [OPTIONS]\n\n");
     printf("\t-h, --help\t\tprint this message.\n\n");
     printf("\t-v,--volume <vid>\t\tvolume identifier \n");
@@ -1799,7 +1750,20 @@ int main(int argc, char *argv[]) {
     int start= 1;
     uint64_t val64;
 
+    /*
+    ** Change local directory to "/"
+    */
+    if (chdir("/")!= 0) {}
     
+    /*
+    ** Check user is root
+    */
+    if (getuid() != 0) {
+      printf("You need to be root !!!\n");
+      exit(EXIT_FAILURE);
+    }      
+
+
     debug_buffer = malloc(ROZO_BALANCE_DBG_BUF_SIZE);
     /*
     ** create the path toward the directory where result file is stored
@@ -1808,9 +1772,14 @@ int main(int argc, char *argv[]) {
     ret = mkpath ((char*)path,S_IRUSR | S_IWUSR | S_IXUSR);
     if (ret < 0)
     {
-       printf("Error while creating path towards result file (path:%s):%s\n",REBALANCE_PATH,strerror(errno));
+       printf("Error while creating path towards result file (path:%s):%s",REBALANCE_PATH,strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    /*
+    ** read common config file
+    */
+    common_config_read(NULL);    
 
     /*
     ** Get utility name and record it for syslog
@@ -1825,7 +1794,7 @@ int main(int argc, char *argv[]) {
     /*
     ** Set a signal handler
     */
-    rozofs_signals_declare(utility_name, 1); 
+    rozofs_signals_declare(utility_name, common_config.nb_core_file); 
     /*
     ** init of the lock on cluster statistics
     */

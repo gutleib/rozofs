@@ -4705,7 +4705,16 @@ duplicate_deleted_file:
           // Remove from the cache when deleted (will be closed and freed)
           if (fid_has_been_recycled == 0)
 	  {
-            if (export_attr_thread_check_context(lv2)==0) lv2_cache_del(e->lv2_cache, child_fid);
+            if (export_attr_thread_check_context(lv2)==0) {
+              lv2_cache_del(e->lv2_cache, child_fid);
+            }
+            else {
+              /*
+              ** Remove an entry from the attribute cache without deleting it
+              ** since a thread is taking care of it
+              */
+              lv2_cache_remove_hash(e->lv2_cache, child_fid);
+            }           
 	  } 
         } 
     }
@@ -7846,6 +7855,10 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   if (sscanf(p," mover_allocate = %d", &new_cid) == 1)
   {
      return (rozofs_mover_allocate_scan(value,p,length,e,lv2,new_cid));  
+  }
+  if (sscanf(p," mover_invalidate = %llu", (long long unsigned int *)&valu64) == 1)
+  {
+     return (rozofs_mover_invalid_scan(e,lv2,valu64));  
   }
 
   if (sscanf(p," mover_validate = %llu", (long long unsigned int *)&valu64) == 1)
