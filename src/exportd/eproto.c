@@ -1025,8 +1025,8 @@ epgw_mattr_ret_t * ep_lookup_1_svc(epgw_lookup_arg_t * arg, struct svc_req * req
         goto error;
     if (export_lookup
             (exp, (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status   = EP_SUCCESS;
@@ -1068,8 +1068,8 @@ epgw_mattr_ret_t * ep_getattr_1_svc(epgw_mfile_arg_t * arg, struct svc_req * req
         goto error;
     if (export_getattr
             (exp, (unsigned char *) arg->arg_gw.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
@@ -1114,8 +1114,8 @@ epgw_mattr_ret_t * ep_setattr_1_svc(epgw_setattr_arg_t * arg, struct svc_req * r
             (mattr_t *) & arg->arg_gw.attrs, arg->arg_gw.to_set) != 0)
         goto error;
     if (export_getattr(exp, (unsigned char *) arg->arg_gw.attrs.fid,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-	    (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+	    (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
@@ -1201,8 +1201,8 @@ epgw_mattr_ret_t * ep_link_1_svc(epgw_link_arg_t * arg, struct svc_req * req) {
         goto error;
     if (export_link(exp, (unsigned char *) arg->arg_gw.inode,
             (unsigned char *) arg->arg_gw.newparent, arg->arg_gw.newname,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status   = EP_SUCCESS;
@@ -1245,8 +1245,8 @@ epgw_mattr_ret_t * ep_mknod_1_svc(epgw_mknod_arg_t * arg, struct svc_req * req) 
     if (export_mknod(
             exp,arg->hdr.gateway_rank, 
 	    (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name, arg->arg_gw.uid, arg->arg_gw.gid,
-            arg->arg_gw.mode, (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            arg->arg_gw.mode, (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.parent_attr.status = EP_SUCCESS;
@@ -1289,8 +1289,8 @@ epgw_mattr_ret_t * ep_mkdir_1_svc(epgw_mkdir_arg_t * arg, struct svc_req * req) 
         goto error;
     if (export_mkdir
             (exp, (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name, arg->arg_gw.uid, arg->arg_gw.gid,
-            arg->arg_gw.mode, (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            arg->arg_gw.mode, (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.parent_attr.status = EP_SUCCESS;
@@ -1333,7 +1333,7 @@ epgw_fid_ret_t * ep_unlink_1_svc(epgw_unlink_arg_t * arg, struct svc_req * req) 
         goto error;
     if (export_unlink(exp, (unsigned char *) arg->arg_gw.pfid, arg->arg_gw.name,
             (unsigned char *) ret.status_gw.ep_fid_ret_t_u.fid,
-            (mattr_t *) &ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) &ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
 
     ret.hdr.eid = arg->arg_gw.eid ;  
@@ -1375,7 +1375,7 @@ epgw_fid_ret_t * ep_rmdir_1_svc(epgw_rmdir_arg_t * arg, struct svc_req * req) {
         goto error;
     if (export_rmdir(exp, (unsigned char *) arg->arg_gw.pfid, arg->arg_gw.name,
             (unsigned char *) ret.status_gw.ep_fid_ret_t_u.fid,
-            (mattr_t *) &ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) &ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
 
     ret.hdr.eid = arg->arg_gw.eid ;  
@@ -1417,8 +1417,8 @@ epgw_mattr_ret_t * ep_symlink_1_svc(epgw_symlink_arg_t * arg, struct svc_req * r
         goto error;
 
     if (export_symlink(exp, arg->arg_gw.link, (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
 	    getuid(),getgid()) != 0)
         goto error;
 
@@ -1462,8 +1462,8 @@ epgw_mattr_ret_t * ep_symlink2_1_svc(epgw_symlink2_arg_t * arg, struct svc_req *
         goto error;
 
     if (export_symlink(exp, arg->arg_gw.link, (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name,
-            (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (mattr_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
 	    arg->arg_gw.uid,arg->arg_gw.gid) != 0)
         goto error;
 
@@ -1509,7 +1509,7 @@ epgw_rename_ret_t * ep_rename_1_svc(epgw_rename_arg_t * arg, struct svc_req * re
     if (export_rename(exp, (unsigned char *) arg->arg_gw.pfid, arg->arg_gw.name,
             (unsigned char *) arg->arg_gw.npfid, arg->arg_gw.newname,
             (unsigned char *) ret.status_gw.ep_fid_ret_t_u.fid,
-	    (mattr_t *) &ret.child_attr.ep_mattr_ret_t_u.attrs) != 0)
+	    (struct inode_internal_t *) &ret.child_attr.ep_mattr_ret_t_u.attrs) != 0)
         goto error;
 
     ret.hdr.eid = arg->arg_gw.eid ;  
@@ -1623,7 +1623,7 @@ epgw_mattr_ret_t * ep_write_block_1_svc(epgw_write_block_arg_t * arg,
 			   arg->hdr.gateway_rank,
 			   arg->arg_gw.geo_wr_start,
 			   arg->arg_gw.geo_wr_end,
-                           (mattr_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) < 0)
+                           (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) < 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status   = EP_SUCCESS;

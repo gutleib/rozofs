@@ -353,7 +353,7 @@ void _rzcachetrack_file(fid_t fid,uint64_t filesize,uint64_t cr8time)
    ie = get_ientry_by_fid(fid);
    if (ie == NULL) return;
    
-   children = ie->attrs.children;
+   children = ie->attrs.attrs.children;
    /*
    ** check if the number of children matches the minimum threshold
    */

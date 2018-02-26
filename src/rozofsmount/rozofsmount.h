@@ -156,13 +156,13 @@ typedef struct ientry {
     uint64_t    symlink_ts;
     int         pending_getattr_cnt;   /**< pending get attr count  */
     int         pending_setattr_with_size_update; /**< number of pending setattr triggered by a truncate callback */
-    mattr_t attrs;   /**< attributes caching for fs_mode = block mode   */
+    struct inode_internal_t attrs;   /**< attributes caching for fs_mode = block mode   */
     /* !!!WARNING !!! DO NOT ADD ANY FIELD BELOW attrs since that array can be extended for storing extended attributes */
 } ientry_t;
 /*
 ** ientry size when the client caches the extended attributes of the inode
 */
-#define ROZOFS_IENTRY_LARGE_SZ   (sizeof(ientry_t) - sizeof(mattr_t) + sizeof(lv2_entry_t)+sizeof(uint64_t))
+#define ROZOFS_IENTRY_LARGE_SZ   (sizeof(ientry_t) - sizeof(struct inode_internal_t) + sizeof(lv2_entry_t)+sizeof(uint64_t))
 
 /*
 ** About exportd id quota
@@ -560,29 +560,29 @@ static inline int flush_write_ientry(ientry_t * ie) {
     return 1;
 }
 
-static inline struct stat *mattr_to_stat(mattr_t * attr, struct stat *st, uint32_t bsize) {
+static inline struct stat *mattr_to_stat(struct inode_internal_t * attr, struct stat *st, uint32_t bsize) {
     memset(st, 0, sizeof (struct stat));
-    st->st_mode = attr->mode;
-    st->st_nlink = attr->nlink;
-    st->st_size = attr->size;
-    st->st_ctime = attr->ctime;
-    st->st_atime = attr->atime;
-    st->st_mtime = attr->mtime;    
+    st->st_mode = attr->attrs.mode;
+    st->st_nlink = attr->attrs.nlink;
+    st->st_size = attr->attrs.size;
+    st->st_ctime = attr->attrs.ctime;
+    st->st_atime = attr->attrs.atime;
+    st->st_mtime = attr->attrs.mtime;    
     st->st_blksize = ROZOFS_BSIZE_BYTES(bsize);
     /*
     ** check the case of the thin provisioning
     */
     if ((rozofs_get_thin_provisioning()) && (S_ISREG(st->st_mode)))
     {
-      uint64_t local_blocks = attr->children;
+      uint64_t local_blocks = attr->hpc_reserved.reg.nb_blocks_thin;
       local_blocks *=4096;
       st->st_blocks = ((local_blocks + 512 - 1) / 512);
     }
     else
-      st->st_blocks = ((attr->size + 512 - 1) / 512);
+      st->st_blocks = ((attr->attrs.size + 512 - 1) / 512);
     st->st_dev = 0;
-    st->st_uid = attr->uid;
-    st->st_gid = attr->gid;
+    st->st_uid = attr->attrs.uid;
+    st->st_gid = attr->attrs.gid;
     return st;
 }
 
@@ -719,10 +719,10 @@ int clear_read_data(file_t *p);
   the ientry.
   
   @param ientry_t *ie
-  @param mattr_t  attr
+  @param struct inode_internal_t  attr
 
 */
-static inline void rozofs_ientry_update(ientry_t *ie,mattr_t  *attr_p)
+static inline void rozofs_ientry_update(ientry_t *ie,struct inode_internal_t  *attr_p)
 {
 
     /**
@@ -737,15 +737,15 @@ static inline void rozofs_ientry_update(ientry_t *ie,mattr_t  *attr_p)
        /*
        ** nothing pending so full copy
        */
-       memcpy(&ie->attrs,attr_p, sizeof (mattr_t));   
+       memcpy(&ie->attrs,attr_p, sizeof (struct inode_internal_t));   
        return;
    }
    /*
    ** preserve the size of the ientry
    */
-   uint64_t file_size = ie->attrs.size;
-   memcpy(&ie->attrs,attr_p, sizeof (mattr_t));   
-   ie->attrs.size = file_size;
+   uint64_t file_size = ie->attrs.attrs.size;
+   memcpy(&ie->attrs,attr_p, sizeof (struct inode_internal_t));   
+   ie->attrs.attrs.size = file_size;
 }
 /*
 **__________________________________________________________________
@@ -799,7 +799,7 @@ static inline int rozofs_fill_storage_info(ientry_t *ie,cid_t *cid,uint8_t *sids
   rozofs_mover_sids_t *dist_mv_p;
   
   
-  attrs_p = &ie->attrs;
+  attrs_p = &ie->attrs.attrs;
   inode_p = (rozofs_inode_t*)attrs_p->fid; 
   
   if (inode_p->s.key == ROZOFS_REG_D_MOVER) key = ROZOFS_MOVER_FID; 
