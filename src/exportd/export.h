@@ -367,12 +367,12 @@ int export_stat(export_t * e, ep_statfs_t * st);
  * @param export: pointer to the export
  * @param pfid: fid of the parent of the searched file
  * @param name: pointer to the name of the searched file
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes) 
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes) 
  
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t * attrs, mattr_t * pattrs);
+int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t * attrs, struct inode_internal_t * pattrs);
 
 /** get attributes of a managed file
  *
@@ -383,7 +383,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t * attrs, mattr_t 
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_getattr(export_t *e, fid_t fid, mattr_t * attrs, mattr_t * pattrs);
+int export_getattr(export_t *e, fid_t fid, struct inode_internal_t * attrs, struct inode_internal_t * pattrs);
 
 /** set attributes of a managed file
  *
@@ -402,13 +402,13 @@ int export_setattr(export_t *e, fid_t fid, mattr_t * attrs, int to_set);
  * @param inode: the id of the file we want to be link on
  * @param newparent: parent od the new file (the link)
  * @param newname: the name of the new file
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname,
-        mattr_t *attrs,mattr_t *pattrs);
+        struct inode_internal_t *attrs,struct inode_internal_t *pattrs);
 
 /** create a new file
  *
@@ -419,14 +419,14 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname,
  * @param uid: the user id
  * @param gid: the group id
  * @param mode: mode of this file
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
   
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int export_mknod(export_t *e,uint32_t site_number,
                  fid_t pfid, char *name, uint32_t uid,
-                 uint32_t gid, mode_t mode, mattr_t *attrs,mattr_t *pattrs);
+                 uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs);
 
 /** create a new directory
  *
@@ -436,13 +436,13 @@ int export_mknod(export_t *e,uint32_t site_number,
  * @param uid: the user id
  * @param gid: the group id
  * @param mode: mode of this file
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
-        uint32_t gid, mode_t mode, mattr_t *attrs,mattr_t *pattrs);
+        uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs);
 
 /** remove a file
  *
@@ -450,11 +450,11 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
  * @param pfid: the id of the parent
  * @param name: the name of this file.
  * @param[out] fid: the fid of the removed file
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] pattrs:  to fill (parent attributes)
  * 
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_unlink(export_t * e, fid_t pfid, char *name, fid_t fid, mattr_t * pattrs);
+int export_unlink(export_t * e, fid_t pfid, char *name, fid_t fid, struct inode_internal_t * pattrs);
 
 /*
 int export_rm_bins(export_t * e);
@@ -466,11 +466,11 @@ int export_rm_bins(export_t * e);
  * @param pfid: the id of the parent
  * @param name: the name of directory to remove.
  * @param[out] fid: the fid of the removed file
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] pattrs:  to fill (parent attributes)
  * 
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid, mattr_t * pattrs);
+int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid, struct inode_internal_t * pattrs);
 
 /** create a symlink
  *
@@ -478,15 +478,15 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid, mattr_t * pattr
  * @param link: target name
  * @param pfid: the id of the parent
  * @param name: the name of the file to link.
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
  * @param uid: user identifier
  * @param gid: group identifier 
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
-        mattr_t * attrs,mattr_t *pattrs, 
+        struct inode_internal_t * attrs,struct inode_internal_t *pattrs, 
 	uint32_t uid, uint32_t gid) ;
 
 /** read a symbolic link
@@ -512,7 +512,7 @@ int export_readlink(export_t *e, fid_t fid, char link[PATH_MAX]);
  */
 int export_rename(export_t * e, fid_t pfid, char *name, fid_t npfid,
         char *newname, fid_t fid,
-	mattr_t * attrs);
+	struct inode_internal_t * attrs);
 
 /** Read to a regular file
  *
@@ -564,7 +564,7 @@ int export_read_block(export_t *e, fid_t fid, bid_t bid, uint32_t n, dist_t * d)
 int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
                            dist_t d, uint64_t off, uint32_t len,
 			   uint32_t site_number,uint64_t geo_wr_start,uint64_t geo_wr_end,
-			   mattr_t *attrs);
+			   struct inode_internal_t *attrs);
 
 /** read a directory
  *

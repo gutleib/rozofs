@@ -104,7 +104,7 @@ char *show_conf_with_buf(char * buf)
      pChar +=sprintf(pChar,"rebalance free trigger     :  %d\n",p->rebalance_threshold_trigger);
      pChar +=sprintf(pChar,"rebalance threshold_config :  %d\n",p->rebalance_threshold_config);
      pChar +=sprintf(pChar,"rebalance threshold_curr   :  %d\n",p->rebalance_threshold);
-     pChar +=sprintf(pChar,"max files move             :  %d\n",p->max_scanned);
+     pChar +=sprintf(pChar,"max files move             :  %d/%d\n",p->max_scanned,scanned_current_count);
      pChar +=sprintf(pChar,"max move size (cur/max)    :  %s/%s\n",display_size_not_aligned((long long unsigned int)p->max_move_size_config,buffer),
                                                                 display_size_not_aligned((long long unsigned int)p->cur_move_size,buffer2));
      pChar +=sprintf(pChar,"min. file size             :  %s\n",display_size_not_aligned((long long unsigned int)p->filesize_config,buffer));

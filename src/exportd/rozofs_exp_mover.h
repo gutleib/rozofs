@@ -116,6 +116,19 @@ int rozofs_mover_allocate_scan(char *value,char *p,int length,export_t *e,lv2_en
     @retval -1 on error (see errno for details)
 */
 int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,uint64_t guard_time);
+/*
+**__________________________________________________________________
+**
+**   scanning of the mover file invalidation
+
+    @param lv2: pointer to the cache entry that contains the i-node data.
+    @param e: pointer to the exportd context.
+    @param unused     Unused up to now
+    
+    @retval 0 on success
+    @retval -1 on error (see errno for details)
+*/
+int rozofs_mover_invalid_scan(export_t *e,lv2_entry_t *lv2,uint64_t unused);
 
 /*
 **__________________________________________________________________

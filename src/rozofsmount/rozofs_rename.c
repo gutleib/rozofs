@@ -236,7 +236,7 @@ void rozofs_ll_rename_cbk(void *this,void *param)
       /*
       ** update the attributes in the ientry
       */
-      rozofs_ientry_update(nie,(mattr_t*)&ret.child_attr.ep_mattr_ret_t_u.attrs);  
+      rozofs_ientry_update(nie,(struct inode_internal_t  *)&ret.child_attr.ep_mattr_ret_t_u.attrs);  
     }
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);     
     fuse_reply_err(req, 0);
@@ -247,7 +247,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp(srv_rozofs_ll_rename,parent,(old_ie==0)?NULL:old_ie->attrs.fid,status,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_rename,parent,(old_ie==0)?NULL:old_ie->attrs.attrs.fid,status,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_rename);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    

@@ -153,8 +153,8 @@ void rozofs_ll_create_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   mattr_t  attrs;
-   mattr_t  pattrs;
+   struct inode_internal_t  attrs;
+   struct inode_internal_t  pattrs;
    errno = 0;
    int trc_idx;
 
@@ -265,21 +265,21 @@ void rozofs_ll_create_cbk(void *this,void *param)
         xdr_free(decode_proc, (char *) &ret);
         goto error;
     }
-    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     /*
     ** get the parent attributes
     */
-    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
 
     xdr_free(decode_proc, (char *) &ret);
     /*
     ** end of decoding
     */
-    if (!(nie = get_ientry_by_fid(attrs.fid))) {
-        nie = alloc_ientry(attrs.fid);
+    if (!(nie = get_ientry_by_fid(attrs.attrs.fid))) {
+        nie = alloc_ientry(attrs.attrs.fid);
     }
     else {
-      recycle_ientry(nie,attrs.fid);
+      recycle_ientry(nie,attrs.attrs.fid);
     }
     memset(&fep, 0, sizeof (fep));
     fep.ino = nie->inode;
@@ -288,7 +288,7 @@ void rozofs_ll_create_cbk(void *this,void *param)
     /*
     ** update the attributes in the ientry
     */
-    memcpy(&nie->attrs,&attrs, sizeof (mattr_t));
+    memcpy(&nie->attrs,&attrs, sizeof (struct inode_internal_t));
     /**
     *  update the timestamp in the ientry context
     */
@@ -296,10 +296,10 @@ void rozofs_ll_create_cbk(void *this,void *param)
     /*
     ** get the parent attributes
     */
-    pie = get_ientry_by_fid(pattrs.fid);
+    pie = get_ientry_by_fid(pattrs.attrs.fid);
     if (pie != NULL)
     {
-      memcpy(&pie->attrs,&pattrs, sizeof (mattr_t));
+      memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
       /**
       *  update the timestamp in the ientry context
       */
@@ -310,15 +310,15 @@ void rozofs_ll_create_cbk(void *this,void *param)
     ** check the length of the file, and update the ientry if the file size returned
     ** by the export is greater than the one found in ientry
     */
-    if (nie->attrs.size < stbuf.st_size) nie->attrs.size = stbuf.st_size;
-    stbuf.st_size = nie->attrs.size;
+    if (nie->attrs.attrs.size < stbuf.st_size) nie->attrs.attrs.size = stbuf.st_size;
+    stbuf.st_size = nie->attrs.attrs.size;
         
     fep.attr_timeout =  rozofs_tmr_get_attr(0);
     fep.entry_timeout = rozofs_tmr_get_entry(0); 
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
     
-    rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.fid;
+    rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.attrs.fid;
     fep.generation = finode->fid[0];  
 
     /*
@@ -352,7 +352,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp(srv_rozofs_ll_create,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.fid,status,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_create,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.attrs.fid,status,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_create);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);        

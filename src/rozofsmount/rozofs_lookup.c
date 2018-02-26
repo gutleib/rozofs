@@ -437,21 +437,21 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
       {
 	if (
            /* check regular file */
-           ((((nie->timestamp+attr_us) > rozofs_get_ticker_us()) || (rozofs_mode == 1))&&(S_ISREG(nie->attrs.mode))) ||
+           ((((nie->timestamp+attr_us) > rozofs_get_ticker_us()) || (rozofs_mode == 1))&&(S_ISREG(nie->attrs.attrs.mode))) ||
 	   /* check directory */
-	   (((nie->pending_getattr_cnt>0)||((nie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(nie->attrs.mode)))
+	   (((nie->pending_getattr_cnt>0)||((nie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(nie->attrs.attrs.mode)))
 	   ) 
         {
 	  /*
 	  ** check if parent and child are either deleted/deleted or active/active
 	  */
 	  int trash_state = 0;
-	  if (rozofs_inode_is_del_pending(ie->attrs.fid)) trash_state = 1;
-	  if (rozofs_inode_is_del_pending(nie->attrs.fid)) trash_state |= 1<<1;
+	  if (rozofs_inode_is_del_pending(ie->attrs.attrs.fid)) trash_state = 1;
+	  if (rozofs_inode_is_del_pending(nie->attrs.attrs.fid)) trash_state |= 1<<1;
 	  switch (trash_state)
 	  {
 	     case 2:
-	       if (rozofs_inode_is_trash(nie->attrs.fid) == 0)
+	       if (rozofs_inode_is_trash(nie->attrs.attrs.fid) == 0)
 	       {
 		 errno = ENOENT;
 		 goto error;
@@ -581,20 +581,20 @@ lookup_objectmode:
       /*
       ** update the attributes in the ientry
       */
-      memcpy(nie->attrs.fid, mattr_obj.fid, sizeof(fid_t));
-      nie->attrs.cid = mattr_obj.cid;
-      memcpy(nie->attrs.sids, mattr_obj.sids, sizeof(sid_t)*ROZOFS_SAFE_MAX);
-      nie->attrs.size = mattr_obj.size;
-      nie->attrs.nlink = 1;
-      nie->attrs.mode = S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO ;
-      nie->attrs.uid = 0;
-      nie->attrs.gid = 0;
+      memcpy(nie->attrs.attrs.fid, mattr_obj.fid, sizeof(fid_t));
+      nie->attrs.attrs.cid = mattr_obj.cid;
+      memcpy(nie->attrs.attrs.sids, mattr_obj.sids, sizeof(sid_t)*ROZOFS_SAFE_MAX);
+      nie->attrs.attrs.size = mattr_obj.size;
+      nie->attrs.attrs.nlink = 1;
+      nie->attrs.attrs.mode = S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO ;
+      nie->attrs.attrs.uid = 0;
+      nie->attrs.attrs.gid = 0;
       nie->nlookup   = 0;
     }   
     mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
     stbuf.st_ino = nie->inode;
 
-//    info("FDL %d mode %d  uid %d gid %d",allocated,nie->attrs.mode,nie->attrs.uid,nie->attrs.gid);
+//    info("FDL %d mode %d  uid %d gid %d",allocated,nie->attrs.attrs.mode,nie->attrs.attrs.uid,nie->attrs.attrs.gid);
 success:
     memset(&fep, 0, sizeof (fep));
     fep.ino =stbuf.st_ino;  
@@ -603,12 +603,12 @@ success:
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
 
-    rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.fid;
+    rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.attrs.fid;
     fep.generation = finode->fid[0];    
     
     rz_fuse_reply_entry(req, &fep);
 
-    rozofs_trc_rsp(srv_rozofs_ll_lookup,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.fid,0,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_lookup,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.attrs.fid,0,trc_idx);
     goto out;
 }
 
@@ -636,13 +636,13 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   mattr_t  attrs;
+   struct inode_internal_t  attrs;
    xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    int trc_idx;
    errno = 0;
    ientry_t *pie = 0;
-   mattr_t  pattrs;
+   struct inode_internal_t  pattrs;
    int errcode=0;
    fuse_ino_t ino = 0;
    rozofs_inode_t *fake_id_p;
@@ -683,7 +683,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
                errno = ENOENT;
                goto error;
 	   }
-           memcpy(&attrs, &nie->attrs, sizeof (mattr_t));
+           memcpy(&attrs, &nie->attrs, sizeof (struct inode_internal_t));
 	   errno = EAGAIN;	   
 	   goto success;
          }
@@ -796,7 +796,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
                rz_fuse_reply_entry(fuse_ctx_p->lookup_tb[i].req, &fep);
 	       trc_idx = fuse_ctx_p->lookup_tb[i].trc_idx;
 	       errno=errcode;
-               rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(nie==NULL)?NULL:nie->attrs.fid,status,(nie==NULL)?-1:nie->attrs.size,trc_idx);
+               rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(nie==NULL)?NULL:nie->attrs.attrs.fid,status,(nie==NULL)?-1:nie->attrs.attrs.size,trc_idx);
 	    }        
 	  }
 	  goto out;	
@@ -809,15 +809,15 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
     */
     eid_set_free_quota(ret.free_quota);
     
-    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     /*
     ** get the parent attributes
     */
-    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
  
-    if (!(nie = get_ientry_by_fid(attrs.fid))) {
-        nie = alloc_ientry(attrs.fid);
+    if (!(nie = get_ientry_by_fid(attrs.attrs.fid))) {
+        nie = alloc_ientry(attrs.attrs.fid);
     }     
     /*
     ** update the attributes in the ientry
@@ -826,10 +826,10 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
     /*
     ** get the parent attributes
     */
-    pie = get_ientry_by_fid(pattrs.fid);
+    pie = get_ientry_by_fid(pattrs.attrs.fid);
     if (pie != NULL)
     {
-      memcpy(&pie->attrs,&pattrs, sizeof (mattr_t));
+      memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
       /**
       *  update the timestamp in the ientry context
       */
@@ -844,7 +844,7 @@ success:
     /*
     ** check the case of the directory
     */
-    if ((S_ISDIR(attrs.mode)) &&(strncmp(name,"@rozofs_uuid@",13) == 0))
+    if ((S_ISDIR(attrs.attrs.mode)) &&(strncmp(name,"@rozofs_uuid@",13) == 0))
     {
         rozofs_inode_t fake_id;
 		
@@ -856,8 +856,8 @@ success:
     {
       fep.ino = nie->inode;
     }
-    stbuf.st_size = nie->attrs.size;
-    fake_id_p = (rozofs_inode_t *) attrs.fid;
+    stbuf.st_size = nie->attrs.attrs.size;
+    fake_id_p = (rozofs_inode_t *) attrs.attrs.fid;
     if (fake_id_p->s.del)
     {
       fep.attr_timeout  = 0;
@@ -871,7 +871,7 @@ success:
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
 
-    rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.fid;
+    rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.attrs.fid;
     fep.generation = finode->fid[0];  
     
     rz_fuse_reply_entry(req, &fep);
@@ -890,7 +890,7 @@ success:
          rz_fuse_reply_entry(fuse_ctx_p->lookup_tb[i].req, &fep);
          nie->nlookup++;
 	 trc_idx = fuse_ctx_p->lookup_tb[i].trc_idx;
-         rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(nie==NULL)?NULL:nie->attrs.fid,status,(nie==NULL)?-1:nie->attrs.size,trc_idx);
+         rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(nie==NULL)?NULL:nie->attrs.attrs.fid,status,(nie==NULL)?-1:nie->attrs.attrs.size,trc_idx);
       }        
     }
     goto out;
@@ -911,14 +911,14 @@ error:
          fuse_reply_err(fuse_ctx_p->lookup_tb[i].req,errcode);
 	 trc_idx = fuse_ctx_p->lookup_tb[i].trc_idx;
 	 errno = errcode;
-         rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(nie==NULL)?NULL:nie->attrs.fid,status,(nie==NULL)?-1:nie->attrs.size,trc_idx);
+         rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(nie==NULL)?NULL:nie->attrs.attrs.fid,status,(nie==NULL)?-1:nie->attrs.attrs.size,trc_idx);
       }        
     }
 out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.fid,status,(nie==NULL)?-1:nie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.attrs.fid,status,(nie==NULL)?-1:nie->attrs.attrs.size,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_lookup);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    

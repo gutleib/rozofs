@@ -161,7 +161,7 @@ ep_lock_size_t rozofs_flock_canonical(struct flock * lock, file_t * f, int64_t *
     *start = f->current_pos;
   }
   else if (lock->l_whence == SEEK_END)  {
-    *start = ie->attrs.size;
+    *start = ie->attrs.attrs.size;
   }  
   else  {
     *start = 0;

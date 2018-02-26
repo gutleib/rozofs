@@ -956,10 +956,10 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
 
     // Fill request
     ie = f->ie;
-    args.cid = ie->attrs.cid;
+    args.cid = ie->attrs.attrs.cid;
     args.layout = f->export->layout;
     args.bsize = exportclt.bsize;
-    memcpy(args.dist_set, ie->attrs.sids, sizeof (sid_t) * ROZOFS_SAFE_MAX);
+    memcpy(args.dist_set, ie->attrs.attrs.sids, sizeof (sid_t) * ROZOFS_SAFE_MAX);
     memcpy(args.fid, f->fid, sizeof (fid_t));
     args.off = off;
     args.data.data_len = len;
@@ -995,7 +995,7 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
     ** the file since this client is the only writter of the file
     */
     if (conf.onlyWriter) {
-      if (off+len >= ie->attrs.size) {
+      if (off+len >= ie->attrs.attrs.size) {
         args.flags |= STORCLI_FLAGS_NO_END_REREAD;    
       }
     }
@@ -1163,7 +1163,7 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
       if ((size == 1) && ((off+1)%bbytes == 0))
       {
 	off_aligned = (off/bbytes)*bbytes;
-	if (ie->attrs.size <= off_aligned)
+	if (ie->attrs.attrs.size <= off_aligned)
 	{
            if (rozofs_buf_scratch_p == NULL) 
 	   {
@@ -1178,13 +1178,13 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
 	} 
       }
     }
-    if (ie->attrs.size < (off + size)) {
+    if (ie->attrs.attrs.size < (off + size)) {
     
         /*
 	** Check whether the size extension is compatible 
 	** with the export hard quota
 	*/
-        if (! eid_check_free_quota(exportclt.bsize, ie->attrs.size - ie->file_extend_size, off + size)) {
+        if (! eid_check_free_quota(exportclt.bsize, ie->attrs.attrs.size - ie->file_extend_size, off + size)) {
           goto error; // errno is already set	  
 	}
 	/*
@@ -1192,17 +1192,17 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
 	** to exclude any other request concerning the same fid: fix a potential issue
 	** when storcli is configure to handle request in parallel
 	*/
-	if (ie->attrs.size == 0) 
+	if (ie->attrs.attrs.size == 0) 
 	{
 	  file->file2create = 1;
 	}
 	
-	if (off > ie->attrs.size) {
+	if (off > ie->attrs.attrs.size) {
 	  creating_hole = 1;
 	}
 	ie->file_extend_pending = 1;
-	ie->file_extend_size   += ((off + size) - ie->attrs.size);
-        ie->attrs.size          = (off + size);
+	ie->file_extend_size   += ((off + size) - ie->attrs.attrs.size);
+        ie->attrs.attrs.size          = (off + size);
     }
 
     /*
@@ -2159,7 +2159,7 @@ void rozofs_ll_release_nb(fuse_req_t req, fuse_ino_t ino,
     file_close(f);
     fuse_reply_err(req, xerrno);
     errno=xerrno;
-    rozofs_trc_rsp(srv_rozofs_ll_release,(fuse_ino_t)f,(ie==NULL)?NULL:ie->attrs.fid,1,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_release,(fuse_ino_t)f,(ie==NULL)?NULL:ie->attrs.attrs.fid,1,trc_idx);
 //    STOP_PROFILING_NB(buffer_p,rozofs_ll_release);
     return;
 
@@ -2169,7 +2169,7 @@ error:
     */
     file_close(f);
     fuse_reply_err(req, errno);
-    rozofs_trc_rsp(srv_rozofs_ll_release,(fuse_ino_t)f,(ie==NULL)?NULL:ie->attrs.fid,1,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_release,(fuse_ino_t)f,(ie==NULL)?NULL:ie->attrs.attrs.fid,1,trc_idx);
     STOP_PROFILING_NB(buffer_p,rozofs_ll_release);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);   
     return;
@@ -2577,7 +2577,7 @@ void export_force_write_block_cbk(void *this,void *param)
     /*
     ** update the attributes in the ientry
     */
-    rozofs_ientry_update(ie,(mattr_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
+    rozofs_ientry_update(ie,(struct inode_internal_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
     //ie->file_extend_running = 0;
   }
 
@@ -2784,7 +2784,7 @@ void export_write_block_retry_cbk(void *this,void *param)
       /*
       ** update the attributes in the ientry
       */
-      rozofs_ientry_update(ie,(mattr_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
+      rozofs_ientry_update(ie,(struct inode_internal_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
       ie->file_extend_running = 0;
       /*
       ** check if some more write blocks are pending
@@ -2827,7 +2827,7 @@ int export_write_block_asynchrone_retry(void *fuse_ctx_p, ientry_t *ie)
     epgw_write_block_arg_t arg;
     int    ret;        
 
-    int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_ioctl,(fuse_ino_t)ie,ie->fid, ie->attrs.size,0);
+    int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_ioctl,(fuse_ino_t)ie,ie->fid, ie->attrs.attrs.size,0);
     SAVE_FUSE_PARAM(fuse_ctx_p,trc_idx);
     /*
     ** insert the site number in the argument
@@ -2841,7 +2841,7 @@ int export_write_block_asynchrone_retry(void *fuse_ctx_p, ientry_t *ie)
     arg.arg_gw.bid = 0;
     arg.arg_gw.nrb = 1;
     arg.arg_gw.length = 0; //buf_flush_len;
-    arg.arg_gw.offset = ie->attrs.size; //buf_flush_offset;
+    arg.arg_gw.offset = ie->attrs.attrs.size; //buf_flush_offset;
     arg.arg_gw.geo_wr_start = 0;
     arg.arg_gw.geo_wr_end   = 0;
     /*
@@ -2990,13 +2990,13 @@ int export_write_block_asynchrone(void *fuse_ctx_p, file_t *file_p, sys_recv_pf_
     /*
     ** adjust the size of the attributes of the local file
     */
-    if ((buf_flush_offset + buf_flush_len) > ie->attrs.size)
+    if ((buf_flush_offset + buf_flush_len) > ie->attrs.attrs.size)
     {
-      ie->file_extend_size   += ((buf_flush_offset + buf_flush_len) - ie->attrs.size);    
-      ie->attrs.size          = buf_flush_offset + buf_flush_len;
+      ie->file_extend_size   += ((buf_flush_offset + buf_flush_len) - ie->attrs.attrs.size);    
+      ie->attrs.attrs.size          = buf_flush_offset + buf_flush_len;
       ie->file_extend_pending = 1;
     }
-    int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_ioctl,(fuse_ino_t)file_p,file_p->fid, ie->attrs.size,0);
+    int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_ioctl,(fuse_ino_t)file_p,file_p->fid, ie->attrs.attrs.size,0);
     SAVE_FUSE_PARAM(fuse_ctx_p,trc_idx);
     /*
     ** insert the site number in the argument
@@ -3011,7 +3011,7 @@ int export_write_block_asynchrone(void *fuse_ctx_p, file_t *file_p, sys_recv_pf_
     arg.arg_gw.bid = 0;
     arg.arg_gw.nrb = 1;
     arg.arg_gw.length = 0; //buf_flush_len;
-    arg.arg_gw.offset = ie->attrs.size; //buf_flush_offset;
+    arg.arg_gw.offset = ie->attrs.attrs.size; //buf_flush_offset;
     arg.arg_gw.geo_wr_start = file_p->off_wr_start;
     arg.arg_gw.geo_wr_end = file_p->off_wr_end;
     /*
@@ -3080,10 +3080,10 @@ void export_write_block_nb(void *fuse_ctx_p, file_t *file_p)
     /*
     ** adjust the size of the attributes of the local file
     */
-    if ((buf_flush_offset + buf_flush_len) > ie->attrs.size)
+    if ((buf_flush_offset + buf_flush_len) > ie->attrs.attrs.size)
     {
-      ie->file_extend_size   += ((buf_flush_offset + buf_flush_len) - ie->attrs.size);        
-      ie->attrs.size          = buf_flush_offset + buf_flush_len;
+      ie->file_extend_size   += ((buf_flush_offset + buf_flush_len) - ie->attrs.attrs.size);        
+      ie->attrs.attrs.size          = buf_flush_offset + buf_flush_len;
       ie->file_extend_pending = 1;
     }
     /*
@@ -3344,7 +3344,7 @@ void export_write_block_cbk(void *this,void *param)
       /*
       ** update the attributes in the ientry
       */
-      rozofs_ientry_update(ie,(mattr_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
+      rozofs_ientry_update(ie,(struct inode_internal_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
       ie->file_extend_running = 0;
       /*
       ** check if some more write blocks are pending
