@@ -140,8 +140,8 @@ void rozofs_ll_link_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   mattr_t  attrs;
-   mattr_t  pattrs;
+   struct inode_internal_t  attrs;
+   struct inode_internal_t  pattrs;
    struct rpc_msg  rpc_reply;
    xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
@@ -259,14 +259,14 @@ void rozofs_ll_link_cbk(void *this,void *param)
     */
     eid_set_free_quota(ret.free_quota);
             
-    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
-    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
+    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
     /*
     ** end of decoding
     */
-    if (!(ie = get_ientry_by_fid(attrs.fid))) {
-        ie = alloc_ientry(attrs.fid);
+    if (!(ie = get_ientry_by_fid(attrs.attrs.fid))) {
+        ie = alloc_ientry(attrs.attrs.fid);
     }
     
     memset(&fep, 0, sizeof (fep));
@@ -277,14 +277,14 @@ void rozofs_ll_link_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(ie,&attrs);  
-    stbuf.st_size = ie->attrs.size;
+    stbuf.st_size = ie->attrs.attrs.size;
     /*
     ** get the parent attributes
     */
-    pie = get_ientry_by_fid(pattrs.fid);
+    pie = get_ientry_by_fid(pattrs.attrs.fid);
     if (pie != NULL)
     {
-      memcpy(&pie->attrs,&pattrs, sizeof (mattr_t));
+      memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
       pie->timestamp = rozofs_get_ticker_us();
     }   
     
@@ -297,7 +297,7 @@ void rozofs_ll_link_cbk(void *this,void *param)
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     ie->nlookup++;
 
-    rozofs_inode_t * finode = (rozofs_inode_t *) ie->attrs.fid;
+    rozofs_inode_t * finode = (rozofs_inode_t *) ie->attrs.attrs.fid;
     fep.generation = finode->fid[0];    
 
     fuse_reply_entry(req, &fep);
@@ -308,7 +308,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp(srv_rozofs_ll_link,ino,(ie==NULL)?NULL:ie->attrs.fid,status,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_link,ino,(ie==NULL)?NULL:ie->attrs.attrs.fid,status,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_link);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
@@ -677,8 +677,8 @@ void rozofs_ll_symlink_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   mattr_t  attrs;
-   mattr_t  pattrs;
+   struct inode_internal_t  attrs;
+   struct inode_internal_t  pattrs;
    xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
 
@@ -793,18 +793,18 @@ void rozofs_ll_symlink_cbk(void *this,void *param)
     */
     eid_set_free_quota(ret.free_quota);
             
-    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
-    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attrs, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
+    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
     /*
     ** end of message decoding
     */
 
-    if (!(nie = get_ientry_by_fid(attrs.fid))) {
-        nie = alloc_ientry(attrs.fid);
+    if (!(nie = get_ientry_by_fid(attrs.attrs.fid))) {
+        nie = alloc_ientry(attrs.attrs.fid);
     }
     else {
-      recycle_ientry(nie,attrs.fid);
+      recycle_ientry(nie,attrs.attrs.fid);
     }
         
     uint64_t time_us = rozofs_get_ticker_us();
@@ -824,14 +824,14 @@ void rozofs_ll_symlink_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(nie,&attrs);  
-    stbuf.st_size = nie->attrs.size;
+    stbuf.st_size = nie->attrs.attrs.size;
     /*
     ** get the parent attributes
     */
-    pie = get_ientry_by_fid(pattrs.fid);
+    pie = get_ientry_by_fid(pattrs.attrs.fid);
     if (pie != NULL)
     {
-      memcpy(&pie->attrs,&pattrs, sizeof (mattr_t));
+      memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
       pie->timestamp = time_us;
     }  
         
@@ -848,7 +848,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp(srv_rozofs_ll_symlink,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.fid,status,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_symlink,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.attrs.fid,status,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_symlink);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
@@ -978,7 +978,7 @@ void rozofs_ll_unlink_cbk(void *this,void *param)
    int trc_idx;
    fuse_ino_t parent;
    errno = 0;
-   mattr_t  pattrs;
+   struct inode_internal_t  pattrs;
        
    GET_FUSE_CTX_P(fuse_ctx_p,param);    
    
@@ -1094,21 +1094,21 @@ void rozofs_ll_unlink_cbk(void *this,void *param)
         // Invalidate attrs cache
         ie->timestamp = 0;
         // Update nlink
-        if (ie->attrs.nlink > 0)
-            ie->attrs.nlink--;
+        if (ie->attrs.attrs.nlink > 0)
+            ie->attrs.attrs.nlink--;
     }
     /*
     ** get the parent attributes
     */
-    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     xdr_free(decode_proc, (char *) &ret);    
     /*
     ** get the parent attributes
     */
-    pie = get_ientry_by_fid(pattrs.fid);
+    pie = get_ientry_by_fid(pattrs.attrs.fid);
     if (pie != NULL)
     {
-      memcpy(&pie->attrs,&pattrs, sizeof (mattr_t));
+      memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
       /**
       *  update the timestamp in the ientry context
       */
@@ -1120,7 +1120,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp(srv_rozofs_ll_unlink,parent,(ie==NULL)?NULL:ie->attrs.fid,status,trc_idx);
+    rozofs_trc_rsp(srv_rozofs_ll_unlink,parent,(ie==NULL)?NULL:ie->attrs.attrs.fid,status,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_unlink);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    

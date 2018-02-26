@@ -170,7 +170,7 @@ error:
     ** release the buffer if has been allocated
     */
 out:
-    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.nlink,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.attrs.nlink,trc_idx);
     STOP_PROFILING_NB(buffer_p,rozofs_ll_opendir);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
 
@@ -200,7 +200,7 @@ void rozofs_ll_opendir_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   mattr_t  attr;
+   struct inode_internal_t  attr;
    xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    errno = 0;
@@ -340,7 +340,7 @@ void rozofs_ll_opendir_cbk(void *this,void *param)
         xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
         goto error;
     }
-    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
     /*
     ** end of the the decoding part
@@ -387,7 +387,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.nlink,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_opendir,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.attrs.fid,status,(ie==NULL)?-1:ie->attrs.attrs.nlink,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_opendir);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    

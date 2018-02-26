@@ -132,7 +132,7 @@ void rozofs_ll_rmdir_cbk(void *this,void *param)
    errno = 0;
    int trc_idx;
    fuse_ino_t parent;
-   mattr_t pattrs;
+   struct inode_internal_t pattrs;
    
    GET_FUSE_CTX_P(fuse_ctx_p,param);    
    
@@ -250,7 +250,7 @@ void rozofs_ll_rmdir_cbk(void *this,void *param)
     /*
     ** get the parent attributes
     */
-    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&pattrs, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
     /*
     ** end of decoding section
@@ -262,10 +262,10 @@ void rozofs_ll_rmdir_cbk(void *this,void *param)
     /*
     ** get the parent attributes
     */
-    pie = get_ientry_by_fid(pattrs.fid);
+    pie = get_ientry_by_fid(pattrs.attrs.fid);
     if (pie != NULL)
     {
-      memcpy(&pie->attrs,&pattrs, sizeof (mattr_t));
+      memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
       /**
       *  update the timestamp in the ientry context
       */

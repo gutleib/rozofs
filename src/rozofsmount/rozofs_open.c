@@ -118,7 +118,7 @@ void rozofs_ll_open_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
       /*
       ** Take care of the file caching cache for hybrid SSD/HDD configuration
       */
-      rzcachetrack_file(ie->pfid,ie->attrs.size,ie->attrs.mtime);
+      rzcachetrack_file(ie->pfid,ie->attrs.attrs.size,ie->attrs.attrs.mtime);
       /*
       ** send back response to fuse
       */
@@ -189,7 +189,7 @@ short_cut:
 	/*
 	** Take care of the file caching cache for hybrid SSD/HDD configuration
 	*/
-	rzcachetrack_file(ie->pfid,ie->attrs.size,ie->attrs.mtime);
+	rzcachetrack_file(ie->pfid,ie->attrs.attrs.size,ie->attrs.attrs.mtime);
 	/*
 	** send back response to fuse
 	*/
@@ -208,7 +208,7 @@ error:
     ** release the buffer if has been allocated
     */
 out:
-    rozofs_trc_rsp_attr(srv_rozofs_ll_open,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_open,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.attrs.size,trc_idx);
     STOP_PROFILING_NB(buffer_p,rozofs_ll_open);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
 
@@ -238,7 +238,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   mattr_t  attr;
+   struct inode_internal_t  attr;
    xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    errno = 0;
@@ -384,7 +384,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
         xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
         goto error;
     }
-    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
     /*
     ** end of the the decoding part
@@ -404,7 +404,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
         char fid_str[37];
         rozofs_uuid_unparse(file->fid, fid_str);
         severe("BUGROZOFSWATCH (open:%p),FID(%s) size=%"PRIu64"", file,
-                    fid_str, ie->attrs.size);
+                    fid_str, ie->attrs.attrs.size);
     }
     
     /*
@@ -432,7 +432,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
     /*
     ** Take care of the file caching cache for hybrid SSD/HDD configuration
     */
-    rzcachetrack_file(ie->pfid,ie->attrs.size,ie->attrs.mtime);    
+    rzcachetrack_file(ie->pfid,ie->attrs.attrs.size,ie->attrs.attrs.mtime);    
     
     fuse_reply_open(req, fi);
     goto out;
@@ -451,7 +451,7 @@ out:
     /*
     ** release the transaction context and the fuse context
     */
-    rozofs_trc_rsp_attr(srv_rozofs_ll_open,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_open,(fuse_ino_t)file,(ie==NULL)?NULL:ie->attrs.attrs.fid,status,(ie==NULL)?-1:ie->attrs.attrs.size,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_open);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    

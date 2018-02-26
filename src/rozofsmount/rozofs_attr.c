@@ -87,9 +87,9 @@ uint64_t rozofs_max_getattr_duplicate = 0;
     */
     if (
          /* check regular file */
-         ((((ie->timestamp+attr_us) > rozofs_get_ticker_us()) || (rozofs_mode == 1))&&(S_ISREG(ie->attrs.mode))) ||
+         ((((ie->timestamp+attr_us) > rozofs_get_ticker_us()) || (rozofs_mode == 1))&&(S_ISREG(ie->attrs.attrs.mode))) ||
 	 /* check directory */
-	 (((ie->pending_getattr_cnt>0)||((ie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(ie->attrs.mode)))
+	 (((ie->pending_getattr_cnt>0)||((ie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(ie->attrs.attrs.mode)))
 	 ) 
     {
       mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
@@ -117,7 +117,7 @@ uint64_t rozofs_max_getattr_duplicate = 0;
          goto error;
       }
       if (north_lbg_get_state(routing_ctx.lbg_id[0]) != NORTH_LBG_UP) {
-        if (ie->attrs.mtime != 0) {
+        if (ie->attrs.attrs.mtime != 0) {
 	  mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	  stbuf.st_ino = ino; 
           rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
@@ -142,7 +142,7 @@ uint64_t rozofs_max_getattr_duplicate = 0;
       ** parameters instead of failing
       */
       if (common_config.client_fast_reconnect) {
-        if (ie->attrs.mtime != 0) {      
+        if (ie->attrs.attrs.mtime != 0) {      
 	  mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	  stbuf.st_ino = ino; 
 	  rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
@@ -165,7 +165,7 @@ error:
     ** release the buffer if has been allocated
     */
 out:
-    rozofs_trc_rsp_attr(srv_rozofs_ll_getattr,0/*ino*/,(ie==NULL)?NULL:ie->attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_getattr,0/*ino*/,(ie==NULL)?NULL:ie->attrs.attrs.fid,(errno==0)?0:1,(ie==NULL)?-1:ie->attrs.attrs.size,trc_idx);
     STOP_PROFILING_NB(buffer_p,rozofs_ll_getattr);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
 
@@ -195,8 +195,8 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   mattr_t  attr;
-   mattr_t  pattr;
+   struct inode_internal_t  attr;
+   struct inode_internal_t  pattr;
    int      parent_attribute_valid = 0;
    struct rpc_msg  rpc_reply;
    rpc_reply.acpted_rply.ar_results.proc = NULL;
@@ -230,7 +230,7 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
        */
        if ((common_config.client_fast_reconnect)&&(errno==ETIME)) {
          ie = get_ientry_by_inode(ino);
-	 if ((ie != NULL) && (ie->attrs.mtime != 0)) { 
+	 if ((ie != NULL) && (ie->attrs.attrs.mtime != 0)) { 
  	   mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	   stbuf.st_ino = ino; 
 	   rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
@@ -329,13 +329,13 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
     */
     eid_set_free_quota(ret.free_quota);
         
-    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
     /*
     ** get the parent attributes
     */
     if (ret.parent_attr.status == EP_SUCCESS)
     {
-       memcpy(&pattr, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+       memcpy(&pattr, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
        parent_attribute_valid = 1;
     }
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
@@ -347,10 +347,10 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
       /*
       ** get the parent attributes
       */
-      pie = get_ientry_by_fid(pattr.fid);
+      pie = get_ientry_by_fid(pattr.attrs.fid);
       if (pie != NULL)
       {
-	memcpy(&pie->attrs,&pattr, sizeof (mattr_t));
+	memcpy(&pie->attrs,&pattr, sizeof (struct inode_internal_t));
 	/**
 	*  update the timestamp in the ientry context
 	*/
@@ -375,7 +375,7 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(ie,&attr);  
-    stbuf.st_size = ie->attrs.size;
+    stbuf.st_size = ie->attrs.attrs.size;
     /*
     ** update the getattr pending count
     */
@@ -385,7 +385,7 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
 error:
     fuse_reply_err(req, errno);
 out:
-    rozofs_trc_rsp_attr(srv_rozofs_ll_getattr,ino,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_getattr,ino,(ie==NULL)?NULL:ie->attrs.attrs.fid,status,(ie==NULL)?-1:ie->attrs.attrs.size,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_getattr);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
@@ -521,7 +521,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       /*
       ** Check quota are respected
       */
-      if (!eid_check_free_quota(exportclt.bsize, ie->attrs.size, attr.size)) {
+      if (!eid_check_free_quota(exportclt.bsize, ie->attrs.attrs.size, attr.size)) {
         goto error;// errno is already set
       }         
 
@@ -529,7 +529,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       ** indicates that there is a pending file size update
       */
       ie->mtime_locked = 1;      
-      ie->attrs.size           = attr.size;
+      ie->attrs.attrs.size           = attr.size;
       ie->file_extend_running = 1;
       ie->file_extend_pending = 0; 
       ie->file_extend_size    = 0;               
@@ -577,10 +577,10 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	**  we take the file information in terms of cid, distribution from the attributes
 	**  saved in the ientry
 	*/
-	args.cid = ie->attrs.cid;
+	args.cid = ie->attrs.attrs.cid;
 	args.layout = exportclt.layout;
 	args.bsize = exportclt.bsize;
-	memcpy(args.dist_set, ie->attrs.sids, sizeof (sid_t) * ROZOFS_SAFE_MAX);
+	memcpy(args.dist_set, ie->attrs.attrs.sids, sizeof (sid_t) * ROZOFS_SAFE_MAX);
 	memcpy(args.fid, ie->fid, sizeof (fid_t));
 	ret = rozofs_fill_storage_info(ie,&args.cid,args.dist_set,args.fid);
 	if (ret < 0)
@@ -644,7 +644,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       */
       if ((ie->file_extend_pending)||(ie->file_extend_running)) {
 	to_set |= FUSE_SET_ATTR_SIZE;
-	attr.size = ie->attrs.size;  
+	attr.size = ie->attrs.attrs.size;  
 	stbuf->st_size = attr.size;
       }	    
 
@@ -726,7 +726,7 @@ async_setattr:
     /*
     ** update the attributes in the ientry
     */
-    stat_to_mattr(stbuf, &ie->attrs, to_set);
+    stat_to_mattr(stbuf, &ie->attrs.attrs, to_set);
     mattr_to_stat(&ie->attrs, &o_stbuf, exportclt.bsize);
     o_stbuf.st_ino = ino;
     rz_fuse_reply_attr(req, &o_stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
@@ -751,9 +751,9 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     struct stat o_stbuf;
     fuse_req_t req; 
     epgw_mattr_ret_t ret ;
-    mattr_t  attr;
+    struct inode_internal_t  attr;
     uint32_t readahead = 0;
-    mattr_t  pattr;
+    struct inode_internal_t  pattr;
     int      parent_attribute_valid = 0;   
     int status;
     uint8_t  *payload;
@@ -887,13 +887,13 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     */
     eid_set_free_quota(ret.free_quota);
     
-    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));  
+    memcpy(&attr, &ret.status_gw.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));  
     /*
     ** get the parent attributes
     */
     if (ret.parent_attr.status == EP_SUCCESS)
     {
-       memcpy(&pattr, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (mattr_t));
+       memcpy(&pattr, &ret.parent_attr.ep_mattr_ret_t_u.attrs, sizeof (struct inode_internal_t));
        parent_attribute_valid = 1;
     } 
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
@@ -905,10 +905,10 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
       /*
       ** get the parent attributes
       */
-      pie = get_ientry_by_fid(pattr.fid);
+      pie = get_ientry_by_fid(pattr.attrs.fid);
       if (pie != NULL)
       {
-	memcpy(&pie->attrs,&pattr, sizeof (mattr_t));
+	memcpy(&pie->attrs,&pattr, sizeof (struct inode_internal_t));
 	/**
 	*  update the timestamp in the ientry context
 	*/
@@ -948,7 +948,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     /*
     ** update the size in the buffer returned to fuse
     */
-    o_stbuf.st_size = ie->attrs.size;
+    o_stbuf.st_size = ie->attrs.attrs.size;
 
     if (lkup_cpt == 0) 
     {
@@ -971,7 +971,7 @@ error:
       }    
     }
 out:
-    rozofs_trc_rsp_attr(srv_rozofs_ll_setattr,ino,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.size,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_setattr,ino,(ie==NULL)?NULL:ie->attrs.attrs.fid,status,(ie==NULL)?-1:ie->attrs.attrs.size,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_setattr);
     rozofs_fuse_release_saved_context(param);
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);  

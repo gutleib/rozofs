@@ -160,35 +160,27 @@ static inline int test_no_extended_attr(lv2_entry_t *lv2) {
 /*__________________________________________________________________
 ** Recopy the attributes of a lv2 cache entry into a structure attribute
 ** destinated to the rozofsmount. 
-** 
-** Recopy the nb of blocks computed in case of thin privsionning
-** into the children field before returning the information
-** to the rozofsmount, since this where the rozofsmount
-** expects it to be.
 **
 ** @param lv2           The lv2 cache enty
-** @param attrs         The attributes to be returned to the rozofsmount
+** @param p             The attributes to be returned to the rozofsmount
+**
 */
-static inline void export_recopy_attributes_for_rozofsmount(lv2_entry_t *lv2, mattr_t *attrs) {    
-
+static inline void export_recopy_extended_attributes(lv2_entry_t *lv2,struct inode_internal_t * attrs) {    
+  
   /*
-  ** Copy the whole attribute structure
+  ** Re-copy the whole exportd attribute structure except the xattributes
+  **
+  ** The attrs pointer should actualy be an ep_mattr_t structure of a response 
+  ** to rozofsmount and so have a size of 264
+  **
+  ** The struct inode_internal_t used by the export has a size of 240
   */
-  memcpy(attrs, &lv2->attributes.s.attrs, sizeof (mattr_t)); 
+  memcpy(attrs, &lv2->attributes.s.attrs, sizeof(struct inode_internal_t)); 
 
   /*
   ** Clear extended attribute flag in mode field , when none is set
   */
-  if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->mode);
-
-  /*
-  ** Recopy the nb of blocks computed in case of thin privsionning
-  ** into the children field before returning the information
-  ** to the rozofsmount, since this where the rozofsmount expects it
-  */   
-  if (S_ISREG(lv2->attributes.s.attrs.mode)) {
-    attrs->children = lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin;
-  }
+  if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->attrs.mode);
 }  
 /*
 **__________________________________________________________________
@@ -1949,7 +1941,7 @@ out:
 /*
 **__________________________________________________________________
 */
-int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *pattrs) {
+int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *attrs,struct inode_internal_t *pattrs) {
     int status = -1;
     lv2_entry_t *plv2 = 0;
     lv2_entry_t *pplv2 = 0;
@@ -1982,8 +1974,8 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     {
        if (strcmp(name,".")==0)
        {       
-          export_recopy_attributes_for_rozofsmount(plv2, attrs);
-	  memset(pattrs->fid,0, sizeof(fid_t));     
+          export_recopy_extended_attributes(plv2, attrs);
+	  memset(pattrs->attrs.fid,0, sizeof(fid_t));     
        }
        else
        {
@@ -1993,8 +1985,8 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
 	  if (!(pplv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, plv2->attributes.s.pfid))) {
               goto out;
 	  }
-          export_recopy_attributes_for_rozofsmount(pplv2, attrs);          
-	  memset(pattrs->fid,0, sizeof(fid_t));     	         
+          export_recopy_extended_attributes(pplv2, attrs);          
+	  memset(pattrs->attrs.fid,0, sizeof(fid_t));     	         
        }
        status = 0;
        goto out;    
@@ -2002,7 +1994,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     /*
     ** copy the parent attributes
     */
-    export_recopy_attributes_for_rozofsmount(plv2, pattrs);
+    export_recopy_extended_attributes(plv2, pattrs);
     int parent_state = 0;
     /*
     ** The parent fid might not have the delete bit asserted even if it has been deleted
@@ -2063,11 +2055,11 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
 	  goto out;
 	}
          
-        export_recopy_attributes_for_rozofsmount(lv2, attrs);
+        export_recopy_extended_attributes(lv2, attrs);
 	/*
 	** copy the fid provided in the input argument
 	*/
-	memcpy(attrs->fid,fid_direct,sizeof(fid_t));
+	memcpy(attrs->attrs.fid,fid_direct,sizeof(fid_t));
         status = 0;  
         goto out;      
     }
@@ -2101,9 +2093,9 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
 	 /*
 	 ** assert the del pending bit in the returned attributes of the parent and return the parent attributes
 	 */
-         export_recopy_attributes_for_rozofsmount(plv2, attrs);
-	 exp_metadata_inode_del_assert(attrs->fid);
-	 rozofs_inode_set_trash(attrs->fid);
+         export_recopy_extended_attributes(plv2, attrs);
+	 exp_metadata_inode_del_assert(attrs->attrs.fid);
+	 rozofs_inode_set_trash(attrs->attrs.fid);
 	 status = 0;
 	 goto out; 
        } 
@@ -2149,7 +2141,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     ** take care of the case of the mover
     */
     rozofs_mover_check_for_validation(e,lv2,child_fid);
-    export_recopy_attributes_for_rozofsmount(lv2, attrs);
+    export_recopy_extended_attributes(lv2, attrs);
     /*
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
@@ -2194,7 +2186,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
 	   {
 	     if (S_ISDIR(lv2->attributes.s.attrs.mode))
 	     {
-	         rozofs_inode_set_trash(attrs->fid);
+	         rozofs_inode_set_trash(attrs->attrs.fid);
 		 break;	     
 	     }
 	    }
@@ -2218,7 +2210,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
 	  goto out;        
     }
 #endif
-    if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->mode);
+    if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->attrs.mode);
     status = 0;
 out:
     /*
@@ -2276,14 +2268,14 @@ out:
 uint64_t  last_export_getattr_log = 0;
 fid_t      rozofs_null_fid = {0};
 
-void export_get_parent_attributes(export_t *e, fid_t pfid, mattr_t *pattrs)
+void export_get_parent_attributes(export_t *e, fid_t pfid, struct inode_internal_t *pattrs)
 {
     uint64_t     ts;
     char fidstring[256];
     
    if (memcmp(rozofs_null_fid,pfid,sizeof(fid_t))==0)
    {
-     memset(pattrs->fid, 0, sizeof (fid_t));
+     memset(pattrs->attrs.fid, 0, sizeof (fid_t));
      return;
    }
     
@@ -2300,10 +2292,10 @@ void export_get_parent_attributes(export_t *e, fid_t pfid, mattr_t *pattrs)
      /*
      ** Clear the attributes to avoid a match on get_ientry_by_fid() on rozofsmount
      */
-     memset(pattrs->fid, 0, sizeof (fid_t));
+     memset(pattrs->attrs.fid, 0, sizeof (fid_t));
      return;
    }
-   export_recopy_attributes_for_rozofsmount(plv2, pattrs);
+   export_recopy_extended_attributes(plv2, pattrs);
 
 #ifdef ROZOFS_DIR_STATS
    /*
@@ -2327,7 +2319,7 @@ void export_get_parent_attributes(export_t *e, fid_t pfid, mattr_t *pattrs)
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_getattr(export_t *e, fid_t fid, mattr_t *attrs,mattr_t * pattrs) {
+int export_getattr(export_t *e, fid_t fid, struct inode_internal_t *attrs,struct inode_internal_t * pattrs) {
     int status = -1;
     lv2_entry_t *lv2 = 0;
     START_PROFILING(export_getattr);
@@ -2352,8 +2344,8 @@ int export_getattr(export_t *e, fid_t fid, mattr_t *attrs,mattr_t * pattrs) {
     ** Recopy the nb of blocks in the children field 
     ** which is where the rozofsmount expects it to be in case of thin provisioning
     */
-    export_recopy_attributes_for_rozofsmount(lv2,attrs);   
-    memcpy(attrs->fid,fid,sizeof(fid_t));
+    export_recopy_extended_attributes(lv2,attrs);   
+    memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
     /*
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
@@ -2566,12 +2558,12 @@ out:
  * @param inode: the id of the file we want to be link on
  * @param newparent: parent od the new file (the link)
  * @param newname: the name of the new file
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, mattr_t *attrs,mattr_t *pattrs) {
+int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, struct inode_internal_t *attrs,struct inode_internal_t *pattrs) {
     int status = -1;
     lv2_entry_t *target = NULL;
     lv2_entry_t *plv2 = NULL;
@@ -2660,12 +2652,12 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, mattr_
         goto out;
 
     // Return attributes
-    export_recopy_attributes_for_rozofsmount(target,attrs);
+    export_recopy_extended_attributes(target,attrs);
     
     /*
     ** return the parent attributes
     */
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+    export_recopy_extended_attributes(plv2,pattrs);
     status = 0;
 
 out:
@@ -2715,7 +2707,7 @@ int rozofs_parse_object_name(char *name,char **basename,int *file_count)
 }
 
 int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
-        uint32_t gid, mode_t mode, mattr_t *attrs,mattr_t *pattrs,lv2_entry_t *plv2) {
+        uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs,lv2_entry_t *plv2) {
     int status = -1;
     fid_t node_fid;
     int xerrno = errno;
@@ -2912,7 +2904,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
       // update the parent
       // add the new child to the parent
       if (put_mdirentry(plv2->dirent_root_idx_p,fdp, pfid, filename_p, 
-                	buf_attr_work_p->s.attrs.fid, attrs->mode,&fid_name_info,
+                	buf_attr_work_p->s.attrs.fid, attrs->attrs.mode,&fid_name_info,
 			plv2->attributes.s.attrs.children,
 			&root_dirent_mask) != 0) {
           goto error;
@@ -2990,8 +2982,8 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     /*
     ** return the parent attributes and the child attributes
     */
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);
-    export_recopy_attributes_for_rozofsmount((lv2_entry_t*)&buf_attr_p,attrs);
+    export_recopy_extended_attributes(plv2,pattrs);
+    export_recopy_extended_attributes((lv2_entry_t*)&buf_attr_p,attrs);
     goto out;
 
 error:
@@ -3097,15 +3089,15 @@ lv2_entry_t *  export_get_recycled_inode(export_t *e,fid_t pfid,ext_mattr_t *ext
  * @param uid: the user id
  * @param gid: the group id
  * @param mode: mode of this file
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
   
  * @return: 0 on success -1 otherwise (errno is set)
  */
 #define ROZOFS_SLICE "@rozofs_slice@"
 
 int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
-        uint32_t gid, mode_t mode, mattr_t *attrs,mattr_t *pattrs) {
+        uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs) {
     int status = -1;
     lv2_entry_t *plv2=NULL;
     lv2_entry_t *lv2_child = NULL;
@@ -3187,8 +3179,8 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
 		/*
 		** Let's respond the file has been created by this request
 		*/
-                export_recopy_attributes_for_rozofsmount(lv2_child,attrs);
-                export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+                export_recopy_extended_attributes(lv2_child,attrs);
+                export_recopy_extended_attributes(plv2,pattrs);
 		status = 0;
 		goto out;	   
 	    }
@@ -3327,7 +3319,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     // update the parent
     // add the new child to the parent
     if (put_mdirentry(plv2->dirent_root_idx_p,fdp, pfid, name, 
-                      ext_attrs.s.attrs.fid, attrs->mode,&fid_name_info,
+                      ext_attrs.s.attrs.fid, attrs->attrs.mode,&fid_name_info,
 		      plv2->attributes.s.attrs.children,
 		      &root_dirent_mask) != 0) {
         goto error;
@@ -3380,8 +3372,8 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     /*
     ** return the parent attributes and the child attributes
     */
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);
-    export_recopy_attributes_for_rozofsmount((lv2_entry_t*)&ext_attrs,attrs);
+    export_recopy_extended_attributes(plv2,pattrs);
+    export_recopy_extended_attributes((lv2_entry_t*)&ext_attrs,attrs);
     goto out;
 
 error:
@@ -3415,13 +3407,13 @@ out:
  * @param uid: the user id
  * @param gid: the group id
  * @param mode: mode of this file
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
-        uint32_t gid, mode_t mode, mattr_t * attrs,mattr_t * pattrs) {
+        uint32_t gid, mode_t mode, struct inode_internal_t * attrs,struct inode_internal_t * pattrs) {
     int status = -1;
     lv2_entry_t *plv2= NULL;
     lv2_entry_t *lv2= NULL;
@@ -3485,13 +3477,13 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       /*
       ** get the attributes of the directory and parent directory
       */
-      export_recopy_attributes_for_rozofsmount(plv2,attrs);
-      export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+      export_recopy_extended_attributes(plv2,attrs);
+      export_recopy_extended_attributes(plv2,pattrs);
       /*
       ** assert the delete pending bit on the pseudo trash directory and set the key to ROZOFS_TRASH
       */
-      exp_metadata_inode_del_assert(attrs->fid);
-      rozofs_inode_set_trash(attrs->fid);
+      exp_metadata_inode_del_assert(attrs->attrs.fid);
+      rozofs_inode_set_trash(attrs->attrs.fid);
       /*
       ** re-write the parent attributes since the trash has been added
       */
@@ -3520,7 +3512,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     ** assert the global variables associated with the current export
     */
     fdp = export_open_parent_directory(e,pfid);
-    if (get_mdirentry(plv2->dirent_root_idx_p,fdp, pfid, name, node_fid, &attrs->mode,&root_dirent_mask) == 0) {
+    if (get_mdirentry(plv2->dirent_root_idx_p,fdp, pfid, name, node_fid, &attrs->attrs.mode,&root_dirent_mask) == 0) {
         /*
 	** if the directory already exist, it should not be an issue because from a VFS standpoint, a lookup
 	** took place before the mkdir. So if we enter here it is because the lookup returns ENOENT, so the 
@@ -3533,8 +3525,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
 	     /*
 	     ** get the attributes of the directory and parent directory
 	     */
-             export_recopy_attributes_for_rozofsmount(lv2,attrs);
-             export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+             export_recopy_extended_attributes(lv2,attrs);
+             export_recopy_extended_attributes(plv2,pattrs);
 	     status = 0;
 	     goto out;	   
   	  }
@@ -3613,7 +3605,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     */
     memset(&ext_attrs,0x00,sizeof(ext_attrs));    
     memcpy(&ext_attrs.s.pfid,pfid,sizeof(fid_t));
-    attrs->cid = 0;
+    attrs->attrs.cid = 0;
     ext_attrs.s.attrs.cid =plv2->attributes.s.attrs.cid;
     
     memset(&ext_attrs.s.attrs.sids, 0, ROZOFS_SAFE_MAX * sizeof (sid_t));
@@ -3759,8 +3751,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     /*
     ** return the parent and child attributes
     */
-    export_recopy_attributes_for_rozofsmount((lv2_entry_t *)&ext_attrs,attrs);
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+    export_recopy_extended_attributes((lv2_entry_t *)&ext_attrs,attrs);
+    export_recopy_extended_attributes(plv2,pattrs);
     goto out;
 
 error:
@@ -3879,12 +3871,12 @@ rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry) {
  * @param pfid: the id of the parent
  * @param name: the name of this file.
  * @param[out] fid: the fid of the removed file
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] pattrs:  to fill (parent attributes)
  * @param[in] plv2: parent attributes
  * 
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pattrs,lv2_entry_t *plv2) {
+int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,struct inode_internal_t * pattrs,lv2_entry_t *plv2) {
 
     int status = -1;
     lv2_entry_t *lv2=NULL;
@@ -4078,7 +4070,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,mat
     /*
     ** return the parent attributes
     */
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+    export_recopy_extended_attributes(plv2,pattrs);
     status = 0;
 
 out:
@@ -4380,11 +4372,11 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
  * @param pfid: the id of the parent
  * @param name: the name of this file.
  * @param[out] fid: the fid of the removed file
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] pattrs:  to fill (parent attributes)
  * 
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pattrs) {
+int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,struct inode_internal_t * pattrs) {
     int status = -1;
     lv2_entry_t *plv2=NULL, *lv2=NULL;
     fid_t child_fid;
@@ -4764,7 +4756,7 @@ duplicate_deleted_file:
     /*
     ** return the parent attributes
     */
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+    export_recopy_extended_attributes(plv2,pattrs);
     status = 0;
     /*
     ** CHECK THE CASE OF THE RENAME
@@ -5503,7 +5495,7 @@ uint64_t export_rm_bins(export_t * e, uint16_t * first_bucket_idx, rmbins_thread
     @retval: 0 : success
     @retval: <0 error see errno
 */
-int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs) {
+int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,struct inode_internal_t * pattrs) {
     int status = -1;
     lv2_entry_t *plv2=NULL;
     lv2_entry_t *lv2=NULL;
@@ -5535,7 +5527,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     */
     if (strcmp(name,ROZOFS_DIR_TRASH)==0)
     {
-      export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+      export_recopy_extended_attributes(plv2,pattrs);
 // #warning clear the trash flag on rmdir rozofs-trash
 //      if (plv2->attributes.s.attrs.sids[1]!= 0) {
 //         plv2->attributes.s.attrs.sids[1] = 2;
@@ -5725,7 +5717,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     /*
     ** return the parent attributes
     */
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);
+    export_recopy_extended_attributes(plv2,pattrs);
     status = 0;
     /*
     ** Check the case of the rename
@@ -5827,13 +5819,13 @@ out:
  * @param link: target name
  * @param pfid: the id of the parent
  * @param name: the name of the file to link.
- * @param[out] attrs: mattr_t to fill (child attributes used by upper level functions)
- * @param[out] pattrs: mattr_t to fill (parent attributes)
+ * @param[out] attrs:  to fill (child attributes used by upper level functions)
+ * @param[out] pattrs:  to fill (parent attributes)
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
-        mattr_t * attrs,mattr_t *pattrs, 
+        struct inode_internal_t * attrs,struct inode_internal_t *pattrs, 
 	uint32_t uid, uint32_t gid) {
 
     int status = -1;
@@ -5872,7 +5864,7 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     ** set global variables associated with the export
     */
     fdp = export_open_parent_directory(e,pfid);
-    if (get_mdirentry(plv2->dirent_root_idx_p,fdp, pfid, name, node_fid, &attrs->mode,&root_dirent_mask) == 0) {
+    if (get_mdirentry(plv2->dirent_root_idx_p,fdp, pfid, name, node_fid, &attrs->attrs.mode,&root_dirent_mask) == 0) {
         errno = EEXIST;
         goto error;
     }
@@ -5941,7 +5933,7 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     // update the parent
     // add the new child to the parent
     if (put_mdirentry(plv2->dirent_root_idx_p,fdp, pfid, name, 
-                      ext_attrs.s.attrs.fid, attrs->mode,&fid_name_info,
+                      ext_attrs.s.attrs.fid, attrs->attrs.mode,&fid_name_info,
 		      plv2->attributes.s.attrs.children,
 		      &root_dirent_mask) != 0)
         goto error;
@@ -5994,8 +5986,8 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     /*
     ** return the parent and child attributes
     */
-    export_recopy_attributes_for_rozofsmount((lv2_entry_t*)&ext_attrs,attrs);
-    export_recopy_attributes_for_rozofsmount(plv2,pattrs);    
+    export_recopy_extended_attributes((lv2_entry_t*)&ext_attrs,attrs);
+    export_recopy_extended_attributes(plv2,pattrs);    
     goto out;
 
 error:
@@ -6107,7 +6099,7 @@ out:
 */
 int export_rename_trash(export_t *e, fid_t pfid, char *name, fid_t npfid,
         char *newname_in, fid_t fid,
-	mattr_t * attrs)
+	struct inode_internal_t * attrs)
 {
     int status = -1;
     lv2_entry_t *lv2_old_parent = 0;
@@ -6245,9 +6237,9 @@ int export_rename_trash(export_t *e, fid_t pfid, char *name, fid_t npfid,
     /*
     ** provide the attributes of the parent directory and assert the deleted by on the fid;
     */
-    export_recopy_attributes_for_rozofsmount(lv2_old_parent,attrs);    
-    exp_metadata_inode_del_assert(attrs->fid);
-    rozofs_inode_set_trash(attrs->fid);
+    export_recopy_extended_attributes(lv2_old_parent,attrs);    
+    exp_metadata_inode_del_assert(attrs->attrs.fid);
+    rozofs_inode_set_trash(attrs->attrs.fid);
     
     status = 0;
 
@@ -6282,7 +6274,7 @@ out:
  */
 int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
         char *newname_in, fid_t fid,
-	mattr_t * attrs) {
+	struct inode_internal_t * attrs) {
     int status = -1;
     lv2_entry_t *lv2_old_parent = 0;
     lv2_entry_t *lv2_new_parent = 0;
@@ -6534,7 +6526,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
             if (S_ISREG(lv2_to_replace->attributes.s.attrs.mode) || S_ISLNK(lv2_to_replace->attributes.s.attrs.mode)) 
             {
 	       fid_t fake_fid;
-	       mattr_t fake_pattr;
+	       struct inode_internal_t  fake_pattr;
 	       
 	       /*
 	       ** use the regular export_unlink function since it addresses the case of the trash and mover
@@ -6664,7 +6656,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     if (export_lv2_write_attributes(e->trk_tb_p,lv2_to_rename, 1/* sync */) != 0)
         goto out;
 
-    export_recopy_attributes_for_rozofsmount(lv2_to_rename,attrs);    
+    export_recopy_extended_attributes(lv2_to_rename,attrs);    
     status = 0;
 
 out:
@@ -6788,7 +6780,7 @@ int64_t export_write(export_t *e, fid_t fid, uint64_t off, uint32_t len) {
 int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
                            dist_t d, uint64_t off, uint32_t len,
 			   uint32_t site_number,uint64_t geo_wr_start,uint64_t geo_wr_end,
-	                   mattr_t *attrs) {
+	                   struct inode_internal_t *attrs) {
     int64_t length = -1;
     lv2_entry_t *lv2 = NULL;
     int          sync = 0;
@@ -6817,8 +6809,8 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	  ** write block should be ignored
 	  */
 	  length = len;
-          export_recopy_attributes_for_rozofsmount(lv2,attrs);    
-          memcpy(attrs->fid,fid,sizeof(fid_t));
+          export_recopy_extended_attributes(lv2,attrs);    
+          memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
 	  goto out;	  
        }
     }
@@ -6902,7 +6894,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     /*
     ** return the parent attributes
     */
-    export_recopy_attributes_for_rozofsmount(lv2,attrs);       
+    export_recopy_extended_attributes(lv2,attrs);       
     length = len;
     if (e->volume->georep) 
     {

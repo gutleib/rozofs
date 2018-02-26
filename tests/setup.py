@@ -1412,7 +1412,6 @@ class rozofs_class:
     else:  
       console("    . %-10s : %s bytes"%("Threshold",self.mojette_threads_threshold))
     console("STORAGE:")
-    console("  . %-12s : %s"%("Mode",self.storio_mode))
     console("  . %-12s : %s"%("CRC32",self.crc32))
     console("  . %-12s : %s"%("Self healing mode",self.device_selfhealing_mode))
     console("  . %-12s : %s minutes"%("Self healing delay",self.device_selfhealing_delay))
@@ -1710,16 +1709,20 @@ def syntax_debug() :
 #_____________________________________________  
 def syntax_diag() :
   console("./setup.py \tdiag    \t{mount|storcli|export|storaged|storio|stspare} <command>")
+#_____________________________________________  
+def syntax_config() :
+  console("./setup.py \tconfigure     \trebuild RozoFS configuration files")
+  console("./setup.py \tconfigure edit\tedit cnf.py configuration file")
   
 #_____________________________________________  
 def syntax_all() :
   console("Usage:")
   #console("./setup.py \tsite    \t<0|1>"
   console("./setup.py \tdisplay\t\t[conf. file]")
-  console("./setup.py \t{start|stop}")
-  console("./setup.py \t{configure|pause|resume}")
+  console("./setup.py \t{start|stop|pause|resume}")
   console("./setup.py \tcmd <command to be executed in the setup context>")
 
+  syntax_config()
   syntax_monitor()
     
   syntax_export()
@@ -1839,7 +1842,17 @@ def test_parse(command, argv):
     os.system("%s"%(cmd))
   elif command == "start"              : rozofs.start()  
   elif command == "stop"               : rozofs.stop() 
-  elif command == "configure"          : rozofs.configure() 
+
+  # configure 
+  elif command == "configure"          : 
+    if len(argv) < 3:  
+      rozofs.configure() 
+    else:
+      if argv[2] == "edit" : 
+        os.system("nedit cnf.py &")
+      else: 
+        syntax_config();
+
   elif command == "pause"              : rozofs.pause()  
   elif command == "resume"             : rozofs.resume()  
   elif command == "build"              : build()

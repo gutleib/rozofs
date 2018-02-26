@@ -384,7 +384,7 @@ void rozofs_ll_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup) {
         }
     }
     rozofs_trc_rsp_attr(srv_rozofs_ll_forget,ino,
-                        (ie==NULL)?NULL:ie->attrs.fid,0,
+                        (ie==NULL)?NULL:ie->attrs.attrs.fid,0,
 			(ie==NULL)?0:ie->nlookup,trc_idx);
     STOP_PROFILING(rozofs_ll_forget);
     fuse_reply_none(req);
@@ -578,6 +578,8 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
   ientry_t * ie = NULL;
   char fid_str[64];
   rozofs_inode_t * pInode;
+  rozofs_mover_children_t  * mover_p;
+  int i;
   
   if (argv[1] == NULL) {
       pChar = show_ientry_help(pChar);
@@ -667,34 +669,46 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
   
   rozofs_uuid_unparse(ie->fid,fid_str);
   pInode = (rozofs_inode_t *)ie->fid;
-  
+
+  if (ie->attrs.fname.name_type == ROZOFS_FNAME_TYPE_DIRECT) {
+    pChar += sprintf(pChar, "%-15s : ", "fname");
+    for (i=0; i<ie->attrs.fname.len; i++) *pChar++ =  ie->attrs.fname.name[i];
+    *pChar++ = '\n';
+  }        
   pChar += sprintf(pChar, "%-15s : %llu\n", "inode", (long long unsigned int)ie->inode);
   pChar += sprintf(pChar, "%-15s : %s\n", "fid", fid_str);
-  if (S_ISREG(ie->attrs.mode)) {
+  rozofs_uuid_unparse(ie->pfid,fid_str);  
+  pChar += sprintf(pChar, "%-15s : %s\n", "pfid", fid_str);
+  if (S_ISREG(ie->attrs.attrs.mode)) {
     pChar += sprintf(pChar, "%-15s : eid %d ./reg_attr/%d/trk_%llu index %d\n", "regular", 
                      pInode->s.eid,
 		     pInode->s.usr_id,
 		     (long long unsigned int)pInode->s.file_id,
 		     pInode->s.idx);
-    pChar += sprintf(pChar, "%-15s : %d\n", "attrs cid", ie->attrs.cid);
+    pChar += sprintf(pChar, "%-15s : %d\n", "attrs cid", ie->attrs.attrs.cid);
     pChar += sprintf(pChar, "%-15s : ", "attrs sid");
     {
       int i;
-      pChar += sprintf(pChar, "%d", ie->attrs.sids[0]);
+      pChar += sprintf(pChar, "%d", ie->attrs.attrs.sids[0]);
       for (i=1;i<ROZOFS_SAFE_MAX;i++) {
-	 pChar += sprintf(pChar, "-%d", ie->attrs.sids[i]);
+	 pChar += sprintf(pChar, "-%d", ie->attrs.attrs.sids[i]);
       }
       pChar += sprintf(pChar,"\n");
     }		     
+    pChar += sprintf(pChar, "%-15s : %d\n", "nb blocks", ie->attrs.hpc_reserved.reg.nb_blocks_thin);    
+    mover_p = (rozofs_mover_children_t *) &ie->attrs.attrs.children;
+    pChar += sprintf(pChar, "%-15s : %d/%d\n", "mover/primary", mover_p->fid_st_idx.mover_idx, mover_p->fid_st_idx.primary_idx);          
   }
-  else if (S_ISDIR(ie->attrs.mode)) {
+  else if (S_ISDIR(ie->attrs.attrs.mode)) {
     pChar += sprintf(pChar, "%-15s : eid %d ./dir_attr/%d/trk_%llu index %d\n", "directory", 
                      pInode->s.eid,
 		     pInode->s.usr_id,
 		     (long long unsigned int)pInode->s.file_id,
 		     pInode->s.idx);    
+    pChar += sprintf(pChar, "%-15s : %llu\n", "deleted files", (long long unsigned int)ie->attrs.hpc_reserved.dir.nb_deleted_files);    
+    pChar += sprintf(pChar, "%-15s : %d\n", "attrs children", ie->attrs.attrs.children);  
   }
-  else if (S_ISLNK(ie->attrs.mode)) {
+  else if (S_ISLNK(ie->attrs.attrs.mode)) {
     pChar += sprintf(pChar, "%-15s : eid %d ./reg_attr/%d/trk_%llu index %d\n", "symlink", 
                      pInode->s.eid,
 		     pInode->s.usr_id,
@@ -708,15 +722,22 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
   pChar += sprintf(pChar, "%-15s : %s\n", "extend_pending", ie->file_extend_pending?"yes":"no"); 
   pChar += sprintf(pChar, "%-15s : %lld\n", "pending size", (long long int)ie->file_extend_size); 
   pChar += sprintf(pChar, "%-15s : %s\n", "extend_running", ie->file_extend_running?"yes":"no"); 
-  pChar += sprintf(pChar, "%-15s : %llu\n", "attrs ctime", (long long unsigned int)ie->attrs.ctime);  
-  pChar += sprintf(pChar, "%-15s : %llu\n", "attrs atime", (long long unsigned int)ie->attrs.atime);  
-  pChar += sprintf(pChar, "%-15s : %llu\n", "attrs mtime", (long long unsigned int)ie->attrs.mtime);
-  pChar += sprintf(pChar, "%-15s : %d\n", "attrs nlink", ie->attrs.nlink);  
-  pChar += sprintf(pChar, "%-15s : %d\n", "attrs children", ie->attrs.children);  
-  pChar += sprintf(pChar, "%-15s : 0x%x\n", "attrs mode", ie->attrs.mode);  
-  pChar += sprintf(pChar, "%-15s : %d\n", "attrs gid", ie->attrs.gid);  
-  pChar += sprintf(pChar, "%-15s : %d\n", "attrs uid", ie->attrs.uid);  
-  pChar += sprintf(pChar, "%-15s : %llu\n", "attrs size", (long long unsigned int)ie->attrs.size);
+  if (ie->symlink_target) {
+    pChar += sprintf(pChar, "%-15s : %s\n", "symlink", ie->symlink_target);  
+  }
+  pChar += sprintf(pChar, "%-15s : ","cr8time");  
+  pChar +=strftime(pChar, 20, "%Y-%m-%d %H:%M:%S", localtime((time_t*)&ie->attrs.cr8time));
+  pChar += sprintf(pChar, "\n%-15s : ","attrs ctime");  
+  pChar +=strftime(pChar, 20, "%Y-%m-%d %H:%M:%S", localtime((time_t*)&ie->attrs.attrs.ctime));
+  pChar += sprintf(pChar, "\n%-15s : ", "attrs atime");
+  pChar +=strftime(pChar, 20, "%Y-%m-%d %H:%M:%S", localtime((time_t*)&ie->attrs.attrs.atime));  
+  pChar += sprintf(pChar, "\n%-15s : ", "attrs mtime");
+  pChar +=strftime(pChar, 20, "%Y-%m-%d %H:%M:%S", localtime((time_t*)&ie->attrs.attrs.mtime));
+  pChar += sprintf(pChar, "\n%-15s : %d\n", "attrs nlink", ie->attrs.attrs.nlink);  
+  pChar += sprintf(pChar, "%-15s : 0x%x\n", "attrs mode", ie->attrs.attrs.mode);  
+  pChar += sprintf(pChar, "%-15s : %d\n", "attrs gid", ie->attrs.attrs.gid);  
+  pChar += sprintf(pChar, "%-15s : %d\n", "attrs uid", ie->attrs.attrs.uid);  
+  pChar += sprintf(pChar, "%-15s : %llu\n", "attrs size", (long long unsigned int)ie->attrs.attrs.size);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
   return;

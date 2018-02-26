@@ -1791,7 +1791,7 @@ int exp_metadata_read_all_attributes(exp_trck_top_header_t *top_hdr_p,int usr_id
    }
    if (stats.st_size <  sizeof(exp_trck_file_header_t))
    {
-      severe("%s file too small %d/%d\n",pathname,sizeof(stats.st_size),sizeof(exp_trck_file_header_t));
+      severe("%s file too small %d/%d\n",pathname,(int)sizeof(stats.st_size),(int)sizeof(exp_trck_file_header_t));
       /*
       ** the file is corrupted
       */

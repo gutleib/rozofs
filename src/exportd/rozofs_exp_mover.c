@@ -109,7 +109,6 @@ int rozofs_mover_file_invalidate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_m
    ext_mattr_t *attr_p;
    rozofs_mover_sids_t *dist_mv_p;   
    rozofs_mover_children_t mover_idx;  
-   int status;
    
    attr_p = &lv2->attributes;
    mover_idx.u32 = attr_p->s.attrs.children;

@@ -145,11 +145,11 @@ void rozofs_ll_setxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, con
     /*
     ** update the mode at the ientry level when it extended attribute is ACL
     */
-    rozofs_acl_access_check(name,value,size,(mode_t*)&ie->attrs.mode);
+    rozofs_acl_access_check(name,value,size,(mode_t*)&ie->attrs.attrs.mode);
     /*
     ** Set xattr indicator in ientry
     */
-    rozofs_set_xattr_flag(&ie->attrs.mode);
+    rozofs_set_xattr_flag(&ie->attrs.attrs.mode);
     /*
     ** clear the timestamp
     */
@@ -438,14 +438,14 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
     ** Check whether ientry is still valid 
     */
     if ((rozofs_mode == 1) || 
-         (((ie->timestamp+rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino))) > rozofs_get_ticker_us())&&(S_ISREG(ie->attrs.mode))) ||
-	 (((ie->timestamp+500) > rozofs_get_ticker_us())&&(S_ISDIR(ie->attrs.mode)))
+         (((ie->timestamp+rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino))) > rozofs_get_ticker_us())&&(S_ISREG(ie->attrs.attrs.mode))) ||
+	 (((ie->timestamp+500) > rozofs_get_ticker_us())&&(S_ISDIR(ie->attrs.attrs.mode)))
 	 )
     {
       /*
       ** Check if the i-node has extended attributs that are not the rozofs extended attributes
       */
-      if (rozofs_has_xattr(ie->attrs.mode)==0)
+      if (rozofs_has_xattr(ie->attrs.attrs.mode)==0)
       {
 	if (rozofs_ea_value == 0)  
 	{
