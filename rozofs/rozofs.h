@@ -277,7 +277,7 @@ typedef enum _ROZOFS_BSIZE_E {
 /* Nb. max of storaged ports on the same storage node */
 #define STORAGE_NODE_PORTS_MAX 32
 /* Nb. max of storages (couple cid:sid) on the same storage node */
-#define STORAGES_MAX_BY_STORAGE_NODE 32
+#define STORAGES_MAX_BY_STORAGE_NODE 128
 /* First TCP port used */
 #define STORAGE_PORT_NUM_BEGIN 40000
 
