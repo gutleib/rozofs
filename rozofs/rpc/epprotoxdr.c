@@ -57,6 +57,9 @@ xdr_epp_estat_t (XDR *xdrs, epp_estat_t *objp)
 	 if (!xdr_vector (xdrs, (char *)objp->path, ROZOFS_PATH_MAX,
 		sizeof (char), (xdrproc_t) xdr_char))
 		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->name, ROZOFS_PATH_MAX,
+		sizeof (char), (xdrproc_t) xdr_char))
+		 return FALSE;
 	return TRUE;
 }
 
