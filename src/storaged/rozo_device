@@ -541,11 +541,11 @@ def mount_temporary_dir(blockdev,tmp):
 #
 def rozo_format_device(blockdev,extra) :
   # Inlinde data requires inode of at least 256 bytes
-  INLINE="mkfs.ext4 -F -b 4096 -I 256 -m 0 -q -O dir_index,filetype,inline_data"
-  OTHER ="mkfs.ext4 -F -b 4096 -m 0 -q -O dir_index,filetype"
+#  INLINE="mkfs.ext4 -F -b 4096 -I 256 -m 0 -q -O dir_index,filetype,inline_data"
+  MKFS ="mkfs.ext4 -F -b 4096 -m 0 -q -O dir_index,filetype"
   
   # First try with inline_data 
-  string="%s "%(INLINE)
+  string="%s "%(MKFS)
   if extra != None :
     string=string+extra    
   string=string+" /dev/"+blockdev
@@ -553,19 +553,9 @@ def rozo_format_device(blockdev,extra) :
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stderr:
-
-    if "inline_data" in line:
-      # Remove inline_data option and retry
-      print "inline_data not supported !!!"
-      string="%s "%(OTHER)
-      if extra != None :
-        string=string+extra    
-      string=string+" /dev/"+blockdev
-      parsed = shlex.split(string)
-      cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-      for line in cmd.stderr:
-        print line
-        exit(-1)
+    print line
+    exit(-1)
+    
   syslog.syslog(string)	  
   print string      
   return 0
