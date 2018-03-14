@@ -188,7 +188,8 @@ typedef union
   uint64_t nb_deleted_files; /**< number of deleted files within the directory  */
   } dir;
   struct {
-  uint32_t filler;   /**< for future usage   */
+  uint16_t share_id; /**< Index of the share or project: follow the parent */
+  uint16_t filler;   /**< for future usage   */
   uint32_t nb_blocks_thin; /**< number of 4KB blocks of a file  */
   } reg;
 } rozofs_hpc_reserved_t;

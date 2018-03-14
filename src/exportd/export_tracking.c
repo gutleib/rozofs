@@ -2843,7 +2843,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     {
        int ret;
        
-       ret = rozofs_qt_check_quota(e->eid,uid,gid);
+       ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
        if (ret < 0)
        {
          errno = ENOSPC;
@@ -2872,6 +2872,10 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
       ** copy the parent fid of the regular file
       */
       memcpy(&buf_attr_work_p->s.pfid,pfid,sizeof(fid_t));
+      /*
+      ** Put the reference of the share (or project) in the i-node
+      */
+      buf_attr_work_p->s.hpc_reserved.reg.share_id = plv2->attributes.s.attrs.cid;    
       /*
       ** get the distribution for the file
       */
@@ -3246,7 +3250,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     {
        int ret;
        
-       ret = rozofs_qt_check_quota(e->eid,uid,gid);
+       ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
        if (ret < 0)
        {
          errno = ENOSPC;
@@ -3274,6 +3278,10 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     */
     memset(&ext_attrs,0x00,sizeof(ext_attrs));
     memcpy(&ext_attrs.s.pfid,pfid,sizeof(fid_t));
+    /*
+    ** Put the reference of the share (or project) in the i-node
+    */
+    ext_attrs.s.hpc_reserved.reg.share_id = plv2->attributes.s.attrs.cid;    
     /*
     ** check if there some fid to recycle
     */
@@ -3652,7 +3660,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     {
        int ret;
        
-       ret = rozofs_qt_check_quota(e->eid,uid,gid);
+       ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
        if (ret < 0)
        {
          errno = ENOSPC;
@@ -6658,7 +6666,19 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	   {
 	     export_dir_adjust_child_size(lv2_new_parent,lv2_to_rename->attributes.s.attrs.size,1,ROZOFS_BSIZE_BYTES(e->bsize));
 	     export_dir_adjust_child_size(lv2_old_parent,lv2_to_rename->attributes.s.attrs.size,0,ROZOFS_BSIZE_BYTES(e->bsize));
-	   
+	     if (lv2_old_parent->attributes.s.attrs.cid != lv2_new_parent->attributes.s.attrs.cid)
+	     {
+	       /*
+	       ** case of a regular file, need to update the share_id in the i-node as well as the share quota
+	       */
+	       rozofs_qt_inode_update(e->eid,-1,-1,1,ROZOFS_QT_DEC,lv2_old_parent->attributes.s.attrs.cid);
+               rozofs_qt_block_update(e->eid,-1,-1,lv2_to_rename->attributes.s.attrs.size,ROZOFS_QT_DEC,lv2_old_parent->attributes.s.attrs.cid);
+	       
+	       rozofs_qt_inode_update(e->eid,-1,-1,1,ROZOFS_QT_INC,lv2_new_parent->attributes.s.attrs.cid);
+               rozofs_qt_block_update(e->eid,-1,-1,lv2_to_rename->attributes.s.attrs.size,ROZOFS_QT_INC,lv2_new_parent->attributes.s.attrs.cid);
+	       
+	       lv2_to_rename->attributes.s.hpc_reserved.reg.share_id = lv2_new_parent->attributes.s.attrs.cid;
+	     }	  	   
 	   }
            export_dir_update_time(lv2_new_parent);
            export_dir_update_time(lv2_old_parent);
@@ -7383,6 +7403,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   }  
   else {
     DISPLAY_ATTR_TXT("MODE", "REGULAR FILE");
+    DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.hpc_reserved.reg.share_id);    
     if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin); // Thin prov fix
     DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
   }
@@ -7716,7 +7737,7 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
       errno = ENOTDIR;
       return -1;
     }
-    if (lv2->attributes.s.attrs.cid!= 0)
+    if (lv2->attributes.s.attrs.children != 0)
     {
       errno = EPERM;
       return -1;

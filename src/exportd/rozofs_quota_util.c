@@ -139,9 +139,7 @@ char *sstrdup(const char *s)
 
 void version(void)
 {
-//	printf(_("Quota utilities version %s.\n"), PACKAGE_VERSION);
-//	printf(_("Compiled with:%s\n"), COMPILE_OPTS);
-//	printf(_("Bugs to %s\n"), MY_EMAIL);
+  printf("%s\n", VERSION);
 }
 
 

@@ -7,6 +7,8 @@ rozo_setquota \- set disk quotas
 .B \-u
 |
 .B \-g
+|
+.B \-s
 ]
 [
 .B \-f
@@ -26,6 +28,8 @@ rozo_setquota \- set disk quotas
 .B \-u
 |
 .B \-g
+|
+.B \-s
 ]
 [
 .B \-f
@@ -42,6 +46,8 @@ rozo_setquota \- set disk quotas
 .B \-u
 |
 .B \-g
+|
+.B \-s
 ]
 [
 .B \-f
@@ -57,6 +63,8 @@ rozo_setquota \- set disk quotas
 .B \-u
 |
 .B \-g
+|
+.B \-s
 ]
 [
 .B \-f
@@ -74,6 +82,8 @@ rozo_setquota \- set disk quotas
 .B \-u
 |
 .B \-g
+|
+.B \-s
 ]
 [
 .B \-f
@@ -109,9 +119,12 @@ Set user quotas for named user. This is the default.
 .B -g, --group
 Set group quotas for named group.
 .TP
+.B -s, --project
+Set group quotas for named project.
+.TP
 .B --always-resolve
 Always try to translate user / group name to uid / gid even if the name
-is composed of digits only.
+is composed of digits only. Does not apply on project.
 .TP
 .B -b, --batch
 Read information to set from stdin (input format is
@@ -122,14 +135,14 @@ Read information to set from stdin (input format is
 If parsing of an input line in batch mode fails, continue with processing the next line.
 .TP
 .B -t, --edit-period
-Set grace times for users/groups. Times
+Set grace times for users/groups/projects. Times
 .B block-grace
 and
 .B inode-grace
 are specified in seconds.
 .TP
 .B -T, --edit-times
-Alter times for individual user/group when softlimit is enforced. Times
+Alter times for individual user/group/porject when softlimit is enforced. Times
 .B block-grace
 and
 .B inode-grace

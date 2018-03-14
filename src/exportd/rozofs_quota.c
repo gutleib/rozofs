@@ -1095,11 +1095,12 @@ int rozofs_quota_check_grace_times(rozo_mem_dqblk *q)
     @retval : 0 on success
     @retval < 0 on error
  */
-int rozofs_qt_check_quota(int eid,int user_id,int grp_id)
+int rozofs_qt_check_quota(int eid,int user_id,int grp_id,int share_id)
 {
    rozofs_qt_export_t *p;
    rozofs_qt_cache_entry_t *dquot_usr= NULL;
    rozofs_qt_cache_entry_t *dquot_grp= NULL;
+   rozofs_qt_cache_entry_t *dquot_share= NULL;
    rozofs_quota_key_t key;
    int ret;
    /*
@@ -1123,64 +1124,72 @@ int rozofs_qt_check_quota(int eid,int user_id,int grp_id)
    /*
    ** check if quota is enable for that exported filesystem
    */
-   if (p->quota_super[USRQUOTA].enable == 0) 
+   if (p->quota_super[USRQUOTA].enable != 0) 
    {
      /*
-     ** no quota
+     ** THere is quota : get user  and group account
      */
-     return 0;
-   }
-   /*
-   ** THere is quota : get user  and group account
-   */
-   key.u64 = 0;
-   key.s.qid = grp_id;
-   key.s.eid = eid;
-   key.s.type = USRQUOTA;
-   dquot_usr = rozofs_qt_cache_get (&rozofs_qt_cache,p->quota_inode[USRQUOTA],&key);
-   if (dquot_usr == NULL)
-   {
-     errno = EFAULT;
-     goto error;
-   }
-   ret = rozofs_quota_check_grace_times(&dquot_usr->dquot.quota);
-   if (ret < 0)
-   {
-     return -1;
+     key.u64 = 0;
+     key.s.qid =  user_id;
+     key.s.eid = eid;
+     key.s.type = USRQUOTA;
+     dquot_usr = rozofs_qt_cache_get (&rozofs_qt_cache,p->quota_inode[USRQUOTA],&key);
+     if (dquot_usr != NULL)
+     {
+       ret = rozofs_quota_check_grace_times(&dquot_usr->dquot.quota);
+       if (ret < 0)
+       {
+	 return -1;
+       }
+     }
    }
    /*
    ** check if quota is enable for that exported filesystem
    */
-   if (p->quota_super[GRPQUOTA].enable == 0) 
+   if (p->quota_super[GRPQUOTA].enable != 0) 
    {
      /*
-     ** no quota
+     ** get group account
      */
-     return 0;
+     key.u64 = 0;
+     key.s.qid = grp_id;
+     key.s.eid = eid;
+     key.s.type = GRPQUOTA;
+     dquot_grp = rozofs_qt_cache_get (&rozofs_qt_cache,p->quota_inode[GRPQUOTA],&key);
+     if (dquot_grp != NULL)
+     {
+       ret = rozofs_quota_check_grace_times(&dquot_grp->dquot.quota);
+       if (ret < 0)
+       {
+	 return -1;
+       }
+     }
    }
+
    /*
-   ** get group account
+   ** check if quota is enable for share (projects)
    */
-   key.u64 = 0;
-   key.s.qid = user_id;
-   key.s.eid = eid;
-   key.s.type = GRPQUOTA;
-   dquot_grp = rozofs_qt_cache_get (&rozofs_qt_cache,p->quota_inode[GRPQUOTA],&key);
-   if (dquot_grp == NULL)
+   if (p->quota_super[SHRQUOTA].enable != 0) 
    {
-     errno = EFAULT;
-     goto error;
-   }
-   ret = rozofs_quota_check_grace_times(&dquot_grp->dquot.quota);
-   if (ret < 0)
-   {
-     return -1;
+     if (share_id == 0) return 0;
+     /*
+     ** get share quota context
+     */
+     key.u64 = 0;
+     key.s.qid = share_id;
+     key.s.eid = eid;
+     key.s.type = SHRQUOTA;
+     dquot_share = rozofs_qt_cache_get (&rozofs_qt_cache,p->quota_inode[SHRQUOTA],&key);
+     if (dquot_share != NULL)
+     {
+       ret = rozofs_quota_check_grace_times(&dquot_share->dquot.quota);
+       if (ret < 0)
+       {
+	 return -1;
+       }
+     }
    }
    return 0;
-error:
-
-   return -1;
-
 }
 
 /*
@@ -1310,6 +1319,15 @@ int rozofs_qt_set_quota(int eid,int type,int identifier,int sqa_cmd, sq_dqblk *s
       dquot->dquot.quota.dqb_bhardlimit = src->rq_bhardlimit;
       dquot->dquot.quota.dqb_bsoftlimit = src->rq_bsoftlimit;	
    }
+   /*
+   ** check if grace times must be updated for the element
+   */
+   if (sqa_cmd & QIF_TIMES) 
+   {
+      /* (QIF_BTIME | QIF_ITIME) */
+      dquot->dquot.quota.dqb_btime = src->rq_btimeleft;
+      dquot->dquot.quota.dqb_itime = src->rq_ftimeleft;	      
+   }   
 #if 0
    if (sqa_cmd & QIF_SPACE)
 	   dst->d_fieldmask |= FS_DQ_BCOUNT;

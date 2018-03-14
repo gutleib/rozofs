@@ -4,7 +4,7 @@ rozo_quotaon, rozo_quotaoff \- turn filesystem quotas on and off
 .SH SYNOPSIS
 .B /usr/sbin/rozo_quotaon
 [
-.B \-vugfp
+.B \-vugsfp
 ] [
 .B \-e
 .I exportconf-name
@@ -13,7 +13,7 @@ rozo_quotaon, rozo_quotaoff \- turn filesystem quotas on and off
 .br
 .B /usr/sbin/rozo_quotaon
 [
-.B \-avugfp
+.B \-avugsfp
 ] [
 .B \-e
 .I  exportconf-name
@@ -21,13 +21,13 @@ rozo_quotaon, rozo_quotaoff \- turn filesystem quotas on and off
 .LP
 .B /usr/sbin/rozo_quotaoff
 [
-.B \-vugp
+.B \-vugsp
 ]
 .IR filesystem-id .\|.\|.
 .br
 .B /usr/sbin/rozo_quotaoff
 [
-.B \-avugp
+.B \-avugsp
 ]
 .SH DESCRIPTION
 .SS rozo_quotaon
@@ -77,6 +77,9 @@ Manipulate user quotas. This is the default.
 .TP
 .B -g, --group
 Manipulate group quotas.
+.TP
+.B -s, --project
+Manipulate project quotas.
 .TP
 .B -p, --print-state
 Instead of turning quotas on just print state of quotas (ie. whether. quota is on or off)

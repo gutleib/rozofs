@@ -387,11 +387,12 @@ int rozofs_qt_thread_intf_create(int slave_id);
     
     @param usr_id : user quota
     @param grp_id : group quota
+    @param share_id : share_id quota
     
     @retval : 0 on success
     @retval < 0 on error
  */
-int rozofs_qt_check_quota(int eid,int user_id,int grp_id);
+int rozofs_qt_check_quota(int eid,int user_id,int grp_id,int share_id);
 
 /*
 **__________________________________________________________________

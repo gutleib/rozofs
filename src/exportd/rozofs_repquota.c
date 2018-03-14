@@ -188,7 +188,7 @@ void space2str(int64_t space, char *buf, int format)
 		sprintf(buf, "%lluK", (unsigned long long)space);
 		return;
 	}
-	sprintf(buf, "%llu", (unsigned long long)space);
+	sprintf(buf, "%lluK", (unsigned long long)space);
 }
 
 void use_syslog(void)
@@ -258,9 +258,7 @@ void gettexton(void)
 
 void version(void)
 {
-//	printf(_("Quota utilities version %s.\n"), PACKAGE_VERSION);
-//	printf(_("Compiled with:%s\n"), COMPILE_OPTS);
-//	printf(_("Bugs to %s\n"), MY_EMAIL);
+  printf("%s\n", VERSION);
 }
 
 
@@ -298,7 +296,7 @@ static void usage(void)
 -v, --verbose               display also users/groups without any usage\n\
 -u, --user                  display information about users\n\
 -g, --group                 display information about groups\n\
--s, --share                 display information about shares\n\
+-s, --project               display information about projects\n\
 -H, --human-readable        show numbers in human friendly units (MB, GB, ...)\n\
 -t, --truncate-names        truncate names to 9 characters\n\
 -p, --raw-grace             print grace time in seconds since epoch\n\
@@ -322,7 +320,7 @@ static void parse_options(int argcnt, char **argstr)
 		{ "verbose", 0, NULL, 'v' },
 		{ "user", 0, NULL, 'u' },
 		{ "group", 0, NULL, 'g' },
-		{ "share", 0, NULL, 's' },
+		{ "project", 0, NULL, 's' },
 		{ "help", 0, NULL, 'h' },
 		{ "truncate-names", 0, NULL, 't' },
 		{ "raw-grace", 0, NULL, 'p' },
@@ -402,7 +400,7 @@ static void parse_options(int argcnt, char **argstr)
 		exit(1);
 	}
 	
-	if (!(flags & (FL_USER | FL_GROUP)))
+	if (!(flags & (FL_USER | FL_GROUP | FL_SHARE)))
 		flags |= FL_USER;
 	if (!(flags & FL_ALL)) {
 		mnt = argstr + optind;

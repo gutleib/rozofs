@@ -64,6 +64,8 @@
 #define FL_ALL 8
 #define FL_STAT 16
 #define FL_OFF 32
+#define FL_SHARE 64	/* Print share information */
+
 #define EXPORT_DEFAULT_PATH "/etc/rozofs/export.conf"
 #define STATEFLAG_ON		0x01
 #define STATEFLAG_OFF		0x02
@@ -86,12 +88,13 @@ int quota_transactionId=1;
 
 static void usage(void)
 {
-	errstr(_("Usage:\n\t%s [-guvp] [-e exportconf] -a\n\
-\t%s [-guvp] [-e exportconf] filesys_id ...\n\n\
+	errstr(_("Usage:\n\t%s [-gusvp] [-e exportconf] -a\n\
+\t%s [-gusvp] [-e exportconf] filesys_id ...\n\n\
 -a, --all                %s\n\
 -f, --off                turn quotas off\n\
 -u, --user               operate on user quotas\n\
 -g, --group              operate on group quotas\n\
+-s, --project            operate on project quotas\n\
 -p, --print-state        print whether quotas are on or off\n\
 -e, --exportconf=path       pathname of the export configuration\n\
 -v, --verbose            print more messages\n\
@@ -112,6 +115,7 @@ static void parse_options(int argcnt, char **argstr)
 		{ "verbose", 0, NULL, 'v' },
 		{ "user", 0, NULL, 'u' },
 		{ "group", 0, NULL, 'g' },
+		{ "project", 0, NULL, 's' },
 		{ "print-state", 0, NULL, 'p' },
 		{ "xfs-command", 1, NULL, 'x' },
 		{ "exportconf", 1, NULL, 'e' },
@@ -120,7 +124,7 @@ static void parse_options(int argcnt, char **argstr)
 		{ NULL, 0, NULL, 0 }
 	};
 
-	while ((c = getopt_long(argcnt, argstr, "afvugpx:Ve:h", long_opts, NULL)) != -1) {
+	while ((c = getopt_long(argcnt, argstr, "afvsugpx:Ve:h", long_opts, NULL)) != -1) {
 		switch (c) {
 		  case 'a':
 			  flags |= FL_ALL;
@@ -133,6 +137,9 @@ static void parse_options(int argcnt, char **argstr)
 			  break;
 		  case 'u':
 			  flags |= FL_USER;
+			  break;
+		  case 's':
+			  flags |= FL_SHARE;
 			  break;
 		  case 'v':
 			  flags |= FL_VERBOSE;
@@ -158,8 +165,8 @@ static void parse_options(int argcnt, char **argstr)
 		fputs("Bad number of arguments.\n", stderr);
 		usage();
 	}
-	if (!(flags & (FL_USER | FL_GROUP)))
-		flags |= FL_USER | FL_GROUP;
+	if (!(flags & (FL_USER | FL_GROUP|FL_SHARE)))
+		flags |= FL_USER | FL_GROUP | FL_SHARE;
 	if (!(flags & FL_ALL)) {
 		mnt = argstr + optind;
 		mntcnt = argcnt - optind;
@@ -334,12 +341,16 @@ int main(int argc, char **argv)
 			       errs += newstate(quota_ctx_p, GRPQUOTA, e1->eid);
 		       if (flags & FL_USER)
 			       errs += newstate(quota_ctx_p, USRQUOTA, e1->eid);
+		       if (flags & FL_SHARE)
+			       errs += newstate(quota_ctx_p, SHRQUOTA, e1->eid);
 	       }
 	       else {
 		       if (flags & FL_GROUP)
 			       errs += print_state(quota_ctx_p, GRPQUOTA,e1->eid);
 		       if (flags & FL_USER)
 			       errs += print_state(quota_ctx_p, USRQUOTA,e1->eid);
+		       if (flags & FL_SHARE)
+			       errs += print_state(quota_ctx_p, SHRQUOTA,e1->eid);
 	       }
 
 	   } 
@@ -378,12 +389,16 @@ int main(int argc, char **argv)
 			  errs += newstate(quota_ctx_p, GRPQUOTA, eid);
 		  if (flags & FL_USER)
 			  errs += newstate(quota_ctx_p, USRQUOTA, eid);
+		  if (flags & FL_SHARE)
+			  errs += newstate(quota_ctx_p, SHRQUOTA, eid);
 	  }
 	  else {
 		  if (flags & FL_GROUP)
 			  errs += print_state(quota_ctx_p, GRPQUOTA,eid);
 		  if (flags & FL_USER)
 			  errs += print_state(quota_ctx_p, USRQUOTA,eid);
+		  if (flags & FL_SHARE)
+			  errs += print_state(quota_ctx_p, SHRQUOTA,eid);
 	  }
 
 	}
