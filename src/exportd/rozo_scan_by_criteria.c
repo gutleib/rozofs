@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <pcre.h>
+#include <stdarg.h>
+
 #include <rozofs/rozofs.h>
 #include <rozofs/common/mattr.h>
 #include "export.h"
@@ -30,7 +32,9 @@ typedef enum _scan_criterie_e {
   SCAN_CRITERIA_SIZE,  
   SCAN_CRITERIA_UID,    
   SCAN_CRITERIA_GID,  
-  SCAN_CRITERIA_CID,    
+  SCAN_CRITERIA_CID,   
+  SCAN_CRITERIA_SID,   
+  SCAN_CRITERIA_PROJECT,      
   SCAN_CRITERIA_NLINK, 
   SCAN_CRITERIA_CHILDREN, 
   SCAN_CRITERIA_PFID,
@@ -83,6 +87,12 @@ uint64_t    uid_diff   = -1;
 */
 uint64_t    gid_equal  = -1;
 uint64_t    gid_diff  = -1;
+
+/*
+** Project
+*/
+uint64_t    project_equal  = -1;
+uint64_t    project_diff   = -1;
 
 /*
 ** CID
@@ -842,23 +852,60 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   }
   
   /*
-  ** Must have a cid equal to cid_equal
+  ** For regular files only
   */    
-  if (cid_equal != -1) {
-    if (inode_p->s.attrs.cid != cid_equal) {
-      return 0;
+  if (S_ISREG(inode_p->s.attrs.mode)) {
+    /*
+    ** Must have a cid equal to cid_equal
+    */    
+    if (cid_equal != -1) {
+      if (inode_p->s.attrs.cid != cid_equal) {
+        return 0;
+      }
     }
-  }
-  
-  /*
-  ** Must have an cid different from cid_diff
-  */    
-  if (cid_diff != -1) {
-    if (inode_p->s.attrs.cid == cid_diff) {
-      return 0;
-    }
-  }
 
+    /*
+    ** Must have an cid different from cid_diff
+    */    
+    if (cid_diff != -1) {
+      if (inode_p->s.attrs.cid == cid_diff) {
+        return 0;
+      }
+    }
+    
+    /*
+    ** Must have a sid equal to sid_equal
+    */    
+    if (sid_equal != -1) {
+      int   sid_idx;
+      sid_t sid;
+      for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+        sid = inode_p->s.attrs.sids[sid_idx];
+        if ((sid == 0) || (sid_equal == sid)) break;
+      }
+      if (sid_equal != sid) {
+        return 0;
+      }
+    }
+    
+    /*
+    ** Must not have a sid equal to sid_diff
+    */    
+    if (sid_diff != -1) {
+      int   sid_idx;
+      sid_t sid;
+      for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+        sid = inode_p->s.attrs.sids[sid_idx];
+        if ((sid == 0) || (sid_diff == sid)) break;
+      }
+      if (sid_diff == sid) {
+        return 0;
+      }
+    }
+    
+    
+  }
+    
   /*
   ** Must have a nlink bigger than nlink_bigger
   */ 
@@ -895,43 +942,80 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }
   }
 
+  /*
+  ** For directory only
+  */    
+  if (S_ISREG(inode_p->s.attrs.mode)) {
+
+    /*
+    ** Must have children bigger than children_bigger
+    */ 
+    if (children_bigger != -1) {
+      if (inode_p->s.attrs.children < children_bigger) {
+        return 0;
+      }
+    }  
+
+    /*
+    ** Must have a children lower than children_lower
+    */    
+    if (children_lower != -1) {
+      if (inode_p->s.attrs.children > children_lower) {
+        return 0;
+      }
+    }  
+
+    /*
+    ** Must have a children equal to children_equal
+    */    
+    if (children_equal != -1) {
+      if (inode_p->s.attrs.children != children_equal) {
+        return 0;
+      }
+    } 
+
+    /*
+    ** Must have a children different from children_diff
+    */    
+    if (children_diff != -1) {
+      if (inode_p->s.attrs.children == children_diff) {
+        return 0;
+      }
+    }
+  }
 
   /*
-  ** Must have children bigger than children_bigger
-  */ 
-  if (children_bigger != -1) {
-    if (inode_p->s.attrs.children < children_bigger) {
-      return 0;
+  ** Project equals
+  */
+  if (project_equal != -1) {
+    if (S_ISDIR(inode_p->s.attrs.mode)) {    
+      if (inode_p->s.attrs.cid != project_equal) {
+        return 0;
+      }
     }
-  }  
-
-  /*
-  ** Must have a children lower than children_lower
-  */    
-  if (children_lower != -1) {
-    if (inode_p->s.attrs.children > children_lower) {
-      return 0;
-    }
-  }  
-
-  /*
-  ** Must have a children equal to children_equal
-  */    
-  if (children_equal != -1) {
-    if (inode_p->s.attrs.children != children_equal) {
-      return 0;
-    }
-  } 
-  
-  /*
-  ** Must have a children different from children_diff
-  */    
-  if (children_diff != -1) {
-    if (inode_p->s.attrs.children == children_diff) {
-      return 0;
+    else if (S_ISREG(inode_p->s.attrs.mode)) {
+      if (inode_p->s.hpc_reserved.reg.share_id != project_equal) {
+        return 0;
+      }
     }
   }
   
+  /*
+  ** Project differs
+  */
+  if (project_diff != -1) {
+    if (S_ISDIR(inode_p->s.attrs.mode)) {    
+      if (inode_p->s.attrs.cid == project_diff) {
+        return 0;
+      }
+    }
+    else if (S_ISREG(inode_p->s.attrs.mode)) {
+      if (inode_p->s.hpc_reserved.reg.share_id == project_diff) {
+        return 0;
+      }
+    }
+  }  
+   
   /*
   ** Must have or not xattributes 
   */    
@@ -969,52 +1053,71 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 /*
  *_______________________________________________________________________
  */
-static void usage() {
-    printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
-    printf("This RozoFS utility enables to scan for files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
-    printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan_by_criteria <MANDATORY> [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
-    printf("\n\033[1mMANDATORY:\033[0m\n");
-    printf("either\t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
-    printf("or\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
-    printf("\n\033[1mOPTIONS:\033[0m\n");
-    printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
-    printf("\t\033[1m-h,--help\033[0m\t\tprint this message and exit.\n");
-    printf("\t\033[1m-a,--all\033[0m\t\tScan all tracking files and not only those matching time criteria.\n");
-    printf("\n\033[1mCRITERIA:\033[0m\n");
-    printf("\t\033[1m-x,--xattr\033[0m\t\tfile/directory must have extended attribute.\n");
-    printf("\t\033[1m-X,--noxattr\033[0m\t\tfile/directory must not have extended attribute.\n");    
-    printf("\t\033[1m-d,--dir\033[0m\t\tscan directories only. Without this options only files are scanned.\n");
-    printf("\t\033[1m-S,--slink\033[0m\t\tinclude symbolink links in the scan. Default is not to scan symbolic links.\n");
-    printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files from the scan.\n");
-    printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
-    printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
-    printf("\n\033[1mFIELD:\033[0m\n");
-    printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
-    printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
-    printf("\t\033[1m-r,--update\033[0m\t\tdirectory update date.\n"); 
-    printf("\t\033[1m-s,--size\033[0m\t\tfile size.\n"); 
-    printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
-    printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
-    printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (1).\n"); 
-    printf("\t\033[1m-l,--link\033[0m\t\tnumber of links.\n"); 
-    printf("\t\033[1m-b,--children\033[0m\t\tnumber of children.\n"); 
-    printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
-    printf("\t\033[1m-n,--name\033[0m\t\tfile/directory name (3).\n");
-    printf("(1) only --eq or --ne conditions are supported.\n");
-    printf("(2) only --eq condition is supported.\n");
-    printf("(3) only --eq, --ge or --regex conditions are supported.\n");
-    printf("\n\033[1mCONDITIONS:\033[0m\n");              
-    printf("\t\033[1m--lt <val>\033[0m\t\tField must be lower than <val>.\n");
-    printf("\t\033[1m--le <val>\033[0m\t\tField must be lower or equal than <val>.\n");
-    printf("\t\033[1m--gt <val>\033[0m\t\tField must be greater than <val>.\n");
-    printf("\t\033[1m--ge <val>\033[0m\t\tField must be greater or equal than <val>.\n");
-    printf("\t\t\t\tFor --name search files whoes name contains <val>.\n");
-    printf("\t\033[1m--regex <regexfile>\033[0m\tOnly valid for --name.\n");
-    printf("\t\t\t\t<regexfile> is the name of the text file containing the Perl regex to match.\n");
-    printf("\t\033[1m--eq <val>\033[0m\t\tField must be equal to <val>.\n");
-    printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
-    printf("\nDates must be expressed as:\n");
-    printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
+static void usage(char * fmt, ...) {
+  va_list   args;
+  char      error_buffer[512];
+
+  /*
+  ** Display optionnal error message if any
+  */
+  if (fmt) {
+    va_start(args,fmt);
+    vsprintf(error_buffer, fmt, args);
+    va_end(args);   
+    printf("\n\033[1m!!!  %s !!!\033[0m\n",error_buffer);
+  }
+
+  printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
+  printf("This RozoFS utility enables to scan for files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
+  printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan_by_criteria <MANDATORY> [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
+  printf("\n\033[1mMANDATORY:\033[0m\n");
+  printf("either\t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
+  printf("or\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
+  printf("\n\033[1mOPTIONS:\033[0m\n");
+  printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
+  printf("\t\033[1m-h,--help\033[0m\t\tprint this message along with examples and exit.\n");
+  printf("\t\033[1m-a,--all\033[0m\t\tForce scanning all tracking files and not only those matching scan time criteria.\n");
+  printf("\t\t\t\tThis is usefull for files imported with tools such as rsync, since their creation\n");
+  printf("\t\t\t\tor modification dates are not related to their importation date under RozoFS.\n");
+  printf("\n\033[1mCRITERIA:\033[0m\n");
+  printf("\t\033[1m-x,--xattr\033[0m\t\tfile/directory must have extended attribute.\n");
+  printf("\t\033[1m-X,--noxattr\033[0m\t\tfile/directory must not have extended attribute.\n");    
+  printf("\t\033[1m-d,--dir\033[0m\t\tscan directories only. Without this options only files are scanned.\n");
+  printf("\t\033[1m-S,--slink\033[0m\t\tinclude symbolink links in the scan. Default is not to scan symbolic links.\n");
+  printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files from the scan.\n");
+  printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
+  printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
+  printf("\n\033[1mFIELD:\033[0m\n");
+  printf("\tusage[1m-c,--cr8\033[0m\t\tcreation date.\n");
+  printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
+  printf("\t\033[1m-r,--update\033[0m\t\tdirectory update date.\n"); 
+  printf("\t\033[1m-s,--size\033[0m\t\tfile size.\n"); 
+  printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
+  printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
+  printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (1).\n"); 
+  printf("\t\033[1m-z,--sid\033[0m\t\tSID identifier (1).\n"); 
+  printf("\t\033[1m-P,--project\033[0m\t\tproject identifier (1).\n"); 
+  printf("\t\033[1m-l,--link\033[0m\t\tnumber of links.\n"); 
+  printf("\t\033[1m-b,--children\033[0m\t\tnumber of children.\n"); 
+  printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
+  printf("\t\033[1m-n,--name\033[0m\t\tfile/directory name (3).\n");
+  printf("(1) only --eq or --ne conditions are supported.\n");
+  printf("(2) only --eq condition is supported.\n");
+  printf("(3) only --eq, --ge or --regex conditions are supported.\n");
+  printf("\n\033[1mCONDITIONS:\033[0m\n");              
+  printf("\t\033[1m--lt <val>\033[0m\t\tField must be lower than <val>.\n");
+  printf("\t\033[1m--le <val>\033[0m\t\tField must be lower or equal than <val>.\n");
+  printf("\t\033[1m--gt <val>\033[0m\t\tField must be greater than <val>.\n");
+  printf("\t\033[1m--ge <val>\033[0m\t\tField must be greater or equal than <val>.\n");
+  printf("\t\t\t\tFor --name search files whoes name contains <val>.\n");
+  printf("\t\033[1m--regex <regexfile>\033[0m\tOnly valid for --name.\n");
+  printf("\t\t\t\t<regexfile> is the name of the text file containing the Perl regex to match.\n");
+  printf("\t\033[1m--eq <val>\033[0m\t\tField must be equal to <val>.\n");
+  printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
+  printf("\nDates must be expressed as:\n");
+  printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
+  
+  if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --xattr --size --ge 76000 --le 76100\033[0m\n");
@@ -1033,7 +1136,12 @@ static void usage() {
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --dir --children --ge 100000\033[0m\n");
     printf("Searching all symbolic links.\n");
     printf("  \033[1mrozo_scan_by_criteria --eid 1 --slink --noreg\033[0m\n");
-     
+    printf("Searching files in project #31 owned by user 2345.\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --project --eq 31 --uid --eq 2345\033[0m\n");
+    printf("Searching files in cluster 2 having a potential projection on sid 7.\n");
+    printf("  \033[1mrozo_scan_by_criteria --eid 1 --cid --eq 2 --sid --eq 7\033[0m\n");
+  }
+  exit(EXIT_FAILURE);     
 };
 /*
 **_______________________________________________________________________
@@ -1262,8 +1370,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
 
 #define NEW_CRITERIA(criteria){\
               if (expect_comparator) {\
-                printf("Expecting --lt, --le, --gt, --ge or --ne. Got --%s\n", long_options[option_index].name);\
-                exit(EXIT_FAILURE);\
+                usage("Expecting --lt, --le, --gt, --ge or --ne. Got --%s", long_options[option_index].name);\
               }\
               expect_comparator = 1; \
               scan_criteria = criteria;\
@@ -1295,6 +1402,8 @@ int main(int argc, char *argv[]) {
         {"uid", no_argument, 0, 'u'},
         {"gid", no_argument, 0, 'g'},        
         {"cid", no_argument, 0, 'C'},        
+        {"sid", no_argument, 0, 'z'},        
+        {"project", no_argument, 0, 'P'},        
         {"link", no_argument, 0, 'l'},        
         {"children", no_argument, 0, 'b'},        
         {"pfid", no_argument, 0, 'f'},        
@@ -1317,39 +1426,34 @@ int main(int argc, char *argv[]) {
         {"update", no_argument, 0, 'r'},
         {0, 0, 0, 0}
     };
-    
+
+    if (argc < 2)  usage(NULL);    
 
     for (c=0; c<argc; c++) {
       if (strcmp(argv[c],"-ge")==0) {
-        printf("Argument %d is %s. Don't you mean --ge ?\n",c,argv[c]);
-        exit(EXIT_FAILURE);
+        usage("Argument %d is %s. Don't you mean --ge ?",c,argv[c]);
       }
       if (strcmp(argv[c],"-le")==0) {
-        printf("Argument %d is %s. Don't you mean --le ?\n",c,argv[c]);
-        exit(EXIT_FAILURE);
+        usage("Argument %d is %s. Don't you mean --le ?",c,argv[c]);
       }
       if (strcmp(argv[c],"-gt")==0) {
-        printf("Argument %d is %s. Don't you mean --gt ?\n",c,argv[c]);
-        exit(EXIT_FAILURE);
+        usage("Argument %d is %s. Don't you mean --gt ?",c,argv[c]);
       }
       if (strcmp(argv[c],"-lt")==0) {
-        printf("Argument %d is %s. Don't you mean --lt ?\n",c,argv[c]);
-        exit(EXIT_FAILURE);
+        usage("Argument %d is %s. Don't you mean --lt ?",c,argv[c]);
       }
       if (strcmp(argv[c],"-eq")==0) {
-        printf("Argument %d is %s. Don't you mean --eq ?\n",c,argv[c]);
-        exit(EXIT_FAILURE);
+        usage("Argument %d is %s. Don't you mean --eq ?",c,argv[c]);
       }
       if (strcmp(argv[c],"-ne")==0) {
-        printf("Argument %d is %s. Don't you mean --ne ?\n",c,argv[c]);
-        exit(EXIT_FAILURE);
+        usage("Argument %d is %s. Don't you mean --ne ?",c,argv[c]);
       }
     } 
   
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:*:hvcmsguClxXdbfnSRartT", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:*:hvcmsguCPlxXdbfnSRartTz", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1357,8 +1461,7 @@ int main(int argc, char *argv[]) {
       switch (c) {
 
           case 'h':
-              usage();
-              exit(EXIT_SUCCESS);
+              usage(NULL);
               break;
           case 'a':
               scan_all_tracking_files = 1; // scan all tracking files
@@ -1372,9 +1475,7 @@ int main(int argc, char *argv[]) {
           case 'e':
               eid = rozofs_scan_u64(optarg);
               if (eid==-1) {
-                printf("\nBad format for --eid \"%s\"\n",optarg);     
-                usage();
-                exit(EXIT_FAILURE);
+                usage("Bad format for --eid \"%s\"",optarg);     
               }
               break;    
           case 'v':
@@ -1403,7 +1504,13 @@ int main(int argc, char *argv[]) {
               break;                  
           case 'C':
               NEW_CRITERIA(SCAN_CRITERIA_CID);
-              break;                  
+              break;    
+          case 'z':
+              NEW_CRITERIA(SCAN_CRITERIA_SID);
+              break;    
+          case 'P':
+              NEW_CRITERIA(SCAN_CRITERIA_PROJECT);
+              break;                                    
           case 'l':
               NEW_CRITERIA(SCAN_CRITERIA_NLINK);
               break;                
@@ -1428,17 +1535,13 @@ int main(int argc, char *argv[]) {
           case 'R':
               exclude_regular = 1;
               if (only_trash) {
-                printf("\nonly trash (-t) and exclude trash (-T) are incompatible\n");     
-                usage();
-                exit(EXIT_FAILURE);              
+                usage("only trash (-t) and exclude trash (-T) are incompatible");     
               }
               break;                     
           case 't':
               only_trash = 1;
               if (exclude_trash) {
-                printf("\nonly trash (-t) and exclude trash (-T) are incompatible\n");     
-                usage();
-                exit(EXIT_FAILURE);              
+                usage("only trash (-t) and exclude trash (-T) are incompatible");     
               }
               break;                     
           case 'T':
@@ -1455,71 +1558,57 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CR8:
                   cr8_lower = rozofs_date2time(optarg);
                   if (cr8_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break; 
                                
                 case SCAN_CRITERIA_MOD:
                   mod_lower = rozofs_date2time(optarg);
                   if (mod_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break; 
 
                 case SCAN_CRITERIA_UPDATE:
                   update_lower = rozofs_date2time(optarg);
                   if (update_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break; 
                     
                 case SCAN_CRITERIA_SIZE:
                   size_lower = rozofs_scan_u64(optarg);
                   if (size_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break;  
                                    
                 case SCAN_CRITERIA_NLINK:
                   nlink_lower = rozofs_scan_u64(optarg);
                   if (nlink_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break; 
                                    
                 case SCAN_CRITERIA_CHILDREN:
                   children_lower = rozofs_scan_u64(optarg);
                   if (children_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break; 
                                                                     
                 case SCAN_CRITERIA_GID:          
                 case SCAN_CRITERIA_UID:
                 case SCAN_CRITERIA_CID:
+                case SCAN_CRITERIA_SID:
                 case SCAN_CRITERIA_PFID:
                 case SCAN_CRITERIA_FNAME:
-                  printf("\nNo %s comparison for -%c\n",comp,crit);     
-                  usage();
-                  exit(EXIT_FAILURE);  
+                case SCAN_CRITERIA_PROJECT:
+                  usage("No %s comparison for -%c",comp,crit);     
                   break;
                   
                 default:
-                  printf("\nNo criteria defined prior to %s\n",comp);     
-                  usage();
-                  exit(EXIT_FAILURE);
+                  usage("No criteria defined prior to %s",comp);     
               }
               break;
           /*
@@ -1533,9 +1622,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CR8:
                   cr8_lower = rozofs_date2time(optarg);
                   if (cr8_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   cr8_lower--;   
                   break;   
@@ -1543,9 +1630,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_MOD:
                   mod_lower = rozofs_date2time(optarg);
                   if (mod_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   mod_lower--;    
                   break;  
@@ -1553,9 +1638,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_UPDATE:
                   update_lower = rozofs_date2time(optarg);
                   if (update_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   update_lower--;    
                   break;  
@@ -1563,14 +1646,10 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_SIZE:
                   size_lower = rozofs_scan_u64(optarg);
                   if (size_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   if (size_lower==0) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   size_lower--;   
                   break;     
@@ -1578,14 +1657,10 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_NLINK:
                   nlink_lower = rozofs_scan_u64(optarg);
                   if (nlink_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   if (nlink_lower==0) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   nlink_lower--;   
                   break;  
@@ -1593,14 +1668,10 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CHILDREN:
                   children_lower = rozofs_scan_u64(optarg);
                   if (children_lower==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   if (children_lower==0) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   children_lower--;   
                   break;  
@@ -1610,15 +1681,11 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_UID:
                 case SCAN_CRITERIA_PFID:
                 case SCAN_CRITERIA_FNAME:
-                  printf("\nNo %s comparison for -%c\n",comp,crit);     
-                  usage();
-                  exit(EXIT_FAILURE);  
+                  usage("No %s comparison for -%c",comp,crit);     
                   break; 
                                                 
                 default:
-                  printf("\nNo criteria defined prior to %s\n",comp);     
-                  usage();
-                  exit(EXIT_FAILURE);
+                  usage("No criteria defined prior to %s",comp);     
               }
               break;
           /*
@@ -1632,54 +1699,42 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CR8:
                   cr8_bigger = rozofs_date2time(optarg);
                   if (cr8_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break;  
                               
                 case SCAN_CRITERIA_MOD:
                   mod_bigger = rozofs_date2time(optarg);
                   if (mod_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break; 
 
                 case SCAN_CRITERIA_UPDATE:
                   update_bigger = rozofs_date2time(optarg);
                   if (update_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break;
                   
                 case SCAN_CRITERIA_SIZE:
                   size_bigger = rozofs_scan_u64(optarg);
                   if (size_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   break; 
                    
                 case SCAN_CRITERIA_NLINK:
                   nlink_bigger = rozofs_scan_u64(optarg);
                   if (nlink_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   break;
                    
                 case SCAN_CRITERIA_CHILDREN:
                   children_bigger = rozofs_scan_u64(optarg);
                   if (children_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   break;
                   
@@ -1690,16 +1745,14 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_GID:          
                 case SCAN_CRITERIA_UID:
                 case SCAN_CRITERIA_CID:                
+                case SCAN_CRITERIA_SID:                
                 case SCAN_CRITERIA_PFID:
-                  printf("\nNo %s comparison for -%c\n",comp,crit);     
-                  usage();
-                  exit(EXIT_FAILURE);  
+                case SCAN_CRITERIA_PROJECT:
+                  usage("No %s comparison for -%c",comp,crit);      
                   break;                               
                                        
                 default:
-                  printf("\nNo criteria defined prior to %s\n",comp);     
-                  usage();
-                  exit(EXIT_FAILURE);
+                  usage("No criteria defined prior to %s",comp);     
               }
               break;
           /*
@@ -1713,9 +1766,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CR8:
                   cr8_bigger = rozofs_date2time(optarg);
                   if (cr8_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }  
                   cr8_bigger++; 
                   break;        
@@ -1723,9 +1774,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_MOD:
                   mod_bigger = rozofs_date2time(optarg);
                   if (mod_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   mod_bigger++;  
                   break;
@@ -1733,18 +1782,14 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_UPDATE:
                   update_bigger = rozofs_date2time(optarg);
                   if (update_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   update_bigger++;  
                   break;                  
                 case SCAN_CRITERIA_SIZE:
                   size_bigger = rozofs_scan_u64(optarg);
                   if (size_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   size_bigger++;
                   break;  
@@ -1752,9 +1797,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_NLINK:
                   nlink_bigger = rozofs_scan_u64(optarg);
                   if (nlink_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   nlink_bigger++;
                   break;  
@@ -1762,9 +1805,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CHILDREN:
                   children_bigger = rozofs_scan_u64(optarg);
                   if (children_bigger==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   children_bigger++;
                   break;  
@@ -1772,17 +1813,15 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_GID:          
                 case SCAN_CRITERIA_UID:
                 case SCAN_CRITERIA_CID:                
+                case SCAN_CRITERIA_SID:                
                 case SCAN_CRITERIA_PFID:
                 case SCAN_CRITERIA_FNAME:
-                  printf("\nNo %s comparison for -%c\n",comp,crit);     
-                  usage();
-                  exit(EXIT_FAILURE);  
+                case SCAN_CRITERIA_PROJECT:
+                  usage("No %s comparison for -%c",comp,crit);     
                   break;                               
                                       
                 default:
-                  printf("\nNo criteria defined prior to %s\n",comp);     
-                  usage();
-                  exit(EXIT_FAILURE);
+                  usage("No criteria defined prior to %s",comp);     
               }
               break; 
           /*
@@ -1796,88 +1835,82 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CR8:
                   cr8_equal = rozofs_date2time(optarg);
                   if (cr8_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   break;    
                             
                 case SCAN_CRITERIA_MOD:
                   mod_equal = rozofs_date2time(optarg);
                   if (mod_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }                   
                   break;  
                   
                 case SCAN_CRITERIA_UPDATE:
                   update_equal = rozofs_date2time(optarg);
                   if (update_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }                   
                   break;  
                 case SCAN_CRITERIA_SIZE:
                   size_equal = rozofs_scan_u64(optarg);
                   if (size_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   break; 
                   
                 case SCAN_CRITERIA_GID:
                   gid_equal = rozofs_scan_u64(optarg);
                   if (gid_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;
                   
                 case SCAN_CRITERIA_NLINK:
                   nlink_equal = rozofs_scan_u64(optarg);
                   if (nlink_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;
                                                                       
                 case SCAN_CRITERIA_CHILDREN:
                   children_equal = rozofs_scan_u64(optarg);
                   if (children_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;
                                                                       
                 case SCAN_CRITERIA_UID:
                   uid_equal = rozofs_scan_u64(optarg);
                   if (uid_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;   
                   
                 case SCAN_CRITERIA_CID:
                   cid_equal = rozofs_scan_u64(optarg);
                   if (cid_equal==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }   
+                  break;
+                  
+                case SCAN_CRITERIA_SID:
+                  sid_equal = rozofs_scan_u64(optarg);
+                  if (sid_equal==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }   
+                  break;                  
+                  
+                case SCAN_CRITERIA_PROJECT:
+                  project_equal = rozofs_scan_u64(optarg);
+                  if (project_equal==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;
                   
                 case SCAN_CRITERIA_PFID:
                   if (rozofs_uuid_parse(optarg, pfid_equal)!=0) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;                                                                         
                   
@@ -1887,9 +1920,7 @@ int main(int argc, char *argv[]) {
                                                                          
                                                                          
                 default:
-                  printf("\nNo criteria defined prior to %s\n",comp);     
-                  usage();
-                  exit(EXIT_FAILURE);
+                  usage("No criteria defined prior to %s",comp);     
               }
               break; 
           /*
@@ -1912,18 +1943,14 @@ int main(int argc, char *argv[]) {
                   */
                   f = fopen(optarg, "r");
                   if (f == NULL) {
-                    printf("Can not open file %s (%s)\n", optarg, strerror(errno));
-                    usage();
-                    exit(EXIT_FAILURE);                    
+                    usage("Can not open file %s (%s)", optarg, strerror(errno));                 
                   } 
                   /*
                   ** Read regex
                   */
-                  if (fread(regex, sizeof(regex), 1, f) != 0) {                
-                    printf("Can not read file %s (%s)\n", optarg, strerror(errno));
-                    fclose(f);
-                    usage();
-                    exit(EXIT_FAILURE);                    
+                  if (fread(regex, sizeof(regex), 1, f) != 0) {       
+                    fclose(f);                           
+                    usage("Can not read file %s (%s)", optarg, strerror(errno));
                   } 
                   fclose(f);
                   /*
@@ -1939,17 +1966,13 @@ int main(int argc, char *argv[]) {
                   }    
                   pRegex = pcre_compile(regex, 0, &pcreErrorStr, &pcreErrorOffset, NULL);
                   if(pRegex == NULL) {
-                    printf("Bad regex \"%s\" at offset %d : %s\n", regex, pcreErrorOffset, pcreErrorStr);  
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad regex \"%s\" at offset %d : %s", regex, pcreErrorOffset, pcreErrorStr);  
                   }
                 }  
                 break; 
                                                                          
                 default:
-                  printf("\nNo criteria defined prior to %s\n",comp);     
-                  usage();
-                  exit(EXIT_FAILURE);
+                  usage("No criteria defined prior to %s",comp);     
               }
               break;  
 
@@ -1964,95 +1987,87 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CR8:
                   cr8_diff = rozofs_date2time(optarg);
                   if (cr8_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   break; 
                                
                 case SCAN_CRITERIA_MOD:
                   mod_diff = rozofs_date2time(optarg);
                   if (mod_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }                   
                   break; 
 
                 case SCAN_CRITERIA_UPDATE:
                   update_diff = rozofs_date2time(optarg);
                   if (update_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }                   
                   break; 
                    
                 case SCAN_CRITERIA_SIZE:
                   size_diff = rozofs_scan_u64(optarg);
                   if (size_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   break; 
                    
                 case SCAN_CRITERIA_NLINK:
                   nlink_diff = rozofs_scan_u64(optarg);
                   if (nlink_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   break; 
                    
                 case SCAN_CRITERIA_CHILDREN:
                   children_diff = rozofs_scan_u64(optarg);
                   if (children_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   break; 
                   
                 case SCAN_CRITERIA_GID:
                   gid_diff = rozofs_scan_u64(optarg);
                   if (gid_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break; 
                                   
                 case SCAN_CRITERIA_UID:
                   uid_diff = rozofs_scan_u64(optarg);
                   if (uid_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break; 
                     
                 case SCAN_CRITERIA_CID:
                   cid_diff = rozofs_scan_u64(optarg);
                   if (cid_diff==-1) {
-                    printf("\nBad format for -%c %s \"%s\"\n",crit,comp,optarg);     
-                    usage();
-                    exit(EXIT_FAILURE);
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }   
+                  break;
+                    
+                case SCAN_CRITERIA_SID:
+                  sid_diff = rozofs_scan_u64(optarg);
+                  if (sid_diff==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }   
+                  break;
+                    
+                case SCAN_CRITERIA_PROJECT:
+                  project_diff = rozofs_scan_u64(optarg);
+                  if (project_diff==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;
                   
                 case SCAN_CRITERIA_PFID:
                 case SCAN_CRITERIA_FNAME:
-                  printf("\nNo %s comparison for -%c\n",comp,crit);     
-                  usage();
-                  exit(EXIT_FAILURE);  
+                  usage("No %s comparison for -%c",comp,crit);      
                   break;                                                   
                                                                          
                 default:
-                  printf("\nNo criteria defined prior to %s\n",comp);     
-                  usage();
-                  exit(EXIT_FAILURE);
+                  usage("No criteria defined prior to %s",comp);     
               }
               break;                
           case 'd':
@@ -2060,17 +2075,14 @@ int main(int argc, char *argv[]) {
               break;                               
           case '?':
           default:
-              if (optopt)  printf("\nUnexpected argument \"-%c\"\n", optopt);
-              else         printf("\nUnexpected argument \"%s\"\n", argv[optind-1]);
-              usage();
-              exit(EXIT_FAILURE);
+              if (optopt)  usage("Unexpected argument \"-%c\"", optopt);
+              else         usage("Unexpected argument \"%s\"", argv[optind-1]);
               break;
       }
   }
   
   if (expect_comparator) {
-    printf("Expecting --lt, --le, --gt, --ge or --ne.\n");
-    exit(EXIT_FAILURE);
+    usage("Expecting --lt, --le, --gt, --ge or --ne.");
   }                     
 
   /*
@@ -2082,27 +2094,23 @@ int main(int argc, char *argv[]) {
     ** Read configuration file
     */
     if (econfig_initialize(&exportd_config) != 0) {
-      printf("can't initialize exportd config %s.\n",strerror(errno));
-      exit(EXIT_FAILURE);  
+      usage("can't initialize exportd config %s",strerror(errno));
     }    
     if (econfig_read(&exportd_config, configFileName) != 0) {
-      printf("failed to parse configuration file %s %s.\n",configFileName,strerror(errno));
-      exit(EXIT_FAILURE);  
+      usage("failed to parse configuration file %s %s",configFileName,strerror(errno));
     }              	 
     /*
     ** Find the export root path
     */
     root_path = get_export_root_path(eid);
     if (root_path==NULL) {
-      printf("eid %d is not configured\n",eid);       
-      exit(EXIT_FAILURE);
+      usage("eid %d is not configured",eid);       
     }
   }
 
   if (root_path == NULL) 
   {
-       usage();
-       exit(EXIT_FAILURE);  
+    usage("Missing root_path(-p) or export identifier (-e)");
   }
 
   printf("\n\n");
@@ -2113,8 +2121,7 @@ int main(int argc, char *argv[]) {
   rozofs_export_p = rz_inode_lib_init(root_path);
   if (rozofs_export_p == NULL)
   {
-    printf("RozoFS: error while reading %s\n",root_path);
-    exit(EXIT_FAILURE);  
+    usage("RozoFS: error while reading %s",root_path);
   }
   /*
   ** init of the lv2 cache

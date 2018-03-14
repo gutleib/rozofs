@@ -185,7 +185,7 @@ void rozofs_qt_set_quota_msg_process(rozofs_qt_header_t *msg)
     */
     memcpy(&msg_out,msg,sizeof(rozofs_qt_header_t));
     
-    if ((msg_in->sqa_type != USRQUOTA) && (msg_in->sqa_type != GRPQUOTA))
+    if ((msg_in->sqa_type != USRQUOTA) && (msg_in->sqa_type != GRPQUOTA)&&(msg_in->sqa_type != SHRQUOTA))
     {
        severe("bad quota type %d",msg_in->sqa_type);
        errno = EPROTO;
@@ -227,10 +227,10 @@ void rozofs_qt_get_quota_msg_process(rozofs_qt_header_t *msg)
     memset(&msg_out,0,sizeof(msg_out));
     memcpy(&msg_out,msg,sizeof(rozofs_qt_header_t));
     
-    if ((msg_in->gqa_type != USRQUOTA) && (msg_in->gqa_type != GRPQUOTA))
+    if ((msg_in->gqa_type != USRQUOTA) && (msg_in->gqa_type != GRPQUOTA)&&(msg_in->gqa_type != SHRQUOTA))
     {
        msg_out.status  = -1;
-       severe(" bad type %d expect %d or %d",msg_in->gqa_type,USRQUOTA,GRPQUOTA);
+       severe(" bad type %d ",msg_in->gqa_type);
        msg_out.errcode = EPROTO;
        goto out;
     }
@@ -314,7 +314,7 @@ void rozofs_qt_set_grace_msg_process(rozofs_qt_header_t *msg)
     */
     memset(&msg_out,0,sizeof(msg_out));
     memcpy(&msg_out,msg,sizeof(rozofs_qt_header_t));
-    if ((msg_in->sqa_type != USRQUOTA) && (msg_in->sqa_type != GRPQUOTA))
+    if ((msg_in->sqa_type != USRQUOTA) && (msg_in->sqa_type != GRPQUOTA)&&(msg_in->sqa_type != SHRQUOTA))
     {
        severe("bad quota type sqa_type:%d",msg_in->sqa_type);
        errno = EPROTO;
@@ -352,7 +352,7 @@ void rozofs_qt_set_quota_state_msg_process(rozofs_qt_header_t *msg)
     */
     memset(&msg_out,0,sizeof(msg_out));
     memcpy(&msg_out,msg,sizeof(rozofs_qt_header_t));
-    if ((msg_in->sqa_type != USRQUOTA) && (msg_in->sqa_type != GRPQUOTA))
+    if ((msg_in->sqa_type != USRQUOTA) && (msg_in->sqa_type != GRPQUOTA)&&(msg_in->sqa_type != SHRQUOTA))
     {
        severe("bad quota type sqa_type:%d",msg_in->sqa_type);
        errno = EPROTO;

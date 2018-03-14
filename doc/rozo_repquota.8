@@ -4,7 +4,7 @@ rozo_reqquota \- summarize quotas for a RozoFS filesystem
 .SH SYNOPSIS
 .B rozo_repquota
 [
-.B \-vHpug
+.B \-vHpugs
 ]
 [
 .B \-c
@@ -45,7 +45,10 @@ Report quotas for users. This is the default.
 .TP
 .B -g, --group
 Report quotas for groups.
- .TP
+.TP
+.B -s, --project
+Report quotas for projects.
+.TP
 .B -c, --batch-translation     
 Cache entries to report and translate uids/gids to names in big chunks by scanning all users (default). This is good (fast) behaviour when using /etc/passwd file.
 .TP
