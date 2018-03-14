@@ -43,6 +43,7 @@
 #define FL_NUMNAMES 256
 #define FL_NO_MIXED_PATHS 512
 #define FL_CONTINUE_BATCH 1024
+#define FL_SHARE 2048	/* Print share information */
 
 /* Size of blocks in which are counted size limits in generic utility parts */
 #define QUOTABLOCK_BITS 10
@@ -90,14 +91,17 @@ static void usage(void)
 
 	char *ropt = "";
 	errstr(_("Usage:\n\
-  setquota [-u|-g] %1$s[-F quotaformat] <user|group>\n\
-\t<block-softlimit> <block-hardlimit> <inode-softlimit> <inode-hardlimit> -a|<eid>...\n\
-  setquota [-u|-g] %1$s[-f exportconf] <-p protouser|protogroup> <user|group> -a|<eid>...\n\
-  setquota [-u|-g] %1$s[-f exportconf] -b [-c] -a|<filesystem>...\n\
-  setquota [-u|-g] [-f exportconf] -t <blockgrace> <inodegrace> -a|<filesystem>...\n\
-  setquota [-u|-g] [-f exportconf] <user|group> -T <blockgrace> <inodegrace> -a|<eid>...\n\n\
+  rozo_setquota [-u <user>|-g <group>|-s <share>]\n\
+\t<block-softlimit> <block-hardlimit> <inode-softlimit> <inode-hardlimit> -a|<eid> [-f exportconf]...\n\
+  rozo_setquota {-u <user>|-g <group>|-s <project>}  <-p protouser|protogroup>  -a|<eid> [-f exportconf]..\n\
+  rozo_setquota {-u <user>|-g <group>|-s <project>} -b [-c] -a|<eid> [-f exportconf]...\n\
+  rozo_setquota [-u|-g|-s] -t <blockgrace> <inodegrace> -a|<eid> [-f exportconf]...\n\
+  rozo_setquota {-u <user>|-g <group>|-s <project>} -T <blockgrace> <inodegrace> -a|<eid> [-f exportconf]...\n\n\
+\
+  Block limits are KB units. \n\
 -u, --user                 set limits for user\n\
 -g, --group                set limits for group\n\
+-s, --project              set limits for project\n\
 -a, --all                  set limits for all filesystems\n\
     --always-resolve       always try to resolve name, even if is\n\
                            composed only of digits\n\
@@ -133,6 +137,8 @@ static inline int flag2type(int flags)
 		return USRQUOTA;
 	if (flags & FL_GROUP)
 		return GRPQUOTA;
+	if (flags & FL_SHARE)
+		return SHRQUOTA;
 	return -1;
 }
 
@@ -167,11 +173,13 @@ static void parse_options(int argcnt, char **argstr)
 {
 	int ret, otherargs;
 	char *protoname = NULL;
+	int flagtype;
 
-	char *opts = "ghp:uVf:taTbc";
+	char *opts = "ghp:usVf:taTbc";
 	struct option long_opts[] = {
 		{ "user", 0, NULL, 'u' },
 		{ "group", 0, NULL, 'g' },
+		{ "project", 0, NULL, 's' },
 		{ "prototype", 1, NULL, 'p' },
 		{ "all", 0, NULL, 'a' },
 		{ "always-resolve", 0, NULL, 256},
@@ -195,6 +203,9 @@ static void parse_options(int argcnt, char **argstr)
 			  break;
 		  case 'u':
 			  flags |= FL_USER;
+			  break;
+		  case 's':
+			  flags |= FL_SHARE;
 			  break;
 		  case 'p':
 			  flags |= FL_PROTO;
@@ -232,9 +243,21 @@ static void parse_options(int argcnt, char **argstr)
 			  exit(0);
 		}
 	}
-	if (flags & FL_USER && flags & FL_GROUP) {
-		errstr(_("Group and user quotas cannot be used together.\n"));
-		usage();
+
+	flagtype = flags & (FL_USER | FL_GROUP | FL_SHARE);
+	switch (flagtype)
+	{
+	  case 0:
+	    flags |= FL_USER;
+	    break;
+	  case FL_USER:
+	  case FL_GROUP:
+	  case FL_SHARE:
+	    break;
+	  default:
+	    errstr(_("Group and user or share quotas cannot be used together.\n"));
+	    usage();
+	    break;
 	}
 	if (flags & FL_PROTO && flags & FL_GRACE) {
 		errstr(_("Prototype user has no sense when editing grace times.\n"));
@@ -271,8 +294,7 @@ static void parse_options(int argcnt, char **argstr)
 		errstr(_("Bad number of arguments.\n"));
 		usage();
 	}
-	if (!(flags & (FL_USER | FL_GROUP)))
-		flags |= FL_USER;
+
 	if (!(flags & (FL_GRACE | FL_BATCH))) {
 		id = name2id(argstr[optind++], flag2type(flags), !!(flags & FL_NUMNAMES), NULL);
 		if (!(flags & (FL_GRACE | FL_INDIVIDUAL_GRACE | FL_PROTO))) {
@@ -362,7 +384,7 @@ static int read_quota(int eid,rozofs_getquota_rsp_t *msg_rsp)
 /*
 **__________________________________________________________________
 */
-static int setlimits(int eid)
+static int setlimits(int eid,int grace)
 {
 	rozofs_setquota_req_t msg_req;
 	rozofs_setquota_rsp_t msg_rsp;
@@ -378,21 +400,42 @@ static int setlimits(int eid)
 	
 	msg_req.sqa_dqblk.rq_curblocks = msg_get_rsp.quota_data.rq_curblocks;
 	msg_req.sqa_dqblk.rq_curfiles  = msg_get_rsp.quota_data.rq_curfiles;
-	msg_req.sqa_dqblk.rq_btimeleft = msg_get_rsp.quota_data.rq_btimeleft;
-	msg_req.sqa_dqblk.rq_ftimeleft = msg_get_rsp.quota_data.rq_ftimeleft;
+	if (grace == 0)
+	{
+	  msg_req.sqa_dqblk.rq_btimeleft = msg_get_rsp.quota_data.rq_btimeleft;
+	  msg_req.sqa_dqblk.rq_ftimeleft = msg_get_rsp.quota_data.rq_ftimeleft;
+	}
+	else
+	{
+	  msg_req.sqa_dqblk.rq_btimeleft = toset.dqb_btime;
+	  msg_req.sqa_dqblk.rq_ftimeleft = toset.dqb_itime;
+	}
 
-	msg_req.sqa_dqblk.rq_bsoftlimit = toset.dqb_bsoftlimit;
-	msg_req.sqa_dqblk.rq_bhardlimit = toset.dqb_bhardlimit;
-	msg_req.sqa_dqblk.rq_fsoftlimit = toset.dqb_isoftlimit;
-	msg_req.sqa_dqblk.rq_fhardlimit = toset.dqb_ihardlimit;
+	if (grace == 0)
+	{
+	  msg_req.sqa_dqblk.rq_bsoftlimit = toset.dqb_bsoftlimit;
+	  msg_req.sqa_dqblk.rq_bhardlimit = toset.dqb_bhardlimit;
+	  msg_req.sqa_dqblk.rq_fsoftlimit = toset.dqb_isoftlimit;
+	  msg_req.sqa_dqblk.rq_fhardlimit = toset.dqb_ihardlimit;
+	}
+	else
+	{
+	  msg_req.sqa_dqblk.rq_bsoftlimit = msg_get_rsp.quota_data.rq_bsoftlimit;
+	  msg_req.sqa_dqblk.rq_bhardlimit = msg_get_rsp.quota_data.rq_bhardlimit;
+	  msg_req.sqa_dqblk.rq_fsoftlimit = msg_get_rsp.quota_data.rq_fsoftlimit;
+	  msg_req.sqa_dqblk.rq_fhardlimit = msg_get_rsp.quota_data.rq_fhardlimit;		
+	}
+#if 0
 	/*
 	** update grace time if needed
 	*/
 	update_grace_times(&msg_req.sqa_dqblk);
+#endif
 	msg_req.eid = eid;
 	msg_req.sqa_id = id;
 	msg_req.sqa_type = flag2type(flags);
 	msg_req.sqa_qcmd = QIF_LIMITS;
+	if (grace != 0) msg_req.sqa_qcmd = msg_req.sqa_qcmd | QIF_TIMES;
 	msg_req.hdr.opcode = ROZOFS_QUOTA_SETQUOTA;
 	msg_req.hdr.length = sizeof(rozofs_setquota_req_t);
 	msg_req.hdr.pid = my_pid;
@@ -631,9 +674,9 @@ int main(int argc, char **argv)
 	   {
 		   ret = setgraces(eid);
 	   }
-#if 0
+#if 1
 	   else if (flags & FL_INDIVIDUAL_GRACE)
-		   ret = setindivgraces(eid);
+		   ret = setlimits(eid,1);
 #endif
 	   else 
 
@@ -641,7 +684,7 @@ int main(int argc, char **argv)
 		   ret = batch_setlimits(eid);
 	   else
 
-		   ret = setlimits(eid);
+		   ret = setlimits(eid,0);
         }
 	/*
 	** close the af_unix socket
