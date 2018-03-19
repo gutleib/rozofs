@@ -387,7 +387,37 @@ void rozofs_export_poll_cbk(void *this,void *param)
    /*
    ** When this antry is now the active entry
    */
-   north_lbg_set_active_entry(lbg_id,sock_idx_in_lbg);     
+   north_lbg_set_active_entry(lbg_id,sock_idx_in_lbg);   
+//   warning("Export connection UP index %d becomes active (old active %d) ",sock_idx_in_lbg,active_entry);   
+   /*
+   ** Check if there was a previous active entry 
+   */  
+   if ((active_entry != -1) && ( active_entry != sock_idx_in_lbg))
+   {
+      warning("Export connection index %d becomes active",sock_idx_in_lbg);    
+       /*
+       ** Need to tear down the other connection in order to requeue any pending request towards the export
+       */
+      lbg_p = north_lbg_getObjCtx_p(lbg_id);
+      if (lbg_p == NULL) 
+      {
+	severe("rozofs_export_poll_tx: no such instance %d ",lbg_id);
+	goto out;
+      }
+      sock_p = af_unix_getObjCtx_p(lbg_p->entry_tb[active_entry].sock_ctx_ref); 
+      if ( sock_p == NULL)
+      {
+         severe("No socket pointer for lbg_id %d entry %d", (int)lbg_id, (int)  lbg_p->entry_tb[active_entry].sock_ctx_ref);
+	 goto out;
+      }
+      /*
+      ** trigger an internal disconnection
+      */
+      warning("Export connection index %d disconnecting (socket %d)",active_entry,sock_p->index);
+      af_unix_sock_stream_disconnect_internal(sock_p);  
+      errno = EPROTO;    
+      (sock_p->userDiscCallBack)(sock_p->userRef,sock_p->index,NULL,errno);      
+   }
    goto out;
 error:
    {
