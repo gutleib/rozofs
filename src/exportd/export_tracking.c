@@ -3505,6 +3505,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     int root_dirent_mask = 0;
    
     START_PROFILING(export_mkdir);
+    mdir_init(&node_mdir);
     
     if (exp_metadata_inode_is_del_pending(pfid))
     {    
@@ -3827,6 +3828,11 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     goto out;
 
 error:
+    /*
+    ** Cose dire and attribute file if they were open
+    */
+    mdir_close(&node_mdir);
+    
     xerrno = errno;
     if (inode_allocated)
     {
