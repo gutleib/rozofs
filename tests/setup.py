@@ -840,7 +840,7 @@ class volume_class:
 #____________________________________
 class exportd_class:
 
-  def __init__(self,hosts="192.168.10.50/192.168.10.51"):
+  def __init__(self,hosts="192.168.100.50/192.168.100.51"):
     self.export_host=hosts  
 
   def get_config_name(self): return "%s/export.conf"%(rozofs.get_config_path())
@@ -866,20 +866,31 @@ class exportd_class:
       if not "exportd" in line: continue
       if not "-i" in line: pid=line.split()[1]
     return pid
-           
-  def start(self,add="50"):
+
+
+  def remove_ip(self,ip):
+    cmd_silent("ip addr del %s/32 dev %s"%(ip,rozofs.interface)) 
+    
+  def remove_all_ip(self):
+    for ip in self.export_host.split('/'): self.remove_ip(ip)
+       
+  def add_ip(self,ip):
+    cmd_silent("ip addr add %s/32 dev %s"%(ip,rozofs.interface))  
+
+  def add_all_ip(self):
+    for ip in self.export_host.split('/'): self.add_ip(ip)
+            
+  def start(self,nb=int(0)):
     pid=self.pid()
     if pid != 0: 
       report("exportd is already started as process %s"%(pid))
       return
-    cmd_silent("ip addr del 192.168.10.50/32 dev %s"%(rozofs.interface))  
-    cmd_silent("ip addr del 192.168.10.51/32 dev %s"%(rozofs.interface))  
-    cmd_silent("ip addr add 192.168.10.%s/32 dev %s"%(add,rozofs.interface))
+    self.remove_all_ip() 
+    self.add_ip(self.export_host.split('/')[0]) 
     os.system("exportd -c %s"%(self.get_config_name()))    
     
   def stop(self):
-    cmd_silent("ip addr del 192.168.10.50/32 dev %s"%(rozofs.interface))  
-    cmd_silent("ip addr del 192.168.10.51/32 dev %s"%(rozofs.interface))    
+    self.remove_all_ip() 
     pid=self.pid()
     if pid == 0: return
     os.system("kill %s"%(pid))
@@ -955,7 +966,8 @@ class exportd_class:
         print "      { ip4subnet=\"127.0.0.16/28\",    rule=\"forbid\"},"
         print "      { ip4subnet=\"127.0.0.1/32\",     rule=\"allow\"},"
         print "      { ip4subnet=\"127.0.0.17/32\",    rule=\"allow\"},"
-        print "      { ip4subnet=\"192.168.10.0/24\",  rule=\"allow\"}"
+        print "      { ip4subnet=\"192.168.10.0/24\",  rule=\"allow\"},"
+        print "      { ip4subnet=\"192.168.100.0/24\", rule=\"allow\"}"
         print "    );"
         print "  }"
     print ");"
