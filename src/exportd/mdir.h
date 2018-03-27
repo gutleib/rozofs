@@ -32,6 +32,15 @@ typedef struct mdir {
     int fdattrs;    ///< attributes file descriptor
 } mdir_t;
 
+
+/** Initialize the mdir structure
+ *
+ * @param mdir: the mdir structure to initialize
+ */
+static inline void mdir_init(mdir_t *mdir) {
+  mdir->fdp     = -1;
+  mdir->fdattrs = -1;
+}
 /** open the mdir
  *
  * @param mdir: the mdir to open

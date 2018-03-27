@@ -35,6 +35,11 @@ int mdir_open(mdir_t *mdir, const char *path) {
     int status = -1;
 
     START_PROFILING(mdir_open);
+    
+    /*
+    ** Reset file descriptors
+    */
+    mdir_init(mdir);
 
     if ((mdir->fdp = open(path, O_RDONLY  | O_NOATIME, S_IRWXU)) < 0) {
         goto out;
@@ -44,6 +49,7 @@ int mdir_open(mdir_t *mdir, const char *path) {
             S_IRWXU)) < 0) {
         int xerrno = errno;
         close(mdir->fdp);
+        mdir->fdp = -1;
         errno = xerrno;
         goto out;
     }
@@ -55,8 +61,20 @@ out:
 
 void mdir_close(mdir_t *mdir) {
     START_PROFILING(mdir_close);
-    close(mdir->fdattrs);
-    close(mdir->fdp);
+    /*
+    ** If attribute file is open, close it and reset file descriptor reference
+    */
+    if (mdir->fdattrs >= 0) {
+      close(mdir->fdattrs);
+      mdir->fdattrs = -1;
+    }
+    /*
+    ** If directory file is open, close it and reset file descriptor reference
+    */
+    if (mdir->fdp >= 0) {  
+      close(mdir->fdp);
+      mdir->fdp = -1;
+    }  
     STOP_PROFILING(mdir_close);
 }
 
