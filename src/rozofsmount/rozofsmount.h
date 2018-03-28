@@ -115,7 +115,8 @@ typedef struct rozofsmnt_conf {
     unsigned noReadFaultTolerant;   
     unsigned xattrcache;   /**< assert to 1 for extended attributes caching                        */      
     unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */
-    unsigned numanode;      
+    unsigned numanode;  
+    unsigned wbcache;  /**< writeback cache fuse */    
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 

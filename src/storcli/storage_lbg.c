@@ -206,6 +206,10 @@ int storaged_lbg_initialize(mstorage_t *s, int index) {
        }
        break;
      }
+     else
+     {
+        info("LBG size is greater than 1 (%d): neither RDMA nor Standalone mode will work",lbg_size);     
+     }
      break;
      }	
 #endif              
@@ -232,8 +236,11 @@ int storaged_lbg_initialize(mstorage_t *s, int index) {
 	    return -1; 
 	  } 							         
        }          
+       else
+       {
+          info("LBG size is greater than 1 (%d): No Standalone mode supported",lbg_size);     
+       }
      }
-
      ret = north_lbg_configure_af_inet(s->lbg_id[index],
                                           s->host,
                                           INADDR_ANY,0,

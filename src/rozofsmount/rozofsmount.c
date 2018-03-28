@@ -61,7 +61,9 @@
 #define MOUNTED_FS_FILE_CHECK "/proc/mounts"
 
 #define FUSE28_DEFAULT_OPTIONS "default_permissions,allow_other,fsname="FSNAME",subtype="FSTYPE",big_writes"""
+#define FUSE28_DEFAULT_OPTIONS_WB "default_permissions,allow_other,fsname="FSNAME",subtype="FSTYPE",big_writes,atomic_o_trunc"""
 #define FUSE27_DEFAULT_OPTIONS "default_permissions,allow_other,fsname="FSNAME",subtype="FSTYPE""""
+#define FUSE27_DEFAULT_OPTIONS_WB "default_permissions,allow_other,,atomic_o_trunc,fsname="FSNAME",subtype="FSTYPE""""
 
 #define CACHE_TIMEOUT 10.0
 #define CONNECTION_THREAD_TIMESPEC  2
@@ -228,6 +230,7 @@ static void usage() {
     fprintf(stderr, "    -o rozofssparestoragems=N\tdefine timeout for switching to a spare storaged for read/write requests (default: %d ms)\n",
                             rozofs_tmr_get(TMR_PRJ_READ_SPARE));
     fprintf(stderr, "    -o numanode=<#node>\tpin rozofsmount as well as its STORCLI on numa node <node#>\n");
+    fprintf(stderr, "    -o wbcache\t\tactivate Linux writeback cache\n");
 
 }
 
@@ -291,6 +294,7 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("onlyWriter", onlyWriter, 1),
     MYFS_OPT("xattrcache", xattrcache, 0),
     MYFS_OPT("asyncsetattr", asyncsetattr,0),
+    MYFS_OPT("wbcache", wbcache,1),
    
     FUSE_OPT_KEY("-H ", KEY_EXPORT_HOST),
     FUSE_OPT_KEY("-E ", KEY_EXPORT_PATH),
@@ -444,6 +448,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(noReadFaultTolerant);
   DISPLAY_UINT32_CONFIG(xattrcache);
   DISPLAY_UINT32_CONFIG(asyncsetattr);
+  DISPLAY_UINT32_CONFIG(wbcache);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
@@ -2223,6 +2228,7 @@ int main(int argc, char *argv[]) {
     conf.mojThreadThreshold = -1; // By default, do not modify the storli default
     conf.localPreference = 0; // No local preference on read
     conf.noReadFaultTolerant = 0; // Give back blocks with 0 on read for corrupted block instead of EIO
+    conf.wbcache = 0;
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
     }
@@ -2478,17 +2484,36 @@ int main(int argc, char *argv[]) {
 
         
     if (fuse_version() < 28) {
-        if (fuse_opt_add_arg(&args, "-o" FUSE27_DEFAULT_OPTIONS) == -1) {
-            fprintf(stderr, "fuse_opt_add_arg failed\n");
-            return 1;
+        if (conf.wbcache)
+	{
+          if (fuse_opt_add_arg(&args, "-o" FUSE27_DEFAULT_OPTIONS_WB) == -1) {
+              fprintf(stderr, "fuse_opt_add_arg failed\n");
+              return 1;
+	  }
+	}
+	else
+        {	
+          if (fuse_opt_add_arg(&args, "-o" FUSE27_DEFAULT_OPTIONS) == -1) {
+              fprintf(stderr, "fuse_opt_add_arg failed\n");
+              return 1;
+	  }
         }
     } else {
-        if (fuse_opt_add_arg(&args, "-o" FUSE28_DEFAULT_OPTIONS) == -1) {
-            fprintf(stderr, "fuse_opt_add_arg failed\n");
-            return 1;
-        }
-    }
-
+        if (conf.wbcache)
+	{        
+          if (fuse_opt_add_arg(&args, "-o" FUSE28_DEFAULT_OPTIONS_WB) == -1) {
+              fprintf(stderr, "fuse_opt_add_arg failed\n");
+              return 1;
+          }
+	}
+	else
+	{
+          if (fuse_opt_add_arg(&args, "-o" FUSE28_DEFAULT_OPTIONS) == -1) {
+              fprintf(stderr, "fuse_opt_add_arg failed\n");
+              return 1;
+          }		
+	}
+    }  
     if (fuse_parse_cmdline(&args, &rozofs_mountpoint, NULL, &fg) == -1) {
         fprintf(stderr, "see: %s -h for help\n", argv[0]);
         return 1;

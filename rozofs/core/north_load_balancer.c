@@ -28,7 +28,7 @@
 #include <linux/sockios.h>
 #include <rozofs/common/types.h>
 #include <rozofs/common/log.h>
-
+#include <rozofs/common/common_config.h>
 #include "ruc_common.h"
 #include "ruc_list.h"
 #include "af_unix_socket_generic_api.h"
@@ -199,13 +199,17 @@ void north_lbg_entries_debug_show(uint32_t tcpRef, void *bufRef) {
 		}
 		else
 		{
-		  if (lbg_p->rdma_state != 0) pChar += sprintf(pChar, "  UP  |\n");
+		  if (lbg_p->rdma_state != 0) {
+		     if ((common_config.standalone == 1) && (lbg_p->local != 0))
+		     {
+		       pChar += sprintf(pChar, "  UP-L|\n");
+		     }
+		     else		     
+		       pChar += sprintf(pChar, "  UP  |\n");
+		  }
 		  else pChar += sprintf(pChar, " DOWN |\n");
 		}
             }
-	    
-
-
         }
     }
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());

@@ -29,6 +29,34 @@
 
 DECLARE_PROFILING(mpp_profiler_t);
 
+void rozofs_assert_open_mode(struct fuse_file_info *fi)
+{
+      switch (rozofs_cache_mode)
+      {
+         default:
+	 case 0:
+	   if (fi->flags & O_WRONLY)
+	   {
+	     /*
+	     ** NFS case to handle the case of the writeback cache : invalidate cache for reader case only
+	     */
+	     fi->keep_cache = 1;
+	   }
+	  break;
+	 
+	 /* Direct I/O */
+	 case 1:
+	  fi->direct_io = 1;
+	 break;
+	 
+	 /* Keep cache */
+	 case 2:
+	  fi->keep_cache = 1;
+	 break;
+      
+      }
+}
+
 /**
 * Open a file
 *
@@ -98,13 +126,7 @@ void rozofs_ll_open_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
       ** allocate a context for the file descriptor
       */
       file = rozofs_file_working_var_init(ie,ie->fid);
-      if (rozofs_cache_mode == 1)
-         fi->direct_io = 1;
-      else
-      {
-        if (rozofs_cache_mode == 2)
-          fi->keep_cache = 1;
-      }
+      rozofs_assert_open_mode(fi);
       /*
       ** save the opening flags
       */
@@ -170,13 +192,7 @@ short_cut:
 	** allocate a context for the file descriptor
 	*/
 	file = rozofs_file_working_var_init(ie,ie->fid);
-	if (rozofs_cache_mode == 1)
-           fi->direct_io = 1;
-	else
-	{
-          if (rozofs_cache_mode == 2)
-            fi->keep_cache = 1;
-	}
+        rozofs_assert_open_mode(fi);
 	/*
 	** save the opening flags
 	*/
@@ -283,13 +299,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
 	 ** allocate a context for the file descriptor
 	 */
 	 file = rozofs_file_working_var_init(ie,ie->fid);
-	 if (rozofs_cache_mode == 1)
-            fi->direct_io = 1;
-	 else
-	 {
-           if (rozofs_cache_mode == 2)
-             fi->keep_cache = 1;
-	 }
+         rozofs_assert_open_mode(fi);
 	 fi->fh = (unsigned long) file;
          file->open_flags = fi->flags;
 	 /*
@@ -415,14 +425,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
     /*
     ** init of the variable used for buffer management
     */
-    
-    if (rozofs_cache_mode == 1)
-       fi->direct_io = 1;
-    else
-    {
-      if (rozofs_cache_mode == 2)
-        fi->keep_cache = 1;
-    }
+    rozofs_assert_open_mode(fi);    
     fi->fh = (unsigned long) file;
     file->open_flags = fi->flags;
     /*
