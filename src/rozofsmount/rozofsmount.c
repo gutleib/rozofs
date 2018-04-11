@@ -1251,13 +1251,28 @@ char *trc_fuse_display_srv(int srv)
     @param pChar : pointer to the result buffer
     @retval none
 */
-void show_trc_fuse_buffer(char * pChar)
+void show_trc_fuse_buffer(uint32_t tcpRef, void *bufRef)
 {
    char str[37];
    fid_t fake_fid;
    int start, count;
    uint64_t cur_ts;
    char * mode;
+   char * pChar;
+   char * pHead;
+   int    max_size;
+   void * nextBuff = NULL;
+   
+   /* 
+   ** Retrieve the buffer payload 
+   */
+   if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+     severe( "ruc_buf_getPayload(%p)", bufRef );
+     /* Let's tell the caller fsm that the message is sent */
+     return;
+   }  
+   max_size = ruc_buf_getMaxPayloadLen(bufRef)-1024;
+  
    
    memset(fake_fid,0,sizeof(fid_t));
    rozofs_trace_t *p ;
@@ -1274,120 +1289,166 @@ void show_trc_fuse_buffer(char * pChar)
    }
    p = &rozofs_trc_buffer[start];
    cur_ts = p->ts;
+
+   /*
+   ** Set the command recell string
+   */
+   pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);   
+   pChar+=sprintf(pChar,"trace entry size : %lu Bytes\n",(long unsigned int)sizeof(rozofs_trace_t));
+   pChar+=sprintf(pChar,"trace nb entry   : %lu\n",(long unsigned int)rozofs_trc_last_idx);
+   pChar+=sprintf(pChar,"ino size         : %lu Bytes\n",(long unsigned int)sizeof(fuse_ino_t));
+
    
    for (i = 0; i < count; i++,start++)
    {
-      if (start >= rozofs_trc_last_idx) start = 0;
-      p = &rozofs_trc_buffer[start];
-      if (p->hdr.s.fid == 1)
-      {
-	rozofs_uuid_unparse(p->par.def.fid, str);
-      } 
-      else
-	rozofs_uuid_unparse(fake_fid, str); 
-      if (p->hdr.s.req)
-      {
-        pChar+=sprintf(pChar,"[%12llu ]--> %-8s %4d %12.12llx ",
-	         (unsigned long long int)(p->ts - cur_ts),trc_fuse_display_srv(p->hdr.s.service_id),p->hdr.s.index,
-		 (unsigned long long int)p->ino);
-        switch (p->hdr.s.trc_type)
-	{
-	  default:
-	  case rozofs_trc_type_attr:
-	  case rozofs_trc_type_def:
-            pChar+=sprintf(pChar,"%s\n",str);
-	    break;
-	  case rozofs_trc_type_def_flags:
-            pChar+=sprintf(pChar,"%s (0%o)\n",str,p->flags);
-	    break;
-	  case rozofs_trc_type_io:
-            pChar+=sprintf(pChar,"%s %8llu/%d\n",str,(unsigned long long int)p->par.io.off,(int)p->par.io.size);
-	    break;	
-	  case rozofs_trc_type_name:
-            pChar+=sprintf(pChar,"%s\n",p->par.name.name);
-	    break;	
-	  case rozofs_trc_type_name_flags:
-            pChar+=sprintf(pChar,"%s (0x%x)\n",p->par.name.name, p->flags);
-	    break;
-	  case rozofs_trc_type_setattr:
-	    pChar+=sprintf(pChar,"%s ", str);
-	    if (p->par.setattr.to_set&FUSE_SET_ATTR_SIZE) {
-	      pChar+=sprintf(pChar," SZ(%llu)", (long long unsigned int) p->par.setattr.attr.size);
-	    }
-	    if (p->par.setattr.to_set&FUSE_SET_ATTR_MODE) {
-              pChar+=sprintf(pChar," MODE(%o)",p->par.setattr.attr.mode);
-	    }
-	    if (p->par.setattr.to_set&FUSE_SET_ATTR_UID) {
-              pChar+=sprintf(pChar," UID(%d)", p->par.setattr.attr.uid);
-	    }
-	    if (p->par.setattr.to_set&FUSE_SET_ATTR_GID) {
-              pChar+=sprintf(pChar," GID(%d)", p->par.setattr.attr.gid);
-	    }	    	     
-	    if (p->par.setattr.to_set&FUSE_SET_ATTR_ATIME) {
-              pChar+=sprintf(pChar," ATIME");
-	    }	    
-	    if (p->par.setattr.to_set&FUSE_SET_ATTR_MTIME) {
-              pChar+=sprintf(pChar," MTIME");
-	    }
-	    pChar+=sprintf(pChar,"\n");	
-	    break;	
-	  case rozofs_trc_type_flock:
-	    switch(p->par.flock.mode) {
-              case EP_LOCK_FREE:  mode = "free"; break;
-              case EP_LOCK_WRITE: mode = "write"; break;
-              case EP_LOCK_READ:  mode = "read"; break;	     
-              default:            mode = "??"; 
-            }	    
-            pChar+=sprintf(pChar,"%s %s %llu-%llu %s \n", str, mode,
-	                   (unsigned long long int)p->par.flock.start,
-	                   (unsigned long long int)p->par.flock.len,
-			   p->par.flock.block?"blocking":"pass");
-	    break;	
-	}
+    
+       /*
+       ** Flush current buffer when almost full
+       */
+       if ((pChar - pHead) >= max_size) {
+         *pChar = 0;
+         
+         /*
+         ** Allocate a next buffer
+         */
+         nextBuff = uma_dbg_get_new_buffer(tcpRef);
+         if (nextBuff==NULL) {
+           pChar += sprintf(pChar,"\n\n!!! Buffer depletion !!!\n");
+           break;
+         }
+         /*
+         ** Send this buffer
+         */
+         uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);         
+         /*
+         ** Allocate a new one
+         */
+         bufRef = nextBuff;
+         if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+           severe( "ruc_buf_getPayload(%p)", bufRef );
+           /* Let's tell the caller fsm that the message is sent */
+           return;
+         }  
+         max_size = ruc_buf_getMaxPayloadLen(bufRef)-1024;
+         pChar = pHead + sizeof(UMA_MSGHEADER_S);
+         *pChar = 0;          
+       }        
 
-      }
-      else
-      { 
-     
-  
-        switch (p->hdr.s.trc_type)
-	{
-	  default:
-	  case rozofs_trc_type_io:
-	  case rozofs_trc_type_def:
-	  case rozofs_trc_type_setattr:
-            pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s %d:%s\n",
-	               (unsigned long long int)(p->ts - cur_ts),
-		       trc_fuse_display_srv(p->hdr.s.service_id),
-		       p->hdr.s.index,
-		       (unsigned long long int)p->ino,
-		       str,
-		       p->errno_val,strerror(p->errno_val));  	  
-	    break;
-	  case rozofs_trc_type_name:
-            pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s\n",
-	               (unsigned long long int)(p->ts - cur_ts),
-		       trc_fuse_display_srv(p->hdr.s.service_id),
-		       p->hdr.s.index,
-		       (unsigned long long int)p->ino,
-		       (p->par.name.name[0] == 0)?strerror(p->errno_val):p->par.name.name); 
-            break;		       
-	  case rozofs_trc_type_attr:
-            pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s %d:%s %8llu\n",
-	               (unsigned long long int)(p->ts - cur_ts),
-		       trc_fuse_display_srv(p->hdr.s.service_id),
-		       p->hdr.s.index,
-		       (unsigned long long int)p->ino,
-		       str,
-		       p->errno_val,strerror(p->errno_val),
-		       (unsigned long long int)p->par.attr.size);
-	    break;	
-	}
+       if (start >= rozofs_trc_last_idx) start = 0;
+        p = &rozofs_trc_buffer[start];
+        if (p->hdr.s.fid == 1)
+        {
+	  rozofs_uuid_unparse(p->par.def.fid, str);
+        } 
+        else
+	  rozofs_uuid_unparse(fake_fid, str); 
+        if (p->hdr.s.req)
+        {
+          pChar+=sprintf(pChar,"[%12llu ]--> %-8s %4d %12.12llx ",
+	           (unsigned long long int)(p->ts - cur_ts),trc_fuse_display_srv(p->hdr.s.service_id),p->hdr.s.index,
+		   (unsigned long long int)p->ino);
+          switch (p->hdr.s.trc_type)
+	  {
+	    default:
+	    case rozofs_trc_type_attr:
+	    case rozofs_trc_type_def:
+              pChar+=sprintf(pChar,"%s\n",str);
+	      break;
+	    case rozofs_trc_type_def_flags:
+              pChar+=sprintf(pChar,"%s (0%o)\n",str,p->flags);
+	      break;
+	    case rozofs_trc_type_io:
+              pChar+=sprintf(pChar,"%s %8llu/%d\n",str,(unsigned long long int)p->par.io.off,(int)p->par.io.size);
+	      break;	
+	    case rozofs_trc_type_name:
+              pChar+=sprintf(pChar,"%s\n",p->par.name.name);
+	      break;	
+	    case rozofs_trc_type_name_flags:
+              pChar+=sprintf(pChar,"%s (0x%x)\n",p->par.name.name, p->flags);
+	      break;
+	    case rozofs_trc_type_setattr:
+	      pChar+=sprintf(pChar,"%s ", str);
+	      if (p->par.setattr.to_set&FUSE_SET_ATTR_SIZE) {
+	        pChar+=sprintf(pChar," SZ(%llu)", (long long unsigned int) p->par.setattr.attr.size);
+	      }
+	      if (p->par.setattr.to_set&FUSE_SET_ATTR_MODE) {
+                pChar+=sprintf(pChar," MODE(%o)",p->par.setattr.attr.mode);
+	      }
+	      if (p->par.setattr.to_set&FUSE_SET_ATTR_UID) {
+                pChar+=sprintf(pChar," UID(%d)", p->par.setattr.attr.uid);
+	      }
+	      if (p->par.setattr.to_set&FUSE_SET_ATTR_GID) {
+                pChar+=sprintf(pChar," GID(%d)", p->par.setattr.attr.gid);
+	      }	    	     
+	      if (p->par.setattr.to_set&FUSE_SET_ATTR_ATIME) {
+                pChar+=sprintf(pChar," ATIME");
+	      }	    
+	      if (p->par.setattr.to_set&FUSE_SET_ATTR_MTIME) {
+                pChar+=sprintf(pChar," MTIME");
+	      }
+	      pChar+=sprintf(pChar,"\n");	
+	      break;	
+	    case rozofs_trc_type_flock:
+	      switch(p->par.flock.mode) {
+                case EP_LOCK_FREE:  mode = "free"; break;
+                case EP_LOCK_WRITE: mode = "write"; break;
+                case EP_LOCK_READ:  mode = "read"; break;	     
+                default:            mode = "??"; 
+              }	    
+              pChar+=sprintf(pChar,"%s %s %llu-%llu %s \n", str, mode,
+	                     (unsigned long long int)p->par.flock.start,
+	                     (unsigned long long int)p->par.flock.len,
+			     p->par.flock.block?"blocking":"pass");
+	      break;	
+	  }
+
+        }
+        else
+        { 
 
 
-      }
-      cur_ts = p->ts;   
+          switch (p->hdr.s.trc_type)
+	  {
+	    default:
+	    case rozofs_trc_type_io:
+	    case rozofs_trc_type_def:
+	    case rozofs_trc_type_setattr:
+              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s %d:%s\n",
+	                 (unsigned long long int)(p->ts - cur_ts),
+		         trc_fuse_display_srv(p->hdr.s.service_id),
+		         p->hdr.s.index,
+		         (unsigned long long int)p->ino,
+		         str,
+		         p->errno_val,strerror(p->errno_val));  	  
+	      break;
+	    case rozofs_trc_type_name:
+              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s\n",
+	                 (unsigned long long int)(p->ts - cur_ts),
+		         trc_fuse_display_srv(p->hdr.s.service_id),
+		         p->hdr.s.index,
+		         (unsigned long long int)p->ino,
+		         (p->par.name.name[0] == 0)?strerror(p->errno_val):p->par.name.name); 
+              break;		       
+	    case rozofs_trc_type_attr:
+              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s %d:%s %8llu\n",
+	                 (unsigned long long int)(p->ts - cur_ts),
+		         trc_fuse_display_srv(p->hdr.s.service_id),
+		         p->hdr.s.index,
+		         (unsigned long long int)p->ino,
+		         str,
+		         p->errno_val,strerror(p->errno_val),
+		         (unsigned long long int)p->par.attr.size);
+	      break;	
+	  }
+
+
+        }
+        cur_ts = p->ts;   
    }
+   /*
+   ** Send last buffer
+   */
+   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);         
    return;
 }
 
@@ -1498,10 +1559,7 @@ void show_trc_fuse(char * argv[], uint32_t tcpRef, void *bufRef) {
 	uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 	return;   	
     }
-    pChar+=sprintf(pChar,"trace entry size : %lu Bytes\n",(long unsigned int)sizeof(rozofs_trace_t));
-    pChar+=sprintf(pChar,"ino size         : %lu Bytes\n",(long unsigned int)sizeof(fuse_ino_t));
-    show_trc_fuse_buffer(pChar);
-    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+    show_trc_fuse_buffer(tcpRef,bufRef);
  }
 
 struct fuse_lowlevel_ops rozofs_ll_operations = {
