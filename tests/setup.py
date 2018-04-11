@@ -1495,7 +1495,31 @@ class rozofs_class:
     self.delete_config()
     for h in hosts: h.del_if()
     self.delete_path()
-        
+
+  def ddd(self,target):
+    string="rozodiag %s -c ps"%(target)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    prog = None
+    for line in cmd.stdout:  
+      if "unexpected" in line: 
+        print "Unexpected target %s !!!"%(target)
+        sys.exit(-1)
+      split = line.split()  
+      if split[0] == '-' and split[1] == '-':
+        prog = split[6]
+        continue
+      if prog == None: continue
+      try:
+        proc = int(split[0])
+      except:
+        proc = int(split[1])        
+      string = "ddd %s -p %s &"%(prog,proc)
+      print string
+      os.system(string)   
+      break 
+
+                  
   def process(self,opt): 
     geomgr.process(opt)
     exportd.process(opt)
@@ -1702,6 +1726,10 @@ def syntax_storage() :
 def syntax_cou() :
   console("./setup.py \tcou     \t<fileName>")
 #_____________________________________________  
+def syntax_ddd() :
+  console("./setup.py \tddd <target>\t: Attach ddd to rozodiag target <target> ")
+  console("                         \t  i.e ddd -T mount:2, ddd -i localhost1 -T storio:1")
+#_____________________________________________  
 def syntax_sid() :
   console("./setup.py \tsid     \t<cid> <sid>\tdevice-delete {all|<#device>} [<site>]")
   console("./setup.py \tsid     \t<cid> <sid>\tdevice-create {all|<#device>} [<site>]")
@@ -1713,7 +1741,7 @@ def syntax_if() :
   console("./setup.py \tifup|ifdown  \t<#if>")
 #_____________________________________________  
 def syntax_monitor() :
-  console("./setup.py \tmonitor") 
+  console("./setup.py \tmonitor \t: Runs monitoring using Naggios pluggins") 
 #_____________________________________________  
 def syntax_debug() :
   console("./setup.py \tcore    \tremove {all|<coredir>/<corefile>}")
@@ -1723,22 +1751,22 @@ def syntax_diag() :
   console("./setup.py \tdiag    \t{mount|storcli|export|storaged|storio|stspare} <command>")
 #_____________________________________________  
 def syntax_config() :
-  console("./setup.py \tconfigure     \trebuild RozoFS configuration files")
-  console("./setup.py \tconfigure edit\tedit cnf.py configuration file")
+  console("./setup.py \tconfigure     \t: rebuilds RozoFS configuration files")
+  console("./setup.py \tconfigure edit\t: edits cnf.py configuration file")
   
 #_____________________________________________  
 def syntax_all() :
   console("Usage:")
   #console("./setup.py \tsite    \t<0|1>"
-  console("./setup.py \tdisplay\t\t[conf. file]")
-  console("./setup.py \t{start|stop|pause|resume}")
-  console("./setup.py \tcmd <command to be executed in the setup context>")
+  console("./setup.py \tdisplay\t\t: A representaion of the configuration")
+  console("./setup.py \t{build|rebuild|clean|start|stop|pause|resume}")
+  console("./setup.py \tcmd <cmd>\t: execute command <cmd> in the setup context")
 
+  syntax_ddd()
   syntax_config()
   syntax_monitor()
     
   syntax_export()
-  syntax_geomgr()
   syntax_mount()
   syntax_storage() 
   syntax_sid() 
@@ -1748,7 +1776,6 @@ def syntax_all() :
   syntax_diag()
   console("./setup.py \tprocess \t[pid]")
   console("./setup.py \tvnr ...")
-  console("./setup.py \t{build|rebuild|clean}")
   sys.exit(-1)   
           
 #_____________________________________________  
@@ -1848,6 +1875,14 @@ def test_parse(command, argv):
       
 
   if   command == "display"            : rozofs.display()  
+  elif command == "ddd"                : 
+    if len(argv) < 3 : syntax("Missing Target","ddd")
+    target=""
+    i = int(2)
+    while i < len(argv): 
+      target = target + " %s"%(argv[i])
+      i = i + 1
+    rozofs.ddd(target)
   elif command == "cmd"                : 
     cmd=""
     for arg in argv[2:]: cmd=cmd+" "+arg
