@@ -29,7 +29,7 @@
 #include "rozofs_string.h"
 #include "ruc_buffer_api.h"
 #include "uma_tcp_main_api.h"
-
+#include "ruc_buffer_debug.h"
 
 #define   UMA_DBG_OPTION_HIDE           (1<<0)
 #define   UMA_DBG_OPTION_RESET          (1<<1)
@@ -149,7 +149,14 @@ char * uma_dbg_thread_get_name(pthread_t tid);
 *  return the address of the end of the dump 
 */
 char * uma_dbg_hexdump(void *mem, unsigned int len, char * p);
-
+/*__________________________________________________________________________
+ */
+/**
+**  @param tcpCnxRef   TCP connection reference
+**
+*  Return an xmit buffer to be used for TCP sending
+*/
+void * uma_dbg_get_new_buffer(uint32_t tcpCnxRef); 
 /*__________________________________________________________________________
  */
 /**
@@ -179,6 +186,70 @@ static inline int uma_dbg_get_buffer_len() {return UMA_DBG_MAX_SEND_SIZE;}
 void uma_dbg_process_command_file(char * command_file_name);
 /*-----------------------------------------------------------------------------
 **
+**  #SYNOPSIS
+**   Send a message
+**
+**  IN:
+**   OUT :
+**
+**----------------------------------------------------------------------------
+*/
+static inline char *  uma_dbg_cmd_recall(UMA_MSGHEADER_S * pHead) {  
+  char            *pChar;
+
+  pChar = (char*) (pHead+1);
+  
+  pChar += rozofs_string_append(pChar,"____[");
+  pChar += rozofs_string_append(pChar,uma_gdb_system_name);
+  pChar += rozofs_string_append(pChar,"]__[");  
+  pChar += rozofs_string_append(pChar,rcvCmdBuffer);
+  pChar += rozofs_string_append(pChar,"]____\n");  
+  * pChar = 0; 
+  return pChar;
+}
+/*-----------------------------------------------------------------------------
+**
+**   Send back a diagnostic response
+**
+**  @param tcpCnxRef   TCP connection reference
+**  @param bufRef      reference of the received buffer that will be used to respond
+**  @param end         whether this is the last buffer of the response 
+**  @param string      A pre-formated string ontaining the reponse 
+**
+**----------------------------------------------------------------------------
+*/
+static inline void uma_dbg_send_buffer(uint32_t tcpCnxRef, void  *bufRef, int len, int end) {
+  UMA_MSGHEADER_S *pHead;
+
+  len++;
+  
+  /*
+  ** Check the message is not too long
+  */
+  if ((len >= ruc_buf_getMaxPayloadLen(bufRef))) {
+    severe("debug response exceeds buffer length %u/%u",len,ruc_buf_getMaxPayloadLen(bufRef));
+  }
+  
+  /* 
+  ** Retrieve the buffer payload 
+  */
+  if ((pHead = (UMA_MSGHEADER_S *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    /* Let's tell the caller fsm that the message is sent */
+    return;
+  }
+  
+  /*
+  ** Set the length in the message header
+  */
+  pHead->len = htonl(len-sizeof(UMA_MSGHEADER_S));
+  pHead->end = end;
+    
+  ruc_buf_setPayloadLen(bufRef,len);
+  uma_tcp_sendSocket(tcpCnxRef,bufRef,0);
+}
+/*-----------------------------------------------------------------------------
+**
 **   Send back a diagnostic response
 **
 **  @param tcpCnxRef   TCP connection reference
@@ -189,9 +260,54 @@ void uma_dbg_process_command_file(char * command_file_name);
 **----------------------------------------------------------------------------
 */
 static inline void uma_dbg_send(uint32_t tcpCnxRef, void  *bufRef, uint8_t end, char *string) {
-  UMA_MSGHEADER_S *pHead;
+  char            * pHead;
+  char            * pChar;
+
+  /* 
+  ** May be in a specific process such as counter reset
+  ** and so do not send any thing
+  */
+  if (uma_dbg_do_not_send) return;
+
+  /* 
+  ** Retrieve the buffer payload 
+  */
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    /* Let's tell the caller fsm that the message is sent */
+    return;
+  }  
+  
+  /*
+  ** Set the command recell string
+  */
+  pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+  
+  /*
+  ** Add the response
+  */
+  pChar += rozofs_string_append(pChar,string);
+  *pChar = 0;
+  
+  /*
+  ** Send everything
+  */
+  uma_dbg_send_buffer(tcpCnxRef, bufRef, pChar-pHead, end);
+}
+/*-----------------------------------------------------------------------------
+**
+**  #SYNOPSIS
+**   Send a message
+**
+**  IN:
+**   OUT :
+**
+**----------------------------------------------------------------------------
+*/
+static inline void uma_dbg_send_format(uint32_t tcpCnxRef, void  *bufRef, uint8_t end, char *fmt, ... ) {
+  va_list         vaList;
+  char            *pHead;
   char            *pChar;
-  uint32_t           len;
 
   /* 
   ** May be in a specific process such as counter reset
@@ -200,33 +316,27 @@ static inline void uma_dbg_send(uint32_t tcpCnxRef, void  *bufRef, uint8_t end, 
   if (uma_dbg_do_not_send) return;
   
   /* Retrieve the buffer payload */
-  if ((pHead = (UMA_MSGHEADER_S *)ruc_buf_getPayload(bufRef)) == NULL) {
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
     severe( "ruc_buf_getPayload(%p)", bufRef );
     /* Let's tell the caller fsm that the message is sent */
     return;
   }
-  pChar = (char*) (pHead+1);
+  /*
+  ** Set the command recell string
+  */
+  pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
   
-  pChar += rozofs_string_append(pChar,"____[");
-  pChar += rozofs_string_append(pChar,uma_gdb_system_name);
-  pChar += rozofs_string_append(pChar,"]__[");  
-  pChar += rozofs_string_append(pChar,rcvCmdBuffer);
-  pChar += rozofs_string_append(pChar,"]____\n");  
-  pChar += rozofs_string_append(pChar,string);
-  
-  len = pChar - (char*)pHead;
-  len ++;
+  /* 
+  ** Format the string 
+  */
+  va_start(vaList,fmt);
+  pChar += vsprintf(pChar, fmt, vaList)+1;
+  va_end(vaList);
 
-  if (len > UMA_DBG_MAX_SEND_SIZE)
-  {
-    severe("debug response exceeds buffer length %u/%u",len,(int)UMA_DBG_MAX_SEND_SIZE);
-  }
-
-  pHead->len = htonl(len-sizeof(UMA_MSGHEADER_S));
-  pHead->end = end;
-
-  ruc_buf_setPayloadLen(bufRef,len);
-  uma_tcp_sendSocket(tcpCnxRef,bufRef,0);
+  /*
+  ** Send everything
+  */
+  uma_dbg_send_buffer(tcpCnxRef, bufRef, pChar-pHead, end);
 }
 /*
    The function uma_dbg_addTopic enables to declare a new topic to

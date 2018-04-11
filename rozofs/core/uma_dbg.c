@@ -805,60 +805,7 @@ void uma_dbg_setCatcher(uma_dbg_catcher_function_t funct)
 	uma_dbg_catcher = funct;
 }
 
-/*-----------------------------------------------------------------------------
-**
-**  #SYNOPSIS
-**   Send a message
-**
-**  IN:
-**   OUT :
-**
-**----------------------------------------------------------------------------
-*/
-void uma_dbg_send_format(uint32_t tcpCnxRef, void  *bufRef, uint8_t end, char *fmt, ... ) {
-  va_list         vaList;
-  UMA_MSGHEADER_S *pHead;
-  char            *pChar;
-  uint32_t           len;
 
-  /* 
-  ** May be in a specific process such as counter reset
-  ** and so do not send any thing
-  */
-  if (uma_dbg_do_not_send) return;
-  
-  /* Retrieve the buffer payload */
-  if ((pHead = (UMA_MSGHEADER_S *)ruc_buf_getPayload(bufRef)) == NULL) {
-    severe( "ruc_buf_getPayload(%p)", bufRef );
-    /* Let's tell the caller fsm that the message is sent */
-    return;
-  }
-  pChar = (char*) (pHead+1);
-  
-  pChar += rozofs_string_append(pChar,"____[");
-  pChar += rozofs_string_append(pChar,uma_gdb_system_name);
-  pChar += rozofs_string_append(pChar,"]__[");  
-  pChar += rozofs_string_append(pChar,rcvCmdBuffer);
-  pChar += rozofs_string_append(pChar,"]____\n");  
-  
-  len = pChar - (char*)pHead;
-
-  /* Format the string */
-  va_start(vaList,fmt);
-  len += vsprintf(pChar, fmt, vaList)+1;
-  va_end(vaList);
-
-  if (len > UMA_DBG_MAX_SEND_SIZE)
-  {
-    severe("debug response exceeds buffer length %u/%u",len,(int)UMA_DBG_MAX_SEND_SIZE);
-  }
-
-  pHead->len = htonl(len-sizeof(UMA_MSGHEADER_S));
-  pHead->end = end;
-
-  ruc_buf_setPayloadLen(bufRef,len);
-  uma_tcp_sendSocket(tcpCnxRef,bufRef,0);
-}
 
 /*-----------------------------------------------------------------------------
 **
@@ -1622,6 +1569,7 @@ void uma_dbg_init(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort) {
   void                      *idx;
   uint32_t                    tcpCnxServer;
   char                     * pChar;
+  void                     * bufferPool;
   
   /*
   ** Save version reference in global variable
@@ -1656,6 +1604,13 @@ void uma_dbg_init(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort) {
     severe( "ruc_listCreate(%d,%d)", nbElements,(int)sizeof(UMA_DBG_SESSION_S) );
     return;
   }
+  
+  
+  /*
+  ** Create a common buffer pool for all debug sessions
+  */
+  bufferPool = ruc_buf_poolCreate(2*nbElements,UMA_DBG_MAX_SEND_SIZE);
+  ruc_buffer_debug_register_pool("diag",  bufferPool);
 
   /* Loop on initializing the distributor entries */
   pnext = NULL;
@@ -1665,7 +1620,7 @@ void uma_dbg_init(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort) {
     p->ipAddr    = (uint32_t)-1;
     p->port      = (uint16_t)-1;
     p->tcpCnxRef = (uint32_t)-1;
-    p->recvPool  = ruc_buf_poolCreate(2,UMA_DBG_MAX_SEND_SIZE);
+    p->recvPool  = bufferPool;
   }
 
   /* Initialize the active list */
@@ -1708,4 +1663,16 @@ void uma_dbg_set_name( char * system_name) {
   }
   
   strcpy(uma_gdb_system_name,system_name);
+}
+/*__________________________________________________________________________
+ */
+/**
+**  @param tcpCnxRef   TCP connection reference
+**
+*  Return an xmit buffer to be used for TCP sending
+*/
+void * uma_dbg_get_new_buffer(uint32_t tcpCnxRef) {
+  UMA_DBG_SESSION_S * p;  
+  p = uma_dbg_findFromCnxRef(tcpCnxRef);
+  return ruc_buf_getBuffer(p->recvPool);
 }
