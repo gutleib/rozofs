@@ -113,26 +113,26 @@ is the diagnostic interface to the RozoFS processes.
 .RS
 Print help. 
 .RE
-.IP "-c cmdline"
+.IP "-c <cmdline>"
 .RS
-.I cmdline
+.I <cmdline>
 is the optional diagnostic command line. Several -c options can be set
 in order to run several diagnostic commands in a run. 
 When neither -c nor -f is set in the command, 
 the rozodiag tools connects to the target in interactive mode.
 .RE
-.IP "-f cmdfile"
+.IP "-f <cmdfile>"
 .RS
-.I cmdfile 
+.I <cmdfile> 
 is a file containing a diagnostic command per file line that the
 rozodiag tool will run. 
 When neither -c nor -f is set in the command, 
 the rozodiag tools connects to the target in interactive mode.
 .RE
-.IP "-period seconds"
+.IP "-period <seconds>"
 .RS
-.I seconds
-gives the periodicity in seconds to run the diagnostic commands given either
+.I <seconds>
+gives the periodicity in seconds (floating) to run the diagnostic commands given either
 through the -c or the -f option. 
 .SH EXAMPLES
 .P
@@ -154,6 +154,11 @@ rozodiag -i 192.168.2.21 -T storio:1-6 -c throughput -period 30
 Getting the uptime of rozofsmount instance 2 and its 4 STORCLIs on 2 nodes
 .RS
 rozodiag -i 192.168.2.:21,23 -T mount:2:0-4 -c uptime
+.RE
+.P
+Speed sampling of the profiler information on rozofsmount instance 2
+.RS
+rozodiag -i 192.168.2.21 -T mount:2 -c prof reset -period 0.1
 .RE
 .\".SH ENVIRONMENT
 .\".SH DIAGNOSTICS

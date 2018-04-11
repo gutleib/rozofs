@@ -64,6 +64,7 @@ const char      *   cmd[MAX_CMD];
 uint32_t            nbTarget=0;
 uint32_t            ipAddr[MAX_TARGET];
 uint16_t            serverPort[MAX_TARGET];
+int                 socketArray[MAX_TARGET];
 uint32_t            period;
 int                 allCmd;
 const char      *   prgName;  
@@ -109,7 +110,7 @@ void syntax_display() {
   printf("  [-f <cmd file>]...\n");  
   printf("         The list of commands can be specified through some files.\n");
   printf("  [-period <seconds>]\n");       
-  printf("         Periodicity when running commands using -c or/and -f options.\n");  
+  printf("         Periodicity in seconds (floating value) when running commands using -c or/and -f options.\n");  
   printf("\nMiscellaneous options:\n");
   printf("  -t <seconds>     Timeout value to wait for a response (default %d seconds).\n",DEFAULT_TIMEOUT);
   printf("  -reserved_ports  Displays model for port reservation\n");        
@@ -122,7 +123,22 @@ void syntax_display() {
   printf("    %s -T storio:1-3 -c throughput\n",prgName) ;          
   printf("  Get the device statuses of the storio of some nodes.\n");
   printf("    %s -i rozofs-node:1,3 -T storio:1-3 -c device\n",prgName) ;          
+  printf("  Speed sampling of the profiler information on rozofsmount instance 2\n");
+  printf("    %s -i 192.168.2.21 -T mount:2 -c prof reset -period 0.1\n",prgName) ; 
   exit(0);
+}
+/*__________________________________________________________________________________
+** Shutdown and close a socket
+**
+** @param idx The index of the socket identifier within socketArray array 
+**
+*/
+void socket_shutdown(int idx) {
+  if (socketArray[idx] < 0) return;
+  
+  shutdown(socketArray[idx],SHUT_RDWR);   
+  close(socketArray[idx]);  
+  socketArray[idx] = -1;   
 }
 void stop_on_error(char *fmt, ... ) {
   va_list         vaList;
@@ -140,6 +156,7 @@ void stop_on_error(char *fmt, ... ) {
 int debug_receive(int socketId, int silent) {
   int             ret;
   unsigned int    recvLen;
+  int             firstMsg=1;
  
 //  printf("\n...............................................\n");
   
@@ -200,7 +217,8 @@ int debug_receive(int socketId, int silent) {
         while ((*pMsg != 0) && (*pMsg != '\n')) pMsg++;
         if (*pMsg == '\n') pMsg++;
       }
-      else {
+      else if (firstMsg) {
+        firstMsg = 0;
         printf("%s", prompt);
       }  
       printf("%s", pMsg);
@@ -274,27 +292,29 @@ int debug_run_this_cmd(int socketId, const char * cmd, int silent) {
   msg.header.precedence = 0;
   len += sizeof(UMA_MSGHEADER_S);
 
-  sent = send(socketId, &msg, len, 0);
+  sent = send(socketArray[socketId], &msg, len, 0);
   if (sent != len) {
     printf("send %s",strerror(errno));
     printf("%d sent upon %d\n", sent,len);
+    socket_shutdown(socketId);
     return -1;
   }
     
-  if (!debug_receive(socketId,silent)) {
+  if (!debug_receive(socketArray[socketId],silent)) {
     printf("Diagnostic session abort\n");
+    socket_shutdown(socketId);
     return -1;
   }  
   return 0;
   
 }
 #define SYSTEM_HEADER "system : "
-void uma_dbg_read_prompt(int socketId, char * pr) {
+int uma_dbg_read_prompt(int socketId, char * pr) {
   char *c = pr;
   char *pt = msg.buffer; 
     
   // Read the prompt
-  if (debug_run_this_cmd(socketId, "who", SILENT) < 0)  return;
+  if (debug_run_this_cmd(socketId, "who", SILENT) < 0)  return -1;
   
   // skip 1rst line
   while ((*pt != 0)&&(*pt != '\n')) pt++;
@@ -315,19 +335,20 @@ void uma_dbg_read_prompt(int socketId, char * pr) {
   *c++ = '>';
   *c++ = ' ';     
   *c = 0;
+  return 0;
 }
 #define LIST_COMMAND_HEADER "List of available topics :"
-void uma_dbg_read_all_cmd_list(int socketId) {
+int uma_dbg_read_all_cmd_list(int socketId) {
   char * p, * begin;
   int len;
     
   // Read the command list
-  if (debug_run_this_cmd(socketId, "", SILENT) < 0)  return;
+  if (debug_run_this_cmd(socketId, "", SILENT) < 0)  return -1;
 
   nbCmd = 0;
   p = msg.buffer;
     
-  if (strncmp(p,LIST_COMMAND_HEADER, strlen(LIST_COMMAND_HEADER)) != 0) return;  
+  if (strncmp(p,LIST_COMMAND_HEADER, strlen(LIST_COMMAND_HEADER)) != 0) return -1;  
   while(*p != '\n') p++;    
   p++;
     
@@ -349,6 +370,7 @@ void uma_dbg_read_all_cmd_list(int socketId) {
     add_cmd_in_list(begin, len);
     p++;
   }
+  return 0;
 }
 void debug_interactive_loop(int socketId) {
 //  char mycmd[1024]; 
@@ -561,7 +583,7 @@ char *argv[];
   uint32_t            val32;
   char              * pt;
   uint32_t            ports[MAX_TARGET];
-  int                 nbPorts;
+  int                 nbPorts = 0;
   int                 localPort;
   int                 hostNb;
   int                 localIP;
@@ -840,13 +862,15 @@ char *argv[];
     /* -period <period> */
     if (strcmp(argv[idx],"-period")==0) {
       idx++;
+      float fl;
       if (idx == argc) {
 	stop_on_error ("%s option but missing value !!!\n",argv[idx-1]);
       }
-      ret = sscanf(argv[idx],"%u",&period);
-      if (ret != 1) {
+      ret = sscanf(argv[idx],"%f",&fl);
+      if (ret < 1) {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);   
       }
+      period = fl * 1000000;
       idx++;
       continue;
     }
@@ -864,36 +888,6 @@ char *argv[];
       idx++;
       continue;
     }  
-      
-    /* -fw <host:port> */
-    if (strcmp(argv[idx],"-c")==0) {
-      idx++;
-      if (idx == argc) {
-	stop_on_error ("%s option but missing value !!!\n",argv[idx-1]);
-      }
-      if (strcmp(argv[idx],"all") == 0) {
-        allCmd = 1;
-	idx++;
-      }
-      else {
-        int start = idx;
-	int size  = 0;
-        while (idx < argc) {
-	  if (argv[idx][0] == '-') break;
-	  size += strlen(argv[idx])+1;
-	  idx++;
-	}
-	if (size > 1) {
-	  char * cmd = malloc(size+1);
-	  char * p = cmd;
-	  for  (;start<idx; start++) p += sprintf(p,"%s ", argv[start]);
-	  *p = 0;
-	  add_cmd_in_list(cmd,size);
-	  free(cmd);
-	} 	  
-      }	
-      continue;
-    }
           
     /* -c <command> */
     if (strcmp(argv[idx],"-c")==0) {
@@ -904,8 +898,26 @@ char *argv[];
       if (strcmp(argv[idx],"all") == 0) {
         allCmd = 1;
 	idx++;
+        continue;
       }
-      else {
+      if (strcmp(argv[idx],"system") == 0) {
+        int start = idx;
+	int size  = 0;
+        while (idx < argc) {
+	  size += strlen(argv[idx])+1;
+	  idx++;
+	}
+	if (size > 1) {
+	  char * cmd = malloc(size+1);
+	  char * p = cmd;
+	  for  (;start<idx; start++) p += sprintf(p,"%s ", argv[start]);
+	  *p = 0;
+	  add_cmd_in_list(cmd,size);
+	  free(cmd);
+	}
+        continue; 	
+      }
+      {
         int start = idx;
 	int size  = 0;
         while (idx < argc) {
@@ -991,7 +1003,6 @@ int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
 }
 int main(int argc, const char **argv) {
   int                 socketId; 
-  int                 idx; 
   uint32_t            ip;
    
   prgName = argv[0];
@@ -1006,16 +1017,20 @@ int main(int argc, const char **argv) {
   read_parameters(argc, argv);
   if (nbTarget == 0) stop_on_error("No target defined");
 
-
+  memset(socketArray, -1, sizeof(socketArray)); 
 reloop:
 
-  for (idx = 0; idx < nbTarget; idx++) {
+  for (socketId = 0; socketId < nbTarget; socketId++) {
    
-    socketId = connect_to_server(ipAddr[idx],serverPort[idx]);
-    if (socketId < 0) continue;
-    
-    ip = ntohl(ipAddr[idx]);
-    sprintf(prompt,"____[%u.%u.%u.%u:%d]",(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF,ip&0xFF, serverPort[idx]);
+    if (socketArray[socketId]  < 0) {
+      socketArray[socketId] = connect_to_server(ipAddr[socketId],serverPort[socketId]);
+    }
+    if (socketArray[socketId]  < 0) {  
+      continue;
+    }
+     
+    ip = ntohl(ipAddr[socketId]);
+    sprintf(prompt,"____[%u.%u.%u.%u:%d]",(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF,ip&0xFF, serverPort[socketId]);
     //uma_dbg_read_prompt(socketId,p);
      
     if (allCmd) uma_dbg_read_all_cmd_list(socketId);
@@ -1026,14 +1041,15 @@ reloop:
     else {
       debug_run_command_list(socketId);
     }
-    shutdown(socketId,SHUT_RDWR);   
-    close(socketId);
   }  
   
   if (period != 0) {
-    sleep(period);
+    usleep(period);
     goto reloop;
   }
-
+  
+  for (socketId = 0; socketId < nbTarget; socketId++) {
+    socket_shutdown(socketId);
+  }  
   exit(0);
 }
