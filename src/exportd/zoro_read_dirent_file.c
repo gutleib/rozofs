@@ -15,6 +15,7 @@
 #include <stdlib.h>
 
 #include <rozofs/core/rozofs_string.h>
+#include <rozofs/common/export_track.h>
 #include "mdirent.h"
 
 typedef uuid_t fid_t; /**< file id */
@@ -23,12 +24,16 @@ unsigned int scoll_idx = -1;
 unsigned int rcoll_idx = -1;
 unsigned int display_chunks = 0;
 char *       input_dir = NULL;
+uuid_t       fiddir;
+int          fidGiven = 0;
+int          dirent_num;
 
 /*
  **______________________________________________________________________________
  */
 static void usage() {
-    printf("zoro_read_dirent_file [-b <bucket #>] [-d <dir>] [-c] <file1> [ <file2> ] \n");
+    printf("zoro_read_dirent_file [ -f <fid dir> ] [-b <bucket #>] [-d <dir>] [-c] <dirent file> ... \n");
+    printf(" [ -f <fid dir> ]         When provided control will be done on the hashes\n");
     printf(" [ -b <bucket #> ]        A specific bucket number to display (default all)\n");
     printf(" [ -c ]                   To display chunk information\n");
     printf(" [ -d < dir> ]            Prepand <dir> to fle names\n");    
@@ -64,6 +69,27 @@ char *argv[];
                 printf("%s option but bad value \"%s\"!!!\n", argv[idx - 1], argv[idx]);
                 usage();
             }
+            idx++;
+            continue;
+        }
+        
+        /* -f <fid dir> */
+        if (strcmp(argv[idx], "-f") == 0) {
+            idx++;
+            if (idx == argc) {
+                printf("%s option set but missing value !!!\n", argv[idx - 1]);
+                usage();
+            }
+            if (rozofs_uuid_parse(argv[idx], fiddir)<0) {
+                printf("Bad fid value %s !!!\n", argv[idx]);
+                usage();
+            }
+            /*
+            ** deassert de delete pending bit of the parent
+            */
+            exp_metadata_inode_del_deassert(fiddir);
+            rozofs_inode_set_dir(fiddir);          
+            fidGiven = 1;  
             idx++;
             continue;
         }
@@ -126,6 +152,22 @@ char *argv[];
 
     return 0;
 }
+/*_______________________________________________________________________
+ */
+int compute_hash(mdirents_name_entry_t * name_entry, uint32_t * hash1,  uint32_t * hash2) {
+    int      len = name_entry->len;
+    int      bucket_idx;
+    
+    /*
+    ** compute the hash of the entry to search
+    */
+    *hash1 = filename_uuid_hash_fnv(0, name_entry->name, fiddir, hash2, &len);
+    bucket_idx = ((*hash2 >> 16) ^ (*hash2 & 0xffff)) & 0xFF;
+
+//    printf("root idx   : %d / %d / %d \n",hash1 & 1, hash1 & 0xF, hash1 & 0xFFF);
+//    printf("H3         : 0x%x\n", hash2 & DIRENT_ENTRY_HASH_MASK);
+    return bucket_idx;
+}
 
 /*
  **______________________________________________________________________________
@@ -154,12 +196,20 @@ char *print_next(mdirents_hash_ptr_t *hash_bucket_p) {
 /*
  **______________________________________________________________________________
  */
-void print_hash_entry(mdirents_hash_entry_t *hash_entry_p) {
+void print_hash_entry(mdirents_hash_entry_t *hash_entry_p, int isFree) {
   int    bucket_idx = DIRENT_HASH_ENTRY_GET_BUCKET_IDX(hash_entry_p);
+
+  if (isFree) {
+    printf("FB%3.3d H%7.7x C%3.3d/%d %4s ", bucket_idx, hash_entry_p->hash,
+             hash_entry_p->chunk_idx, hash_entry_p->nb_chunk,
+             print_next(&hash_entry_p->next));
   
-  printf(" B%3d H%7.7x C%3d/%d %4s ", bucket_idx, hash_entry_p->hash,
-           hash_entry_p->chunk_idx, hash_entry_p->nb_chunk,
-           print_next(&hash_entry_p->next));
+  }  
+  else {
+    printf(" B%3.3d H%7.7x C%3.3d/%d %4s ", bucket_idx, hash_entry_p->hash,
+             hash_entry_p->chunk_idx, hash_entry_p->nb_chunk,
+             print_next(&hash_entry_p->next));
+  }
 } 
 
 /*
@@ -167,7 +217,7 @@ void print_hash_entry(mdirents_hash_entry_t *hash_entry_p) {
  */
 char chunk_buff[8192];
 char out_buff[256];
-void print_chunk(int fd, int offset,mdirents_hash_entry_t *hash_entry_p) {
+void print_chunk(int fd, int offset,mdirents_hash_entry_t *hash_entry_p, int isFree) {
   int i;
   int ret;
   char * pChar = out_buff;
@@ -180,7 +230,13 @@ void print_chunk(int fd, int offset,mdirents_hash_entry_t *hash_entry_p) {
   
   offset *= MDIRENT_SECTOR_SIZE;
   offset += chunk_nb * MDIRENTS_NAME_CHUNK_SZ;
-  pChar += rozofs_u32_padded_append(pChar, 4, rozofs_right_alignment, chunk_nb);
+  if (isFree) {
+    pChar += rozofs_string_append(pChar, "FREE C");    
+  }
+  else {
+    pChar += rozofs_string_append(pChar, "     C");  
+  }        
+  pChar += rozofs_u32_padded_append(pChar, 3, rozofs_zero, chunk_nb);
   pChar += rozofs_string_append(pChar, " offset 0x");
   pChar += rozofs_x32_append(pChar, offset);
   *pChar++ = '/';
@@ -211,8 +267,27 @@ void print_chunk(int fd, int offset,mdirents_hash_entry_t *hash_entry_p) {
   pChar += rozofs_fid_append(pChar,name_entry->fid);
   pChar += rozofs_string_append(pChar," mode ");
   pChar += rozofs_mode2String(pChar,name_entry->type);
-  *pChar++ = '\n';
-  printf("%s",out_buff);
+  pChar += rozofs_eol(pChar);
+  printf("%s",out_buff);  
+  /*
+  ** FID parent is given so compute the hashes
+  */
+  if (fidGiven) {
+    uint32_t hash1 = 0;
+    uint32_t hash2 = 0;
+    name_entry->name[name_entry->len] = 0;
+    int bucket_idx = compute_hash(name_entry, &hash1, &hash2);
+    if (bucket_idx != DIRENT_HASH_ENTRY_GET_BUCKET_IDX(hash_entry_p)) {
+      printf("  !!! INCONSISTENT BUCKET IDX : computed %d vs hash entry %d !!!\n", bucket_idx, DIRENT_HASH_ENTRY_GET_BUCKET_IDX(hash_entry_p));
+    }
+    if (hash_entry_p->hash != (hash2& DIRENT_ENTRY_HASH_MASK) ) {
+      printf("  !!! INCONSISTENT HASH3      : computed 0x%x vs hash entry 0x%x !!!\n", (hash2& DIRENT_ENTRY_HASH_MASK), hash_entry_p->hash);
+    }
+    if ((dirent_num!= (hash1 & 1))&&(dirent_num!= (hash1 & 0xF))&&(dirent_num!= (hash1 & 0xFFF))) {
+      printf("  !!! INCONSISTENT DIRENT     : computed %d/%d/%d vs %d !!!\n", (hash1 & 1),(hash1 & 0xF),(hash1 & 0xFFF),dirent_num);
+    }
+  }
+
   return;
 }  
 /*
@@ -356,6 +431,7 @@ error:
  * @retval NULL if this mdirents file doesn't exist
  * @retval pointer to the mdirents file
  */
+#define ISFREE(x) (dirent_file_p->sect0.s.hash_bitmap.bitmap[x/8] & (1<<(x%8)))
 void do_read_mdirents_file(char *pathname) {
     int fd = -1;
     int flag = O_RDONLY;
@@ -366,6 +442,8 @@ void do_read_mdirents_file(char *pathname) {
     mdirents_header_new_t * header;
     char    filename[1024];
     char  * path_p ;
+    int     isFree;
+    
 
     /*
      ** clear errno
@@ -383,6 +461,22 @@ void do_read_mdirents_file(char *pathname) {
       path_p = pathname;
     }
     printf("___________________________________________________\n%s\n___________________________________________________\n", path_p);
+     
+    /*
+    ** Scan dirent number in the name .../d_<dirent_num>_<collision> 
+    */
+    while(1) {
+      dirent_num = -1;
+      char * pChar = pathname + strlen(pathname);
+      while ((pChar > pathname) && (*pChar != '/')) pChar--; /* Go to the last / */
+      if (*pChar == '/') pChar++;                            /* Skip / */  
+      if (*pChar !='d') break;                               /* Skip d */
+      pChar++;                                               
+      if (*pChar !='_') break;                               /* Skip _ */
+      pChar++;
+      sscanf(pChar,"%d",&dirent_num);
+      break;
+    }
      
     if ((fd = open(path_p, flag, S_IRWXU)) == -1) {
         //printf("Cannot open the file %s, error %s at line %d\n",path_p,strerror(errno),__LINE__);
@@ -489,7 +583,8 @@ void do_read_mdirents_file(char *pathname) {
                     j = 0;
                 }
                 j++;
-                print_hash_entry(hash_entry_p);
+                isFree = ISFREE(i);
+                print_hash_entry(hash_entry_p,isFree);
                 printf("|");
             }
         } else {
@@ -497,7 +592,8 @@ void do_read_mdirents_file(char *pathname) {
                 bucket_idx = DIRENT_HASH_ENTRY_GET_BUCKET_IDX(hash_entry_p);
                 if (bucket_idx != bucket) continue;
                 printf("%3d",i);
-                print_hash_entry(hash_entry_p);
+                isFree = ISFREE(i);                
+                print_hash_entry(hash_entry_p,isFree);
                 printf("\n");
 
             }
@@ -516,14 +612,16 @@ void do_read_mdirents_file(char *pathname) {
         int bucket_idx;
         if (bucket == -1) {
             for (i = 0; i < MDIRENTS_ENTRIES_COUNT; i++, hash_entry_p++) {
-                print_chunk(fd,header->sector_offset_of_name_entry, hash_entry_p);
+                isFree = ISFREE(i);
+                print_chunk(fd,header->sector_offset_of_name_entry, hash_entry_p, isFree);
             }
         } 
         else {
             for (i = 0; i < MDIRENTS_ENTRIES_COUNT; i++, hash_entry_p++) {
                 bucket_idx = DIRENT_HASH_ENTRY_GET_BUCKET_IDX(hash_entry_p);
                 if (bucket_idx != bucket) continue;
-                print_chunk(fd,header->sector_offset_of_name_entry, hash_entry_p);
+                isFree = ISFREE(i);                
+                print_chunk(fd,header->sector_offset_of_name_entry, hash_entry_p, isFree);
             }
         }
         printf("\n");     

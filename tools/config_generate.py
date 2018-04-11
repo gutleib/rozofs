@@ -18,7 +18,7 @@ modules = []
 #_______________________________________________
 class conf_obj:
 
-  def __init__(self,name,module,genre,default,comment,minmax=None):
+  def __init__(self,name,module,genre,default,comment,minmax=None,values=None):
 
     self.name     = name
     self.module   = module
@@ -26,8 +26,12 @@ class conf_obj:
     self.default  = default
     self.mini=None
     self.maxi=None
-    self.comment = comment
-
+    self.comment = comment    
+    if values != None:
+      self.values = values.replace('"','')
+    else:
+      self.values = None
+      
     if minmax != None:
       try:
         self.mini=minmax.split(':')[0]
@@ -43,12 +47,14 @@ class conf_obj:
 
 #    print "%s is %s in %s"%(name,genre,module)
 
-  def write_in_struct(self):
+  def write_in_struct(self,struct_name):
 
     for comment in self.comment:  print "  %s"%(comment) 
      
     if self.genre == "STRING":
       print "  char *      %s;"%(self.name) 
+    elif self.genre == "ENUM":    
+      print "  %s_%s_e  %s;"%(struct_name,self.name,self.name)
     elif self.genre == "LONG":
       print "  int64_t     %s;"%(self.name)
     else:
@@ -59,7 +65,9 @@ class conf_obj:
     print "  %s_IS_DEFAULT_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default) 
     print "  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);"        
     for comment in self.comment: print "  pChar += rozofs_string_append(pChar,\"%s\\n\");"%(comment)
-    if self.mini != None:
+    if self.genre == "ENUM":
+      print "  %s_SHOW_ENUM(%s,\"%s\",\"%s\");"%(struct_name.upper(),self.name,self.default,self.values)      
+    elif self.mini != None:
       print "  %s_SHOW_%s_OPT(%s,%s,\"%s:%s\");"%(struct_name.upper(),self.genre,self.name,self.default,self.mini,self.maxi) 
     else:
       print "  %s_SHOW_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default) 
@@ -68,27 +76,35 @@ class conf_obj:
   def write_in_save(self,struct_name):  
     print ""
     print "  %s_IS_DEFAULT_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default) 
-    for comment in self.comment: print "  pChar += rozofs_string_append(pChar,\"%s\\n\");"%(comment)
-    if self.mini != None:
-      print "  %s_SHOW_%s_OPT(%s,%s,\"%s:%s\");"%(struct_name.upper(),self.genre,self.name,self.default,self.mini,self.maxi) 
+    print "  if (isDefaultValue==0) {"
+    for comment in self.comment: print "    pChar += rozofs_string_append(pChar,\"%s\\n\");"%(comment)
+    if self.genre == "ENUM":
+      print "    %s_SHOW_%s(%s,%s,\"%s\");"%(struct_name.upper(),self.genre,self.name,self.default,self.values)      
+    elif self.mini != None:
+      print "    %s_SHOW_%s_OPT(%s,%s,\"%s:%s\");"%(struct_name.upper(),self.genre,self.name,self.default,self.mini,self.maxi) 
     else:
-      print "  %s_SHOW_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default) 
+      print "    %s_SHOW_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default) 
+    print "  }"
               
   def read(self,struct_name):
     for comment in self.comment: print "  %s "%(comment)
-    if self.mini == None:
+    if self.genre == "ENUM" :
+      print "  %s_%s_READ_ENUM(&cfg);"%(struct_name.upper(),self.name.upper())             
+    elif self.mini == None:
       print "  %s_READ_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default)       
     else:
       print "  %s_READ_%s_MINMAX(%s,%s,%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default,self.mini,self.maxi)                
 
   def set(self,struct_name):
     print "  if (strcmp(parameter,\"%s\")==0) {"%(self.name)
-    if self.mini == None:
+    if self.genre == "ENUM":
+      print "    %s_%s_SET_ENUM(value);"%(struct_name.upper(),self.name.upper())             
+    elif self.mini == None:
       print "    %s_SET_%s(%s,value);"%(struct_name.upper(),self.genre,self.name)       
     else:
       print "    %s_SET_%s_MINMAX(%s,value,%s,%s);"%(struct_name.upper(),self.genre,self.name,self.mini,self.maxi)                    
     print "  }"  
-    
+
 #_______________________________________________
 class conf_int(conf_obj):
 
@@ -125,6 +141,19 @@ class conf_bool(conf_obj):
       raise ValueError()
     conf_obj.__init__(self,name,module,"BOOL",default,comment)    
 #_______________________________________________
+class conf_enum(conf_obj):
+
+  def __init__(self,name,module,default,valueList,comment):
+    if default == None:
+      print "ENUM %s has no default value."%(name)
+      raise ValueError()
+    if valueList == None:
+      print "ENUM %s has no value list."%(name)
+      raise ValueError()
+     
+    conf_obj.__init__(self,name,module,"ENUM",default,comment,values=valueList)    
+
+#_______________________________________________
 def start_header_file(name,struct_name):
   global save_stdout
   
@@ -155,6 +184,7 @@ def start_header_file(name,struct_name):
   print "#ifndef _%s_H"%(name.upper())
   print "#define _%s_H"%(name.upper())
   print ""
+  print "#include <stdlib.h>"
   print "#include <stdint.h>"
   print "#include <string.h>"
   print "#include <errno.h>"
@@ -224,6 +254,12 @@ def go_read_input_file(struct_name):
       elif genre == "STRING": 
         obj = conf_string(name,module,default,comment)
         
+      elif genre == "ENUM":
+        valueList = None
+        if len(line.split()) == 5:
+           valueList = line.split()[4]
+        obj = conf_enum(name,module,default,valueList,comment)
+        
       else:
         print "Unknown type %s for %s"%(genre,name)	
       comment =  []	
@@ -281,13 +317,27 @@ def go_build_macros(struct_name):
   print "  isDefaultValue = 0; \\"
   print "  if (strcmp(%s.val,def)==0) isDefaultValue = 1;"%(struct_name)
   print ""  
-    
+       
   print "#define %s_SHOW_STRING(val,def)  {\\"%(struct_name.upper())
   print "  %s_SHOW_NAME(val,def)\\"%(struct_name.upper())
   print "  *pChar++ = '\\\"';\\"
   print "  if (%s.val!=NULL) pChar += rozofs_string_append(pChar, %s.val);\\"%(struct_name,struct_name)
   print "  *pChar++ = '\\\"';\\"
   print "  %s_SHOW_END\\"%(struct_name.upper())
+  print "}"
+  print ""  
+  
+  print "#define %s_IS_DEFAULT_ENUM(val,def) \\"%(struct_name.upper())
+  print "  isDefaultValue = 0; \\"
+  print "  if (%s.val == string2%s_ ## val (def)) isDefaultValue = 1;"%(struct_name,struct_name)
+  print ""  
+    
+  print "#define %s_SHOW_ENUM(val,def,opt)  {\\"%(struct_name.upper())
+  print "  %s_SHOW_NAME(val,def)\\"%(struct_name.upper())
+  print "  *pChar++ = '\\\"';\\"
+  print "  pChar += rozofs_string_append(pChar, %s_ ## val ## 2String(%s.val));\\"%(struct_name,struct_name)
+  print "  *pChar++ = '\\\"';\\"
+  print "  %s_SHOW_END_OPT(opt)\\"%(struct_name.upper())
   print "}"
   print ""  
 
@@ -337,7 +387,7 @@ def go_build_macros(struct_name):
   print "  } else {\\"
   print "    %s.val = 0;\\"%(struct_name)
   print "  }\\"
-  print "  if (config_lookup_bool(&cfg, #val, &boolval)) { \\"
+  print "  if (config_lookup_bool(&cfg, #val, &boolval) == CONFIG_TRUE) { \\"
   print "    %s.val = boolval;\\"%(struct_name)
   print "  }\\"
   print "}"
@@ -371,7 +421,7 @@ def go_build_macros(struct_name):
   print ""  
   print "#define %s_READ_INT_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
   print "  %s.val = def;\\"%(struct_name)
-  print "  if (config_lookup_int(&cfg, #val, &intval)) { \\"
+  print "  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \\"
   print "    if (intval<mini) {\\"
   print "      %s.val = mini;\\"%(struct_name)
   print "    }\\"
@@ -409,7 +459,7 @@ def go_build_macros(struct_name):
       
   print "#define %s_READ_INT(val,def) {\\"%(struct_name.upper())
   print "  %s.val = def;\\"%(struct_name)
-  print "  if (config_lookup_int(&cfg, #val, &intval)) { \\"
+  print "  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \\"
   print "    %s.val = intval;\\"%(struct_name)
   print "  }\\"
   print "}" 
@@ -432,7 +482,7 @@ def go_build_macros(struct_name):
   print "#define %s_READ_LONG(val,def) {\\"%(struct_name.upper())
   print "  long long         longval;\\"
   print "  %s.val = def;\\"%(struct_name)
-  print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
+  print "  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \\"
   print "    %s.val = longval;\\"%(struct_name)
   print "  }\\"
   print "}" 
@@ -456,7 +506,7 @@ def go_build_macros(struct_name):
   print "#define %s_READ_LONG_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
   print "  long long         longval;\\"
   print "  %s.val = def;\\"%(struct_name)
-  print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
+  print "  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \\"
   print "    if (longval<mini) {\\"
   print "      %s.val = mini;\\"%(struct_name)
   print "    }\\"
@@ -495,7 +545,7 @@ def go_build_macros(struct_name):
   print "#define %s_READ_STRING(val,def)  {\\"%(struct_name.upper())
   print "  const char * charval;\\"
   print "  if (%s.val) free(%s.val);\\"%(struct_name,struct_name)
-  print "  if (config_lookup_string(&cfg, #val, &charval)) {\\"
+  print "  if (config_lookup_string(&cfg, #val, &charval) == CONFIG_TRUE) {\\"
   print "    %s.val = strdup(charval);\\"%(struct_name)
   print "  } else {\\"
   print "    %s.val = strdup(def);\\"%(struct_name)
@@ -512,7 +562,8 @@ def go_build_macros(struct_name):
   print "  pChar += rozofs_eol(pChar);\\"
   print "  return 0;\\"
   print "}" 
-  print ""
+  print "" 
+  
 #_______________________________________________
 def go_build_cfile(struct_name):
   global save_stdout
@@ -585,8 +636,39 @@ def go_build_cfile(struct_name):
 def go_build_struct(struct_name):
   print "void %s_read(char * fname);"%(struct_name)
   print ""
-  
-                   
+
+  print ""  
+  print "/*_______________________________"
+  print "** ENUM definion"
+  print "*/"
+  for obj in objects:
+    if obj.genre =="ENUM":
+      print "\n// %s "%(obj.name)
+      print "typedef enum _%s_%s_e {"%(struct_name,obj.name)
+      for value in obj.values.split(","):
+         print "  %s_%s_%s,"%(struct_name,obj.name,value)
+      print "} %s_%s_e;"%(struct_name,obj.name)
+      print "// enum to string"    
+      print "static inline char * %s_%s2String(%s_%s_e x) {"%(struct_name,obj.name,struct_name,obj.name)
+      print "  switch(x) {"
+      for value in obj.values.split(","):
+         print "    case %s_%s_%s: return \"%s\";"%(struct_name,obj.name,value,value)
+      print "    default: return \"?\";"
+      print "  }"
+      print "  return \"?\";"
+      print "}"
+      print "// string to enum"    
+      print "static inline %s_%s_e string2%s_%s(const char * x) {"%(struct_name,obj.name,struct_name,obj.name)
+      for value in obj.values.split(","):
+        print "  if (strcmp(x,\"%s\")==0) return %s_%s_%s;"%(value,struct_name,obj.name,value)
+      print "  return -1;" 
+      print "}"     
+
+  print ""  
+  print "/*_______________________________"
+  print "** %s structure"%(struct_name)
+  print "*/"
+                     
   print "typedef struct _%s_t {"%(struct_name)
   for module in modules:
     print ""  
@@ -596,10 +678,44 @@ def go_build_struct(struct_name):
     print ""
     for obj in objects:
       if obj.module == module:     
-        obj.write_in_struct()    
+        obj.write_in_struct(struct_name)    
   print "} %s_t;\n"%(struct_name)
-  
   print "extern %s_t %s;"%(struct_name,struct_name)
+  print ""  
+  print "/*_______________________________"
+  print "** ENUM macro"
+  print "*/"
+  for obj in objects:
+    if obj.genre =="ENUM":
+      print "// Read enum from configuration file"    
+      print "static inline void %s_%s_READ_ENUM(config_t * cfg) {"%(struct_name.upper(),obj.name.upper())
+      print "  const char * charval;"
+      print "  %s.%s = -1;"%(struct_name,obj.name)
+      print "  if (config_lookup_string(cfg, \"%s\", &charval) == CONFIG_TRUE) {"%(obj.name)
+      print "    %s.%s = string2%s_%s(charval);"%(struct_name,obj.name,struct_name,obj.name)  
+      print "  }"
+      print "  if (%s.%s == -1) {"%(struct_name,obj.name)
+      print "    %s.%s =  string2%s_%s(%s);"%(struct_name,obj.name,struct_name,obj.name,obj.default)
+      print "  }"
+      print "}"  
+      print "// Set enum value thanks to rozodiag"    
+      print "#define %s_%s_SET_ENUM(VAL)  {\\"%(struct_name.upper(),obj.name.upper())
+      print "  int myval = string2%s_%s(VAL);\\"%(struct_name,obj.name)  
+      print "  if (myval == -1) {\\"
+      print "    pChar += rozofs_string_append(pChar,\" Unexpected enum value for %s : \");\\"%(obj.name)
+      print "    pChar += rozofs_string_append(pChar,VAL);\\"
+      print "  }\\"
+      print "  else {\\"
+      print "    %s.%s = myval;\\"%(struct_name,obj.name)
+      print "    pChar += rozofs_string_append(pChar,\"%s\");\\"%(obj.name)
+      print "    pChar += rozofs_string_append(pChar,\" set to value \");\\"
+      print "    pChar += rozofs_string_append(pChar,VAL);\\"
+      print "  }\\"         
+      print "  pChar += rozofs_eol(pChar);\\"
+      print "  return 0;\\"
+      print "}" 
+      print ""       
+
   #print "extern int             config_file_is_read;"
   #print "extern char            config_file_name[];"  
 
@@ -635,11 +751,11 @@ def build_show_module(module,struct_name):
   print "*/"
   print "char * show_%s_module_%s(char * pChar) {"%(struct_name,module)
   print ""
-  print "  pChar += rozofs_string_append_bold(pChar,\"#\\n\");"    
+  print "  pChar += rozofs_string_append_bold(pChar,\"#____________________________________________________________\\n\");"    
   print "  pChar += rozofs_string_append_bold(pChar,\"# \");"
   print "  pChar += rozofs_string_append_bold(pChar,\"%s\");"%(module)
   print "  pChar += rozofs_string_append_bold(pChar,\" scope configuration parameters\\n\");"   
-  print "  pChar += rozofs_string_append_bold(pChar,\"#\\n\\n\");"    
+  print "  pChar += rozofs_string_append_bold(pChar,\"#____________________________________________________________\\n\\n\");"    
   for obj in objects:
     if obj.module == module:     
       obj.write_in_show(struct_name) 
@@ -660,11 +776,11 @@ def build_save_module(module,struct_name):
   print "*/"
   print "char * save_%s_module_%s(char * pChar) {"%(struct_name,module)
   print ""
-  print "  pChar += rozofs_string_append(pChar,\"#\\n\");"    
+  print "  pChar += rozofs_string_append(pChar,\"#____________________________________________________________\\n\");"    
   print "  pChar += rozofs_string_append(pChar,\"# \");"
   print "  pChar += rozofs_string_append(pChar,\"%s\");"%(module)
   print "  pChar += rozofs_string_append(pChar,\" scope configuration parameters\\n\");"   
-  print "  pChar += rozofs_string_append(pChar,\"#\\n\\n\");"    
+  print "  pChar += rozofs_string_append(pChar,\"#____________________________________________________________\\n\\n\");"    
   for obj in objects:
     if obj.module == module:     
       obj.write_in_save(struct_name) 
@@ -683,34 +799,14 @@ def go_build_show_files(struct_name):
   print "**"
   print "*/"
   print "char * %s_generated_show_all_files(char * pChar) {"%(struct_name)
-  print "  DIR           * dp = NULL;"
-  print "  struct dirent * pep; "
-  print "  char            dirName[256];"
-  print "  char            *pt;"
+  print "  char            cmd[256];"
   print ""
-  print "  if (%s_file_is_read==0) {"%(struct_name)
-  print "    pChar += rozofs_string_append(pChar,\"Can not read configuration file \");"    
+  print "  if (common_config_file_is_read==0) {"
+  print "    pChar += rozofs_string_append(pChar,\"Can not read configuration file \");"
   print "    return pChar;"
   print "  }"
-  print ""
-  print "  strcpy(dirName,%s_file_name);"%(struct_name)
-  print "  pt = dirName;"
-  print "  pt += strlen(dirName);"
-  print "  while((pt > dirName)&&(*pt!='/')) pt--;"
-  print "  *pt = 0;"
-  print ""  
-  print "  dp = opendir(dirName);"
-  print "  if (dp) {"
-  print "    while ((pep = readdir(dp)) != NULL) {"
-  print "      if (pep == NULL) break;"
-  print "      if (strncmp(pep->d_name,\"rozofs.conf\",11) != 0) continue;"
-  print "      pChar += rozofs_string_append(pChar, dirName);"
-  print "      pChar += rozofs_string_append(pChar, \"/\");"
-  print "      pChar += rozofs_string_append(pChar, pep->d_name);"
-  print "      pChar += rozofs_eol(pChar);"
-  print "    }"         
-  print "  }"
-  print "  closedir(dp);"
+  print "  sprintf(cmd,\"ls -lisa %s*\",common_config_file_name);"
+  print "  uma_dbg_run_system_cmd(cmd, pChar, uma_dbg_get_buffer_len()); " 
   print "  return pChar;"
   print "}"    
 #_______________________________________________
@@ -723,6 +819,7 @@ def go_build_show(struct_name):
   print "*/"
   print "void %s_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {"%(struct_name)
   print "char *pChar = uma_dbg_get_buffer();"
+  print "char *pHead;"
   print ""
   print "  if (argv[1] != NULL) {"
   print ""
@@ -763,8 +860,16 @@ def go_build_show(struct_name):
       first=False
     else:
       print "    else if (strcmp(\"%s\",argv[1])==0) {"%(module)
+    print "      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {"
+    print "        severe( \"ruc_buf_getPayload(%p)\", bufRef );"
+    print "        return;"
+    print "      }"             
+    print "      /*"
+    print "      ** Set the command recall string"
+    print "      */"
+    print "      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);"   
     print "      pChar = show_%s_module_%s(pChar);"%(struct_name,module)
-    print "      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
+    print "      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);"
     print "      return;"           
     print "    }"
   print "    else {"
@@ -774,16 +879,40 @@ def go_build_show(struct_name):
   print "    }"
   print "  }"  
   print ""
+  print "  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {"
+  print "    severe( \"ruc_buf_getPayload(%p)\", bufRef );"
+  print "    return;"
+  print "  }"             
+  print "  /*"
+  print "  ** Set the command recall string"
+  print "  */"
+  print "  pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);"     
   print "  if (%s_file_is_read==0) {"%(struct_name)
   print "    pChar += rozofs_string_append(pChar,\"Can not read configuration file \");"    
   print "  }"
-  print "  pChar += rozofs_string_append(pChar,%s_file_name);"%(struct_name)
-  print "  pChar += rozofs_eol(pChar);"
+  print "  "    
   for module in modules:
+    print "  "    
     print "  pChar = show_%s_module_%s(pChar);"%(struct_name,module)
-	   
-  print "" 
-  print "  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
+    print "  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);"
+    print "  "
+    print "  bufRef = uma_dbg_get_new_buffer(tcpRef);"
+    print "  if (bufRef == NULL) {"
+    print "    warning( \"uma_dbg_get_new_buffer() Buffer depletion\");"
+    print "    return;"    
+    print "  }"
+    print "  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {"
+    print "    severe( \"ruc_buf_getPayload(%p)\", bufRef );"
+    print "    return;"
+    print "  }"             
+    print "  pChar = pHead+sizeof(UMA_MSGHEADER_S);"
+    print "  *pChar = 0;"                                
+  print "  pChar += rozofs_string_append(pChar,\"#____________________________________________________________\\n\");"    
+  print "  pChar += rozofs_string_append(pChar,\"# \");"
+  print "  pChar += rozofs_string_append(pChar,\" %s file is \");"%(struct_name)
+  print "  pChar += rozofs_string_append(pChar,%s_file_name);"%(struct_name)
+  print "  pChar += rozofs_string_append(pChar,\"\\n#____________________________________________________________\\n\\n\");"    
+  print "  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);"
   print "  return;"     
   print "}"
 #_______________________________________________
@@ -849,7 +978,7 @@ def go_build_save(file_name,struct_name):
     print "  }" 
   print "  pChar += rozofs_string_append(pChar,\"Saved in \");"
   print "  pChar += rozofs_string_append(pChar,%s_file_name);"%(struct_name)
-  print "  pChar += rozofs_eol(pChar);\\"
+  print "  pChar += rozofs_eol(pChar);"
   print "  close(fd);"
   print "  return 0;"    
   print "}" 

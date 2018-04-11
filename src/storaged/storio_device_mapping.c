@@ -456,7 +456,7 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += rozofs_string_append(pChar,"\n    device_number     = ");
     pChar += rozofs_u32_append(pChar,st->device_number);
     pChar += rozofs_string_append(pChar,"\n    self-healing-mode  = ");
-    pChar += rozofs_string_append(pChar, common_config.device_selfhealing_mode);
+    pChar += rozofs_string_append(pChar, common_config_device_selfhealing_mode2String(common_config.device_selfhealing_mode));
     pChar += rozofs_string_append(pChar,"\n    self-healing-delay = ");
     pChar += rozofs_u32_append(pChar,common_config.device_selfhealing_delay);
     pChar += rozofs_string_append(pChar,"\n    spare-mark         = \"");

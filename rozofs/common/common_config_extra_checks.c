@@ -28,13 +28,4 @@
 **
 */ 
 void common_config_extra_checks() {  
-  /*
-  ** For self healing to be set, export host must be provided
-  */
-  if (strcasecmp(common_config.device_selfhealing_mode,"")!=0) {
-    if (strcasecmp(common_config.export_hosts,"")==0) {
-      severe("device_selfhealing_mode is \"%s\" while export_hosts is not defined -> set to \"\"",common_config.device_selfhealing_mode);
-      common_config.device_selfhealing_mode[0] = 0;
-    }
-  }
 }  
