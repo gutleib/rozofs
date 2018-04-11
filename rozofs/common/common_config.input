@@ -9,7 +9,7 @@
 # ......................................................
 # // one or more...
 # // ... comment lines
-# <type> <scope> <name> <default> {<option>]
+# <type> <scope> <name> <default> [<extra>]
 # ......................................................
 #
 # Where
@@ -18,13 +18,16 @@
 #               - INT   : at least 32 bits signed integer
 #               - LONG  : 64 bits signed integer
 #               - STRING: character string
+#               - ENUM  : a character string within a list of values
 #               - BOOL  ; boolean True or False
 #   <scope>     is any string you want to classify the different parameters in groups
 #   <name>      is any parameter name
 #   <default>   is the default parameter value. (STRING must be quoted).
-#   <option>    is an option of the parameter dependant on the <type>
-#               - INT and LONG option: 
-#                 min:max : minimum and maximum (included) of the integer
+#   <extra>     is an optional field of the parameter dependant on the <type>
+#               - INT and LONG extra: 
+#                 min:max : minimum and maximum values (included) of the integer
+#               - ENUM mandatory extra
+#                 a comma separated list of possible values.
 #
 #_______________________________________________________________________________________
 
@@ -147,7 +150,7 @@ INT     storage device_selfhealing_read_throughput        20 0:10000
 // relocate   also repair on remaining disks when no spare available
 // resecure   repair on spare device when available, and then resecure files on
 //            spare storages when no spare device is available
-STRING  storage device_selfhealing_mode        "spareOnly"
+ENUM  storage device_selfhealing_mode        "spareOnly"   "spareOnly,resecure,relocate"
 // Export host names or IP addresses separated with / 
 // Required for selfhealing.
 // Required for spare file restoring to its nominal location.

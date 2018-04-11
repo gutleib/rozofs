@@ -188,7 +188,7 @@ void storio_selfHealing_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
   pChar += rozofs_string_append(pChar,"      \"exportd\" \t: \"");
   pChar += rozofs_string_append(pChar,common_config.export_hosts);
   pChar += rozofs_string_append(pChar,"\",\n      \"mode\" \t: \"");
-  pChar += rozofs_string_append(pChar,common_config.device_selfhealing_mode);
+  pChar += rozofs_string_append(pChar,common_config_device_selfhealing_mode2String(common_config.device_selfhealing_mode));
   pChar += rozofs_string_append(pChar,"\",\n      \"delay\" \t: ");
   pChar += rozofs_u32_append(pChar,common_config.device_selfhealing_delay);
   pChar += rozofs_string_append(pChar,"\n   },\n");
@@ -1038,7 +1038,7 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	      /*
 	      ** Let's resecure on spare storages if allowed
 	      */
-	      if (strcmp(common_config.device_selfhealing_mode,"resecure")==0) {	        
+	      if (common_config.device_selfhealing_mode == common_config_device_selfhealing_mode_resecure) {	        
 	        pDev->status = storage_device_status_resec;
 	        if (storio_device_rebuild(st,dev,storio_selfHealing_mode_resecure) == 0) {
 	          rebuild_allowed = 0; /* On rebuild at a time */
@@ -1051,7 +1051,7 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	      /*
 	      ** Let's relocate on other devices if allowed
 	      */
-	      if (strcmp(common_config.device_selfhealing_mode,"relocate")==0) {	        
+	      if (common_config.device_selfhealing_mode == common_config_device_selfhealing_mode_relocate) {	        
 	        pDev->status = storage_device_status_reloc;
 	        if (storio_device_rebuild(st,dev,storio_selfHealing_mode_relocate) == 0) {
 	          rebuild_allowed = 0; /* On rebuild at a time */

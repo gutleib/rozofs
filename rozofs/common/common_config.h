@@ -21,6 +21,7 @@
 #ifndef _COMMON_CONFIG_H
 #define _COMMON_CONFIG_H
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
@@ -31,6 +32,38 @@
 #include <dirent.h>
 void common_config_read(char * fname);
 
+
+/*_______________________________
+** ENUM definion
+*/
+
+// device_selfhealing_mode 
+typedef enum _common_config_device_selfhealing_mode_e {
+  common_config_device_selfhealing_mode_spareOnly,
+  common_config_device_selfhealing_mode_resecure,
+  common_config_device_selfhealing_mode_relocate,
+} common_config_device_selfhealing_mode_e;
+// enum to string
+static inline char * common_config_device_selfhealing_mode2String(common_config_device_selfhealing_mode_e x) {
+  switch(x) {
+    case common_config_device_selfhealing_mode_spareOnly: return "spareOnly";
+    case common_config_device_selfhealing_mode_resecure: return "resecure";
+    case common_config_device_selfhealing_mode_relocate: return "relocate";
+    default: return "?";
+  }
+  return "?";
+}
+// string to enum
+static inline common_config_device_selfhealing_mode_e string2common_config_device_selfhealing_mode(const char * x) {
+  if (strcmp(x,"spareOnly")==0) return common_config_device_selfhealing_mode_spareOnly;
+  if (strcmp(x,"resecure")==0) return common_config_device_selfhealing_mode_resecure;
+  if (strcmp(x,"relocate")==0) return common_config_device_selfhealing_mode_relocate;
+  return -1;
+}
+
+/*_______________________________
+** common_config structure
+*/
 typedef struct _common_config_t {
 
   /*
@@ -202,7 +235,7 @@ typedef struct _common_config_t {
   // relocate   also repair on remaining disks when no spare available
   // resecure   repair on spare device when available, and then resecure files on
   //            spare storages when no spare device is available
-  char *      device_selfhealing_mode;
+  common_config_device_selfhealing_mode_e  device_selfhealing_mode;
   // Export host names or IP addresses separated with / 
   // Required for selfhealing.
   // Required for spare file restoring to its nominal location.
@@ -232,4 +265,36 @@ typedef struct _common_config_t {
 } common_config_t;
 
 extern common_config_t common_config;
+
+/*_______________________________
+** ENUM macro
+*/
+// Read enum from configuration file
+static inline void COMMON_CONFIG_DEVICE_SELFHEALING_MODE_READ_ENUM(config_t * cfg) {
+  const char * charval;
+  common_config.device_selfhealing_mode = -1;
+  if (config_lookup_string(cfg, "device_selfhealing_mode", &charval) == CONFIG_TRUE) {
+    common_config.device_selfhealing_mode = string2common_config_device_selfhealing_mode(charval);
+  }
+  if (common_config.device_selfhealing_mode == -1) {
+    common_config.device_selfhealing_mode =  string2common_config_device_selfhealing_mode("spareOnly");
+  }
+}
+// Set enum value thanks to rozodiag
+#define COMMON_CONFIG_DEVICE_SELFHEALING_MODE_SET_ENUM(VAL)  {\
+  int myval = string2common_config_device_selfhealing_mode(VAL);\
+  if (myval == -1) {\
+    pChar += rozofs_string_append(pChar," Unexpected enum value for device_selfhealing_mode : ");\
+    pChar += rozofs_string_append(pChar,VAL);\
+  }\
+  else {\
+    common_config.device_selfhealing_mode = myval;\
+    pChar += rozofs_string_append(pChar,"device_selfhealing_mode");\
+    pChar += rozofs_string_append(pChar," set to value ");\
+    pChar += rozofs_string_append(pChar,VAL);\
+  }\
+  pChar += rozofs_eol(pChar);\
+  return 0;\
+}
+
 #endif

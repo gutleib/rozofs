@@ -85,6 +85,18 @@ static int isDefaultValue;
   COMMON_CONFIG_SHOW_END\
 }
 
+#define COMMON_CONFIG_IS_DEFAULT_ENUM(val,def) \
+  isDefaultValue = 0; \
+  if (common_config.val == string2common_config_ ## val (def)) isDefaultValue = 1;
+
+#define COMMON_CONFIG_SHOW_ENUM(val,def,opt)  {\
+  COMMON_CONFIG_SHOW_NAME(val,def)\
+  *pChar++ = '\"';\
+  pChar += rozofs_string_append(pChar, common_config_ ## val ## 2String(common_config.val));\
+  *pChar++ = '\"';\
+  COMMON_CONFIG_SHOW_END_OPT(opt)\
+}
+
 #define COMMON_CONFIG_IS_DEFAULT_INT(val,def) \
   isDefaultValue = 0; \
   if (common_config.val == def) isDefaultValue = 1;
@@ -123,7 +135,7 @@ static int isDefaultValue;
   } else {\
     common_config.val = 0;\
   }\
-  if (config_lookup_bool(&cfg, #val, &boolval)) { \
+  if (config_lookup_bool(&cfg, #val, &boolval) == CONFIG_TRUE) { \
     common_config.val = boolval;\
   }\
 }
@@ -157,7 +169,7 @@ static long int          intval;
 
 #define COMMON_CONFIG_READ_INT_MINMAX(val,def,mini,maxi)  {\
   common_config.val = def;\
-  if (config_lookup_int(&cfg, #val, &intval)) { \
+  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \
     if (intval<mini) {\
       common_config.val = mini;\
     }\
@@ -194,7 +206,7 @@ static long int          intval;
 
 #define COMMON_CONFIG_READ_INT(val,def) {\
   common_config.val = def;\
-  if (config_lookup_int(&cfg, #val, &intval)) { \
+  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \
     common_config.val = intval;\
   }\
 }
@@ -216,7 +228,7 @@ static long int          intval;
 #define COMMON_CONFIG_READ_LONG(val,def) {\
   long long         longval;\
   common_config.val = def;\
-  if (config_lookup_int64(&cfg, #val, &longval)) { \
+  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \
     common_config.val = longval;\
   }\
 }
@@ -239,7 +251,7 @@ static long int          intval;
 #define COMMON_CONFIG_READ_LONG_MINMAX(val,def,mini,maxi)  {\
   long long         longval;\
   common_config.val = def;\
-  if (config_lookup_int64(&cfg, #val, &longval)) { \
+  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \
     if (longval<mini) {\
       common_config.val = mini;\
     }\
@@ -277,7 +289,7 @@ static long int          intval;
 #define COMMON_CONFIG_READ_STRING(val,def)  {\
   const char * charval;\
   if (common_config.val) free(common_config.val);\
-  if (config_lookup_string(&cfg, #val, &charval)) {\
+  if (config_lookup_string(&cfg, #val, &charval) == CONFIG_TRUE) {\
     common_config.val = strdup(charval);\
   } else {\
     common_config.val = strdup(def);\
