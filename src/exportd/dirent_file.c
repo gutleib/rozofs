@@ -1752,7 +1752,7 @@ int del_mdirentry_internal(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent, 
              */
 	    path_full = path;
             path_d = dirent_build_filename(&cache_entry_p->header, pathname_dentry_file);
-	    mdirent_resolve_path(dirent_export_root_path,fid_parent,(char*)pathname_dentry_file,path_full);
+	    mdirent_resolve_path(fid_parent,(char*)pathname_dentry_file,path_full);
 
 	    if (cache_entry_p->header.level_index == 0) 
 	    {
@@ -1836,7 +1836,7 @@ int del_mdirentry_internal(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent, 
                  ** build the filename of the dirent file to read
                  */
                 path_d = dirent_build_filename(&root_entry_p->header, pathname_dentry_file);
-	        mdirent_resolve_path(dirent_export_root_path,fid_parent,(char*)pathname_dentry_file,path);
+	        mdirent_resolve_path(fid_parent,(char*)pathname_dentry_file,path);
 		if (root_entry_p->header.level_index == 0) 
 		{
 		   dirent_clear_root_idx_bit(root_entry_p->header.dirent_idx[0]);    

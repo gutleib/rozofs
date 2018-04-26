@@ -283,7 +283,7 @@ int dirent_wbcache_diskflush(dirent_writeback_entry_t  *cache_p)
   /*
   ** open the dirent file
   */
-  mdirent_resolve_path(dirent_export_root_path,cache_p->dir_fid,(char*)cache_p->pathname,path);
+  mdirent_resolve_path(cache_p->dir_fid,(char*)cache_p->pathname,path);
   if ((fd = open(path, flag, S_IRWXU)) == -1) 
   {
      severe("cannot open %s",path);
@@ -584,7 +584,7 @@ int dirent_wbcache_chunk_diskflush(dirent_writeback_entry_t  *cache_p)
   /*
   ** open the dirent file
   */
-  mdirent_resolve_path(dirent_export_root_path,cache_p->dir_fid,(char*)cache_p->pathname,path);
+  mdirent_resolve_path(cache_p->dir_fid,(char*)cache_p->pathname,path);
   if ((fd = open(path, flag, S_IRWXU)) == -1) 
   {
      severe("cannot open %s",path);
@@ -814,7 +814,7 @@ int dirent_wbcache_diskflush_best_effort(dirent_writeback_entry_t  *cache_p)
   /*
   ** open the dirent file
   */
-  mdirent_resolve_path(dirent_export_root_path,cache_p->dir_fid,(char*)cache_p->pathname,path);
+  mdirent_resolve_path(cache_p->dir_fid,(char*)cache_p->pathname,path);
   if ((fd = open(path, flag, S_IRWXU)) == -1) 
   {
      goto error;  
