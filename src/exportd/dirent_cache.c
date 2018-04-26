@@ -48,7 +48,7 @@ int fdl_debug_bucket_idx = 203;
  *  Global Data
  */
 int dirent_current_eid;  /**< current eid: used by dirent writeback cache */
-char *dirent_export_root_path = NULL;  /**< pointer to the root path of the export */
+char *dirent_export_root_path[EXPGW_EID_MAX_IDX+1] = {NULL};  /**< pointer to the root path of the export */
 
 
 #define DIRENT_WRITE_DEBUG 0

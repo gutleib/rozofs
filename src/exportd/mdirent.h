@@ -86,7 +86,7 @@ extern uint64_t malloc_size; /**< cumulative allocated bytes */
 extern uint32_t malloc_size_tb[]; /**< @ingroup DIRENT_MALLOC per memory block statistics */
 
 extern int dirent_current_eid;  /**< current eid: used by dirent writeback cache */
-extern char *dirent_export_root_path ;  /**< pointer to the root path of the export */
+extern char *dirent_export_root_path[] ;  /**< pointer to the root path of the export */
 
 /*
  *__________________________________________________
@@ -4087,14 +4087,29 @@ static inline ssize_t dirent_pwrite(int fd, const void *buf, size_t count,
 #define DIRENT_PWRITE dirent_pwrite  /**<@ingroup DIRENT_RW_DISK */
 
 
-static inline void mdirent_resolve_path(char *root_path,fid_t fid,char *pathname_dentry,char *path)
+static inline void mdirent_resolve_path(fid_t fid,char *pathname_dentry,char *path)
 {
     char str[37];
     uint32_t slice;
     uint32_t subslice;
+    eid_t eid;
+    char *root_path;
     
+    
+    eid = rozofs_get_eid_from_fid(fid);    
+    
+    if (eid > EXPGW_EID_MAX_IDX) eid = 0;
+    root_path = dirent_export_root_path[eid];
+    if (root_path == NULL)
+    {
+       severe("no root for eid %d",eid);
+       sprintf(path,"/bad_eid/%d",eid);
+       return;
+    
+    }
     mstor_get_slice_and_subslice(fid, &slice, &subslice);
     rozofs_uuid_unparse(fid, str);
+    
     sprintf(path, "%s/%d/%s/%s", root_path, slice, str,pathname_dentry);
 
 }
@@ -4119,7 +4134,7 @@ static inline int dirent_openat(int dirfd, const char *pathname, int flags, mode
   
   if (dirent_writeback_cache_enable == 0)
   {
-    mdirent_resolve_path(dirent_export_root_path,dir_fid,(char*)pathname,path);
+    mdirent_resolve_path(dir_fid,(char*)pathname,path);
     fd = open(path,flags,mode);
     return fd;
   }
@@ -4132,7 +4147,7 @@ static inline int dirent_openat(int dirfd, const char *pathname, int flags, mode
     /*
     ** writeback cache is full, so by-pass it
     */
-    mdirent_resolve_path(dirent_export_root_path,dir_fid,(char*)pathname,path);
+    mdirent_resolve_path(dir_fid,(char*)pathname,path);
     fd = open(path,flags,mode);
     return fd;
   }
@@ -4171,7 +4186,7 @@ static inline int dirent_openat_read(int dirfd, const char *pathname, int flags,
     */   
     dirent_wbcache_check_flush_on_read(dirent_current_eid,(char *)pathname,root_idx,dir_fid);
   }
-  mdirent_resolve_path(dirent_export_root_path,dir_fid,(char*)pathname,path);
+  mdirent_resolve_path(dir_fid,(char*)pathname,path);
   fd = open(path,flags,mode);
   return fd;
 }

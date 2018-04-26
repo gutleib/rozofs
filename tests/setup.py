@@ -29,10 +29,9 @@ cids = []
 hosts = []
 volumes= []
 mount_points = []
+exports = []
 
-vid_nb=0
 cid_nb=0
-eid_nb=0
 
 #____________________________________
 def get_device_from_mount(mnt):
@@ -689,16 +688,31 @@ class mount_point_class:
       pid=line.split()[1]
       print "\n_______________FS %s eid %s vid %s %s"%(self.instance,self.eid.eid,self.eid.volume.vid,self.get_mount_path())     
       os.system("pstree %s %s"%(opt,pid))
-    return        
+    return  
+#____________________________________
+def check_export_id_is_free(eid):
+  for e in exports:
+    if e.eid == eid: return False
+  return True 
+#____________________________________
+def find_free_export_id():
+  for eid in range(1,512):
+    if check_export_id_is_free(eid):
+      return eid 
+  return 0          
 #____________________________________
 # Class export
 #____________________________________
 class export_class:
 
-  def __init__(self, bsize, volume,layout=None):
-    global eid_nb
-    eid_nb += 1
-    self.eid   = eid_nb
+  def __init__(self, bsize, volume,layout=None,eid=None):
+    global exports
+
+    if eid == None:
+      # Find the 1Rst available eid
+      eid = find_free_export_id()  
+
+    self.eid   = eid
     self.bsize = bsize
     self.volume= volume
     self.thin = False
@@ -747,16 +761,29 @@ class export_class:
   	          
   def display(self):
     for m in self.mount: m.display()
+
+#____________________________________
+def check_volume_id_is_free(vid):
+  for v in volumes:
+    if v.vid == vid: return False
+  return True 
+#____________________________________
+def find_free_volume_number():
+  for vid in range(1,128):
+    if check_volume_id_is_free(vid):
+      return vid 
+  return 0
 #____________________________________
 # Class volume
 #____________________________________
 class volume_class:
 
-  def __init__(self,layout):
-    global vid_nb
+  def __init__(self,layout,vid=None):
     global rozofs
-    vid_nb+=1
-    self.vid        = vid_nb
+    if vid == None:
+      # Find the 1Rst available vid
+      vid = find_free_volume_number()  
+    self.vid        = vid
     self.cid        = [] 
     self.eid        = []  
     self.layout     = layout
@@ -780,8 +807,8 @@ class volume_class:
 	  exit(1)
     return georep
      
-  def add_export(self, bsize,layout=None):
-    e = export_class(bsize,self,layout)
+  def add_export(self, bsize,layout=None,eid=None):
+    e = export_class(bsize,self,layout,eid)
     self.eid.append(e)
     return e
 
@@ -1275,10 +1302,10 @@ class rozofs_class:
     
     loop = self.findout_loopback_device(path,rozofs.disk_size_mb)    
     if mark == None:
-      os.system("./setup.py cmd rozo_device -b %s -fS "%(loop))
+      os.system("./setup.py cmd rozo_device --format spare %s"%(loop))
       syslog.syslog("Created %s -> %s spare"%(path,loop))	  
     else:
-      os.system("./setup.py cmd rozo_device -b %s -fS -m %s"%(loop,mark))         
+      os.system("./setup.py cmd rozo_device --format spare -m %s %s"%(mark,loop))         
       syslog.syslog("Created %s -> %s spare(%s)"%(path,loop,mark))	  
     return  	 
 
@@ -1286,7 +1313,7 @@ class rozofs_class:
     if rozofs.disk_size_mb == None: return   
 
     loop = self.findout_loopback_device(path,rozofs.disk_size_mb)    
-    os.system("./setup.py cmd rozo_device -f -b %s -c %s -s %s -d %d"%(loop,cid,sid,dev))
+    os.system("./setup.py cmd rozo_device --format %s/%s/%s %s"%(cid,sid,dev,loop))
     syslog.syslog("Created %s -> %s (%s,%s,%s)"%(path,loop,cid,sid,dev))	  
     return  	
      

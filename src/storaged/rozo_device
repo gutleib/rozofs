@@ -9,6 +9,8 @@ import re
 import shlex
 from optparse import OptionParser
 import syslog
+import glob
+
 
 
 #!/usr/bin/python
@@ -82,7 +84,8 @@ class big_title:
     for i in range(start): line+=" "
     line+=self.text
     for i in range(end): line+=" " 
-    line+=endeffect
+    if self.effect != None:
+      line+=endeffect
     line+=" |"   
     print line  
 #_______________________________________________
@@ -211,7 +214,7 @@ class display_line:
       for i in range(start): line+=" "
       line+=val
       for i in range(end): line+=" " 
-      line+=endeffect
+      if eff != None: line+=endeffect
       line+=" | "  
       col+=joined 
     print line
@@ -287,7 +290,7 @@ def rozo_get_partitionned_devices() :
 # associated to a device when these data are 
 # meaningfull
 #
-def rozo_list_block_devices(blockDev=None) :
+def rozo_list_all_block_devices(blockDev=None) :
   global partitioned
   
   tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
@@ -299,16 +302,17 @@ def rozo_list_block_devices(blockDev=None) :
   d.set_column(2,"size")
   d.set_column(3,"FS")      
   d.set_column(4,"Mount")
-  d.set_column(5,"Intf")
-  d.set_column(6,"Model[Vendor]")
-  d.set_column(7,"HCTL")
-  d.set_column(8,"Sched.")
-  d.set_column(9,"Rota")
-  d.set_column(10,"R.A")
+  d.set_column(5,"Label")
+  d.set_column(6,"Intf")
+  d.set_column(7,"Model[Vendor]")
+  d.set_column(8,"HCTL")
+  d.set_column(9,"Sched.")
+  d.set_column(10,"Rota")
+  d.set_column(11,"R.A")
   d.end_separator()   
   
   # List every block device and find out a specific one
-  string="lsblk -Pndo NAME,SIZE,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA -x MOUNTPOINT"
+  string="lsblk -Pndo NAME,SIZE,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA,LABEL -x MOUNTPOINT"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -335,34 +339,67 @@ def rozo_list_block_devices(blockDev=None) :
     if rota == "1": rota = "Yes"
     else:           rota = "No"
     ra        = line.split('"')[21].strip()
-    
+    label     = line.split('"')[23].strip()
+         
     d.new_line()
     d.set_column(1,device)  
     d.set_column(2,size)   
     d.set_column(3,fs)
     d.set_column(4,mountpoint)   
-    d.set_column(5,interface)   
-    d.set_column(6,"%s[%s]"%(model,vendor))   
-    d.set_column(7,hctl)   
-    d.set_column(8,scheduler)   
-    d.set_column(9,rota)   
-    d.set_column(10,ra)   
+    d.set_column(5,label)   
+    d.set_column(6,interface)   
+    d.set_column(7,"%s[%s]"%(model,vendor))   
+    d.set_column(8,hctl)   
+    d.set_column(9,scheduler)   
+    d.set_column(10,rota)   
+    d.set_column(11,ra)   
     
-    # In case the device is not mounted 
-    if mountpoint == "":
-      # Mount adevice on temporary directory
-      if mount_temporary_dir(device,tmp) == 0: 
-        for file in os.listdir(tmp):
-          if file == "rozofs_spare":
-            d.set_column(4,"<<< "+file+" >>>")   
-            break
-          if "storage_c" in file:
-            d.set_column(4,"<<< "+file+" >>>")  
-            break                 
-      os.system("umount %s 2>/dev/null"%(tmp))
   d.display() 
   os.system("rmdir %s 2>/dev/null"%(tmp))
+#_____________________________________________  
+#
+# List one block device
+#
+def rozo_list_some_block_device(blockDev) :
+  global partitioned
+  
+  
+  # List every block device and find out a specific one
+  for b in blockDev:
+    string="lsblk -PO /dev/%s"%(b)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:
 
+      device = line.split('" ')[1].strip()
+      if device in partitioned: continue
+      
+      print "______________________________________________________________________________"
+      sp = line.split('" ')    
+      for pair in sp:
+        name   = pair.split('=')[0]
+        value  = pair.split('"')[1]
+        print "%40s = %s"%(name,value)   
+    rozo_list_tune_parameters(b)  
+
+#_____________________________________________  
+#
+# Light a led device on/off
+#
+def rozo_led_device(blockDev,status="get"):
+  for b in blockDev:
+    string="/sys/class/enclosure/*/*/device/block/%s"%(b)
+    if len(glob.glob(string)) == 0:
+      print("%s not found in any enclosure"%(b))
+    for F in glob.glob(string):
+      if status == "get" :
+        os.system("cat %s"%(F))
+      elif status == "on" :
+        os.system("echo 1 > %s"%(status,F))
+      elif status == "off" :
+        os.system("echo 0 > %s"%(status,F))
+      else:
+        print "No such value %s"%(status)
 #_____________________________________________  
 #
 # Return device, fs type as well as mountpoint
@@ -394,25 +431,28 @@ def rozo_get_block_devices(dev) :
 #
 def rozo_tune_ssd_devices(blockdev, nr_requests=None) :
 
-  path = "/sys/block/%s/queue"%(blockdev)
-  if not os.path.exists(path):
-    print "%s do not exists. Can not tune it !!!"
-    return 1
+  for b in blockdev:
+    path = "/sys/block/%s/queue"%(b)
+    if not os.path.exists(path):
+      print "%s do not exists. Can not tune it !!!"
+      return 1
 
-  string = "echo noop > %s/scheduler"%(path)
-  os.system(string)
+    string = "echo noop > %s/scheduler"%(path)
+    os.system(string)
 
-  time.sleep(1)
+    time.sleep(1)
 
-  string = "echo 0 > %s/rotational"%(path)
-  os.system(string)
+    string = "echo 0 > %s/rotational"%(path)
+    os.system(string)
 
-  if nr_requests == None: nr_requests = "32" 
-  string = "echo %s > %s/nr_requests"%(nr_requests,path)
-  os.system(string)
-  
-  string = "echo 1 > %s/nomerges"%(path)
-  os.system(string)
+    if nr_requests == None: nr_requests = "32" 
+    string = "echo %s > %s/nr_requests"%(nr_requests,path)
+    os.system(string)
+
+    string = "echo 1 > %s/nomerges"%(path)
+    os.system(string)
+
+    rozo_list_tune_parameters(b)  
   return 0  
 
 #_____________________________________________  
@@ -421,45 +461,47 @@ def rozo_tune_ssd_devices(blockdev, nr_requests=None) :
 #
 def rozo_tune_hdd_devices(blockdev,nr_requests=None,read_expire=None,write_expire=None,fifo_batch=None,read_ahead_kb=None) :
 
-  path = "/sys/block/%s/queue"%(blockdev)
-  if not os.path.exists(path):
-    print "%s do not exists. Can not tune it !!!"
-    return 1
-    
-  string = "echo deadline > %s/scheduler"%(path)
-  os.system(string)
-  
-  time.sleep(1)
+  for b in blockdev: 
+    path = "/sys/block/%s/queue"%(b)
+    if not os.path.exists(path):
+      print "%s do not exists. Can not tune it !!!"
+      return 1
 
-  string = "echo 1 > %s/rotational"%(path)
-  os.system(string)
+    string = "echo deadline > %s/scheduler"%(path)
+    os.system(string)
 
-  if nr_requests == None: nr_requests = "32" 
-  string = "echo %s > %s/nr_requests"%(nr_requests,path)
-  os.system(string)
-  
-  string = "echo 1 > %s/iosched/front_merges"%(path)
-  os.system(string)
-  
-  if read_expire == None: read_expire = "150"
-  string = "echo %s > %s/iosched/read_expire"%(read_expire,path)
-  os.system(string)
-  
-  if write_expire == None: write_expire = "1500"
-  string = "echo %s > %s/iosched/write_expire"%(write_expire,path)
-  os.system(string)
+    time.sleep(1)
 
-  if fifo_batch == None: fifo_batch = "16"
-  string = "echo %s > %s/iosched/fifo_batch"%(fifo_batch,path)  
-  os.system(string)
+    string = "echo 1 > %s/rotational"%(path)
+    os.system(string)
 
-  if read_ahead_kb == None: read_ahead_kb = "768"
-  string = "echo %s > %s/read_ahead_kb"%(read_ahead_kb,path)
-  os.system(string)
+    if nr_requests == None: nr_requests = "32" 
+    string = "echo %s > %s/nr_requests"%(nr_requests,path)
+    os.system(string)
 
-  string = "echo 0 > %s/nomerges"%(path)
-  os.system(string)
-  
+    string = "echo 1 > %s/iosched/front_merges"%(path)
+    os.system(string)
+
+    if read_expire == None: read_expire = "150"
+    string = "echo %s > %s/iosched/read_expire"%(read_expire,path)
+    os.system(string)
+
+    if write_expire == None: write_expire = "1500"
+    string = "echo %s > %s/iosched/write_expire"%(write_expire,path)
+    os.system(string)
+
+    if fifo_batch == None: fifo_batch = "16"
+    string = "echo %s > %s/iosched/fifo_batch"%(fifo_batch,path)  
+    os.system(string)
+
+    if read_ahead_kb == None: read_ahead_kb = "768"
+    string = "echo %s > %s/read_ahead_kb"%(read_ahead_kb,path)
+    os.system(string)
+
+    string = "echo 0 > %s/nomerges"%(path)
+    os.system(string)
+
+    rozo_list_tune_parameters(b)  
   return 0  
 #_____________________________________________  
 #
@@ -467,17 +509,17 @@ def rozo_tune_hdd_devices(blockdev,nr_requests=None,read_expire=None,write_expir
 #
 def rozo_print_file(file):
   if not os.path.exists(file):
-    print "%50s = %s"%(file,"No such file")
+    print "%40s = %s"%(file,"No such file")
     return None
     
   try :
     f = open(file,"r")
   except:
-    print "%50s = %s"%(file,"Can not open")
+    print "%40s = %s"%(file,"Can not open")
     return None
   
   val = f.read().rstrip()   
-  print "%50s = %s"%(file,val)
+  print "%40s = %s"%(file,val)
   return val
 #_____________________________________________  
 #
@@ -539,34 +581,38 @@ def mount_temporary_dir(blockdev,tmp):
 # 
 # Pormat a device 
 #
-def rozo_format_device(blockdev,extra) :
-  # Inlinde data requires inode of at least 256 bytes
-#  INLINE="mkfs.ext4 -F -b 4096 -I 256 -m 0 -q -O dir_index,filetype,inline_data"
-  MKFS ="mkfs.ext4 -F -b 4096 -m 0 -q -O dir_index,filetype"
-  
-  # First try with inline_data 
-  string="%s "%(MKFS)
-  if extra != None :
-    string=string+extra    
-  string=string+" /dev/"+blockdev
+def rozo_format_device(blockdev,lazzy,spare,cid,sid,dev) :
 
-  parsed = shlex.split(string)
+  MKFS = "mkfs.ext4 -F -b 4096 -m 0 -q"
+  if lazzy == False:
+    MKFS = MKFS+" -E lazy_itable_init=0,lazy_journal_init=0"
+  
+  if spare == True:
+    MKFS = MKFS+" -L RozoFS_spare"  
+  else:
+    MKFS = MKFS+" -L RozoFS_c%s_s%s_%s"%(cid,sid,dev)
+        
+  MKFS = MKFS+" /dev/"+blockdev
+
+  parsed = shlex.split(MKFS)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stderr:
     print line
     exit(-1)
-    
-  syslog.syslog(string)	  
-  print string      
+
+  rozo_mark_device(blockdev,spare,cid,sid,dev)  
+      
+  syslog.syslog(MKFS)	  
+  print MKFS      
   return 0
 #_____________________________________________  
 #
 # Write a regular mark on device
 #
-def rozo_mark_regular(tmp,blockdev) :
+def rozo_mark_regular(tmp,blockdev,cid,sid,dev) :
 
-  os.system("touch %s/storage_c%s_s%s_%s"%(tmp,options.cid,options.sid,options.device))  
-  print "%s formated for cid/sid/dev %s/%s/%s"%(blockdev,options.cid,options.sid,options.device)
+  os.system("touch %s/storage_c%s_s%s_%s"%(tmp,cid,sid,dev))  
+  syslog.syslog("%s formated for cid/sid/dev %s/%s/%s"%(blockdev,cid,sid,dev))
   
 #_____________________________________________  
 #
@@ -579,14 +625,14 @@ def rozo_mark_spare(tmp,blockdev) :
      print "%s formated for spare with \"%s\" mark"%(blockdev,options.mark)
      return 
   os.system("touch %s/rozofs_spare"%(tmp))   
-  print "%s formated for spare"%(blockdev)
+  syslog.syslog("%s formated for spare"%(blockdev))
      
 #_____________________________________________     
 #
 # Mount device on a temporary directory in order
 # to write a mark file
 # 
-def rozo_mark_device(blockdev):
+def rozo_mark_device(blockdev,spare,cid,sid,dev):
   tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
   
   # Mount adevice on temporary directory
@@ -595,10 +641,10 @@ def rozo_mark_device(blockdev):
     exit(-1)
 
   # Write the requested mark file on it
-  if options.spare == True:
+  if spare == True:
     rozo_mark_spare(tmp,blockdev)
   else:
-    rozo_mark_regular(tmp,blockdev)   
+    rozo_mark_regular(tmp,blockdev,cid,sid,dev)   
     
   # Unmount the temporary directory   
   os.system("umount %s"%(tmp))  
@@ -614,36 +660,39 @@ def syntax(string=None) :
     print "\n\033[1m!!! %s !!!\033[0m\n"%(string)
   print "\033[4mUsage:\033[0m"
   print "  To list the available devices"
-  print "       \033[1mrozo_device -l\033[0m"
-  print "  To get some disk tuning information for a block device"
-  print "       \033[1mrozo_device -l -b <sddev>\033[0m"
-  print "  To tune a block device"
-  print "       \033[1mrozo_device -t [hdd|ssd] -b <sddev> [ --nr_request <nr_request> ]\033[0m"
-  print "  To format a regular device use this command"
-  print "       \033[1mrozo_device [-f] -c <cid> -s <sid> -d <device> -b <sddev>\033[0m"
-  print "  To format a spare device use one of these commands"
-  print "       \033[1mrozo_device [-f] -S -b <sddev> \033[0m"
-  print "       \033[1mrozo_device [-f] -S -b <sddev> -m <mark> \033[0m"
-  print "  -f option must be added to re-format an already formated disk."
-  print ""
+  print "       \033[1mrozo_device\033[0m"
+  print "  To get more information for some block devices"
+  print "       \033[1mrozo_device <dev>,...\033[0m"
+  print "  To switch the led on/off of some disk slots within an enclosure"
+  print "       \033[1mrozo_device {-l|--led} {on|off|get} <dev>,...\033[0m"
+  print "  To tune some block devices"
+  print "       \033[1mrozo_device {-t|--tune} {hdd|ssd} <dev>,... [ --nr_request <nr_request> ]\033[0m"
+  print "  To format a device use this command"
+  print "       \033[1mrozo_device {-f|--format} {spare|<c>/<s>/<d>}[,option,...] <dev>\033[0m"
+  print "     mandatory paramter is"
+  print "         either \033[1mspare\033[0m        to format a spare disk."
+  print "         or     \033[1m<c>/<s>/<d>\033[0m  to format a regular file for cluster <c> sid <s> device <d>.." 
+  print "     options can be"
+  print "         \033[1mforce\033[0m        to force formating aleady formated device."
+  print "         \033[1mlazzy\033[0m        to format lazzyly."
   print "\033[4mExamples:\033[0m"
   print ". This command lists information about all block devices"
-  print "  \033[1mrozo_device -l\033[0m"
-  print ". This command lists information about device sdm"
-  print "  \033[1mrozo_device -l -b sdm\033[0m"
+  print "  \033[1mrozo_device\033[0m"
+  print ". This command lists information about device sdm and sdo"
+  print "  \033[1mrozo_device sdm sdo\033[0m"
   print ". This command formats the block device /dev/sdl as device 3 of sid 4 of cluster 2."
-  print "  \033[1mrozo_device -c 2 -s 4 -d 3 -b sdl\033[0m"
+  print "  \033[1mrozo_device -f 2/4/3 sdl\033[0m"
   print ". This command formats the block device /dev/sdm as a spare device."
   print "  This spare device has an empty spare mark file. This is the usual"
   print "  case when only one volume is configured."
-  print "  \033[1mrozo_device -S -b sdm\033[0m" 
+  print "  \033[1mrozo_device -f spare sdm\033[0m" 
   print ". This command forces to re-format the block device /dev/sdn as a spare device."
   print "  This spare device has a spare mark file containing the string \"NVME\"." 
   print "  This must fit to the spare-mark parameter in storage.conf for such"
   print "  type of devices when multiple volumes are configured."
-  print "  \033[1mrozo_device -fS -b sdn -m NVME\033[0m"
-  print ". This command tunes block device sdp in HDD mode"
-  print "  \033[1mrozo_device -t hdd -b sdp\033[0m"
+  print "  \033[1mrozo_device -f spare,force sdn -m NVME\033[0m"
+  print ". This command tunes block devices sda to sdd in HDD mode"
+  print "  \033[1mrozo_device -t hdd sd{a..d}\033[0m"
   print ""
   print "Check man storage.conf."
   exit(-1)    
@@ -656,72 +705,72 @@ def syntax(string=None) :
 
   
 parser = OptionParser()
-parser.add_option("-c","--cid", action="store",type="string", dest="cid", help="The cluster identifier.")
-parser.add_option("-s","--sid", action="store",type="string", dest="sid", help="The logical storage identifier within the cluster.")
-parser.add_option("-d","--device", action="store",type="string", dest="device", help="The device identifier within the logical storage.")
-parser.add_option("-b","--blockdev", action="store",type="string", dest="blockdev", help="The block device name to format.")
-parser.add_option("-S","--spare", action="store_true",default=False, dest="spare", help="Format a spare device.")
 parser.add_option("-m","--mark", action="store",type="string", dest="mark", help="The mark to be written if any in the spare mark file.")
 parser.add_option("-e","--extra", action="store",type="string", dest="extra", help="extra mkfs options.")
-parser.add_option("-f","--force", action="store_true",default=False, dest="force", help="forces format when device is already formated.")
-parser.add_option("-l","--list", action="store_true",default=False, dest="list", help="List the available block devices in the node.")
+parser.add_option("-f","--format", action="store",type="string",dest="format", help="Formats a device.")
 parser.add_option("-t","--tune", action="store",type="string",dest="tune", help="Tune a SSG or HDD device.")
 parser.add_option("-n","--nr_requests", action="store",type="string",dest="nr_requests", help="nr_request value to set.")
 parser.add_option("-r","--read_expire", action="store",type="string",dest="read_expire", help="read_expire value to set.")
 parser.add_option("-w","--write_expire", action="store",type="string",dest="write_expire", help="write_expire value to set.")
 parser.add_option("-a","--read_ahead", action="store",type="string",dest="read_ahead", help="read ahead KB value to set.")
+parser.add_option("-l","--led", action="store",type="string", dest="led", help="The led requested status (on/off).")
 
 (options, args) = parser.parse_args()
 
 #
-# remove /dev/ from block device
+# help requested 
 #
-if options.blockdev == None:
-  blockdev = None
-elif len(options.blockdev.split('/')) > 1:
-  blockdev = options.blockdev.split('/')[2].strip()
-else:
-  blockdev = options.blockdev.strip()
+if len(args) != 0 and args[0] == "?": syntax("?")
+
+#
+# Read block devices
+#
+blockdev = []
+for b in args:  
+  if len(b.split('/')) > 1:
+    blockdev.append(b.split('/')[2].strip())
+  else:
+    blockdev.append(b.strip())
 
 # Make the list of partitionned devices
 rozo_get_partitionned_devices()
 
+
+# Check block devices exists when given as parameter
 #
-# Check block device exists when given as parameter
-#
-if blockdev != None:
-  dev,fstype,mountpoint = rozo_get_block_devices(blockdev)
+for b in blockdev:
+  dev,fstype,mountpoint = rozo_get_block_devices(b)
   if dev == None:
-    print "No such RozoFS block device %s"%(blockdev)
+    print "No such RozoFS block device %s"%(b)
     exit(-1)
 
 #
-# List one or all block devices 
+# Led
 #
-if options.list == True:    
-  rozo_list_block_devices(blockdev)
-  rozo_list_tune_parameters(blockdev)  
-  exit(0)    
-
-
-if blockdev == None: 
-  syntax("Missing block device name")
+if options.led != None:
+  if len(blockdev) == 0: syntax("Missing block device name")
+  if options.led == "on" or options.led == "off" or options.led == "get":
+    if len(blockdev) == 0:
+      syntax("--led option requires block device identifiers")
+    rozo_led_device(blockdev,options.led)
+    exit(0)
+  syntax("--led option requires on/off/get")
+  
 
 #
-# Tunea device
+# Tune device
 #        
 if options.tune != None:
+  if len(blockdev) == 0: syntax("Missing block device name")
 
   # Tuning a HDD
   if options.tune == "ssd" or options.tune == "SSD":
     rozo_tune_ssd_devices(blockdev, nr_requests=options.nr_requests)
-    rozo_list_tune_parameters(blockdev)  
     exit(0)
     
   # Tuning a SSD
   if options.tune == "hdd" or options.tune == "HDD":
     rozo_tune_hdd_devices(blockdev, nr_requests=options.nr_requests, read_expire=options.read_expire, write_expire=options.write_expire, read_ahead_kb=options.read_ahead)
-    rozo_list_tune_parameters(blockdev)  
     exit(0)
     
   syntax("Tuning requires either ssd or hdd")
@@ -729,21 +778,54 @@ if options.tune != None:
 
 #
 # Format a device
+#     
+
+if options.format != None:
+  if len(blockdev) == 0: syntax("Missing block device name")
+  force = False  
+  spare = False
+  lazzy = False
+  cid   = None
+  sid   = None
+  dev   = None
+  # Format only one device at a time
+  if len(blockdev) != 1: 
+    syntax("Format requires one and only one block device")
+
+  # Do not format mounted device
+  if mountpoint != None:
+    print "%s is mounted on %s !!!"%(blockdev[0],mountpoint)
+    exit(-1)  
+    
+  # Parse options
+  for opt in  options.format.split(','):
+    if   opt == "force": force = True
+    elif opt == "lazzy": lazzy = True
+    elif opt == "spare": spare = True
+    else:
+      sp = opt.split("/")
+      if len(sp) != 3: syntax("Unexpected format option %s"%(opt))
+      try:
+        cid = int(sp[0])
+        sid = int(sp[1])
+        dev = int(sp[2])
+      except:
+        syntax("format option requires inter value for cid/sid/dev"%(opt))
+
+  if fstype != None and force == False:
+    print "%s is already formated in %s !!!\n(use force option to force format)"%(blockdev[0],fstype)
+    exit(-1)       
+        
+  rozo_format_device(blockdev[0],lazzy,spare,cid,sid,dev)  
+  exit(0)  
 #
-if mountpoint != None:
-  print "%s is mounted on %s !!!"%(blockdev,mountpoint)
-  exit(-1)  
-if fstype != None and options.force == False:
-  print "%s is already formated in %s !!!\n(use -f option to force format)"%(blockdev,fstype)
-  exit(-1)       
+#
+# List one or all block devices 
+#
+if len(blockdev) != 0:
+  rozo_list_some_block_device(blockdev)
+else:    
+  rozo_list_all_block_devices()
+exit(0)    
 
-# Check non spare options
-#  
-if options.spare == False:
-  if options.cid == None: syntax("Missing cid")
-  if options.sid == None: syntax("Missing sid")
-  if options.device == None: syntax("Missing device")
-
-rozo_format_device(blockdev,options.extra)  
-rozo_mark_device(blockdev)  
   

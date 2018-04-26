@@ -1060,7 +1060,7 @@ int export_lv2_resolve_path(export_t *export, fid_t fid, char *path) {
 int export_open_parent_directory(export_t *e,fid_t parent)
 {    
     dirent_current_eid = e->eid;
-    dirent_export_root_path = &e->root[0]; 
+//    dirent_export_root_path = &e->root[0]; 
     return -1;
 }
 
@@ -1455,6 +1455,7 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache) {
     */
     if (!realpath(root, e->root))
         return -1;
+    
     export_open_parent_directory(e,NULL);
 	
     if ( expgwc_non_blocking_conf.slave == 0)
@@ -1651,6 +1652,17 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
         severe("realpath failure for %s : %s",root,strerror(errno));
         return -1;
     }
+    /*
+    ** save the root in dirent_export_root_path table
+    */
+    {
+      char * new_path = strdup(e->root);
+      char * old_path = dirent_export_root_path[eid];
+      dirent_export_root_path[eid]= new_path;
+      if (old_path != NULL) {
+        free(old_path);
+      }
+    }    
     
     strcpy(e->name, name);
     

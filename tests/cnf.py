@@ -29,7 +29,7 @@ def setLayout(l=0):
 # when the given number is too small, the minimum 
 # required number of SID per host is used.
 #
-def setVolumeHosts(nbHosts, nbSidPerHost=0):
+def setVolumeHosts(nbHosts, nbSidPerHost=0,vid=None):
   global layout_int
   global nbclusters
   global clients_nb
@@ -53,7 +53,7 @@ def setVolumeHosts(nbHosts, nbSidPerHost=0):
     nbSidPerHost = minimumSidPerHost
     
   # Create a volume
-  v1 = volume_class(layout)
+  v1 = volume_class(layout, vid)
 
   # Compute the number of host failure allowed
   if minimumSidPerHost != 1:
@@ -83,10 +83,10 @@ def setVolumeHosts(nbHosts, nbSidPerHost=0):
   return v1  
     
 #_____________________________________ 
-def addExport(vol,layout=None):
+def addExport(vol,layout=None,eid=None):
 
   # Create on export for 4K, and one mount point
-  e = vol.add_export(rozofs.bsize4K(),layout)
+  e = vol.add_export(rozofs.bsize4K(),layout,eid)
 
   for i in range(1,clients_nb+1): 
     # Georeplication : 1 clinet on each site
@@ -191,7 +191,7 @@ mapper     = 2
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 2
+nbclusters = 1
 
 # default is to have one mount point per site and export
 clients_nb = 1
@@ -202,7 +202,9 @@ setLayout(1)
 # Define volume 1 on some hosts
 vol = setVolumeHosts(4)
 # Create an export on this volume with layout 1
-e = addExport(vol,1)
+e = addExport(vol,layout=1,eid=1)
+e = addExport(vol,layout=1,eid=9)
+e = addExport(vol,layout=1,eid=17)
 # Set thin provisionning
 #e.set_thin()
 
