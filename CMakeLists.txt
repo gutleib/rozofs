@@ -18,10 +18,11 @@
 #
 cmake_minimum_required(VERSION 2.6)
 project(rozofs C)
+<<<<<<< HEAD
 
 set(MAJOR "3")
 set(MINOR "0")
-set(REVISION "~alpha18")
+set(REVISION "~alpha19")
 
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
