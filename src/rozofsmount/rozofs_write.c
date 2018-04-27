@@ -103,6 +103,10 @@ static void display_write_flush_stat(char * argv[], uint32_t tcpRef, void *bufRe
       return;         
     }
     if (strcmp(argv[1],"set")==0) {
+      if (argv[2] == NULL) {
+        uma_dbg_send_format(tcpRef, bufRef, TRUE, "Value required\n"); 
+        return;       
+      }
       errno = 0;       
       new_val = (int) strtol(argv[2], (char **) NULL, 10);   
       if (errno != 0) {
