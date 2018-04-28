@@ -916,7 +916,7 @@ static int strquota_to_nbblocks(const char *str, uint64_t *blocks, ROZOFS_BSIZE_
     uint64_t value;
 
     errno = 0;
-    value = strtol(str, &unit, 10);
+    value = strtoull(str, &unit, 10);
     if ((errno == ERANGE && (value == LONG_MAX || value == LONG_MIN))
             || (errno != 0 && value == 0)) {
         goto out;
@@ -931,13 +931,19 @@ static int strquota_to_nbblocks(const char *str, uint64_t *blocks, ROZOFS_BSIZE_
 
     switch (*unit) {
         case 'K':
-            *blocks = 1024 * value / ROZOFS_BSIZE_BYTES(bsize);
+            *blocks = (1024ULL * value) / ROZOFS_BSIZE_BYTES(bsize);
             break;
         case 'M':
-            *blocks = 1024 * 1024 * value / ROZOFS_BSIZE_BYTES(bsize);
+            *blocks = (1024ULL * 1024ULL * value) / ROZOFS_BSIZE_BYTES(bsize);
             break;
         case 'G':
-            *blocks = 1024 * 1024 * 1024 * value / ROZOFS_BSIZE_BYTES(bsize);
+            *blocks = (1024ULL * 1024ULL * 1024ULL * value) / ROZOFS_BSIZE_BYTES(bsize);
+            break;
+        case 'T':
+            *blocks = (1024ULL * 1024ULL * 1024ULL * 1024ULL * value) / ROZOFS_BSIZE_BYTES(bsize);
+            break;
+        case 'P':
+            *blocks = (1024ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL * value) / ROZOFS_BSIZE_BYTES(bsize);
             break;
         default: // no unit -> nb blocks
             *blocks = value;
