@@ -165,7 +165,7 @@ void rozofs_exit() {
     if (semForEver != NULL) {
         sem_post(semForEver);
         for (;;) {
-            severe("rozofsmount exit required.");
+            info("rozofsmount exit required.");
             sleep(10);
         }
         fatal("semForEver is not initialized.");
