@@ -1073,7 +1073,12 @@ int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode)
   rozofs_rdma_ec = rdma_create_event_channel();
   if (rozofs_rdma_ec == NULL)
   {
-     severe("error on rdma_create_event_channel(): %s",strerror(errno));
+     if (errno == ENODEV) {
+       info("error on rdma_create_event_channel(): %s",strerror(errno));
+     }
+     else {
+       severe("error on rdma_create_event_channel(): %s",strerror(errno));
+     }  
 //     goto error;  
   }
   /* 
@@ -2523,7 +2528,12 @@ int rozofs_rdma_cli_connect_req(rozofs_rdma_tcp_assoc_t *assoc_p)
    if(rdma_create_id(rozofs_rdma_ec, &conn->id, NULL, RDMA_PS_TCP) < 0)
    {
       RDMA_STATS_RSP_NOK(rdma_create_id);
-      severe("RDMA rdma_create_id error:%s",strerror(errno));
+      if (errno == ENODEV) {
+        info("RDMA rdma_create_id error:%s",strerror(errno));
+      }
+      else {     
+        severe("RDMA rdma_create_id error:%s",strerror(errno));
+      }  
       goto error;
    }
    RDMA_STATS_RSP_OK(rdma_create_id);
