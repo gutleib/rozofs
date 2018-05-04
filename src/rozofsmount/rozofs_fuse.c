@@ -171,7 +171,7 @@ restart:
 	    goto restart;
 	  }
 	  if (err == ENODEV) {
-	    severe("Exit from RozofsMount required!!!");
+	    info("Exit from RozofsMount required!!!");
 	    fuse_session_exit(se);
 	    rozofs_exit();
 	    return 0;
