@@ -231,6 +231,7 @@ static void usage() {
                             rozofs_tmr_get(TMR_PRJ_READ_SPARE));
     fprintf(stderr, "    -o numanode=<#node>\tpin rozofsmount as well as its STORCLI on numa node <node#>\n");
     fprintf(stderr, "    -o wbcache\t\tactivate Linux writeback cache\n");
+    fprintf(stderr, "    -o nb_writeThreads=N\tDefine the number of active write threads\n");
 
 }
 
@@ -255,6 +256,7 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("rozofsbufsize=%u", buf_size, 0),
     MYFS_OPT("rozofsminreadsize=%u", min_read_size, 0),
     MYFS_OPT("rozofsmaxwritepending=%u", max_write_pending, 0),
+    MYFS_OPT("nb_writeThreads=%u", nb_writeThreads, 0),
     MYFS_OPT("rozofsnbstorcli=%u", nbstorcli, 0),    
     MYFS_OPT("rozofsmaxretry=%u", max_retry, 0),
     MYFS_OPT("rozofsexporttimeout=%u", export_timeout, 0),
@@ -414,6 +416,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(buf_size);
   DISPLAY_UINT32_CONFIG(min_read_size);
   DISPLAY_UINT32_CONFIG(max_write_pending);
+  DISPLAY_UINT32_CONFIG(nb_writeThreads);
   DISPLAY_UINT32_CONFIG(nbstorcli);
   DISPLAY_UINT32_CONFIG(max_retry);
   DISPLAY_UINT32_CONFIG(dbg_port);
@@ -2004,6 +2007,11 @@ int fuseloop(struct fuse_args *args, int fg) {
     */
     init_write_flush_stat(conf.max_write_pending);
 
+    /*
+    ** Initialize the number of active write threads
+    */
+    init_write_thread_active(conf.nb_writeThreads);
+
     /**
     * init of the mode block cache
     */
@@ -2287,6 +2295,7 @@ int main(int argc, char *argv[]) {
     conf.localPreference = 0; // No local preference on read
     conf.noReadFaultTolerant = 0; // Give back blocks with 0 on read for corrupted block instead of EIO
     conf.wbcache = 0;
+    conf.nb_writeThreads = 0;
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
     }

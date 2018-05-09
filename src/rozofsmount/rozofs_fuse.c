@@ -79,6 +79,87 @@ void rozofs_fuse_get_ticker()
   rozofs_fuse_req_tic = MICROLONG(timeDay); 
 }
 
+
+list_t rozofs_fuse_rcv_buf_head;    /**< head of the receive buffer   */
+int    rozofs_fuse_rcv_buf_count;
+rozofs_fuse_rcv_buf_t *rozofs_fuse_cur_rcv_buf = NULL;  /**< current receive buffer */
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Init of the fuse receive buffer distributor
+
+   @param count: number of buffer to setup
+   @param size: size of each buffer
+
+   @retval 0 on success
+   @retval -1 on error (see errno )
+*/
+int rozofs_fuse_init_rcv_buffer_pool(int count,int size)
+{
+   int effective_size = size+sizeof(list_t);
+   int i;
+   rozofs_fuse_rcv_buf_t *p_rcv_buf;
+   
+   /*
+   ** init of the head
+   */
+    list_init(&rozofs_fuse_rcv_buf_head);
+    rozofs_fuse_rcv_buf_count = count;
+    
+    for (i = 0; i < count;i++)
+    {
+       p_rcv_buf = memalign(4096,effective_size);
+       if (p_rcv_buf== NULL)
+       {
+          errno = ENOMEM;
+	  return -1;
+       }
+       list_init(&p_rcv_buf->list);
+       list_push_front(&rozofs_fuse_rcv_buf_head,&p_rcv_buf->list);        
+    }
+    return 0;
+}
+/*
+**__________________________________________________________________________
+*/
+/**
+*  get a  fuse receive buffer from distributor
+
+
+   @retval <> NULL on success
+   @retval  NULL if no buffer 
+*/
+rozofs_fuse_rcv_buf_t *rozofs_fuse_alloc_rcv_buffer_pool()
+{
+    rozofs_fuse_rcv_buf_t *p_rcv_buf = NULL;
+    if (list_empty(&rozofs_fuse_rcv_buf_head)) return NULL;
+    rozofs_fuse_rcv_buf_count--;
+    p_rcv_buf = list_first_entry(&rozofs_fuse_rcv_buf_head,rozofs_fuse_rcv_buf_t,list);
+    list_remove(&p_rcv_buf->list);
+    return p_rcv_buf;
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  release a  fuse receive buffer to the distributor
+
+
+   @retval <> NULL on success
+   @retval  NULL if no buffer 
+*/
+void rozofs_fuse_release_rcv_buffer_pool(rozofs_fuse_rcv_buf_t *p_rcv_buf)
+{
+    list_remove(&p_rcv_buf->list);
+    list_push_front(&rozofs_fuse_rcv_buf_head,&p_rcv_buf->list);     
+    rozofs_fuse_rcv_buf_count++;
+}
+
+
+
 /**
 * rozofs fuse xmit and receive channel callbacks for non blocking case
 */
@@ -503,10 +584,28 @@ int rozofs_fuse_session_loop(rozofs_fuse_ctx_t *ctx_p, int * empty)
     ** at startup.
     */
 //    START_PROFILING_FUSE();
-    buf = ctx_p->buf_fuse_req_p;
-    
-	while (1) {
-		struct fuse_chan *tmpch = ch;
+//    buf = ctx_p->buf_fuse_req_p;
+
+    if (rozofs_fuse_cur_rcv_buf == NULL)
+    {
+      /*
+      ** Allocate a buffer for receiving message from fuse kernel
+      */
+
+      rozofs_fuse_cur_rcv_buf = rozofs_fuse_alloc_rcv_buffer_pool();
+      if (rozofs_fuse_cur_rcv_buf == NULL) 
+      {
+	 /*
+	 ** force empty in order to exit from the polling loop
+	 */
+	 *empty = 1;
+	 return 0;
+      }
+    }
+    buf = rozofs_fuse_cur_rcv_buf->buf;
+    while (1) 
+    {
+        struct fuse_chan *tmpch = ch;
 
         /*
         ** set the reference of the buffer that will be used by fuse
@@ -514,7 +613,7 @@ int rozofs_fuse_session_loop(rozofs_fuse_ctx_t *ctx_p, int * empty)
         fbuf.mem     = buf;
         fbuf.flags   = 0;
         fbuf.size    = ctx_p->bufsize;
-		res = fuse_session_receive_buf(se, &fbuf, &tmpch);
+	res = fuse_session_receive_buf(se, &fbuf, &tmpch);
         if (res == 0)
         {
            /*
@@ -549,7 +648,7 @@ int rozofs_fuse_session_loop(rozofs_fuse_ctx_t *ctx_p, int * empty)
         */
 //        STOP_PROFILING_FUSE();
         
-		if ( exit_req == 0) fuse_session_process_buf(se, &fbuf, tmpch);
+	if ( exit_req == 0) fuse_session_process_buf(se, &fbuf, tmpch);
         if (fuse_session_exited(se) == 1)
         {
            exit_req = 1;
@@ -557,7 +656,7 @@ int rozofs_fuse_session_loop(rozofs_fuse_ctx_t *ctx_p, int * empty)
         
         }
         break;
-	}
+    }
 /*
 ** to be reworked
 */
@@ -965,6 +1064,17 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
      */
      int bufsize = fuse_chan_bufsize(ch)*4;
      rozofs_fuse_ctx_p->bufsize = bufsize;
+     /*
+     ** create the distributor fro receiving data from fuse kernel
+     */
+     status = rozofs_fuse_init_rcv_buffer_pool(ROZOFS_FUSE_RECV_BUF_COUNT,bufsize);
+     if (status < 0)
+     {
+        severe( "rozofs_fuse_init fuse buffer pool creation error(%d,%d)", (int)ROZOFS_FUSE_RECV_BUF_COUNT, (int)bufsize ) ;
+        status = -1;
+        break;     
+     
+     }
      /*
      ** create the pool
      */

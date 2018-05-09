@@ -173,6 +173,16 @@ typedef enum {
 	srv_rozofs_ll_truncate,
 } rozofs_service_e;
 
+
+
+#define ROZOFS_FUSE_RECV_BUF_COUNT 8
+typedef struct _rozofs_fuse_rcv_buf_t
+{
+   list_t  list; /**< pnext & pprev */
+   char    buf[1];  /**< buffer array for data received from fuse kernel */
+} rozofs_fuse_rcv_buf_t;
+
+
 extern int rozofs_trc_wr_idx;
 extern int rozofs_trc_buf_full;
 extern int rozofs_trc_last_idx;
@@ -180,6 +190,27 @@ extern int rozofs_trc_enabled;
 extern int rozofs_trc_index;
 extern rozofs_trace_t *rozofs_trc_buffer;
 extern uint64_t fuse_profile[];
+
+extern rozofs_fuse_rcv_buf_t *rozofs_fuse_cur_rcv_buf ;  /**< current receive buffer */
+/*
+**____________________________________________________
+*/
+/**
+  Check if a buffer is the fuse received buffer
+  
+  @param buf_p : current pointer to the data to write
+  
+  @retval 1: there is a match
+  @retval 0 : no match
+*/
+static inline int rozofs_fuse_is_current_rcv_buffer(char *buf_p)
+{
+  uint64_t begin_p;
+  
+  begin_p = ((uint64_t)(buf_p)/4096);
+  if ((uint64_t)(rozofs_fuse_cur_rcv_buf)/4096 !=  begin_p) return 0;
+  return 1;
+}
 /*
 **____________________________________________________
 */
@@ -1215,4 +1246,17 @@ void rz_fuse_reply_entry(fuse_req_t req, const struct fuse_entry_param *e);
  */
 void rz_fuse_reply_create(fuse_req_t req, const struct fuse_entry_param *e,struct fuse_file_info *fi);
 void show_fuse_reply_thread(char * argv[], uint32_t tcpRef, void *bufRef);
+
+
+
+/*
+**__________________________________________________________________________
+*/
+int rozofs_storcli_wr_thread_send(int rpc_opcode,void *msg2encode_p,xdrproc_t encode_fct,
+                                  sys_recv_pf_t recv_cbk,void *fuse_ctx_p,
+			          int storcli_idx,fid_t fid);
+
+
+void af_unix_fuse_write_process_response(void *msg);
+void rozofs_fuse_release_rcv_buffer_pool(rozofs_fuse_rcv_buf_t *p_rcv_buf);
 #endif

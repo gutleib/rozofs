@@ -211,11 +211,11 @@ void *rozofs_fuse_thread(void *arg) {
 			 &msg,sizeof(msg), 
 			 0,(struct sockaddr *)NULL,NULL);
     if (bytesRcvd == -1) {
-      fatal("Disk Thread %d recvfrom %s !!\n",ctx_p->thread_idx,strerror(errno));
+      fatal("Read Thread %d recvfrom %s !!\n",ctx_p->thread_idx,strerror(errno));
       exit(0);
     }
     if (bytesRcvd != sizeof(msg)) {
-      fatal("Disk Thread %d socket is dead (%d/%d) %s !!\n",ctx_p->thread_idx,bytesRcvd,(int)sizeof(msg),strerror(errno));
+      fatal("Read Thread %d socket is dead (%d/%d) %s !!\n",ctx_p->thread_idx,bytesRcvd,(int)sizeof(msg),strerror(errno));
       exit(0);    
     }
     
