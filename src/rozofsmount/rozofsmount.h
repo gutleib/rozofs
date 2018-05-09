@@ -59,7 +59,7 @@ extern uint16_t rozofsmount_diag_port;
 extern int rozofs_max_storcli_tx ;  /**< depends on the number of storcli processes */
 extern char *rozofs_mountpoint;
 extern struct fuse_lowlevel_ops rozofs_ll_operations;
-
+extern int ROZOFS_MAX_WRITE_THREADS;  /**< number of active write threads           */
 typedef struct rozofsmnt_conf {
     char *host;
     char *export;
@@ -115,7 +115,8 @@ typedef struct rozofsmnt_conf {
     unsigned noReadFaultTolerant;   
     unsigned xattrcache;   /**< assert to 1 for extended attributes caching                        */      
     unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */
-    unsigned numanode;      
+    unsigned numanode; 
+    unsigned nb_writeThreads;  /**< number of write threads (default:0                             */     
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 
@@ -174,7 +175,7 @@ extern int rozofs_xattr_disable; /**< assert to one to disable xattr for the exp
 */
 extern uint64_t    rozofs_aligned_write_start[2];
 extern uint64_t    rozofs_aligned_write_end[2];
-
+extern int ROZOFS_MAX_WRITE_PENDING;
 extern int rozofs_site_number;
 /**______________________________________________________________________________
 */
@@ -679,7 +680,7 @@ void init_write_flush_stat(int max_write_pending);
 
 void rozofs_ll_opendir_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi);
 void rozofs_ll_releasedir_nb(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
-
+void init_write_thread_active(int nb_writeThreads);
 /*
 **__________________________________________________________________
 */

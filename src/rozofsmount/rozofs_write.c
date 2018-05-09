@@ -187,6 +187,7 @@ void init_write_flush_stat(int max_write_pending){
   uma_dbg_addTopic_option("write_flush", display_write_flush_stat,UMA_DBG_OPTION_RESET);  
   uma_dbg_addTopic("bugwatch", bugwatch_proc);  
 }
+ 
 
 /*
 **__________________________________________________________________
@@ -957,6 +958,12 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
    fuse_end_tx_recv_pf_t  callback;
    int storcli_idx;
    ientry_t *ie;
+   int use_write_thread = 0 ;
+   
+   if (ROZOFS_MAX_WRITE_THREADS != 0)
+   {
+     if (rozofs_fuse_is_current_rcv_buffer((char*)buf) != 0) use_write_thread = 1;
+   }  
 
     // Fill request
     ie = f->ie;
@@ -1052,11 +1059,25 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
     GET_FUSE_CALLBACK(buffer_p,callback);
     f->buf_write_pending++;
     f->write_block_pending = 1;
-    ret = rozofs_storcli_send_common(NULL,ROZOFS_TMR_GET(TMR_STORCLI_PROGRAM),STORCLI_PROGRAM, STORCLI_VERSION,
-                              STORCLI_WRITE,
-			      (shared_buf_idx!=-1)?(xdrproc_t) xdr_storcli_write_arg_no_data_t: (xdrproc_t)xdr_storcli_write_arg_t,
-			      (void *)&args,
-                              callback,buffer_p,storcli_idx,f->fid); 
+    /*
+    ** Check iof rozofsmount is configured with write threads
+    */
+    if (use_write_thread)
+    {
+      ret = rozofs_storcli_wr_thread_send(STORCLI_WRITE,(void *)&args,(xdrproc_t) xdr_storcli_write_arg_no_data_t,
+                                  callback,buffer_p,
+			          storcli_idx,f->fid);
+    
+    
+    }
+    else
+    {
+      ret = rozofs_storcli_send_common(NULL,ROZOFS_TMR_GET(TMR_STORCLI_PROGRAM),STORCLI_PROGRAM, STORCLI_VERSION,
+                        	STORCLI_WRITE,
+				(shared_buf_idx!=-1)?(xdrproc_t) xdr_storcli_write_arg_no_data_t: (xdrproc_t)xdr_storcli_write_arg_t,
+				(void *)&args,
+                        	callback,buffer_p,storcli_idx,f->fid); 
+    }
     if (ret < 0) goto error;
     
     /*
@@ -1259,7 +1280,21 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
       fuse_reply_write(req, size);
       goto out;
     }
-    
+    /*
+    ** Check the case of the big write wthen the write thread are active
+    */
+    if (ROZOFS_MAX_WRITE_THREADS != 0)
+    {
+      if (size >=ROZOFS_MAX_FILE_BUF_SZ)
+      {
+	 /*
+	 ** clear the reference of the buffer since it is under the control of the fuse
+	 ** write thread
+	 */
+	 buffer_p = NULL;
+	 goto out;    
+      }
+    }    
     /*
     ** A write toward the STORCLI is pending 
     ** so we must keep the the fuse context until the STORCLI response

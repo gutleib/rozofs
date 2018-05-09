@@ -60,6 +60,7 @@ add_executable(rozofsmount
     rozofs_xattr_flt.c
     rozofs_export_cnx_supervision.c
     rozofs_fuse_thread.c
+    rozofs_fuse_wr_thread.c
     rozofs_fuse_thread_intf.c
     rozofs_fuse_thread_intf.h
     fuse_reply_thread.c

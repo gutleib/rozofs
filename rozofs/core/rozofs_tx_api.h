@@ -358,6 +358,22 @@ static inline void rozofs_tx_save_xmitBuf(rozofs_tx_ctx_t *p,void *xmit_buf)
 
 }
 
+/**
+*  API to get the reference of the xmit buffer
+  Application are intended to use that service if they want to attempt
+  releasing the xmit buffer while it is queued on the xmit queue
+  of a load balancing group or any other transport stack.
+
+ @param p : pointer to the transaction context
+ 
+ @retval <>NULL xmit buffer reference
+*/
+static inline void *rozofs_tx_get_xmitBuf(rozofs_tx_ctx_t *p)
+{
+    return p->xmit_buf;
+}
+
+
 /*
 **____________________________________________________
 */

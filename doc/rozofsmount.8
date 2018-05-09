@@ -64,6 +64,9 @@ Specify minimum read size on disk in KiB (default value is same as RozoFS block 
 \fB\-o rozofsmaxwritepending=\fP\fIN\fP
 Specify the number of write request(s) that can be sent for an open file from the rozofsmount toward the storcli asynchronously (default: 4).
 .TP
+\fB\-o nb_writeThreads=\fP\fIN\fP
+Specify the number of active write thread(s) for processing write greater than 256KB (default: 0; max: 4).
+.TP
 \fB\-o rozofsmaxretry=\fP\fIN\fP
 Specify number of retries before I/O error is returned (default: 50).
 .TP

@@ -27,11 +27,12 @@
 #include <rozofs/common/log.h>
 #include <rozofs/core/af_unix_socket_generic.h>
 #include <rozofs/core/rozofs_socket_family.h>
+#include <rozofs/rpc/storcli_proto.h>
 #include "rozofs_fuse_api.h"
 #include "rozofs_sharedmem.h"
 
 #define ROZOFS_MAX_FUSE_THREADS 8
-
+#define ROZOFS_MAX_FUSE_WR_THREADS 8
 typedef struct _rozofs_fuse_thread_stat_t {
   
   uint64_t            write_count;
@@ -52,6 +53,7 @@ typedef struct _rozofs_fuse_thread_ctx_t
 } rozofs_fuse_thread_ctx_t;
 
 extern rozofs_fuse_thread_ctx_t rozofs_fuse_thread_ctx_tb[];
+extern rozofs_fuse_thread_ctx_t rozofs_fuse_wr_thread_ctx_tb[];
 
 /**
 * Message sent/received in the af_unix disk sockets
@@ -59,6 +61,7 @@ extern rozofs_fuse_thread_ctx_t rozofs_fuse_thread_ctx_tb[];
 
 typedef enum _rozofs_fuse_thread_request_e {
   ROZOFS_FUSE_REPLY_BUF=1,
+  ROZOFS_FUSE_WRITE_BUF,
   ROZOFS_FUSE_THREAD_MAX_OPCODE
 } rozofs_fuse_thread_request_e;
 
@@ -73,6 +76,37 @@ typedef struct _rozofs_fuse_thread_msg_t
   void                *payload;   /**< pointer to the buffer payload   */
   void                *bufRef;   /**< shared memory buffer reference   */
 } rozofs_fuse_thread_msg_t;
+
+
+/*
+** message used by rozofs_write
+*/
+typedef struct _rozofs_fuse_wr_thread_msg_t
+{
+  uint32_t            opcode;
+  uint32_t            status;
+  int                 errval;           /**< errno code  */
+  uint64_t            timeStart;
+  uint64_t            timeResp;
+  uint32_t            size;              /**< size of the buffer   */
+  int                 rpc_opcode;        /**< storcli rpc opcode */
+  xdrproc_t           encode_fct;
+  void                *rozofs_tx_ctx_p;  /**< pointer to the transaction context */
+  int                 storcli_idx;
+  uint32_t            rm_xid;     /**< xid of the rpc transaction  */
+  storcli_write_arg_t args;       /**< rpc arguments          */
+  void                *rozofs_fuse_cur_rcv_buf;
+  
+} rozofs_fuse_wr_thread_msg_t;
+
+/*
+** Use the same response thread for read and write
+*/
+typedef union
+{
+   rozofs_fuse_thread_msg_t read;
+   rozofs_fuse_wr_thread_msg_t write;
+} rozofs_fuse_rd_wr_thread_msg_u;
 
 /*__________________________________________________________________________
 * Initialize the fuse thread interface
@@ -101,6 +135,19 @@ int rozofs_thread_fuse_reply_buf(fuse_req_t req,
 				 uint32_t size,
 				 void *bufRef,
 				 uint64_t       timeStart);
+
+
+/*__________________________________________________________________________
+*/
+/**
+*  Send a write buffer to a write fuse thread
+*
+* @param msg_thread_p: pointer to the message to send  
+*
+* @retval 0 on success -1 in case of error
+*  
+*/
+int rozofs_sendto_wr_fuse_thread(rozofs_fuse_wr_thread_msg_t *msg_thread_p);
 /*
 **__________________________________________________________________________
 */
@@ -116,5 +163,17 @@ int rozofs_thread_fuse_reply_buf(fuse_req_t req,
    @retval none
 */
 void rozofs_fuse_th_send_response (rozofs_fuse_thread_ctx_t *thread_ctx_p, rozofs_fuse_thread_msg_t * msg, int status);
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Thar API is intended to be used by a fuse write thread for sending back a 
+   write prepare response  towards the main thread
+   
+   @param thread_ctx_p: pointer to the thread context (contains the thread source socket )
+   
+   @retval none
+*/
+void rozofs_fuse_wr_th_send_response (rozofs_fuse_thread_ctx_t *thread_ctx_p, rozofs_fuse_wr_thread_msg_t * msg);
 
 #endif
