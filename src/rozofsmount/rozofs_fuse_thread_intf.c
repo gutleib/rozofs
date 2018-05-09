@@ -34,14 +34,15 @@
  
 int        af_unix_fuse_south_socket_ref = -1;
 int        af_unix_fuse_thread_count=0;
+int        af_unix_fuse_wr_thread_count=0;
 int        af_unix_fuse_pending_req_count = 0;
 
 struct  sockaddr_un rozofs_fuse_south_socket_name;
 struct  sockaddr_un rozofs_fuse_north_socket_name;
-
+struct  sockaddr_un rozofs_fuse_wr_north_socket_name;
  
 int rozofs_fuse_thread_create(char * hostname, int nb_threads, int instance_id) ;
- 
+int rozofs_fuse_wr_thread_create(char * hostname, int nb_threads, int instance_id) ; 
 
 
 /*__________________________________________________________________________
@@ -148,7 +149,7 @@ void fuse_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
       display_txt("Total");
     }   
 #if 1
-    display_line_topic("Read Requests");  
+    display_line_topic("Write Requests");  
     display_line_val("   number", write_count);
     display_line_val("   Bytes",write_Byte_count);      
     display_line_val("   Cumulative Time (us)",write_time);
@@ -164,6 +165,102 @@ void fuse_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
 
   if (doreset) {
     for (i=0; i<af_unix_fuse_thread_count; i++) {
+      memset(&p[i].stat,0,sizeof(p[i].stat));
+    } 
+    pChar += sprintf(pChar,"reset done\n");    
+  }
+  uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
+}
+
+/*
+** Write thread debug
+*/
+static char * fuse_thread_wr_debug_help(char * pChar) {
+  pChar += rozofs_string_append(pChar,"usage:\nfuseWrThreads reset       : reset statistics\nfuseWrThreads             : display statistics\n");  
+  pChar += rozofs_string_append(pChar,"fuseWrThreads set <nb>    : set the number of active write threads [0..4]\n");
+  return pChar; 
+}  
+
+void fuse_thread_wr_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char           *pChar=uma_dbg_get_buffer();
+  char           *pLine=pChar;
+  int             lineEmpty=0;
+  int             doreset=0;
+  int i;
+  rozofs_fuse_thread_ctx_t *p = rozofs_fuse_wr_thread_ctx_tb;
+  int startIdx,stopIdx;
+  rozofs_fuse_thread_stat_t sum;
+  int                       last=0;
+  int   new_val;
+  
+  if (argv[1] != NULL) {
+    if (strcmp(argv[1],"set")==0) {
+      if (argv[2] == NULL) {
+        pChar += sprintf(pChar, "missing number of threads parameter\n");
+        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+        return;	
+      }
+      errno = 0;       
+      new_val = (int) strtol(argv[2], (char **) NULL, 10);   
+      if (errno != 0) {
+        pChar += sprintf(pChar, "bad value %s\n",argv[2]);
+        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+        return;
+      }
+      init_write_thread_active((int)new_val);
+      pChar +=sprintf(pChar,"new value of active write threads is now %d\n",ROZOFS_MAX_WRITE_THREADS);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;      
+    }
+    if (strcmp(argv[1],"reset")==0) {
+      doreset = 1;
+    }
+    else {  
+      pChar = fuse_thread_wr_debug_help(pChar);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    }        
+  }
+  
+  memset(&sum, 0, sizeof(sum));
+  stopIdx  = 0;
+  last = 0;
+  pChar +=sprintf(pChar,"Number of active threads : %d\n",ROZOFS_MAX_WRITE_THREADS);
+  while (last == 0) {
+  
+    startIdx = stopIdx;
+    if ((af_unix_fuse_wr_thread_count - startIdx) > THREAD_PER_LINE) {
+      stopIdx = startIdx + THREAD_PER_LINE;
+    }  
+    else {
+      stopIdx = af_unix_fuse_wr_thread_count;
+      last = 1;
+    }  
+    
+    new_line("Thread number",0);
+    for (i=startIdx; i<stopIdx; i++) {
+      display_val(p[i].thread_idx);
+    } 
+    if (last) {
+      display_txt("Total");
+    }   
+#if 1
+    display_line_topic("Write Requests");  
+    display_line_val("   number", write_count);
+    display_line_val("   Bytes",write_Byte_count);      
+    display_line_val("   Cumulative Time (us)",write_time);
+    display_line_div("   Average Bytes",write_Byte_count,write_count);  
+    display_line_div("   Average Time (us)",write_time,write_count);
+    display_line_div("   Throughput (MBytes/s)",write_Byte_count,write_time);  
+#endif
+ 
+    display_line_topic("");  
+    *pChar++= '\n';
+    *pChar = 0;
+  }
+
+  if (doreset) {
+    for (i=0; i<af_unix_fuse_wr_thread_count; i++) {
       memset(&p[i].stat,0,sizeof(p[i].stat));
     } 
     pChar += sprintf(pChar,"reset done\n");    
@@ -260,11 +357,13 @@ uint32_t af_unix_fuse_rcvReadysock(void * unused,int socketId)
 {
   return TRUE;
 }
+
+
 /*
 **__________________________________________________________________________
 */
 /**
-  Processes a disk response
+  Processes a read response
 
    Called from the socket controller when there is a response from a disk thread
    the response is either for a disk read or write
@@ -273,20 +372,8 @@ uint32_t af_unix_fuse_rcvReadysock(void * unused,int socketId)
  
   @retval :none
 */
-void af_unix_fuse_response(rozofs_fuse_thread_msg_t *msg) 
+void af_unix_fuse_read_response(rozofs_fuse_thread_msg_t *msg) 
 {
-  rozofs_fuse_thread_request_e   opcode;
-  opcode = msg->opcode;
-  switch (opcode) {
-  
-    case ROZOFS_FUSE_REPLY_BUF:
-    {
-      break;
-    }  
-          
-    default:
-      severe("Unexpected opcode %d", opcode);
-  }
   /*
   ** release the shared buffer
   */
@@ -306,6 +393,38 @@ void af_unix_fuse_response(rozofs_fuse_thread_msg_t *msg)
   */
   *p32 = 0;
   ruc_buf_freeBuffer(msg->bufRef);
+}
+/*
+**__________________________________________________________________________
+*/
+/**
+  Processes either a read or write response
+
+   Called from the socket controller when there is a response from a disk thread
+   the response is either for a disk read or write
+    
+  @param msg: pointer to disk response message
+ 
+  @retval :none
+*/
+void af_unix_fuse_response(rozofs_fuse_rd_wr_thread_msg_u *msg) 
+{
+  rozofs_fuse_thread_request_e   opcode;
+  opcode = msg->read.opcode;
+  switch (opcode) {
+  
+    case ROZOFS_FUSE_REPLY_BUF:
+    {
+      return af_unix_fuse_read_response(&msg->read);
+      break;
+    }  
+    case ROZOFS_FUSE_WRITE_BUF:          
+      return af_unix_fuse_write_process_response(&msg->write);
+      
+    default:
+      severe("Unexpected opcode %d", opcode);
+  }
+
 }
 
 /*
@@ -329,7 +448,7 @@ void af_unix_fuse_response(rozofs_fuse_thread_msg_t *msg)
 
 uint32_t af_unix_fuse_rcvMsgsock(void * unused,int socketId)
 {
-  rozofs_fuse_thread_msg_t   msg;
+  rozofs_fuse_rd_wr_thread_msg_u   msg;
   int                        bytesRcvd;
   int eintr_count = 0;
   
@@ -420,6 +539,31 @@ void fuse_set_socket_name_with_hostname(struct sockaddr_un *socketname,char *nam
   pChar += rozofs_string_append(pChar,hostname);
 }
 
+
+/*
+**__________________________________________________________________________
+*/
+/**
+* fill the storio  AF_UNIX name in the global data
+
+  @param hostname
+  @param socketname : pointer to a sockaddr_un structure
+  
+  @retval none
+*/
+void fuse_set_wr_socket_name_with_hostname(struct sockaddr_un *socketname,char *name,char *hostname,int instance_id)
+{
+  socketname->sun_family = AF_UNIX;  
+  char * pChar = socketname->sun_path;
+  pChar += rozofs_string_append(pChar,name);
+   *pChar++ = '_';
+   *pChar++ = 'w';
+   *pChar++ = 'r';
+  *pChar++ = '_';
+  pChar += rozofs_u32_append(pChar,instance_id);
+  *pChar++ = '_';  
+  pChar += rozofs_string_append(pChar,hostname);
+}
 /*
 **__________________________________________________________________________
 */
@@ -444,6 +588,30 @@ void rozofs_fuse_th_send_response (rozofs_fuse_thread_ctx_t *thread_ctx_p, rozof
   msg->status = status;
   msg->timeResp = tic;
   
+  /*
+  ** send back the response
+  */  
+  ret = sendto(thread_ctx_p->sendSocket,msg, sizeof(*msg),0,(struct sockaddr*)&rozofs_fuse_south_socket_name,sizeof(rozofs_fuse_south_socket_name));
+  if (ret <= 0) {
+     fatal("rozofs_fuse_th_send_response %d sendto(%s) %s", thread_ctx_p->thread_idx, rozofs_fuse_south_socket_name.sun_path, strerror(errno));
+     exit(0);  
+  }
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Thar API is intended to be used by a fuse write thread for sending back a 
+   write prepare response  towards the main thread
+   
+   @param thread_ctx_p: pointer to the thread context (contains the thread source socket )
+   
+   @retval none
+*/
+void rozofs_fuse_wr_th_send_response (rozofs_fuse_thread_ctx_t *thread_ctx_p, rozofs_fuse_wr_thread_msg_t * msg) 
+{
+  int                     ret; 
   /*
   ** send back the response
   */  
@@ -489,6 +657,33 @@ int rozofs_thread_fuse_reply_buf(fuse_req_t req,
   ret = sendto(af_unix_fuse_south_socket_ref,&msg, sizeof(msg),0,(struct sockaddr*)&rozofs_fuse_north_socket_name,sizeof(rozofs_fuse_north_socket_name));
   if (ret <= 0) {
      fatal("rozofs_fuse_thread_intf_send  sendto(%s) %s", rozofs_fuse_north_socket_name.sun_path, strerror(errno));
+     exit(0);  
+  }
+  
+  af_unix_fuse_pending_req_count++;
+//  sched_yield();
+  return 0;
+}
+
+
+/*__________________________________________________________________________
+*/
+/**
+*  Send a write buffer to a write fuse thread
+*
+* @param msg_thread_p: pointer to the message to send  
+*
+* @retval 0 on success -1 in case of error
+*  
+*/
+int rozofs_sendto_wr_fuse_thread(rozofs_fuse_wr_thread_msg_t *msg_thread_p) 
+{
+  int                         ret;
+  
+  /* Send the buffer to its destination */
+  ret = sendto(af_unix_fuse_south_socket_ref,msg_thread_p, sizeof(*msg_thread_p),0,(struct sockaddr*)&rozofs_fuse_wr_north_socket_name,sizeof(rozofs_fuse_wr_north_socket_name));
+  if (ret <= 0) {
+     fatal("rozofs_sendto_wr_fuse_thread  sendto(%s) %s", rozofs_fuse_wr_north_socket_name.sun_path, strerror(errno));
      exit(0);  
   }
   
@@ -580,14 +775,16 @@ void af_unix_fuse_scheduler_entry_point(uint64_t current_time)
 /*__________________________________________________________________________
 * Initialize the disk thread interface
 *
-* @param hostname    storio hostname (for tests)
-* @param nb_threads  Number of threads that can process the disk requests
+* @param hostname    hostname (for tests)
+* @param nb_threads  Number of threads that can process the read or write requests
 *
 *  @retval 0 on success -1 in case of error
 */
 int rozofs_fuse_thread_intf_create(char * hostname, int instance_id, int nb_threads) {
 
   af_unix_fuse_thread_count = nb_threads;
+  af_unix_fuse_wr_thread_count = nb_threads;
+  int ret;
 
   /*
   ** init of the AF_UNIX sockaddr associated with the south socket (socket used for disk response receive)
@@ -614,7 +811,21 @@ int rozofs_fuse_thread_intf_create(char * hostname, int instance_id, int nb_thre
   */
 //  ruc_sockCtrl_attach_applicative_poller(af_unix_fuse_scheduler_entry_point);  
    
-  return rozofs_fuse_thread_create(hostname, nb_threads, instance_id);
+
+  ret =  rozofs_fuse_thread_create(hostname, nb_threads, instance_id);
+  if (ret < 0) return ret;
+
+ /*
+  ** init of the AF_UNIX sockaddr associated with the north socket (socket used for disk request receive)
+  */
+  fuse_set_wr_socket_name_with_hostname(&rozofs_fuse_wr_north_socket_name,ROZOFS_SOCK_FAMILY_FUSE_NORTH,hostname,instance_id);
+  /*
+  ** Start the write threads
+  */
+  uma_dbg_addTopic_option("fuseWrThreads", fuse_thread_wr_debug,UMA_DBG_OPTION_RESET); 
+
+  return rozofs_fuse_wr_thread_create(hostname, nb_threads, instance_id);
+  
 }
 
 
