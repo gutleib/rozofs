@@ -254,6 +254,11 @@ uint32_t readln(int fd,char *pbuf,uint32_t buflen)
 
 void add_cmd_in_list(char * new_cmd, int len) {
   char * p;
+
+  if (len > 2000) {
+    printf("Add command : too big %d\n", len);
+    return;
+  }    
   
   p = malloc(len+1);
   memcpy(p,new_cmd,len);
@@ -284,6 +289,11 @@ int debug_run_this_cmd(int socketId, const char * cmd, int silent) {
   uint32_t len,sent; 
    
   len = strlen(cmd)+1; 
+  
+  if (len > 2001) {
+    printf("Run command : too big %d\n", len);
+    return 0;
+  }    
 
   memcpy(msg.buffer ,cmd,len);  
   msg.header.len = htonl(len);
