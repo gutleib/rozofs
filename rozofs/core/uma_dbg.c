@@ -76,12 +76,13 @@ typedef struct uma_dbg_topic_s {
   uma_dbg_manual_function_t  man;  
 } UMA_DBG_TOPIC_S;
 
-#define UMA_DBG_MAX_TOPIC 128
+#define UMA_DBG_MAX_TOPIC 256
 UMA_DBG_TOPIC_S uma_dbg_topic[UMA_DBG_MAX_TOPIC] = {};
 uint32_t        uma_dbg_nb_topic = 0;
 uint32_t          uma_dbg_topic_initialized=FALSE;
 
-#define            MAX_ARG   64
+#define            UMA_DBG_MAX_CMD_LEN ((1024*2)-1)
+#define            MAX_ARG              64
 
 uma_dbg_catcher_function_t	uma_dbg_catcher = uma_dbg_catcher_DFT;
 
@@ -94,14 +95,13 @@ typedef struct uma_dbg_session_s {
 //64BITS  uint32_t                    recvPool;
   void                      *recvPool;
   char                     *argv[MAX_ARG];
-  char                      argvBuffer[2050];
-  char                      last_valid_command[2000];
+  char                      argvBuffer[UMA_DBG_MAX_CMD_LEN+1];
+  char                      last_valid_command[UMA_DBG_MAX_CMD_LEN+1];
 } UMA_DBG_SESSION_S;
 
 UMA_DBG_SESSION_S *uma_dbg_freeList = (UMA_DBG_SESSION_S*)NULL;
 UMA_DBG_SESSION_S *uma_dbg_activeList = (UMA_DBG_SESSION_S*)NULL;
 
-#define UMA_DBG_MAX_CMD_LEN (1024*4)
 char rcvCmdBuffer[UMA_DBG_MAX_CMD_LEN+1];
 
 char uma_dbg_temporary_buffer[UMA_DBG_MAX_SEND_SIZE];
@@ -1179,6 +1179,7 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
   UMA_MSGHEADER_S *pHead;
   UMA_DBG_SESSION_S * p;
   int                 replay=0;
+  uint32_t            cmdLen = 0;
 
   /*
   ** clear the received command buffer content
@@ -1197,6 +1198,15 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
     severe( "ruc_buf_getPayload(%p)", bufRef );
     return;
   }
+
+  /*
+  ** Check that the received command is not too big
+  */
+  cmdLen = ruc_buf_getPayloadLen(bufRef);
+  if (cmdLen > UMA_DBG_MAX_CMD_LEN) {
+    uma_dbg_send(tcpCnxRef,bufRef,TRUE,"Command is too long !!!\n");
+    return;
+  }     
 
   /*
   ** Call an optional catcher in order to redirect the message.
@@ -1230,16 +1240,26 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
   /*
   ** save the current received command
   */
-  memcpy(rcvCmdBuffer,pBuf,UMA_DBG_MAX_CMD_LEN);
-  rcvCmdBuffer[UMA_DBG_MAX_CMD_LEN] = 0;
+  memcpy(rcvCmdBuffer,pBuf,cmdLen);
+  rcvCmdBuffer[cmdLen] = 0;
   pArg = p->argvBuffer;
   while (1) {
     /* Skip blanks */
 //  (before FDL)  while ((*pBuf == ' ') || (*pBuf == '\t')) *pBuf++;
-  while ((*pBuf == ' ') || (*pBuf == '\t')) pBuf++;
+    while ((*pBuf == ' ') || (*pBuf == '\t')) pBuf++;
     if (*pBuf == 0) break; /* end of command line */
+    
+    /*
+    ** Check one do not exhaust the maximum number of parameters
+    */
+    if (argc >= MAX_ARG) {
+      uma_dbg_send(tcpCnxRef,bufRef,TRUE,"Too much parameters in command !!!\n");
+      return;
+    }     
+    
     p->argv[argc] = pArg;     /* beginning of a parameter */
     argc++;
+    
     /* recopy the parameter */
     while ((*pBuf != ' ') && (*pBuf != '\t') && (*pBuf != 0)) *pArg++ = *pBuf++;
     *pArg++ = 0; /* End the parameter with 0 */
