@@ -92,11 +92,10 @@ typedef struct uma_dbg_session_s {
   uint32_t                    ipAddr;
   uint16_t                    port;
   uint32_t                    tcpCnxRef;
-//64BITS  uint32_t                    recvPool;
-  void                      *recvPool;
-  char                     *argv[MAX_ARG];
-  char                      argvBuffer[UMA_DBG_MAX_CMD_LEN+1];
-  char                      last_valid_command[UMA_DBG_MAX_CMD_LEN+1];
+  uint64_t                    nbcmd;
+  void                      * recvPool;
+  char                      * argv[MAX_ARG];
+  char                        argvBuffer[UMA_DBG_MAX_CMD_LEN+1];
 } UMA_DBG_SESSION_S;
 
 UMA_DBG_SESSION_S *uma_dbg_freeList = (UMA_DBG_SESSION_S*)NULL;
@@ -382,6 +381,46 @@ void show_uma_dbg_core_files(char * argv[], uint32_t tcpRef, void *bufRef) {
   len = uma_dbg_run_system_cmd(uma_dbg_get_buffer(), uma_dbg_get_buffer(), uma_dbg_get_buffer_len());
   if (len == 0)  uma_dbg_send(tcpRef, bufRef, TRUE, "None\n");    
   else           uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+  return ;
+}
+/*__________________________________________________________________________
+ */
+/**
+*  Display diagnostic sessions
+*/
+void show_uma_dbg_diag_man(char * pChar) {
+  pChar += rozofs_string_append           (pChar,"Display diagnostic sessions\n");
+}
+void show_uma_dbg_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
+  int                 len;
+  char              * pChar;
+  ruc_obj_desc_t    * pnext;
+  UMA_DBG_SESSION_S * p;
+  int                 first=1;
+  
+  pChar = uma_dbg_get_buffer();
+  pChar += sprintf(pChar, "{ \"diagnostic sessions\" : [\n") ;
+  pnext = (ruc_obj_desc_t*)NULL;
+  while ((p = (UMA_DBG_SESSION_S*)ruc_objGetNext(&uma_dbg_activeList->link, &pnext))
+	 !=(UMA_DBG_SESSION_S*)NULL) {
+     if (first) {
+       first = 0;
+     }
+     else {
+       pChar += sprintf(pChar,",\n");
+     }  
+     pChar += sprintf(pChar, "    { \"ref\" : %x, \"ip\" : \"%u:%u.%u.%u\", \"port\" : %u, \"cmd#\" : %llu }", 
+                      p->ref, 
+                      p->ipAddr>>24  & 0xFF, 
+                      p->ipAddr>>16 & 0xFF, 
+                      p->ipAddr>>8  & 0xFF, 
+                      p->ipAddr     & 0xFF,
+                      p->port,
+                      p->nbcmd);
+  }
+  pChar += sprintf(pChar, "\n] }\n"); 
+
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
   return ;
 }
 /*__________________________________________________________________________
@@ -1178,13 +1217,7 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
   uint32_t           argc;
   UMA_MSGHEADER_S *pHead;
   UMA_DBG_SESSION_S * p;
-  int                 replay=0;
   uint32_t            cmdLen = 0;
-
-  /*
-  ** clear the received command buffer content
-  */
-  rcvCmdBuffer[0] = 0;
 
   /* Retrieve the session context from the referecne */
 
@@ -1199,14 +1232,42 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
     return;
   }
 
+
   /*
-  ** Check that the received command is not too big
+  ** clear the received command buffer content
   */
+  rcvCmdBuffer[0] = 0;
+  
+  /*
+  ** Check the message consistency
+  */
+
   cmdLen = ruc_buf_getPayloadLen(bufRef);
+  
+  if (cmdLen != (ntohl(pHead->len)+sizeof(UMA_MSGHEADER_S))) {
+    char * tmp = uma_dbg_get_buffer();
+    sprintf(tmp,"!!! Size is inconsistent buffer=%d header=%lu command=%d!!!\n",cmdLen,sizeof(UMA_MSGHEADER_S),ntohl(pHead->len));
+    uma_dbg_send(tcpCnxRef,bufRef,TRUE,tmp);
+    return;
+  }          
+  if (cmdLen < sizeof(UMA_MSGHEADER_S)) {
+    char * tmp = uma_dbg_get_buffer();
+    sprintf(tmp,"!!! Command is too short buffer=%d header=%lu !!!\n",cmdLen,sizeof(UMA_MSGHEADER_S));
+    uma_dbg_send(tcpCnxRef,bufRef,TRUE,tmp);
+    return;
+  }      
   if (cmdLen > UMA_DBG_MAX_CMD_LEN) {
-    uma_dbg_send(tcpCnxRef,bufRef,TRUE,"Command is too long !!!\n");
+    char * tmp = uma_dbg_get_buffer();
+    sprintf(tmp,"!!! Command is too long buffer=%d max=%d !!!\n",cmdLen,UMA_DBG_MAX_CMD_LEN);
+    uma_dbg_send(tcpCnxRef,bufRef,TRUE,tmp);
     return;
   }     
+
+  if (cmdLen == sizeof(UMA_MSGHEADER_S)) {
+    old=1;
+    uma_dbg_listTopic(tcpCnxRef, bufRef, NULL);
+    return;
+  }
 
   /*
   ** Call an optional catcher in order to redirect the message.
@@ -1217,18 +1278,12 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
   {
     return;
   }
-
+  
+  p->nbcmd++;
 
   /* Scan the command line */
   argc = 0;
   pBuf = (char*)(pHead+1);
-  
-  /* Is it a replay request i.e "!!" */
-  if ((pBuf[0] =='!') && (pBuf[1] =='!')) {
-    /* let's get as input the last saved command */
-    pBuf = p->last_valid_command;
-    replay = 1;
-  }
   
   if (*pBuf == 0) {
     old=1;
@@ -1242,7 +1297,10 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
   */
   memcpy(rcvCmdBuffer,pBuf,cmdLen);
   rcvCmdBuffer[cmdLen] = 0;
+
   pArg = p->argvBuffer;
+  *pArg = 0;
+
   while (1) {
     /* Skip blanks */
 //  (before FDL)  while ((*pBuf == ' ') || (*pBuf == '\t')) *pBuf++;
@@ -1253,7 +1311,7 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
     ** Check one do not exhaust the maximum number of parameters
     */
     if (argc >= MAX_ARG) {
-      uma_dbg_send(tcpCnxRef,bufRef,TRUE,"Too much parameters in command !!!\n");
+      uma_dbg_send(tcpCnxRef,bufRef,TRUE,"!!! Too much parameters in command !!!\n");
       return;
     }     
     
@@ -1285,12 +1343,6 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
     uma_dbg_listTopic(tcpCnxRef, bufRef, p->argv[0]); 
     return;
   }    
-  /* We have found one command */
-
-  /* Save this existing command for later replay */
-  if (replay == 0) {
-    strcpy(p->last_valid_command,(char*)(pHead+1));
-  } 
   
   uma_dbg_topic[topicNum].funct(p->argv,tcpCnxRef,bufRef);
 }
@@ -1343,7 +1395,6 @@ void uma_dbg_process_command_file(char * command_file_name) {
   p->ipAddr    = ntohl(0x7F000001);
   p->port      = 0;
   p->tcpCnxRef = (uint32_t) -1;  
-  p->last_valid_command[0] = 0;
   
   /*
   ** Get a buffer
@@ -1519,7 +1570,6 @@ uint32_t uma_dbg_accept_CBK(uint32_t userRef,int socketId,struct sockaddr * sock
 
   /* Search for a debug session with this IP address and port */
   if ((pObj = uma_dbg_findFromAddrAndPort(ipAddr,port)) != NULL) {
-
     /* Session already exist. Just update it */
     if (uma_tcp_updateTcpConnection(pObj->tcpCnxRef,socketId,name) != RUC_OK) {
       uma_dbg_free(pObj);
@@ -1539,9 +1589,8 @@ uint32_t uma_dbg_accept_CBK(uint32_t userRef,int socketId,struct sockaddr * sock
   pObj->ipAddr    = ipAddr;
   pObj->port      = port;
   pObj->tcpCnxRef = (uint32_t) -1;
+  pObj->nbcmd     = 0;
   
-  pObj->last_valid_command[0] = 0;
-
   /* Allocate a TCP connection descriptor */
   pconf->headerSize       = sizeof(UMA_MSGHEADER_S);
   pconf->msgLenOffset     = 0;
@@ -1660,6 +1709,7 @@ void uma_dbg_init(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort) {
   uma_dbg_addTopicAndMan("reserved_ports", uma_dbg_reserved_ports, uma_dbg_reserved_ports_man, 0);
   uma_dbg_addTopicAndMan("counters", uma_dbg_counters_reset, uma_dbg_counters_reset_man, 0);
   uma_dbg_addTopicAndMan("manual", uma_dbg_manual, uma_dbg_manual_man, 0);
+  uma_dbg_addTopicAndMan("diagnostic", show_uma_dbg_diag, show_uma_dbg_diag_man, 0);
 }
 /*
 **-------------------------------------------------------
