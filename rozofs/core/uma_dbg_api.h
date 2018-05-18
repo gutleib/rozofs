@@ -43,6 +43,10 @@ extern uint32_t uma_dbg_do_not_send;
 extern char   * uma_gdb_system_name;
 extern char     rcvCmdBuffer[];
 
+
+static inline void uma_dbg_send(uint32_t tcpCnxRef, void  *bufRef, uint8_t end, char *string);
+
+
 /*__________________________________________________________________________
  */
 /**
@@ -227,7 +231,11 @@ static inline void uma_dbg_send_buffer(uint32_t tcpCnxRef, void  *bufRef, int le
   ** Check the message is not too long
   */
   if ((len >= ruc_buf_getMaxPayloadLen(bufRef))) {
-    severe("debug response exceeds buffer length %u/%u",len,ruc_buf_getMaxPayloadLen(bufRef));
+    char * tmp = uma_dbg_get_buffer();
+    sprintf(tmp,"!!! rozodiag response exceeds buffer length %u/%u !!!\n",len,ruc_buf_getMaxPayloadLen(bufRef));
+    severe("%s",tmp);
+    uma_dbg_send(tcpCnxRef, bufRef, 1, tmp);
+    return;
   }
   
   /* 

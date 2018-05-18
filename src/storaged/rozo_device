@@ -366,21 +366,30 @@ def rozo_list_some_block_device(blockDev) :
   
   # List every block device and find out a specific one
   for b in blockDev:
+  
+    if b in partitioned: continue
+
+    # Create a display array
+    d = adaptative_tbl(2,"%s device"%(b)) 
+    d.new_center_line()
+    d.set_column(1,"Name")
+    d.set_column(2,"Value")
+    d.end_separator()  
+    
     string="lsblk -PO /dev/%s"%(b)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
-
-      device = line.split('" ')[1].strip()
-      if device in partitioned: continue
-      
-      print "______________________________________________________________________________"
+       
       sp = line.split('" ')    
       for pair in sp:
         name   = pair.split('=')[0]
         value  = pair.split('"')[1]
-        print "%40s = %s"%(name,value)   
-    rozo_list_tune_parameters(b)  
+        d.new_line()
+        d.set_column(1,name)  
+        d.set_column(2,value) 
+    d.display()       
+    rozo_list_tune_parameters(b)         
 
 #_____________________________________________  
 #
@@ -507,19 +516,23 @@ def rozo_tune_hdd_devices(blockdev,nr_requests=None,read_expire=None,write_expir
 #
 # Display a configuration file
 #
-def rozo_print_file(file):
+def rozo_print_file(d, file):
+
+  d.new_line()
+  d.set_column(1,file)  
+
   if not os.path.exists(file):
-    print "%40s = %s"%(file,"No such file")
+    d.set_column(2,"No such file") 
     return None
     
   try :
     f = open(file,"r")
   except:
-    print "%40s = %s"%(file,"Can not open")
+    d.set_column(2,"Can not open") 
     return None
   
   val = f.read().rstrip()   
-  print "%40s = %s"%(file,val)
+  d.set_column(2,val) 
   return val
 #_____________________________________________  
 #
@@ -533,19 +546,26 @@ def rozo_list_tune_parameters(blockdev) :
   if not os.path.exists(path):
     print "%s do not exists !!!"%(blockdev)
     return 1
-  
-  rozo_print_file("%s/rotational"%(path))
-   
-  val = rozo_print_file("%s/scheduler"%(path))
-  if "[deadline]" in val:
-    rozo_print_file("%s/iosched/read_expire"%(path))
-    rozo_print_file("%s/iosched/write_expire"%(path))
-    rozo_print_file("%s/iosched/fifo_batch"%(path))
-    rozo_print_file("%s/iosched/front_merges"%(path))
     
-  rozo_print_file("%s/nr_requests"%(path))
-  rozo_print_file("%s/read_ahead_kb"%(path))
-  rozo_print_file("%s/nomerges"%(path))
+  d = adaptative_tbl(2,"%s tuning"%(b)) 
+  d.new_center_line()
+  d.set_column(1,"File")
+  d.set_column(2,"Value")
+  d.end_separator()  
+  
+  rozo_print_file(d, "%s/rotational"%(path))
+   
+  val = rozo_print_file(d, "%s/scheduler"%(path))
+  if "[deadline]" in val:
+    rozo_print_file(d, "%s/iosched/read_expire"%(path))
+    rozo_print_file(d, "%s/iosched/write_expire"%(path))
+    rozo_print_file(d, "%s/iosched/fifo_batch"%(path))
+    rozo_print_file(d, "%s/iosched/front_merges"%(path))
+    
+  rozo_print_file(d, "%s/nr_requests"%(path))
+  rozo_print_file(d, "%s/read_ahead_kb"%(path))
+  rozo_print_file(d, "%s/nomerges"%(path))
+  d.display()
   return 0
     
   
