@@ -70,8 +70,12 @@ int                 allCmd;
 const char      *   prgName;  
 int                 timeout=DEFAULT_TIMEOUT;
 char prompt[64];
-/**
-**   lnkdebug <IPADDR> <PORT>
+/*
+**_________________________________________________________________________________
+**
+** Display the rozodiag syntax
+**
+**_________________________________________________________________________________
 */
 void syntax_display() {
   printf("\n%s - RozoFS %s\n\n", prgName, VERSION);
@@ -127,11 +131,13 @@ void syntax_display() {
   printf("    %s -i 192.168.2.21 -T mount:2 -c prof reset -period 0.1\n",prgName) ; 
   exit(0);
 }
-/*__________________________________________________________________________________
+/*
+**_________________________________________________________________________________
 ** Shutdown and close a socket
 **
 ** @param idx The index of the socket identifier within socketArray array 
 **
+**_________________________________________________________________________________
 */
 void socket_shutdown(int idx) {
   if (socketArray[idx] < 0) return;
@@ -140,9 +146,20 @@ void socket_shutdown(int idx) {
   close(socketArray[idx]);  
   socketArray[idx] = -1;   
 }
+/*
+**_________________________________________________________________________________
+**
+** Stop execution on error. Display an error message and exit
+**
+**_________________________________________________________________________________
+*/
 void stop_on_error(char *fmt, ... ) {
   va_list         vaList;
+  int             socketId;
 
+  /*
+  ** Print out an error message
+  */
   if (fmt != NULL) {
     /* Format the string */
     va_start(vaList,fmt);
@@ -151,15 +168,33 @@ void stop_on_error(char *fmt, ... ) {
   }
 
   printf("Check syntax with: %s -h\n",prgName);
+
+  /*
+  ** Shutdown every connection
+  */
+  for (socketId = 0; socketId < nbTarget; socketId++) {
+    socket_shutdown(socketId);
+  }  
+  
   exit(1);  
 }
+/*
+**_________________________________________________________________________________
+**
+** Wait for a response after having sent a command
+**
+** @param socketId      The index of the diagnostic target
+** @param silent        Wheter to print out the response
+**
+** @retval  0 on error, 1 on success
+**
+**_________________________________________________________________________________
+*/
 int debug_receive(int socketId, int silent) {
   int             ret;
   unsigned int    recvLen;
   int             firstMsg=1;
- 
-//  printf("\n...............................................\n");
-  
+   
   /* 
   ** Do a select before reading to be sure that a response comes in time
   */
@@ -201,7 +236,6 @@ int debug_receive(int socketId, int silent) {
       printf("Receive too big %d\n", msg.header.len);
       return 0;
     }
-//    printf("FDL length %u\n",msg.header.len);
     recvLen = 0;
     while (recvLen < msg.header.len) {
       ret = recv(socketId,&msg.buffer[recvLen],msg.header.len-recvLen,0);
@@ -226,7 +260,19 @@ int debug_receive(int socketId, int silent) {
     if (msg.header.end) return 1;
   }
 }
-
+/*
+**_________________________________________________________________________________
+**
+** read a command (a line) from a file
+**
+** @param fd      The file descriptor
+** @param buflen  Where to return the line
+** @param pbuf    The size of the buffer
+**
+** @retval the size of the line read
+**
+**_________________________________________________________________________________
+*/
 uint32_t readln(int fd,char *pbuf,uint32_t buflen)
 {
    int len,lenCur = 0;
@@ -251,12 +297,21 @@ uint32_t readln(int fd,char *pbuf,uint32_t buflen)
    pbuf[lenCur] = 0;
    return lenCur+1;
 }
-
+/*
+**_________________________________________________________________________________
+**
+** Add a command in the cmd global array of command to execute
+**
+** @param new_cmd      The command to add
+** @param len          The length of the command
+**
+**_________________________________________________________________________________
+*/
 void add_cmd_in_list(char * new_cmd, int len) {
   char * p;
 
   if (len > 2000) {
-    printf("Add command : too big %d\n", len);
+    stop_on_error ("Add command : too big %d\n", len);
     return;
   }    
   
@@ -265,7 +320,16 @@ void add_cmd_in_list(char * new_cmd, int len) {
   p[len] = 0;
   cmd[nbCmd++] = (const char *) p;
 }
-
+/*
+**_________________________________________________________________________________
+**
+** Read a list of command from a file and add them to the cmd global array of 
+** command to execute
+**
+** @param fileName      The file containing the list of commands
+**
+**_________________________________________________________________________________
+*/
 void read_file(const char * fileName ) {
   uint32_t len;  
   int fd;
@@ -285,16 +349,33 @@ void read_file(const char * fileName ) {
   
   close(fd);
 } 
+/*
+**_________________________________________________________________________________
+**
+** Execute a single command toward a diagnostic target
+**
+** @param socketId      The index of the diagnostic target
+** @param cmd           The command to execute
+** @param silent        Whether execution must be silent or not (system, list all commands)
+**
+** @retval 0 on success, -1 on error
+**_________________________________________________________________________________
+*/
 int debug_run_this_cmd(int socketId, const char * cmd, int silent) {
   uint32_t len,sent; 
    
+  /*
+  ** Control the size of the command
+  */ 
   len = strlen(cmd)+1; 
-  
   if (len > 2001) {
     printf("Run command : too big %d\n", len);
     return 0;
   }    
 
+  /*
+  ** Send the command
+  */
   memcpy(msg.buffer ,cmd,len);  
   msg.header.len = htonl(len);
   msg.header.end = 1;
@@ -310,6 +391,9 @@ int debug_run_this_cmd(int socketId, const char * cmd, int silent) {
     return -1;
   }
     
+  /*
+  ** Wait for the response
+  */  
   if (!debug_receive(socketArray[socketId],silent)) {
     printf("Diagnostic session abort\n");
     socket_shutdown(socketId);
@@ -318,6 +402,16 @@ int debug_run_this_cmd(int socketId, const char * cmd, int silent) {
   return 0;
   
 }
+/*
+**_________________________________________________________________________________
+**
+** Read the target name in order to make a prompt from it
+**
+** @param socketId      The index of the diagnostic target
+** @param pr            Where to return the promp
+**
+**_________________________________________________________________________________
+*/
 #define SYSTEM_HEADER "system : "
 int uma_dbg_read_prompt(int socketId, char * pr) {
   char *c = pr;
@@ -347,12 +441,23 @@ int uma_dbg_read_prompt(int socketId, char * pr) {
   *c = 0;
   return 0;
 }
+/*
+**_________________________________________________________________________________
+**
+** request to a target the list of its commands
+**
+** @param socketId      The index of the diagnostic target
+**
+**_________________________________________________________________________________
+*/
 #define LIST_COMMAND_HEADER "List of available topics :"
 int uma_dbg_read_all_cmd_list(int socketId) {
   char * p, * begin;
   int len;
     
-  // Read the command list
+  /*
+  ** request the command list
+  */
   if (debug_run_this_cmd(socketId, "", SILENT) < 0)  return -1;
 
   nbCmd = 0;
@@ -382,24 +487,40 @@ int uma_dbg_read_all_cmd_list(int socketId) {
   }
   return 0;
 }
+/*
+**_________________________________________________________________________________
+**
+** Interactive loop
+**
+** @param socketId      The index of the diagnostic target
+**
+**_________________________________________________________________________________
+*/
 void debug_interactive_loop(int socketId) {
-//  char mycmd[1024]; 
   char *mycmd = NULL; 
-//  int len;
-//  int fd;
 
+  /*
+  ** Read prompt
+  */
   uma_dbg_read_prompt(socketId,prompt + strlen(prompt)); 
    
-//  fd = open("/dev/stdin", O_RDONLY);
+  /*
+  ** Activate history
+  */ 
   using_history();
   rl_bind_key('\t',rl_complete);   
+  
+  
   while (1) {
 
     printf("_________________________________________________________\n");
-//    len = readln (fd, mycmd,sizeof(mycmd));
-//    if (len == (uint32_t)-1) break;
+
+    /*
+    ** Read command from user
+    */
     mycmd = readline (prompt);
     if (mycmd == NULL) break;
+    
     if (strcasecmp(mycmd,"exit") == 0) {
       printf("Diagnostic session end\n");
       break;
@@ -412,26 +533,33 @@ void debug_interactive_loop(int socketId) {
       printf("Diagnostic session end\n");
       break;
     }
-    if ((mycmd[0] != 0) && (strcasecmp(mycmd,"!!") != 0)) {
-       add_history(mycmd);
+    if ((mycmd[0] != 0) && (strcasecmp(mycmd," ") != 0)) {
+      add_history(mycmd);
     }
     if (debug_run_this_cmd(socketId, mycmd, NOT_SILENT) < 0)  break;
     free(mycmd);
   }
-  if (mycmd != NULL) free(mycmd);
-//  close(fd);  
+  if (mycmd != NULL) free(mycmd); 
 } 
+/*
+**_________________________________________________________________________________
+**
+** Execute a list of commands stored in cmd global array toward a given target
+**
+** @param socketId      The index of the diagnostic target
+**
+**_________________________________________________________________________________
+*/
 void debug_run_command_list(int socketId) {
   int idx;  
 
   for (idx=0; idx < nbCmd; idx++) {
-//    printf("_________________________________________________________\n");
-//    printf("< %s >\n", cmd[idx]);  
     if (debug_run_this_cmd(socketId, cmd[idx], NOT_SILENT) < 0)  break;
   }
 } 
 /*
-**_______________________________________________________________________
+**_________________________________________________________________________________
+**
 ** Scan for a a host in the formmat 
 **
 ** <hostname>
@@ -445,6 +573,7 @@ void debug_run_command_list(int socketId) {
 ** @param ip       The returned array of IP addresses
 **
 ** @retval         The number of IP addresses
+**_________________________________________________________________________________
 */
 static inline int scan_host(char * hostStr, uint32_t * ip) {
   uint32_t  val1,val2;
@@ -533,7 +662,18 @@ static inline int scan_host(char * hostStr, uint32_t * ip) {
   
 }
 /*
-** Scan for either x  x-y x,y,..
+**_________________________________________________________________________________
+**
+** scan the port string that can either be
+** - a single port : <p>
+** - a range of port : <p1>-<p2>
+** - a list of ports : <p1>,<p2>,...
+**
+** @param str         The sgtring to parse
+** @param values      The array where to fill the parsed values
+**
+** @retval the number of ports returned
+**_________________________________________________________________________________
 */
 static inline int scan_ports(char * str, uint32_t * values) {
   int      nbValues = 0;
@@ -583,6 +723,15 @@ static inline int scan_ports(char * str, uint32_t * values) {
   return nbValues;
   
 }
+/*
+**_________________________________________________________________________________
+**
+** Parse the input command line
+**
+** @param argc         Number of parameter
+** @param argv         Array of parameter
+**_________________________________________________________________________________
+*/
 void read_parameters(argc, argv)
 int argc;
 char *argv[];
@@ -612,6 +761,14 @@ char *argv[];
   
   /* Scan parameters */
   while (idx < argc) {
+  
+    /*
+    ** Check we have not exhausted the maximum number of target
+    */
+    if (nbTarget >= MAX_TARGET) {
+      stop_on_error ("!!! Too much targets !!!\n");
+    }
+
 
     /* -h */
     if (strcmp(argv[idx],"-h")==0) {
@@ -962,13 +1119,25 @@ char *argv[];
   }  
   
 }
+/*
+**_________________________________________________________________________________
+**
+** Connect a diagnostic target
+**
+** @param ipAddr       IPv4 address of the target
+** @param serverPort   TCP listening port of the target
+**
+** @retval the socket identifier on sucesss, -1 on failure
+**_________________________________________________________________________________
+*/
 int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
   int                 socketId;  
   struct  sockaddr_in vSckAddr;
   int                 sockSndSize = 256;
   int                 sockRcvdSize = 2*MX_BUF;
+  
   /*
-  ** now create the socket for TCP
+  ** Create the socket for TCP
   */
   if ((socketId = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     printf("Unable to create a socket !!!\n");
@@ -976,7 +1145,7 @@ int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
   }  
   
   /* 
-  ** change sizeof the buffer of socket for sending
+  ** change size of the buffer of socket for sending
   */
   if (setsockopt (socketId,SOL_SOCKET,
 		  SO_SNDBUF,(char*)&sockSndSize,sizeof(int)) == -1)  {
@@ -985,7 +1154,7 @@ int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
     exit(2);
   }
   /* 
-  ** change sizeof the buffer of socket for receiving
+  ** change size of the buffer of socket for receiving
   */  
   if (setsockopt (socketId,SOL_SOCKET,
                   SO_RCVBUF,(char*)&sockRcvdSize,sizeof(int)) == -1)  {
@@ -995,7 +1164,9 @@ int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
   }
   
 
-  /* Connect to the GG */
+  /* 
+  ** Connect to the target
+  */
   vSckAddr.sin_family = AF_INET;
   vSckAddr.sin_port   = htons(serverPort);
   memcpy(&vSckAddr.sin_addr.s_addr, &ipAddr, 4); 
@@ -1007,17 +1178,27 @@ int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
             (unsigned int) (ipAddr>>24)&0xFF, 
             (unsigned int)serverPort, 
             strerror(errno));
+    close(socketId);            
     return-1;
   }
   return socketId;
 }
+/*
+**_________________________________________________________________________________
+**
+**                             ROZODIAG UTILITY
+**
+** Connect a a list of diagnostic targets and execute a list of diagnostic commands
+**
+**_________________________________________________________________________________
+*/
 int main(int argc, const char **argv) {
   int                 socketId; 
   uint32_t            ip;
    
   prgName = argv[0];
 
-  /* Read parametres */
+  /* Read parameters */
   memset(serverPort,0,sizeof(serverPort)); 
   memset(ipAddr,0,sizeof(ipAddr));
   nbTarget = 0;
@@ -1030,8 +1211,14 @@ int main(int argc, const char **argv) {
   memset(socketArray, -1, sizeof(socketArray)); 
 reloop:
 
+  /*
+  ** Loop on every target
+  */
   for (socketId = 0; socketId < nbTarget; socketId++) {
    
+    /*
+    ** Connect to the target if not yet done
+    */
     if (socketArray[socketId]  < 0) {
       socketArray[socketId] = connect_to_server(ipAddr[socketId],serverPort[socketId]);
     }
@@ -1039,25 +1226,55 @@ reloop:
       continue;
     }
      
+    /*
+    ** Display target @
+    */ 
     ip = ntohl(ipAddr[socketId]);
     sprintf(prompt,"____[%u.%u.%u.%u:%d]",(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF,ip&0xFF, serverPort[socketId]);
-    //uma_dbg_read_prompt(socketId,p);
      
-    if (allCmd) uma_dbg_read_all_cmd_list(socketId);
-
-    if (nbCmd == 0) {
-      debug_interactive_loop(socketId);
-    }  
-    else {
+    /*
+    ** Run every available command
+    */ 
+    if (allCmd) {
+      /*
+      ** Read the list of commands
+      */
+      uma_dbg_read_all_cmd_list(socketId);
+      /*
+      ** Execute every command
+      */
+      if (nbCmd != 0) {
+        debug_run_command_list(socketId);
+      }
+      continue;
+    }   
+     
+    /*
+    ** Non interactive mode
+    */    
+    if (nbCmd != 0) {
       debug_run_command_list(socketId);
+      continue;
     }
+    
+    /*
+    ** Interactive mode
+    */  
+    debug_interactive_loop(socketId);
+    
   }  
   
+  /*
+  ** periodic mode
+  */
   if (period != 0) {
     usleep(period);
     goto reloop;
   }
   
+  /*
+  ** Shutdown every connection
+  */
   for (socketId = 0; socketId < nbTarget; socketId++) {
     socket_shutdown(socketId);
   }  

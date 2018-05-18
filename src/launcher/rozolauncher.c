@@ -56,7 +56,7 @@ char   * pid_file_name=NULL;
  */
 void rozolauncher_catch_signal(int sig){
 
-  if  (rozolauncher_signal_raised != 0) raise (sig);
+  if  (rozolauncher_signal_raised != 0) return;
   rozolauncher_signal_raised++;
 
   if (child_pid) kill(child_pid,SIGTERM);
@@ -96,39 +96,96 @@ void rozolauncher_catch_sigpipe(int s){
 /*
  *_______________________________________________________________________
   *
+  * Read pid file when it exist and return back the pid
+  *
+  * @param pid_file The name of the pid file
+  *
+  * @retval pid or 0 
+ */
+pid_t rozolauncher_read_pid_file(char * pid_file) {
+  pid_t pid = 0;
+  int   fd  = -1;
+  char  process_id_string[64];
+  int   ret;   
+
+  /*
+  ** Check input 
+  */
+  if ((pid_file == NULL) || (pid_file[0] == 0)) {
+    goto out;
+  }   
+  
+  /*
+  ** Open file
+  */  
+  fd = open(pid_file,O_RDONLY, 0640);
+  if (fd < 0) {
+    goto out;
+  }
+    
+  /*
+  ** Read file
+  */  
+  ret = pread(fd,&process_id_string, 64,0);
+  if (ret < 0) {
+    goto out;
+  }
+  
+  /*
+  ** Scan for pid
+  */
+  ret = sscanf(process_id_string,"%d",&pid);
+  if (ret != 1) {
+    goto out;
+  }
+  
+out:
+
+  /*
+  ** Cmose file when open
+  */
+  if (fd >=0) {
+    close(fd);
+    fd = 0;
+  }
+  
+  return pid;
+}
+/*
+ *_______________________________________________________________________
+  *
+  * Send a signal to a rozolauncher
+  *
+  * @param pid_file The name of the pid file
+  * @signal         The signal to send
+ */
+int rozolauncher_send_signal(char * pid_file, int signal) {
+  pid_t   pid;
+
+  pid = rozolauncher_read_pid_file(pid_file);
+  if (pid == 0) return -1;
+
+#ifdef LAUNCHER_TRACE
+  info("send signal %d to process %d %s",signal,pid,pid_file);
+#endif 
+  
+  kill(pid,signal);
+  return 0;
+}
+/*
+ *_______________________________________________________________________
+  *
   * Try to read the process id in the gieven pid file and sends it a SIGTERM
   *
   * @param pid_file The name of the pid file
   * @timer          Time in ms to wait for the process to dy
  */
 int rozolauncher_stop(char * pid_file, int timer) {
-  int   fd;
-  char  process_id_string[64];
-  int   ret;   
-  int   pid;
   struct timespec ts;
 
-  
-  fd = open(pid_file,O_RDONLY, 0640);
-  if (fd < 0) {
+  if (rozolauncher_send_signal(pid_file,SIGTERM) < 0) {
     return -1;
-  }
-  
-  
-  ret = pread(fd,&process_id_string, 64,0);
-  close(fd);
-  
-  if (ret < 0) return -1;
-  
-  
-  ret = sscanf(process_id_string,"%d",&pid);
-  if (ret != 1) return -1;
-
-#ifdef LAUNCHER_TRACE
-  info("killing process %d %s",pid,pid_file);
-#endif 
-  
-  kill(pid,SIGTERM);
+  }  
   
   while (timer) {
   
@@ -157,39 +214,12 @@ int rozolauncher_stop(char * pid_file, int timer) {
 /*
  *_______________________________________________________________________
   *
-  * Try to read the process id in the gieven pid file and sends it a SIGTERM
+  * Try to read the process id in the given pid file and send it a SIGTERM
   *
   * @param pid_file The name of the pid file
  */
 int rozolauncher_reload(char * pid_file) {
-  int   fd;
-  char  process_id_string[64];
-  int   ret;   
-  int   pid;
-
-  
-  fd = open(pid_file,O_RDONLY, 0640);
-  if (fd < 0) {
-    return -1;
-  }
-  
-  
-  ret = pread(fd,&process_id_string, 64,0);
-  close(fd);
-  
-  if (ret < 0) return -1;
-  
-  
-  ret = sscanf(process_id_string,"%d",&pid);
-  if (ret != 1) return -1;
-
-#ifdef LAUNCHER_TRACE
-  info("reload process %d %s",pid,pid_file);
-#endif 
-  /*
-  ** send a hangup signal to the process
-  */
-  return kill(pid,SIGHUP);
+  return rozolauncher_send_signal(pid_file,SIGHUP);
 }
 /*
  *_______________________________________________________________________
@@ -262,6 +292,7 @@ void usage(char * fmt, ...) {
 int main(int argc, char *argv[]) {
   time_t   last_start = 0;
   int      deamonize;
+  pid_t    pid;
 
 #ifdef LAUNCHER_TRACE
   openlog("launcher", LOG_PID, LOG_DAEMON);
@@ -425,6 +456,17 @@ int main(int argc, char *argv[]) {
     ** to relaunch it
     */
     waitpid(child_pid,NULL,0);
+    
+    /**
+    ** Check the content of the pid file
+    */
+    pid = rozolauncher_read_pid_file(argv[2]);
+    if (pid != getpid()) {
+#ifdef LAUNCHER_TRACE
+      info("%s %s pid %d is no more the active one",argv[1],argv[2],getpid());
+#endif 
+      exit(-1);      
+    }
   }
 }
 

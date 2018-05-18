@@ -1088,7 +1088,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
   printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
   printf("\n\033[1mFIELD:\033[0m\n");
-  printf("\tusage[1m-c,--cr8\033[0m\t\tcreation date.\n");
+  printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
   printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
   printf("\t\033[1m-r,--update\033[0m\t\tdirectory update date.\n"); 
   printf("\t\033[1m-s,--size\033[0m\t\tfile size.\n"); 
