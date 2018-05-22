@@ -239,6 +239,34 @@ uint32_t uma_tcp_create_rcvRdy_bufPool(uma_tcp_create_t *pconf);
 */
 
 uint32_t uma_tcp_deleteReq(uint32_t tcpIdx);
+/*
+***-------------------------------------------------------------------------
+** uint32_t uma_tcp_disconnectReq(uint32 tcpIdx)
+**--------------------------------------------------------------------------
+**  #SYNOPSIS
+**   That service performs the deletion of a TCP connection. The input
+** argument is the reference of the TCP connection that has been returned
+**  during the creation time.
+**
+** That service asserts the disconnect event to each  FSM (xmit and receive).
+**  Once all the resources have been released, then the socket is closed
+**  and the connection with the socket controller is deleted.
+**
+**  If there is some pending xmit request or buffer each caller is warned
+**  with an error code indicating that the TCP connection disconnection is
+**  in progress
+**
+**   IN:
+**       tcpIdx : reference of the TCP connection
+**
+**   OUT :
+**         RUC_OK : success
+**         RUC_NOK : failure
+**                    - bad TCP connection reference
+**----------------------------------------------------------------------------
+*/
+
+uint32_t uma_tcp_disconnectReq(uint32_t tcpIdx);
 
 /*--------------------------------------------------------------------------
 **
