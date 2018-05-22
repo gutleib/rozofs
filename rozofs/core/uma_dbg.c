@@ -1246,20 +1246,26 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
   
   if (cmdLen != (ntohl(pHead->len)+sizeof(UMA_MSGHEADER_S))) {
     char * tmp = uma_dbg_get_buffer();
-    sprintf(tmp,"!!! Size is inconsistent buffer=%d header=%lu command=%d!!!\n",cmdLen,sizeof(UMA_MSGHEADER_S),ntohl(pHead->len));
-    uma_dbg_send(tcpCnxRef,bufRef,TRUE,tmp);
+    sprintf(tmp,"!!! %u.%u.%u.%u:%u : Size is inconsistent buffer=%d header=%lu command=%d !!!\n",
+            p->ipAddr>>24 & 0xFF, p->ipAddr>>16 & 0xFF, p->ipAddr>>8 & 0xFF, p->ipAddr & 0xFF, p->port,
+            cmdLen,sizeof(UMA_MSGHEADER_S),ntohl(pHead->len));
+    uma_dbg_disconnect(tcpCnxRef,bufRef,tmp);
     return;
   }          
   if (cmdLen < sizeof(UMA_MSGHEADER_S)) {
     char * tmp = uma_dbg_get_buffer();
-    sprintf(tmp,"!!! Command is too short buffer=%d header=%lu !!!\n",cmdLen,sizeof(UMA_MSGHEADER_S));
-    uma_dbg_send(tcpCnxRef,bufRef,TRUE,tmp);
+    sprintf(tmp,"!!! %u.%u.%u.%u:%u : Command is too short buffer=%d header=%lu !!!\n",
+            p->ipAddr>>24 & 0xFF, p->ipAddr>>16 & 0xFF, p->ipAddr>>8 & 0xFF, p->ipAddr & 0xFF, p->port,
+            cmdLen,sizeof(UMA_MSGHEADER_S));
+     uma_dbg_disconnect(tcpCnxRef,bufRef,tmp);
     return;
   }      
   if (cmdLen > UMA_DBG_MAX_CMD_LEN) {
     char * tmp = uma_dbg_get_buffer();
-    sprintf(tmp,"!!! Command is too long buffer=%d max=%d !!!\n",cmdLen,UMA_DBG_MAX_CMD_LEN);
-    uma_dbg_send(tcpCnxRef,bufRef,TRUE,tmp);
+    sprintf(tmp,"!!! %u.%u.%u.%u:%u : Command is too long buffer=%d max=%d !!!\n",
+            p->ipAddr>>24 & 0xFF, p->ipAddr>>16 & 0xFF, p->ipAddr>>8 & 0xFF, p->ipAddr & 0xFF, p->port,
+            cmdLen,UMA_DBG_MAX_CMD_LEN);
+    uma_dbg_disconnect(tcpCnxRef,bufRef,tmp);
     return;
   }     
 
@@ -1311,7 +1317,10 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
     ** Check one do not exhaust the maximum number of parameters
     */
     if (argc >= MAX_ARG) {
-      uma_dbg_send(tcpCnxRef,bufRef,TRUE,"!!! Too much parameters in command !!!\n");
+      char * tmp = uma_dbg_get_buffer();
+      sprintf(tmp,"!!! %u.%u.%u.%u:%u : Too much parameters in command !!!\n",
+            p->ipAddr>>24 & 0xFF, p->ipAddr>>16 & 0xFF, p->ipAddr>>8 & 0xFF, p->ipAddr & 0xFF, p->port);
+      uma_dbg_disconnect(tcpCnxRef,bufRef,tmp);
       return;
     }     
     
