@@ -304,6 +304,33 @@ static inline void uma_dbg_send(uint32_t tcpCnxRef, void  *bufRef, uint8_t end, 
 }
 /*-----------------------------------------------------------------------------
 **
+**   Send back a diagnostic response and dis connect
+**
+**  @param tcpCnxRef   TCP connection reference
+**  @param bufRef      reference of the received buffer that will be used to respond
+**  @param string      A pre-formated string ontaining the reponse 
+**
+**----------------------------------------------------------------------------
+*/
+static inline void uma_dbg_disconnect(uint32_t tcpCnxRef, void  *bufRef, char *string) {
+
+  /*
+  ** Send error message
+  */
+  uma_dbg_send(tcpCnxRef, bufRef, 1, string);
+
+  /*
+  ** Log the error
+  */
+  warning("%s",string);
+  
+  /*
+  ** Disconnect the client
+  */
+  uma_tcp_disconnectReq(tcpCnxRef); 
+}
+/*-----------------------------------------------------------------------------
+**
 **  #SYNOPSIS
 **   Send a message
 **
