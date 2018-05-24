@@ -2113,7 +2113,6 @@ int main(int argc, char *argv[]) {
     usage("Missing root_path(-p) or export identifier (-e)");
   }
 
-  printf("\n\n");
   /*
   ** init of the RozoFS data structure on export
   ** in order to permit the scanning of the exportd
