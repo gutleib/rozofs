@@ -392,7 +392,6 @@ void show_uma_dbg_diag_man(char * pChar) {
   pChar += rozofs_string_append           (pChar,"Display diagnostic sessions\n");
 }
 void show_uma_dbg_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
-  int                 len;
   char              * pChar;
   ruc_obj_desc_t    * pnext;
   UMA_DBG_SESSION_S * p;
@@ -409,14 +408,14 @@ void show_uma_dbg_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
      else {
        pChar += sprintf(pChar,",\n");
      }  
-     pChar += sprintf(pChar, "    { \"ref\" : %x, \"ip\" : \"%u:%u.%u.%u\", \"port\" : %u, \"cmd#\" : %llu }", 
+     pChar += sprintf(pChar, "    { \"ref\" : %p, \"ip\" : \"%u:%u.%u.%u\", \"port\" : %u, \"cmd#\" : %llu }", 
                       p->ref, 
                       p->ipAddr>>24  & 0xFF, 
                       p->ipAddr>>16 & 0xFF, 
                       p->ipAddr>>8  & 0xFF, 
                       p->ipAddr     & 0xFF,
                       p->port,
-                      p->nbcmd);
+                      (long long unsigned int) p->nbcmd);
   }
   pChar += sprintf(pChar, "\n] }\n"); 
 
