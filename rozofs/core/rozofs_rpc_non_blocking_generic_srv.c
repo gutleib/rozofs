@@ -129,6 +129,12 @@ void rozorpc_srv_debug_show(uint32_t tcpRef, void *bufRef) {
   ==========================================================================*/
 void rozorpc_srv_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   rozorpc_srv_debug_show(tcpRef,bufRef);
+  /*
+  ** Reset is requested
+  */
+  if ((argv[1] != NULL) && strcmp(argv[1],"reset")==0) {
+    memset(rozorpc_srv_stats,0, sizeof(rozorpc_srv_stats));
+  }    
 }
 
 
@@ -140,7 +146,7 @@ void rozorpc_srv_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   RETURN: none
   ==========================================================================*/
 void rozorpc_srv_debug_init() {
-  uma_dbg_addTopic(ROZORPC_SRV_DEBUG_TOPIC, rozorpc_srv_debug); 
+  uma_dbg_addTopic_option(ROZORPC_SRV_DEBUG_TOPIC, rozorpc_srv_debug,UMA_DBG_OPTION_RESET); 
 }
 
 
