@@ -81,7 +81,7 @@ export_reload_conf_status_t export_reload_conf_status;
 int export_instance_id;    /**< instance id of the export  : 0 is the master   */
 int export_master;         /**< assert to 1 for export Master                  */
 
-lv2_cache_t cache;
+lv2_cache_t cache = {0} ;
 int export_local_site_number = 0;
 int rozofs_no_site_file;
 typedef struct export_entry {
