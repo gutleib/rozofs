@@ -273,7 +273,17 @@ void rozofs_clean_core(char * coredir) {
   }
   closedir(dir);
 }
-
+/*__________________________________________________________________________
+  Let's die
+  ==========================================================================
+  PARAMETERS: 
+  - sig : the signal received 
+  RETURN: none
+  ==========================================================================*/
+void rozofs_die(int sig){
+  signal (sig,SIG_DFL);
+  raise (sig);
+}  
 /*__________________________________________________________________________
   generic handler for fatal errors
   ==========================================================================
@@ -284,12 +294,19 @@ void rozofs_clean_core(char * coredir) {
 void rozofs_catch_error(int sig){
   int   idx;
   pid_t pid = getpid();
-
+  
   /*
-  ** Already processing a signal
+  ** Ignore SIGTERM within exception handler
+  */
+  rozofs_set_handler_signal_ignore(SIGTERM);
+  
+  /*
+  ** Already processing a signal.
+  ** We may have crashed within execution of a crash call back !
+  ** Let's die immediatly
   */
   if  (rozofs_fatal_error_processing != 0) {
-    return;
+    rozofs_die(sig);
   }  
   rozofs_fatal_error_processing = sig;
   
@@ -325,8 +342,7 @@ void rozofs_catch_error(int sig){
   /* 
   ** Adios crual world !
   */
-  signal (sig,SIG_DFL);
-  raise (sig);
+  rozofs_die (sig);
 }
 /*__________________________________________________________________________
   Set signal handler for fatal errors

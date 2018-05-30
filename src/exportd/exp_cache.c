@@ -192,6 +192,13 @@ void lv2_cache_initialize(lv2_cache_t *cache) {
 void lv2_cache_release(lv2_cache_t *cache) {
     list_t *p, *q;
 
+    /*
+    ** Check that the cache has been initialized
+    ** before trying to release it
+    */
+    if (cache==NULL) return;
+    if (cache->size==0) return;
+    
     list_for_each_forward_safe(p, q, &cache->lru) {
         lv2_entry_t *entry = list_entry(p, lv2_entry_t, list);
         htable_del(&cache->htable, entry->attributes.s.attrs.fid);
