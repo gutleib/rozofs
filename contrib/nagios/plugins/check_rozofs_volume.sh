@@ -420,25 +420,25 @@ esac
 host=${hosts[$((i-1))]}
 
 
-# Check DRDB synchronization status
-$ROZDBG -c synchro drbd >  $SYNCHRO
-synchro_warning=`awk '
-{
-  if (($1=="0:")||($1=="1:")) 
-  {
-    if (($2!= "cs:Connected")||($3!= "ro:Primary/Secondary")||($4!= "ds:UpToDate/UpToDate")) {
-      print "drdb $1 out of synchro";
-    }	
-    else {
-      print "OK";
-    }
-  }
-}' $SYNCHRO`
-case "$synchro_warning" in
-  "OK");;
-  "")  ;;
-  *)  display_output $STATE_CRITICAL "$res";;    
-esac
+# # Check DRDB synchronization status
+# $ROZDBG -c synchro drbd >  $SYNCHRO
+# synchro_warning=`awk '
+# {
+#   if (($1=="0:")||($1=="1:")) 
+#   {
+#     if (($2!= "cs:Connected")||($3!= "ro:Primary/Secondary")||($4!= "ds:UpToDate/UpToDate")) {
+#       print "drdb is out of synchro";
+#     }	
+#     else {
+#       print "OK";
+#     }
+#   }
+# }' $SYNCHRO`
+# case "$synchro_warning" in
+#   "OK");;
+#   "")  ;;
+#   *)  display_output $STATE_CRITICAL "$synchro_warning";;    
+# esac
 
   
 # Check pacemaker synchronization status
@@ -460,6 +460,29 @@ case $res in
 esac
 free=`echo $res | awk '{print $1}'`
 percent=`echo $res | awk '{print $2}'`
+
+
+
+# Check DRDB synchronization status
+$ROZDBG -c synchro drbd >  $SYNCHRO
+synchro_warning=`awk '
+{
+  if (($1=="0:")||($1=="1:")) 
+  {
+    if (($2!= "cs:Connected")||($3!= "ro:Primary/Secondary")||($4!= "ds:UpToDate/UpToDate")) {
+      print "drdb is out of synchro";
+    }	
+    else {
+      print "OK";
+    }
+  }
+}' $SYNCHRO`
+case "$synchro_warning" in
+  "OK");;
+  "")  ;;
+  *)  display_output $STATE_CRITICAL "$synchro_warning";;    
+esac
+
 
 
 # Run vfstat_stor debug command on export to check storage status
