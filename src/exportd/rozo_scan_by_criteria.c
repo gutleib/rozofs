@@ -45,6 +45,18 @@ typedef enum _scan_criterie_e {
 SCAN_CRITERIA_E scan_criteria = SCAN_CRITERIA_NONE;
 
 /*
+** Privileges
+*/
+int Ux  = -1;
+int Ur  = -1;
+int Uw  = -1;
+int Gx  = -1;
+int Gr  = -1;
+int Gw  = -1;
+int Ox  = -1;
+int Or  = -1;
+int Ow  = -1;
+/*
 ** Modification time 
 */
 uint64_t    mod_lower  = -1;
@@ -732,7 +744,123 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       return 0;
     }
   }
-   
+
+  /* 
+  ** Privileges
+  */
+  
+  /* User privileges */
+  if (Ux != -1) {
+    if (inode_p->s.attrs.mode & S_IXUSR) {
+      if (!Ux) {
+        return 0; 
+      }
+    }
+    else {
+      if (Ux) {
+        return 0; 
+      } 
+    }
+  }
+  if (Uw != -1) {
+    if (inode_p->s.attrs.mode & S_IWUSR) {
+      if (!Uw) {
+        return 0; 
+      }
+    }
+    else {
+      if (Uw) {
+        return 0; 
+      } 
+    }
+  }   
+  if (Ur != -1) {
+    if (inode_p->s.attrs.mode & S_IRUSR) {
+      if (!Ur) {
+        return 0; 
+      }
+    }
+    else {
+      if (Ur) {
+        return 0; 
+      } 
+    }
+  } 
+  /* Group privileges */
+  if (Gx != -1) {
+    if (inode_p->s.attrs.mode & S_IXGRP) {
+      if (!Gx) {
+        return 0; 
+      }
+    }
+    else {
+      if (Gx) {
+        return 0; 
+      } 
+    }
+  }
+  if (Gw != -1) {
+    if (inode_p->s.attrs.mode & S_IWGRP) {
+      if (!Gw) {
+        return 0; 
+      }
+    }
+    else {
+      if (Gw) {
+        return 0; 
+      } 
+    }
+  }   
+  if (Gr != -1) {
+    if (inode_p->s.attrs.mode & S_IRGRP) {
+      if (!Gr) {
+        return 0; 
+      }
+    }
+    else {
+      if (Gr) {
+        return 0; 
+      } 
+    }
+  }       
+  /* Others privileges */
+  if (Ox != -1) {
+    if (inode_p->s.attrs.mode & S_IXOTH) {
+      if (!Ox) {
+        return 0; 
+      }
+    }
+    else {
+      if (Ox) {
+        return 0; 
+      } 
+    }
+  }
+  if (Ow != -1) {
+    if (inode_p->s.attrs.mode & S_IWOTH) {
+      if (!Ow) {
+        return 0; 
+      }
+    }
+    else {
+      if (Ow) {
+        return 0; 
+      } 
+    }
+  }   
+  if (Or != -1) {
+    if (inode_p->s.attrs.mode & S_IROTH) {
+      if (!Or) {
+        return 0; 
+      }
+    }
+    else {
+      if (Or) {
+        return 0; 
+      } 
+    }
+  }        
+    
   if (S_ISDIR(inode_p->s.attrs.mode)) 
   {
     ext_dir_mattr_t *stats_attr_p;
@@ -1069,10 +1197,12 @@ static void usage(char * fmt, ...) {
 
   printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
   printf("This RozoFS utility enables to scan for files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
-  printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan_by_criteria <MANDATORY> [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
-  printf("\n\033[1mMANDATORY:\033[0m\n");
-  printf("either\t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
-  printf("or\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
+  printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan [EXPORT] [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
+  printf("\n\033[1mEXPORT:\033[0m\n");
+  printf("\tCan be omitted when current path is the RozoFS mountpoint one want to scan.\n");
+  printf("\tElse the target export must be given:\n");
+  printf("\tEither\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
+  printf("\tor\t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
   printf("\n\033[1mOPTIONS:\033[0m\n");
   printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
   printf("\t\033[1m-h,--help\033[0m\t\tprint this message along with examples and exit.\n");
@@ -1087,6 +1217,12 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files from the scan.\n");
   printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
   printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
+  printf("\t\033[1m--U<x|w|r>\033[0m\t\tUser has <executable|write|read> priviledge.\n");
+  printf("\t\033[1m--Un<x|w|r>\033[0m\t\tUser has not <executable|write|read> priviledge.\n");
+  printf("\t\033[1m--G<x|w|r>\033[0m\t\tGroup has <executable|write|read> priviledge.\n");
+  printf("\t\033[1m--Gn<x|w|r>\033[0m\t\tGroup has not <executable|write|read> priviledge.\n");
+  printf("\t\033[1m--O<x|w|r>\033[0m\t\tOthers have <executable|write|read> priviledge.\n");
+  printf("\t\033[1m--On<x|w|r>\033[0m\t\tOthers have not <executable|write|read> priviledge.\n");
   printf("\n\033[1mFIELD:\033[0m\n");
   printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
   printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
@@ -1120,26 +1256,28 @@ static void usage(char * fmt, ...) {
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --xattr --size --ge 76000 --le 76100\033[0m\n");
+    printf("  \033[1mrozo_scan --xattr --size --ge 76000 --le 76100\033[0m\n");
     printf("Searching files with a modification date in february 2017 but created before 2017.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
+    printf("  \033[1mrozo_scan --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
     printf("Searching files created by user 4501 on 2015 January the 10th in the afternoon.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
+    printf("  \033[1mrozo_scan --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
     printf("Searching files owned by group 4321 in directory with FID 00000000-0000-4000-1800-000000000018.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
+    printf("  \033[1mrozo_scan --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
     printf("Searching files whoes name constains captainNemo.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --name --ge captainNemo\033[0m\n");
+    printf("  \033[1mrozo_scan --name --ge captainNemo\033[0m\n");
     printf("Searching directories whoes name starts by a \'Z\', ends with \".DIR\" and constains at least one decimal number.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --dir --name --regex /tmp/regex\033[0m\n");
+    printf("  \033[1mrozo_scan --dir --name --regex /tmp/regex\033[0m\n");
     printf("  With /tmp/regex containing regex string \033[1m^Z.*\\d.*\\.DIR$\033[0m\n");    
     printf("Searching directories with more than 100K entries.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --dir --children --ge 100000\033[0m\n");
+    printf("  \033[1mrozo_scan --dir --children --ge 100000\033[0m\n");
     printf("Searching all symbolic links.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --slink --noreg\033[0m\n");
+    printf("  \033[1mrozo_scan --slink --noreg\033[0m\n");
     printf("Searching files in project #31 owned by user 2345.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --project --eq 31 --uid --eq 2345\033[0m\n");
+    printf("  \033[1mrozo_scan --project --eq 31 --uid --eq 2345\033[0m\n");
     printf("Searching files in cluster 2 having a potential projection on sid 7.\n");
-    printf("  \033[1mrozo_scan_by_criteria --eid 1 --cid --eq 2 --sid --eq 7\033[0m\n");
+    printf("  \033[1mrozo_scan --cid --eq 2 --sid --eq 7\033[0m\n");
+    printf("Searching non writable files being executable by its group but not by the others.\n");
+    printf("  \033[1mrozo_scan --Unw --Gx --Onx\033[0m\n");
   }
   exit(EXIT_FAILURE);     
 };
@@ -1424,6 +1562,25 @@ int main(int argc, char *argv[]) {
         {"trash", no_argument, 0, 't'},
         {"notrash", no_argument, 0, 'T'},
         {"update", no_argument, 0, 'r'},
+        {"Ux", no_argument, 0, 1},
+        {"Unx", no_argument, 0, 2},
+        {"Ur", no_argument, 0, 3},
+        {"Unr", no_argument, 0, 4},
+        {"Uw", no_argument, 0, 5},
+        {"Unw", no_argument, 0, 6},
+        {"Gx", no_argument, 0, 7},
+        {"Gnx", no_argument, 0, 8},
+        {"Gr", no_argument, 0, 9},
+        {"Gnr", no_argument, 0, 10},
+        {"Gw", no_argument, 0, 11},
+        {"Gnw", no_argument, 0, 12},
+        {"Ox", no_argument, 0, 13},
+        {"Onx", no_argument, 0, 14},
+        {"Or", no_argument, 0, 15},
+        {"Onr", no_argument, 0, 16},
+        {"Ow", no_argument, 0, 17},
+        {"Onw", no_argument, 0, 18},
+
         {0, 0, 0, 0}
     };
 
@@ -1481,6 +1638,25 @@ int main(int argc, char *argv[]) {
           case 'v':
               verbose = 1;
               break;
+          case  1:  Ux = 1; break;
+          case  2:  Ux = 0; break;
+          case  3:  Ur = 1; break;
+          case  4:  Ur = 0; break;
+          case  5:  Uw = 1; break;
+          case  6:  Uw = 0; break;
+          case  7:  Gx = 1; break;
+          case  8:  Gx = 0; break;
+          case  9:  Gr = 1; break;
+          case 10:  Gr = 0; break;
+          case 11:  Gw = 1; break;
+          case 12:  Gw = 0; break;
+          case 13:  Ox = 1; break;
+          case 14:  Ox = 0; break;
+          case 15:  Or = 1; break;
+          case 16:  Or = 0; break;
+          case 17:  Ow = 1; break;
+          case 18:  Ow = 0; break;
+
           case 'c':
               NEW_CRITERIA(SCAN_CRITERIA_CR8);
               date_criteria_is_set = 1;
