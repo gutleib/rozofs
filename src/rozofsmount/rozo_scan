@@ -1,0 +1,128 @@
+#!/bin/bash
+# Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
+# This file is part of Rozofs.
+#
+# Rozofs is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, version 2.
+#
+# Rozofs is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+#set -x
+
+#
+# This script is the user interface to the rozoFS scanning utility
+# It comes with the rozofsmount client package.
+#
+# When current dir is a RozoFS mountpoint, it gets from the RozoFS client
+# the export nodes as well as the current eid.
+# Else it reads from the rozofs.conf configuration file the export nodes
+# and get the eid from the -e opttion in the user command line
+
+active=""
+
+#
+# Register parameters
+#
+eid=""
+parameters=$*
+parameters=''
+while [ ! -z $1 ]
+do
+  # Debug mode
+  if [ "$1" == "-x" ]
+  then
+    set -x
+    shift 1
+    continue
+  fi
+
+  # Extract eid parameter  
+  if [ "$1" == "-e" ]
+  then
+
+    shift 1
+    if [ -z $1 ]
+    then
+      echo "Missing eid value after -e option"
+      exit 1
+    fi
+    
+    eid="-e $1"
+    shift 1      
+    continue 
+  fi
+
+  parameters="${parameters} $1"
+  shift 1        
+  
+done
+
+#
+# Find out the current RozoFS exportd from the current path
+#
+res=`attr -qg rozofs.export . 2>/dev/null`
+if [ $? -eq 0 ]
+then
+  #
+  # This is a RozoFS mountpoint
+  #
+  exports=`echo ${res} | awk '{print $1}'`
+  #
+  # When eid is not given in the commande line 
+  # get it from the client
+  #
+  if [ -z "${eid}" ]
+  then
+    eid="-e "`echo ${res} | awk '{print $2}'`
+  fi  
+else
+  #
+  # This is not a RozoFS mountpoint
+  # Read rozofs.conf file
+  #
+  exports=`cat /etc/rozofs/rozofs.conf | grep export_hosts | awk -F'"' '{print $2}'`
+  if [ $? -ne 0 ];
+  then
+    echo "This is not a RozoFS mountpoint,"
+    echo "and rozofs.conf configuration file can not be read."
+    exit 1
+  fi
+fi
+ 
+# 
+# Find out which of these exports is the active one asking crm
+#
+for export in `echo $exports | tr \/ ' '`
+do
+  active=`ssh ${export} "crm_resource --resource p-fs-exportd --locate -Q"`
+  if [ $? -ne 0 ];
+  then
+    active=""
+    continue
+  fi 
+  break
+done
+
+# 
+# Is the current node the active export
+#
+if [ "$HOSTNAME" == "${active}" ]
+then
+  #
+  # Curent node is the active export 
+  #
+  rozo_scan_by_criteria ${eid} ${parameters}
+else
+  #
+  # Forward the command to the active axport
+  #
+  ssh ${active} "rozo_scan_by_criteria ${eid} ${parameters}"
+fi
+exit $?
