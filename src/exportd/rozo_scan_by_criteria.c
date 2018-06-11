@@ -406,17 +406,29 @@ char *rozo_get_path(void *exportd,void *inode_p,char *buf,int lenmax, int relati
    rozofs_inode_t *inode_val_p;
    int was_in_trash=0;
    
-   pbuf +=lenmax;
    
    export_t *e= exportd;
+
+   /*
+   ** This is the root.
+   */        
+   if (memcmp(e->rfid,inode_attr_p->s.attrs.fid,sizeof(fid_t))== 0)
+   {         
+      pbuf[0] = '.';
+      pbuf[1] = 0;
+      return pbuf;
+   }
    
    inode_val_p = (rozofs_inode_t*)inode_attr_p->s.pfid;
    if ((inode_val_p->fid[0]==0) && (inode_val_p->fid[1]==0))
-   {
-      pbuf-=2;
-      pbuf[0]='.';   
-      pbuf[1]=0;      
-   } 
+   if (memcmp(e->rfid,inode_attr_p->s.attrs.fid,sizeof(fid_t))== 0)
+   {         
+      pbuf[0] = '.';
+      pbuf[1] = 0;
+      return pbuf;
+   }
+
+   pbuf +=lenmax;
    
    buf[0] = 0;
    first = 1;
