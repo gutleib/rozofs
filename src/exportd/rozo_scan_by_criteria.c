@@ -29,6 +29,7 @@ typedef enum _scan_criterie_e {
   SCAN_CRITERIA_NONE=0,
   SCAN_CRITERIA_CR8,
   SCAN_CRITERIA_MOD,
+  SCAN_CRITERIA_CTIME,
   SCAN_CRITERIA_SIZE,  
   SCAN_CRITERIA_UID,    
   SCAN_CRITERIA_GID,  
@@ -39,11 +40,45 @@ typedef enum _scan_criterie_e {
   SCAN_CRITERIA_CHILDREN, 
   SCAN_CRITERIA_PFID,
   SCAN_CRITERIA_FNAME,       
-  SCAN_CRITERIA_UPDATE     /**< directory update time */      
+  SCAN_CRITERIA_UPDATE,     /**< directory update time */      
+  SCAN_CRITERIA_DELETED, 
 } SCAN_CRITERIA_E;
 
 SCAN_CRITERIA_E scan_criteria = SCAN_CRITERIA_NONE;
+/*
+** Ouput format
+*/
+int entry_per_line = 1;
+int cur_entry_per_line = 0;
+/*
+** Name output format
+*/
+typedef enum _name_format_e {
+  name_format_full = 0,
+  name_format_relative,
+  name_format_fid,
+} name_format_e;
+name_format_e name_format = name_format_full;
 
+int display_size = 0;
+int display_children = 0;
+int display_deleted = 0;
+int display_nlink = 0;
+int display_project = 0;
+int display_uid = 0;
+int display_gid = 0;
+int display_cr8 = 0;
+int display_mod = 0;
+int display_ctime = 0;
+int display_update = 0;
+int display_priv = 0;
+int display_distrib = 0;
+
+char separator[128] = {0};
+#define NEW_FIELD(field) {\
+  if (separator[0]) printf(" %s "#field"=",separator);\
+  else printf(" "#field"=");\
+}  
 /*
 ** Privileges
 */
@@ -63,7 +98,13 @@ uint64_t    mod_lower  = -1;
 uint64_t    mod_bigger = -1;
 uint64_t    mod_equal  = -1;
 uint64_t    mod_diff   = -1;
-
+/*
+** change time 
+*/
+uint64_t    ctime_lower  = -1;
+uint64_t    ctime_bigger = -1;
+uint64_t    ctime_equal  = -1;
+uint64_t    ctime_diff   = -1;
 /*
 ** creation time 
 */
@@ -133,6 +174,15 @@ uint64_t    children_lower  = -1;
 uint64_t    children_bigger = -1;
 uint64_t    children_equal  = -1;
 uint64_t    children_diff  = -1;
+
+/*
+** Delcount
+*/
+uint64_t    deleted_lower  = -1;
+uint64_t    deleted_bigger = -1;
+uint64_t    deleted_equal  = -1;
+uint64_t    deleted_diff  = -1;
+
 
 /*
 ** PFID 
@@ -276,95 +326,20 @@ int exp_check_regex(char        * rootPath,
                     ext_mattr_t * inode_p,
                     pcre        * fname_equal)
 {
-  char             pathname[ROZOFS_PATH_MAX+1];
-  char           * p = pathname;
-  rozofs_inode_t * fake_inode;
-  int              fd;
-  off_t            offset;
-  size_t           size;
-  mdirents_name_entry_t * pentry;
+  int              nameLen;
+  char           * pName;
   
   /*
   ** Short names are stored in inode
-  */
-  if (inode_p->s.fname.name_type == ROZOFS_FNAME_TYPE_DIRECT) {
-    /*
-    ** Compare the names
-    */
-    if (pcre_exec (fname_equal, NULL, inode_p->s.fname.name, inode_p->s.fname.len, 0, 0, NULL, 0) == 0) {
-      return 1;
-    }  
-    return 0;
-  }
-  
-  /*
   ** When name length is bigger than ROZOFS_OBJ_NAME_MAX
   ** indirect mode is used
   */
-  pentry = &bufferName;
+  pName = exp_read_fname_from_inode(rootPath,inode_p,&nameLen);    
 
-  /*
-  ** Name is too big and is so in the direntry
-  */
-
-  size = inode_p->s.fname.s.name_dentry.nb_chunk * MDIRENTS_NAME_CHUNK_SZ;
-  
-  offset = DIRENT_HASH_NAME_BASE_SECTOR * MDIRENT_SECTOR_SIZE
-         + inode_p->s.fname.s.name_dentry.chunk_idx * MDIRENTS_NAME_CHUNK_SZ;
-
-  /*
-  ** Start with the export root path
-  */   
-  p += rozofs_string_append(p,rootPath);
-  p += rozofs_string_append(p, "/");
-
-  /*
-  ** Add the parent slice
-  */
-  fake_inode = (rozofs_inode_t *) inode_p->s.pfid;
-  p += rozofs_u32_append(p, fake_inode->s.usr_id);
-  p += rozofs_string_append(p, "/");
-
-  /*
-  ** Add the parent FID
-  */
-  p += rozofs_fid_append(p, inode_p->s.pfid);
-  p += rozofs_string_append(p, "/d_");
-
-  /*
-  ** Add the root idx
-  */
-  p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.root_idx);
-
-  /*
-  ** Add the collision idx
-  */
-  if (inode_p->s.fname.s.name_dentry.coll) {
-    p += rozofs_string_append(p, "_");
-    p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.coll_idx);
-  }   
-
-  /*
-  ** Open the file
-  */
-  fd = open(pathname,O_RDONLY);
-  if (fd < 0) {
-    return 0;
-  }
-  
-  /*
-  ** Read the file
-  */
-  int ret = pread(fd, &bufferName, size, offset);
-  close(fd);
-  
-  if (ret != size) {
-    return 0;
-  }
   /*
   ** Compare the names
   */
-  if (pcre_exec (fname_equal, NULL, pentry->name, pentry->len, 0, 0, NULL, 0) == 0) {
+  if (pcre_exec (fname_equal, NULL, pName, nameLen, 0, 0, NULL, 0) == 0) {
     return 1;
   }  
   return 0;  
@@ -382,118 +357,28 @@ int exp_are_name_equal(char        * rootPath,
                        ext_mattr_t * inode_p,
                        char        * name)
 {
-  char             pathname[ROZOFS_PATH_MAX+1];
-  char           * p = pathname;
-  rozofs_inode_t * fake_inode;
-  int              fd;
-  off_t            offset;
-  size_t           size;
-  mdirents_name_entry_t * pentry;
   int              len;
-
+  int              nameLen;
+  char           * pName;
+  
   len = strlen(name);
-  
-  /*
-  ** Short names are stored in inode
-  */
-  if (len < ROZOFS_OBJ_NAME_MAX) {
 
-    if (inode_p->s.fname.name_type != ROZOFS_FNAME_TYPE_DIRECT) {
-      /* 
-      ** This guy has a long name
-      */
-      return 0;
-    }
-    if (inode_p->s.fname.len != len) {
-      /*
-      ** Not the same length
-      */
-      return 0;
-    }    
-    /*
-    ** Compare the names
-    */
-    if (strcmp(inode_p->s.fname.name, name)==0) {
-      return 1;
-    }  
-    return 0;
-  }
-  
   /*
   ** When name length is bigger than ROZOFS_OBJ_NAME_MAX
   ** indirect mode is used
   */
-  pentry = &bufferName;
-
-  /*
-  ** Name is too big and is so in the direntry
-  */
-
-  size = inode_p->s.fname.s.name_dentry.nb_chunk * MDIRENTS_NAME_CHUNK_SZ;
-  if ((size-sizeof(fid_t)) < len) {
-    return 0;
-  }  
+  pName = exp_read_fname_from_inode(rootPath,inode_p,&nameLen);
   
-  offset = DIRENT_HASH_NAME_BASE_SECTOR * MDIRENT_SECTOR_SIZE
-         + inode_p->s.fname.s.name_dentry.chunk_idx * MDIRENTS_NAME_CHUNK_SZ;
-
-  /*
-  ** Start with the export root path
-  */   
-  p += rozofs_string_append(p,rootPath);
-  p += rozofs_string_append(p, "/");
-
-  /*
-  ** Add the parent slice
-  */
-  fake_inode = (rozofs_inode_t *) inode_p->s.pfid;
-  p += rozofs_u32_append(p, fake_inode->s.usr_id);
-  p += rozofs_string_append(p, "/");
-
-  /*
-  ** Add the parent FID
-  */
-  p += rozofs_fid_append(p, inode_p->s.pfid);
-  p += rozofs_string_append(p, "/d_");
-
-  /*
-  ** Add the root idx
-  */
-  p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.root_idx);
-
-  /*
-  ** Add the collision idx
-  */
-  if (inode_p->s.fname.s.name_dentry.coll) {
-    p += rozofs_string_append(p, "_");
-    p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.coll_idx);
-  }   
-
-  /*
-  ** Open the file
-  */
-  fd = open(pathname,O_RDONLY);
-  if (fd < 0) {
+  if (nameLen != len) {
+    /*
+    ** Not the same length
+    */
     return 0;
-  }
-  
-  /*
-  ** Read the file
-  */
-  int ret = pread(fd, &bufferName, size, offset);
-  close(fd);
-  
-  if (ret != size) {
-    return 0;
-  }
-  if (len != pentry->len) {
-    return 0;
-  }  
-  pentry->name[len] = 0;
+  }    
   /*
   ** Compare the names
   */
-  if (strcmp(pentry->name, name)==0) {
+  if (strcmp(pName, name)==0) {
     return 1;
   }  
   return 0;
@@ -510,7 +395,7 @@ int exp_are_name_equal(char        * rootPath,
    
    @retval buf: pointer to the beginning of the outbuffer
 */
-char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
+char *rozo_get_path(void *exportd,void *inode_p,char *buf,int lenmax, int relative)
 {
    lv2_entry_t *plv2;
    char name[1024];
@@ -519,6 +404,7 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
    int first=1;
    ext_mattr_t *inode_attr_p = inode_p;
    rozofs_inode_t *inode_val_p;
+   int was_in_trash=0;
    
    pbuf +=lenmax;
    
@@ -537,10 +423,20 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
    while(1)
    {
       /*
-      ** get the name of the directory
+      ** get the name of the current inode
       */
       name[0]=0;
       rozolib_get_fname(inode_attr_p->s.attrs.fid,e,name,&inode_attr_p->s.fname,inode_attr_p->s.pfid);
+      if (name[0]== 0) {
+        /*
+        ** Long name and parent FID may not exist any more. Put FID only
+        */
+        pbuf = buf;
+        pbuf += sprintf(pbuf,"./@rozofs_uuid@");
+        rozofs_fid_append(pbuf,inode_attr_p->s.attrs.fid);
+        return buf;   
+      }
+      
       name_len = strlen(name);
       if (name_len == 0) break;
       if (first == 1) {
@@ -550,9 +446,31 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
       pbuf -=name_len;
       memcpy(pbuf,name,name_len);
       pbuf--;
-      *pbuf='/';
+      *pbuf='/'; 
+
+      /*
+      ** Memorize whether the current FID is in trash or not ?
+      */
+      if (exp_metadata_inode_is_del_pending(inode_attr_p->s.attrs.fid)) {
+        was_in_trash = 1;
+      }  
+      else {
+        was_in_trash = 0;
+      } 
+            
+      /*
+      ** Parent is the root. This is the end of the loop
+      */        
       if (memcmp(e->rfid,inode_attr_p->s.pfid,sizeof(fid_t))== 0)
       {
+         /*
+         ** So far FID were trash FIDs...
+         ** Add the trash mark.
+         */
+         if (was_in_trash) {
+           pbuf -= strlen("/@rozofs-trash@");
+           memcpy(pbuf,"/@rozofs-trash@",strlen("/@rozofs-trash@"));          
+         }            
 	 /*
 	 ** this the root
 	 */
@@ -560,13 +478,45 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
 	 *pbuf='.';
 	 return pbuf;
       }
+      
       /*
       ** get the attributes of the parent
       */
       if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,&cache, inode_attr_p->s.pfid))) {
-	break;
-      }  
+        /*
+        ** Parent FID does not exist any more. Put FID only
+        */
+        pbuf = buf;
+        pbuf += sprintf(pbuf,"./@rozofs_uuid@");
+        rozofs_fid_append(pbuf,inode_attr_p->s.attrs.fid);
+        return buf;   
+      }      
       inode_attr_p=  &plv2->attributes;
+      /*
+      ** So far FID were trash FIDs...
+      */
+      if (was_in_trash) {
+        /*
+        ** .. but now this parent is not in trash.
+        ** Introduce the trash mark in the name
+        */
+        if (!exp_metadata_inode_is_del_pending(inode_attr_p->s.attrs.fid)) {
+          pbuf -= strlen("/@rozofs-trash@");
+          memcpy(pbuf,"/@rozofs-trash@",strlen("/@rozofs-trash@")); 
+        }         
+      }
+      
+      /*
+      ** In relative mode just add the parent fid
+      */
+      if (relative) {
+	 pbuf -= strlen("./@rozofs_uuid@");
+         pbuf -= 36;
+         memcpy(pbuf,"./@rozofs_uuid@",strlen("./@rozofs_uuid@")); 
+         rozofs_fid_append(pbuf+strlen("./@rozofs_uuid@"),inode_attr_p->s.attrs.fid);
+         pbuf[strlen("./@rozofs_uuid@")+36] = '/';
+	 return pbuf;        
+      }        
     }
 
     return pbuf;
@@ -744,7 +694,42 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       return 0;
     }
   }
+   
+  /*
+  ** Must have a change time bigger than ctime_bigger
+  */ 
+  if (ctime_bigger != -1) {
+    if (inode_p->s.attrs.ctime < ctime_bigger) {
+      return 0;
+    }
+  }  
 
+  /*
+  ** Must have a change time lower than ctime_lower
+  */    
+  if (ctime_lower != -1) {
+    if (inode_p->s.attrs.ctime > ctime_lower) {
+      return 0;
+    }
+  }     
+
+  /*
+  ** Must have a change time equal to ctime_equal
+  */    
+  if (ctime_equal != -1) {
+    if (inode_p->s.attrs.ctime != ctime_equal) {
+      return 0;
+    }
+  } 
+  
+  /*
+  ** Must have a change time different from ctime_diff
+  */    
+  if (ctime_diff != -1) {
+    if (inode_p->s.attrs.ctime == ctime_diff) {
+      return 0;
+    }
+  }
   /* 
   ** Privileges
   */
@@ -863,8 +848,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     
   if (S_ISDIR(inode_p->s.attrs.mode)) 
   {
-    ext_dir_mattr_t *stats_attr_p;
-    stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
+    ext_dir_mattr_t * stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
     
     if (stats_attr_p->s.version >=  ROZOFS_DIR_VERSION_1)
     {
@@ -905,43 +889,42 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 	}
       }
     }
+    /*
+    ** Must have a size bigger than size_bigger
+    */ 
+    if (size_bigger != -1) {
+      if (stats_attr_p->s.nb_bytes < size_bigger) {
+        return 0;
+      }
+    }  
+
+    /*
+    ** Must have a size lower than size_lower
+    */    
+    if (size_lower != -1) {
+      if (stats_attr_p->s.nb_bytes  > size_lower) {
+        return 0;
+      }
+    }     
+
+    /*
+    ** Must have a size equal to size_equal
+    */    
+    if (size_equal != -1) {
+      if (stats_attr_p->s.nb_bytes  != size_equal) {
+        return 0;
+      }
+    }   
+
+    /*
+    ** Must have a size time different from size_diff
+    */    
+    if (size_diff != -1) {
+      if (stats_attr_p->s.nb_bytes  == size_diff) {
+        return 0;
+      }
+    }
   }     
-  /*
-  ** Must have a size bigger than size_bigger
-  */ 
-  if (size_bigger != -1) {
-    if (inode_p->s.attrs.size < size_bigger) {
-      return 0;
-    }
-  }  
-
-  /*
-  ** Must have a size lower than size_lower
-  */    
-  if (size_lower != -1) {
-    if (inode_p->s.attrs.size > size_lower) {
-      return 0;
-    }
-  }     
-
-  /*
-  ** Must have a size equal to size_equal
-  */    
-  if (size_equal != -1) {
-    if (inode_p->s.attrs.size != size_equal) {
-      return 0;
-    }
-  }   
-
-  /*
-  ** Must have a size time different from size_diff
-  */    
-  if (size_diff != -1) {
-    if (inode_p->s.attrs.size == size_diff) {
-      return 0;
-    }
-  }
-     
   
   /*
   ** Must have an uid equal to size_equal
@@ -983,6 +966,43 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   ** For regular files only
   */    
   if (S_ISREG(inode_p->s.attrs.mode)) {
+  
+    /*
+    ** Must have a size bigger than size_bigger
+    */ 
+    if (size_bigger != -1) {
+      if (inode_p->s.attrs.size < size_bigger) {
+        return 0;
+      }
+    }  
+
+    /*
+    ** Must have a size lower than size_lower
+    */    
+    if (size_lower != -1) {
+      if (inode_p->s.attrs.size > size_lower) {
+        return 0;
+      }
+    }     
+
+    /*
+    ** Must have a size equal to size_equal
+    */    
+    if (size_equal != -1) {
+      if (inode_p->s.attrs.size != size_equal) {
+        return 0;
+      }
+    }   
+
+    /*
+    ** Must have a size time different from size_diff
+    */    
+    if (size_diff != -1) {
+      if (inode_p->s.attrs.size == size_diff) {
+        return 0;
+      }
+    }
+       
     /*
     ** Must have a cid equal to cid_equal
     */    
@@ -1031,50 +1051,87 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       }
     }
     
-    
-  }
-    
-  /*
-  ** Must have a nlink bigger than nlink_bigger
-  */ 
-  if (nlink_bigger != -1) {
-    if (inode_p->s.attrs.nlink < nlink_bigger) {
-      return 0;
-    }
-  }  
+    /*
+    ** Must have a nlink bigger than nlink_bigger
+    */ 
+    if (nlink_bigger != -1) {
+      if (inode_p->s.attrs.nlink < nlink_bigger) {
+        return 0;
+      }
+    }  
 
-  /*
-  ** Must have a nlink lower than nlink_lower
-  */    
-  if (nlink_lower != -1) {
-    if (inode_p->s.attrs.nlink > nlink_lower) {
-      return 0;
-    }
-  }  
+    /*
+    ** Must have a nlink lower than nlink_lower
+    */    
+    if (nlink_lower != -1) {
+      if (inode_p->s.attrs.nlink > nlink_lower) {
+        return 0;
+      }
+    }  
 
-  /*
-  ** Must have a nlink equal to nlink_equal
-  */    
-  if (nlink_equal != -1) {
-    if (inode_p->s.attrs.nlink != nlink_equal) {
-      return 0;
+    /*
+    ** Must have a nlink equal to nlink_equal
+    */    
+    if (nlink_equal != -1) {
+      if (inode_p->s.attrs.nlink != nlink_equal) {
+        return 0;
+      }
+    } 
+
+    /*
+    ** Must have a nlink different from nlink_diff
+    */    
+    if (nlink_diff != -1) {
+      if (inode_p->s.attrs.nlink == nlink_diff) {
+        return 0;
+      }
     }
-  } 
-  
-  /*
-  ** Must have a nlink different from nlink_diff
-  */    
-  if (nlink_diff != -1) {
-    if (inode_p->s.attrs.nlink == nlink_diff) {
-      return 0;
-    }
+    
   }
 
   /*
   ** For directory only
   */    
-  if (S_ISREG(inode_p->s.attrs.mode)) {
+  if (S_ISDIR(inode_p->s.attrs.mode)) {
+    
+    uint64_t deleted = inode_p->s.hpc_reserved.dir.nb_deleted_files;
 
+    /*
+    ** Must have delete count bigger than deleted_bigger
+    */ 
+    if (deleted_bigger != -1) {
+      if (deleted < deleted_bigger) {
+        return 0;
+      }
+    }  
+
+    /*
+    ** Must have a delete count lower than deleted_lower
+    */    
+    if (deleted_lower != -1) {
+      if (deleted > deleted_lower) {
+        return 0;
+      }
+    }  
+
+    /*
+    ** Must have a delete count equal to deleted_equal
+    */    
+    if (deleted_equal != -1) {
+      if (deleted != deleted_equal) {
+        return 0;
+      }
+    } 
+
+    /*
+    ** Must have a delete count different from deleted_diff
+    */    
+    if (deleted_diff != -1) {
+      if (deleted == deleted_diff) {
+        return 0;
+      }
+    }
+  
     /*
     ** Must have children bigger than children_bigger
     */ 
@@ -1163,17 +1220,173 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** This inode is valid
   */
-  if (exp_metadata_inode_is_del_pending(inode_p->s.attrs.fid))
-  {
-    pChar = rozolib_get_relative_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
-  }
-  else
-  {
-    pChar = rozo_get_full_path(exportd,inode_attr_p, fullName,sizeof(fullName)); 
-  } 
+  switch(name_format) {
 
-  if (pChar) {
-    printf("%s\n",pChar);
+    case name_format_fid:
+      pChar = fullName;    
+      pChar += sprintf(pChar,"./@rozofs_uuid@");
+      rozofs_fid_append(pChar,inode_p->s.attrs.fid);
+      pChar = fullName;    
+      break;
+
+    case name_format_relative:
+      pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),1);
+      break;
+      pChar = fullName;    
+      pChar += sprintf(pChar,"./@rozofs_uuid@");
+      pChar += rozofs_fid_append(pChar,inode_p->s.pfid);
+      if (exp_metadata_inode_is_del_pending(inode_p->s.attrs.fid)) {
+        pChar += sprintf(pChar,"/@rozofs-trash@");  
+      }
+      pName = exp_read_fname_from_inode(e->root,inode_p,&nameLen);        
+      pChar += sprintf(pChar,"/%s",pName);        
+      pChar  = fullName;    
+      break;
+
+    default:        
+      pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),0);
+  }     
+
+  /*
+  ** Put entry_per_line entries per line
+  */
+  if (pChar==NULL) {
+    return 0;
+  }  
+  
+  printf("%s",pChar);
+
+  if (display_uid) {
+    NEW_FIELD(uid); 
+    printf("%d", inode_p->s.attrs.uid);
+  }
+  if (display_gid) {
+    NEW_FIELD(gid);   
+    printf("%d", inode_p->s.attrs.gid);
+  }
+  if (display_priv) {
+    NEW_FIELD(priv);   
+    printf("%3.3o", inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+  }  
+
+  /*
+  ** Directory
+  */
+  if (S_ISDIR(inode_p->s.attrs.mode)) {
+    ext_dir_mattr_t *ext_dir_mattr_p = (ext_dir_mattr_t*)inode_p->s.attrs.sids; 
+
+    if (display_size) {
+      NEW_FIELD(size); 
+      printf("%llu",(long long unsigned)ext_dir_mattr_p->s.nb_bytes);        
+    }
+    if (display_children) {       
+      NEW_FIELD(children); 
+      printf("%llu",(long long unsigned)inode_p->s.attrs.children);                
+    }
+    if (display_deleted) {       
+      uint64_t deleted = inode_p->s.hpc_reserved.dir.nb_deleted_files;
+      NEW_FIELD(deleted); 
+      printf("%llu",(long long unsigned)deleted);                
+    }
+    if (display_project) {
+      NEW_FIELD(project);       
+      printf("%d", inode_p->s.attrs.cid);
+    }
+    if (display_update) {
+      ext_dir_mattr_t * stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
+      if (stats_attr_p->s.version >=  ROZOFS_DIR_VERSION_1) {
+        if (display_update==2) {
+          char buftime[512];
+          NEW_FIELD(hupdate);
+          rozofs_time2string(buftime,stats_attr_p->s.update_time);  
+          printf("\"%s\"", buftime);
+        }
+        else {
+          NEW_FIELD(update);
+          printf("%llu",(long long unsigned int)stats_attr_p->s.update_time);  
+        }  
+      }
+    }
+  }
+
+  /*
+  ** Regular file
+  */
+  else {  
+    if (display_size) {
+      NEW_FIELD(size);       
+      printf("%llu",(long long unsigned)inode_p->s.attrs.size);        
+    }  
+    if (display_nlink) {       
+      NEW_FIELD(nlink); 
+      printf("%llu",(long long unsigned)inode_p->s.attrs.nlink);                
+    }
+    if (display_project) {
+      NEW_FIELD(project);       
+      printf("%d", inode_p->s.hpc_reserved.reg.share_id);
+    }
+    if (display_distrib) {
+      char fidString[40];
+      NEW_FIELD(distrib);   
+      printf("%u/%u", inode_p->s.attrs.cid, inode_p->s.attrs.sids[0]);
+      int sid_idx;
+      for (sid_idx=1; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+        if (inode_p->s.attrs.sids[sid_idx] == 0) break;
+        printf("-%u",inode_p->s.attrs.sids[sid_idx]);
+      }
+      NEW_FIELD(fid);  
+      rozofs_fid_append(fidString,inode_p->s.attrs.fid);
+      printf("%s", fidString);       
+    }     
+  } 
+  
+  
+  if (display_cr8) {
+    if (display_cr8==2) {
+      char buftime[512];
+      rozofs_time2string(buftime,inode_p->s.cr8time);  
+      NEW_FIELD(hcr8); 
+      printf("\"%s\"", buftime); 
+    }  
+    else {
+      NEW_FIELD(cr8);
+      printf("%llu",(long long unsigned int)inode_p->s.cr8time);  
+    }  
+  }
+  
+  if (display_mod) {
+    if (display_mod==2) {
+      char buftime[512];
+      rozofs_time2string(buftime,inode_p->s.attrs.mtime);  
+      NEW_FIELD(hmod); 
+      printf("\"%s\"", buftime);
+    }        
+    else {
+      NEW_FIELD(mod);
+      printf("%llu",(long long unsigned int)inode_p->s.attrs.mtime);  
+    }  
+  }
+  
+  if (display_ctime) {
+    if (display_ctime==2) {
+      char buftime[512];
+      rozofs_time2string(buftime,inode_p->s.attrs.ctime);  
+      NEW_FIELD(hctime); 
+      printf("\"%s\"", buftime);
+    }        
+    else {
+      NEW_FIELD(ctime);
+      printf("%llu",(long long unsigned int)inode_p->s.attrs.ctime);  
+    }  
+  }   
+   
+  cur_entry_per_line++;
+  if (cur_entry_per_line >= entry_per_line) {
+    cur_entry_per_line = 0;
+    printf("\n");
+  }
+  else {
+    printf("  %s ", separator);
   }  
   return 1;
 }
@@ -1197,7 +1410,7 @@ static void usage(char * fmt, ...) {
 
   printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
   printf("This RozoFS utility enables to scan for files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
-  printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan [EXPORT] [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } \033[0m\n\n");
+  printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan [EXPORT] [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } [OUTPUT]\033[0m\n\n");
   printf("\n\033[1mEXPORT:\033[0m\n");
   printf("\tCan be omitted when current path is the RozoFS mountpoint one want to scan.\n");
   printf("\tElse the target export must be given:\n");
@@ -1226,15 +1439,17 @@ static void usage(char * fmt, ...) {
   printf("\n\033[1mFIELD:\033[0m\n");
   printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
   printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
-  printf("\t\033[1m-r,--update\033[0m\t\tdirectory update date.\n"); 
-  printf("\t\033[1m-s,--size\033[0m\t\tfile size.\n"); 
+  printf("\t\033[1m-M,--ctime\033[0m\t\tchange date.\n"); 
+  printf("\t\033[1m-r,--update\033[0m\t\tdirectory update date (directory only).\n"); 
+  printf("\t\033[1m-s,--size\033[0m\t\tfile/directory size.\n"); 
   printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
   printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
-  printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (1).\n"); 
-  printf("\t\033[1m-z,--sid\033[0m\t\tSID identifier (1).\n"); 
+  printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (file only) (1).\n"); 
+  printf("\t\033[1m-z,--sid\033[0m\t\tSID identifier (file only) (1).\n"); 
   printf("\t\033[1m-P,--project\033[0m\t\tproject identifier (1).\n"); 
-  printf("\t\033[1m-l,--link\033[0m\t\tnumber of links.\n"); 
-  printf("\t\033[1m-b,--children\033[0m\t\tnumber of children.\n"); 
+  printf("\t\033[1m-l,--link\033[0m\t\tnumber of links (file only).\n"); 
+  printf("\t\033[1m-b,--children\033[0m\t\tnumber of children (directory only).\n"); 
+  printf("\t\033[1m-D,--deleted\033[0m\t\tnumber of deleted inode in the trash (directory only).\n"); 
   printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
   printf("\t\033[1m-n,--name\033[0m\t\tfile/directory name (3).\n");
   printf("(1) only --eq or --ne conditions are supported.\n");
@@ -1252,32 +1467,52 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
   printf("\nDates must be expressed as:\n");
   printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
+  printf("\n\033[1mOUTPUT:\033[0m\n");              
+  printf("\t\033[1m-o,--out <f1,f2...>\033[0m\tDescribes requested output fields.\n");
+  printf("\t\t\t\tDefault is to have one inode path per line.\n");
+  printf("\t\033[1mline<val>\033[0m\t\tDisplay <val> inode per line.\n");
+  printf("\t\033[1m<full|rel|fid>\033[0m\t\tDisplay <full names|relative names|fid>.\n");
+  printf("\t\033[1msize\033[0m\t\t\tdisplay file/directory size.\n");
+  printf("\t\033[1mproject\033[0m\t\t\tdisplay project identifier.\n");
+  printf("\t\033[1mchildren\033[0m\t\tdisplay directory number of children.\n");
+  printf("\t\033[1mdeleted\033[0m\t\t\tdisplay directory number of deleted inode.\n");
+  printf("\t\033[1mnlink\033[0m\t\t\tdisplay file number of link.\n");
+  printf("\t\033[1muid\033[0m\t\t\tdisplay uid.\n");
+  printf("\t\033[1mgid\033[0m\t\t\tdisplay gid.\n");
+  printf("\t\033[1mcr8|hcr8\033[0m\t\tdisplay creation time in seconds or human readable date.\n");
+  printf("\t\033[1mmod|hmod\033[0m\t\tdisplay modification time in seconds or human readable date.\n");
+  printf("\t\033[1mctime|hctime\033[0m\t\tdisplay change time in seconds or human readable date.\n");
+  printf("\t\033[1mupdate|hupdate\033[0m\t\tdisplay update directory time in seconds or human readable date.\n");
+  printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
+  printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution and FID.\n");
+  printf("\t\033[1mall|allh\033[0m\t\tdisplay every field (time in seconds or human readable date).\n");
+  printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
   
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
-    printf("  \033[1mrozo_scan --xattr --size --ge 76000 --le 76100\033[0m\n");
+    printf("  \033[1mrozo_scan --xattr --size --ge 76000 --le 76100 --out size\033[0m\n");
     printf("Searching files with a modification date in february 2017 but created before 2017.\n");
-    printf("  \033[1mrozo_scan --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
+    printf("  \033[1mrozo_scan --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\" -o hcr8,hmod,uid,sep=#\033[0m\n");
     printf("Searching files created by user 4501 on 2015 January the 10th in the afternoon.\n");
-    printf("  \033[1mrozo_scan --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
+    printf("  \033[1mrozo_scan --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\" -o hcr8,hmod,uid,gid\033[0m\n");
     printf("Searching files owned by group 4321 in directory with FID 00000000-0000-4000-1800-000000000018.\n");
     printf("  \033[1mrozo_scan --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
     printf("Searching files whoes name constains captainNemo.\n");
-    printf("  \033[1mrozo_scan --name --ge captainNemo\033[0m\n");
+    printf("  \033[1mrozo_scan --name --ge captainNemo --out all\033[0m\n");
     printf("Searching directories whoes name starts by a \'Z\', ends with \".DIR\" and constains at least one decimal number.\n");
     printf("  \033[1mrozo_scan --dir --name --regex /tmp/regex\033[0m\n");
     printf("  With /tmp/regex containing regex string \033[1m^Z.*\\d.*\\.DIR$\033[0m\n");    
     printf("Searching directories with more than 100K entries.\n");
-    printf("  \033[1mrozo_scan --dir --children --ge 100000\033[0m\n");
+    printf("  \033[1mrozo_scan --dir --children --ge 100000 --out size,children\033[0m\n");
     printf("Searching all symbolic links.\n");
     printf("  \033[1mrozo_scan --slink --noreg\033[0m\n");
     printf("Searching files in project #31 owned by user 2345.\n");
     printf("  \033[1mrozo_scan --project --eq 31 --uid --eq 2345\033[0m\n");
     printf("Searching files in cluster 2 having a potential projection on sid 7.\n");
-    printf("  \033[1mrozo_scan --cid --eq 2 --sid --eq 7\033[0m\n");
+    printf("  \033[1mrozo_scan --cid --eq 2 --sid --eq 7 -o distrib\033[0m\n");
     printf("Searching non writable files being executable by its group but not by the others.\n");
-    printf("  \033[1mrozo_scan --Unw --Gx --Onx\033[0m\n");
+    printf("  \033[1mrozo_scan --Unw --Gx --Onx -o priv,gid,uid\033[0m\n");
   }
   exit(EXIT_FAILURE);     
 };
@@ -1498,7 +1733,221 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
     */
     docheck(inode_p->s.attrs.mtime,mod_equal);
   } 
+   
+  /*
+  ** Must have a modification time bigger than ctime_bigger
+  */ 
+  if (ctime_bigger != -1) {
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.ctime, ctime_bigger);
+  }  
+
+  /*
+  ** Must have a modification time lower than mod_lower
+  */    
+  if (ctime_lower != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(ctime_lower,inode_p->s.cr8time);
+  }     
+
+  /*
+  ** Must have a modification time equal to mod_equal
+  */    
+  if (ctime_equal != -1) {
+    /*
+    ** The tracking file must have been created at this time or before
+    */
+    docheck(ctime_equal,inode_p->s.cr8time);
+    /*
+    ** The tracking file must have been modified at this timer or later
+    */
+    docheck(inode_p->s.attrs.mtime,ctime_equal);
+  }   
   return 1; 
+}
+/*
+**_______________________________________________________________________
+** Check whether the tracking file c an match the given date criteria
+**   
+**  @param  eid : eport identifier
+**    
+**  @retval 0 = do not read this file / 1 = read this file
+*/
+#define NEXT(p) { \
+  while((*p!=',')&&(*p!=0)&&(*p!=' ')) p++;\
+  if (*p==',') {\
+    p++;\
+  }  \
+  if ((*p==0)||(*p==' ')) {\
+    return 0;\
+  } \
+  continue;\
+}     
+int rozofs_parse_output_format(char * fmt) {
+  char * p = fmt;
+  
+  while (1) {
+  
+    if (strncmp(p, "line", 4)==0) {
+      p+=4;
+      if (*p==0) {
+        usage("Bad output format for \"line\"\" : no line value.");           
+      }
+      if (sscanf(p,"%d",&entry_per_line)!=1) {
+        usage("Bad output format for \"line\" : integer value required");     
+      } 
+      if ((entry_per_line<=0)||(entry_per_line>50)) {
+        usage("Bad output format for \"line\" : value must be within [1..50] ");     
+      }
+      NEXT(p);
+    }
+    
+    if (strncmp(p, "fid", 3)==0) {
+      name_format = name_format_fid;
+      NEXT(p);
+    }    
+    if (strncmp(p, "full", 3)==0) {
+      name_format = name_format_full;
+      NEXT(p);
+    }  
+    if (strncmp(p, "rel", 3)==0) {
+      name_format = name_format_relative;
+      NEXT(p);
+    }  
+    
+    if (strncmp(p, "size", 4)==0) {
+      display_size = 1;
+      NEXT(p);
+    }      
+    
+    if (strncmp(p, "children", 5)==0) {
+      display_children = 1;
+      NEXT(p);
+    }      
+    
+    if (strncmp(p, "deleted", 3)==0) {
+      display_deleted = 1;
+      NEXT(p);
+    }      
+
+    if (strncmp(p, "nlink", 5)==0) {
+      display_nlink = 1;
+      NEXT(p);
+    }      
+
+    if (strncmp(p, "project", 4)==0) {
+      display_project = 1;
+      NEXT(p);
+    }      
+
+    if (strncmp(p, "uid", 3)==0) {
+      display_uid = 1;
+      NEXT(p);
+    }      
+
+    if (strncmp(p, "gid", 3)==0) {
+      display_gid = 1;
+      NEXT(p);
+    }   
+    
+    if (strncmp(p, "cr8", 3)==0) {
+      display_cr8 = 1;
+      NEXT(p);
+    } 
+    if (strncmp(p, "hcr8", 4)==0) {
+      display_cr8 = 2;
+      NEXT(p);
+    } 
+
+    if (strncmp(p, "mod", 3)==0) {
+      display_mod = 1;
+      NEXT(p);
+    }              
+
+    if (strncmp(p, "hmod", 3)==0) {
+      display_mod = 2;
+      NEXT(p);
+    }              
+
+    if (strncmp(p, "ctime", 4)==0) {
+      display_ctime = 1;
+      NEXT(p);
+    }              
+
+    if (strncmp(p, "hctime", 5)==0) {
+      display_ctime = 2;
+      NEXT(p);
+    }              
+
+
+    if (strncmp(p, "update", 3)==0) {
+      display_update = 1;
+      NEXT(p);
+    }              
+
+    if (strncmp(p, "hupdate", 3)==0) {
+      display_update = 2;
+      NEXT(p);
+    }              
+
+ 
+    if (strncmp(p, "priv", 4)==0) {
+      display_priv = 1;
+      NEXT(p);
+    }        
+          
+    if (strncmp(p, "distrib", 4)==0) {
+      display_distrib = 1;
+      NEXT(p);
+    }                       
+
+    if (strncmp(p, "sep=", 4)==0) {
+      p+=4;
+      char * pSep = separator;
+      while((*p!= ' ') && (*p!= 0) &&(*p!=',')) {
+        *pSep++ = *p++;
+      }
+      NEXT(p);
+    } 
+    if (strncmp(p, "allh", 4)==0) {
+      display_distrib = 1;
+      display_priv = 1;
+      display_update = 2;
+      display_mod = 2;
+      display_ctime = 2;
+      display_cr8 = 2;
+      display_gid = 1;
+      display_uid = 1;
+      display_project = 1;
+      display_nlink = 1;
+      display_deleted = 1;
+      display_children = 1;
+      display_size = 1;
+      NEXT(p);
+    }      
+    if (strncmp(p, "all", 3)==0) {
+      display_distrib = 1;
+      display_priv = 1;
+      display_update = 1;
+      display_mod = 1;
+      display_ctime = 1;
+      display_cr8 = 1;
+      display_gid = 1;
+      display_uid = 1;
+      display_project = 1;
+      display_nlink = 1;
+      display_deleted = 1;
+      display_children = 1;
+      display_size = 1;
+      NEXT(p);
+    }            
+     usage("Bad output format : unexpected format (char %d)", (int)(p-fmt));
+  }  
+  return 0;
 }
 /*
 **_______________________________________________________________________
@@ -1536,6 +1985,7 @@ int main(int argc, char *argv[]) {
         {"verbose", no_argument, 0, 'v'},
         {"cr8", no_argument, 0, 'c'},
         {"mod", no_argument, 0, 'm'},
+        {"ctime", no_argument, 0, 'M'},
         {"size", no_argument, 0, 's'},
         {"uid", no_argument, 0, 'u'},
         {"gid", no_argument, 0, 'g'},        
@@ -1544,6 +1994,7 @@ int main(int argc, char *argv[]) {
         {"project", no_argument, 0, 'P'},        
         {"link", no_argument, 0, 'l'},        
         {"children", no_argument, 0, 'b'},        
+        {"deleted", no_argument, 0, 'D'},        
         {"pfid", no_argument, 0, 'f'},        
         {"name", no_argument, 0, 'n'},        
         {"xattr", no_argument, 0, 'x'}, 
@@ -1580,6 +2031,7 @@ int main(int argc, char *argv[]) {
         {"Onr", no_argument, 0, 16},
         {"Ow", no_argument, 0, 17},
         {"Onw", no_argument, 0, 18},
+        {"out", required_argument, 0, 'o'},
 
         {0, 0, 0, 0}
     };
@@ -1610,7 +2062,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:*:hvcmsguCPlxXdbfnSRartTz", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:e:k:*:hvcmsguCPlxXdbfnSRartTzo:", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1638,6 +2090,7 @@ int main(int argc, char *argv[]) {
           case 'v':
               verbose = 1;
               break;
+              
           case  1:  Ux = 1; break;
           case  2:  Ux = 0; break;
           case  3:  Ur = 1; break;
@@ -1656,6 +2109,15 @@ int main(int argc, char *argv[]) {
           case 16:  Or = 0; break;
           case 17:  Ow = 1; break;
           case 18:  Ow = 0; break;
+          
+          case 'o':
+            if (optarg==0) {
+              usage("No output format defined");     
+            }
+            if (rozofs_parse_output_format(optarg)!=0) {
+              usage("Bad output format \"%s\"",optarg);     
+            }
+            break;
 
           case 'c':
               NEW_CRITERIA(SCAN_CRITERIA_CR8);
@@ -1663,6 +2125,10 @@ int main(int argc, char *argv[]) {
               break;
           case 'm':
               NEW_CRITERIA(SCAN_CRITERIA_MOD);
+              date_criteria_is_set = 1;
+              break;
+          case 'M':
+              NEW_CRITERIA(SCAN_CRITERIA_CTIME);
               date_criteria_is_set = 1;
               break;
           case 'r':
@@ -1692,6 +2158,9 @@ int main(int argc, char *argv[]) {
               break;                
           case 'b':
               NEW_CRITERIA(SCAN_CRITERIA_CHILDREN);
+              break;                
+          case 'D':
+              NEW_CRITERIA(SCAN_CRITERIA_DELETED);
               break;                
           case 'f':
               NEW_CRITERIA(SCAN_CRITERIA_PFID);
@@ -1745,6 +2214,13 @@ int main(int argc, char *argv[]) {
                   }    
                   break; 
 
+                case SCAN_CRITERIA_CTIME:
+                  ctime_lower = rozofs_date2time(optarg);
+                  if (ctime_lower==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }    
+                  break; 
+
                 case SCAN_CRITERIA_UPDATE:
                   update_lower = rozofs_date2time(optarg);
                   if (update_lower==-1) {
@@ -1769,6 +2245,13 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CHILDREN:
                   children_lower = rozofs_scan_u64(optarg);
                   if (children_lower==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }    
+                  break; 
+                                   
+                case SCAN_CRITERIA_DELETED:
+                  deleted_lower = rozofs_scan_u64(optarg);
+                  if (deleted_lower==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
                   break; 
@@ -1809,6 +2292,14 @@ int main(int argc, char *argv[]) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   mod_lower--;    
+                  break;  
+                  
+                case SCAN_CRITERIA_CTIME:
+                  ctime_lower = rozofs_date2time(optarg);
+                  if (mod_lower==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }
+                  ctime_lower--;    
                   break;  
 
                 case SCAN_CRITERIA_UPDATE:
@@ -1851,6 +2342,17 @@ int main(int argc, char *argv[]) {
                   } 
                   children_lower--;   
                   break;  
+                                   
+                case SCAN_CRITERIA_DELETED:
+                  deleted_lower = rozofs_scan_u64(optarg);
+                  if (deleted_lower==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }   
+                  if (deleted_lower==0) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  } 
+                  deleted_lower--;   
+                  break;  
 
                                       
                 case SCAN_CRITERIA_GID:          
@@ -1886,6 +2388,13 @@ int main(int argc, char *argv[]) {
                   }    
                   break; 
 
+                case SCAN_CRITERIA_CTIME:
+                  ctime_bigger = rozofs_date2time(optarg);
+                  if (ctime_bigger==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }    
+                  break; 
+                  
                 case SCAN_CRITERIA_UPDATE:
                   update_bigger = rozofs_date2time(optarg);
                   if (update_bigger==-1) {
@@ -1910,6 +2419,13 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CHILDREN:
                   children_bigger = rozofs_scan_u64(optarg);
                   if (children_bigger==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  } 
+                  break;
+
+                case SCAN_CRITERIA_DELETED:
+                  deleted_bigger = rozofs_scan_u64(optarg);
+                  if (deleted_bigger==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   break;
@@ -1955,7 +2471,15 @@ int main(int argc, char *argv[]) {
                   mod_bigger++;  
                   break;
 
-                case SCAN_CRITERIA_UPDATE:
+                case SCAN_CRITERIA_CTIME:
+                  ctime_bigger = rozofs_date2time(optarg);
+                  if (ctime_bigger==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  } 
+                  ctime_bigger++;  
+                  break;
+
+                 case SCAN_CRITERIA_UPDATE:
                   update_bigger = rozofs_date2time(optarg);
                   if (update_bigger==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
@@ -1984,6 +2508,14 @@ int main(int argc, char *argv[]) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
                   children_bigger++;
+                  break;  
+                  
+                case SCAN_CRITERIA_DELETED:
+                  deleted_bigger = rozofs_scan_u64(optarg);
+                  if (deleted_bigger==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  } 
+                  deleted_bigger++;
                   break;  
                   
                 case SCAN_CRITERIA_GID:          
@@ -2022,6 +2554,13 @@ int main(int argc, char *argv[]) {
                   }                   
                   break;  
                   
+                case SCAN_CRITERIA_CTIME:
+                  ctime_equal = rozofs_date2time(optarg);
+                  if (ctime_equal==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }                   
+                  break;  
+                  
                 case SCAN_CRITERIA_UPDATE:
                   update_equal = rozofs_date2time(optarg);
                   if (update_equal==-1) {
@@ -2055,7 +2594,14 @@ int main(int argc, char *argv[]) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }   
                   break;
-                                                                      
+                  
+                case SCAN_CRITERIA_DELETED:
+                  deleted_equal = rozofs_scan_u64(optarg);
+                  if (deleted_equal==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }   
+                  break;
+                                                                       
                 case SCAN_CRITERIA_UID:
                   uid_equal = rozofs_scan_u64(optarg);
                   if (uid_equal==-1) {
@@ -2173,6 +2719,13 @@ int main(int argc, char *argv[]) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }                   
                   break; 
+                  
+                case SCAN_CRITERIA_CTIME:
+                  ctime_diff = rozofs_date2time(optarg);
+                  if (ctime_diff==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }                   
+                  break; 
 
                 case SCAN_CRITERIA_UPDATE:
                   update_diff = rozofs_date2time(optarg);
@@ -2198,6 +2751,13 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_CHILDREN:
                   children_diff = rozofs_scan_u64(optarg);
                   if (children_diff==-1) {
+                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  }
+                  break; 
+                   
+                case SCAN_CRITERIA_DELETED:
+                  deleted_diff = rozofs_scan_u64(optarg);
+                  if (deleted_diff==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
                   break; 
@@ -2319,6 +2879,15 @@ int main(int argc, char *argv[]) {
   else {
     rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
+
+  /*
+  ** Current ouput line is not yet finished.
+  ** add a \n
+  */
+  if (cur_entry_per_line != 0) {
+    printf("\n");
+  }  
+  
   exit(EXIT_SUCCESS);  
   return 0;
 }
