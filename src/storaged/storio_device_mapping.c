@@ -683,13 +683,17 @@ static inline uint32_t storio_device_mapping_allocate_device_round_robin(storage
 } 
 /*
 **____________________________________________________
+**
+** Allocate a device for a file following a read or write
+** round robin algorithm
+**  
+** @param st        : storage context
+** @param layout    : layout to be used for this file
+** @param distrib   : File projection distribution within the cluster
+**
+** @retval The allocated device number on this storage
 */
-/*
-  Allocate a device for a file
-  
-   @param st: storage context
-*/
-uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib) {
+uint32_t storio_device_mapping_allocate_device_rw_round_robin(storage_t * st, uint8_t layout, sid_t * distrib) {
   uint8_t       inverse;
   int           idx;
   
@@ -708,18 +712,132 @@ uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, s
     }
     return storio_device_mapping_allocate_device_size_balancing (st);
   }
+  
+  /*
+  ** Strict round robin
+  */
+  return storio_device_mapping_allocate_device_round_robin(st);
+}
+
+/*
+**____________________________________________________
+**
+** Allocate a device for a new chunk of a given file.
+**
+** SIZE BALANCING:
+** _______________
+** In size balancing mode one allocates the device with 
+** the biggest free size
+**
+** ROUND ROBIN READ OR WRITE:
+** __________________________
+** The goal is to spread chunks of big files on every
+** devices. If the storio has #nbDevice devices, the 
+** allocation policy considers the file in slices of
+** #nbDevice continuous chunks.
+**
+** For the 1rst slice: chunks [0..(#nbDevice-1)]
+** - the 1rst allocated device is allocated following 
+**   the configured distibution rule. (either read round
+**   robin or write round robin).
+** - The next chunks in the same slice are allocated 
+**   in order to spread the chunks on every available 
+**   devices.
+**
+** For the further slices:
+** - the 1rst allocated device is allocated in size 
+**   balancing distibution rule. 
+** - The next chunks in the same slice are allocated 
+**   in order to spread the chunks on every available 
+**   devices.
+**
+** @param fidCtx    : the FID mapping context 
+** @param chunk     : the chunk number to allocate
+** @param st        : storage context
+** @param layout    : layout to be used for this file
+** @param distrib   : File projection distribution within the cluster
+**
+** @retval The allocated device number on this storage
+**
+*/
+uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
+                                         storio_device_mapping_t * fidCtx,
+                                         storage_t               * st, 
+                                         uint8_t                   layout, 
+                                         sid_t                   * distrib) {
+  uint8_t     chunkIdx;                                         
+  uint8_t     devIdx;                                         
+  uint64_t    bitmap   = 0;
+  uint32_t    nbDevice = st->device_number;
+  uint8_t     firstChunk;   
+  uint8_t     device;
 
   /*
-  ** size equalizing
+  ** size balancing
   */    
   if (common_config.file_distribution_rule == rozofs_file_distribution_size_balancing) {
     return storio_device_mapping_allocate_device_size_balancing (st);    
   }
+    
+  /*
+  ** Loop on a slice of chunks of size nbDevice to find out
+  ** which devices has already been allocated for a chunK
+  ** within the slice. We try to spread the slice on all devices.
+  */
+  firstChunk = (chunk / nbDevice)*nbDevice;
+  /* Build the bitmap of already used devices in this slice */
+  for (chunkIdx=0; chunkIdx<nbDevice; chunkIdx++) {
+    device = storio_get_dev(fidCtx, firstChunk+chunkIdx);
+    if (device < 65) {
+      bitmap |= (1<<device);
+    } 
+  }
+    
+  /*
+  ** First chunk allocated in this slice.
+  ** 1rst slice     : use configured distribution algorithm
+  ** further slices : use size balancing distribution
+  */
+  if (bitmap == 0) {
+    if (firstChunk == 0) { 
+      return storio_device_mapping_allocate_device_rw_round_robin(st, layout, distrib);
+    }
+    return storio_device_mapping_allocate_device_size_balancing(st); 
+  } 
   
   /*
-  ** Strict roound robin
+  ** Some devices have already been choosen in this slice,
+  ** Try to get a different one to spread the slice on all devices
   */
-  return storio_device_mapping_allocate_device_round_robin(st);
+  
+  /*
+  ** Find the 1rst allocated device in the slice
+  */
+  for (devIdx=0; devIdx<nbDevice; devIdx++) {
+    if (bitmap & (1<<devIdx)) break;
+  }
+  device = devIdx;
+  
+  /*
+  ** Find the 1rst non allocated device after the current one
+  */
+  for (devIdx=0; devIdx<nbDevice; devIdx++) {
+    /* Next device */  
+    device = (device+1) % nbDevice; 
+    if ( (bitmap & (1<< device)) == 0) {
+      /* This device is not yet allocated in this slice */
+      if ((st->device_ctx[device].status == storage_device_status_is)
+      ||  (st->device_ctx[device].status == storage_device_status_rebuild)) {
+        /* This device can be used */
+        return device;   
+      }
+    }  
+  }  
+  
+  /*
+  ** No more usable device. Let's use size balancing distribution
+  */
+  return storio_device_mapping_allocate_device_size_balancing(st);
 }
 /*_____________________________________
 ** Parameter of the relocate thread
