@@ -1245,7 +1245,7 @@ static inline storage_dev_map_distribution_write_ret_e
     /*
     ** Allocate a device for this newly written chunk
     */
-    *dev = storio_device_mapping_allocate_device(st, layout, dist_set);
+    *dev = storio_device_mapping_new_chunk(chunk, fidCtx, st, layout, dist_set);
     rozofs_st_header_set_chunk(file_hdr,chunk,*dev);     
         
     /*
@@ -1893,11 +1893,14 @@ int storage_write_chunk_empty(storage_t * st, storio_device_mapping_t * fidCtx, 
     rozofs_stor_bins_file_hdr_t file_hdr;
     storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
     uint8_t   dev = storio_get_dev(fidCtx, chunk);
-
+    char * readBuffer = NULL;
     // No specific fault on this FID detected
     *is_fid_faulty = 0; 
-
-    dbg("%d/%d Write chunk %d : ", st->cid, st->sid, chunk);
+    struct iovec       vector[ROZOFS_MAX_BLOCK_PER_MSG*2]; 
+    int                i;
+    int                nb_read;
+    uint64_t          *pMsg;
+    dbg("%d/%d Write empty chunk %d : ", st->cid, st->sid, chunk);
    
   
     // If the device id is given as input, that proves that the file
@@ -1961,15 +1964,18 @@ open:
     length_to_write  = nb_proj * rozofs_disk_psize;
 
     /*
-    ** If the file is smaller than the offset to start writing on,
-    ** one just need to truncate the file to extend it.
+    ** Get the projection file size
     */
     if (fstat(fd, &sb) == -1) {
       storio_fid_error(fid, dev, chunk, bid, nb_proj,"fstat");       
       storage_error_on_device(st,dev);
       goto out;
     }
-
+    
+    /*
+    ** If the file is smaller than the offset to start writing on,
+    ** one just need to truncate the file to extend it.
+    */
     if (bins_file_offset >= sb.st_size) {
       /*
       ** Let's truncate the file
@@ -1981,12 +1987,56 @@ open:
       }
       goto out;
     }
+    
+    /*
+    ** If the end of the file is within what we are to write
+    ** just write it
+    */
+    if ((bins_file_offset+length_to_write) > sb.st_size) {
+      goto do_re_write;
+    } 
+           
+    /*
+    ** Read the file in order to see if it contains something else
+    ** than zeros, in which case we will need to re-write it
+    */
+    readBuffer = malloc(length_to_write);  
+    if (readBuffer == NULL) {
+      goto do_re_write;
+    }    
+    nb_read = pread(fd, readBuffer, length_to_write, bins_file_offset);             
+    
+    /*
+    ** Check for error
+    */
+    if (nb_read != length_to_write) {
+      /*
+      ** Let's re write the file
+      */
+      goto do_re_write;
+    }
+    
+    /*
+    ** Check the blocks content
+    */
+    pMsg = (uint64_t*) readBuffer;
+    for (i=0; i< length_to_write/8; i++,pMsg++) {
+      if (*pMsg != 0) {
+        goto do_re_write;
+      }
+    }     
+   
+    /*
+    ** All is zero. No need to rewrite
+    */
+    status = nb_proj * rozofs_msg_psize;
+    goto out;
+
+do_re_write:
 
     /*
     ** We have to write empty blocks to erase the file content
     */
-    struct iovec       vector[ROZOFS_MAX_BLOCK_PER_MSG*2]; 
-    int                i;
 
     if (nb_proj > (ROZOFS_MAX_BLOCK_PER_MSG*2)) {  
       severe("storage_write more blocks than possible %d vs max %d",
@@ -2031,6 +2081,10 @@ open:
     status = nb_proj * rozofs_msg_psize;	
 
 out:
+    if (readBuffer != NULL) {
+      free(readBuffer);
+      readBuffer = NULL;
+    }  
     if (fd != -1) {
       // Stat file for return the size of bins file after the write operation
       if (fstat(fd, &sb) == -1) {
@@ -2829,7 +2883,7 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
       /*
       ** Aloocate a device
       */ 
-      dev = storio_device_mapping_allocate_device(st, layout, dist_set);
+      dev = storio_device_mapping_new_chunk(chunk, fidCtx, st, layout, dist_set);
       /*
       ** Store the devic e in the file header
       */
@@ -3580,7 +3634,8 @@ out:
 
 
 
-
+#define ROZOFS_LABEL_SIZE    32
+#define ROZOFS_MODEL_SIZE    32
 
 
 /*
@@ -3591,6 +3646,8 @@ typedef struct _storage_enumerated_device_t {
   sid_t     sid;          // SID this device is dedicated to
   uint8_t   dev;          // Device number within the SID
   char      name[32];     // Device name
+  char      label[ROZOFS_LABEL_SIZE];    // Label
+  char      model[ROZOFS_MODEL_SIZE];    // Label
   time_t    date;         // Date of the mark file that gave cid/sid/device
   
   uint32_t  mounted:1;    // Is it mounted 
@@ -3604,7 +3661,26 @@ typedef struct _storage_enumerated_device_t {
 storage_enumerated_device_t * storage_enumerated_device_tbl[STORAGE_MAX_DEV_PER_NODE]={0};
 int                           storage_enumerated_device_nb=0;
 
+/*
+ *_______________________________________________________________________
+ *
+ * Set a label on a device
+ *
+ * @param pDev       Enumerated device context address
+ */
+ void rozofs_set_label(storage_enumerated_device_t * pDev) {
+   char label[ROZOFS_LABEL_SIZE];
+   char cmd[256];
 
+   sprintf(label, "RozoFS_c%u_s%u_%u",pDev->cid, pDev->sid, pDev->dev);  
+   
+   if (strcmp(pDev->label,label) == 0) return;
+   
+   sprintf(cmd, "e2label %s %s", pDev->name, label);
+   if (system(cmd)==0) {
+     strcpy(pDev->label, label);
+   }
+}   
 /*
  *_______________________________________________________________________
  *
@@ -3882,6 +3958,8 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   storage_t     * st;
   char          * pt, * pt2;
   int             ret;
+  char          * pLabel;
+  char          * pModel;
   storage_enumerated_device_t * pDev = NULL;  
 
 
@@ -3916,7 +3994,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   pt += rozofs_string_append(pt,".dev");
   
   pt = cmd;
-  pt += rozofs_string_append(pt,"lsblk -nro KNAME,FSTYPE,MOUNTPOINT | awk '{print $1\":\"$2\":\"$3;}' > ");
+  pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL | awk -F '\"' '{print $2\":\"$4\":\"$6\":\"$8\":\"$10\":\";}' > ");
   pt += rozofs_string_append(pt,fdevice);
   if (system(cmd)==0) {}
   
@@ -4011,6 +4089,28 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     pMount = pt;
     while ((*pt!=0)&&(*pt!='\n')&&(*pt!=':')) pt++;    
     *pt = 0;
+
+    /*
+    ** Get the label
+    */    
+    pt++;
+    pLabel = pt;   
+    while ((*pt!=0)&&(*pt!=':')) pt++;
+    *pt = 0;
+    if (strlen(pLabel) < ROZOFS_LABEL_SIZE) {
+      strcpy(pDev->label, pLabel);
+    }
+
+    /*
+    ** Get the model
+    */    
+    pt++;
+    pModel = pt;   
+    while ((*pt!=0)&&(*pt!=':')) pt++;
+    *pt = 0;
+    if (strlen(pModel) < ROZOFS_MODEL_SIZE) {
+      strcpy(pDev->model, pModel);
+    }
 
     /*
     ** If file system is mounted
@@ -4363,19 +4463,27 @@ void storage_show_enumerated_devices(char * argv[], uint32_t tcpRef, void *bufRe
     pChar +=strftime(pChar, 20, "%Y-%m-%d %H:%M:%S", localtime(&pDev1->date));    
     
     if (pDev1->ext4) {
-      pChar += rozofs_string_append(pChar,"\", \"fs\" : \"ext4\",\n");
+      pChar += rozofs_string_append(pChar,"\", \"fs\" : \"ext4\", \"model\" : \"");
     }
     else {
-      pChar += rozofs_string_append(pChar,"\", \"fs\" : \"xfs\",\n");
-    }    
-    pChar += rozofs_string_append(pChar, "      \"role\" : \"");
+      pChar += rozofs_string_append(pChar,"\", \"fs\" : \"xfs\", \"model\" : \"");
+    } 
+    if (pDev1->model[0] != 0) {
+      pChar += rozofs_string_append(pChar, pDev1->model);
+    }     
+        
+    pChar += rozofs_string_append(pChar, "\",\n      \"label\" : \"");
+    if (pDev1->label[0] != 0) {
+      pChar += rozofs_string_append(pChar, pDev1->label);
+    }     
+           
+    pChar += rozofs_string_append(pChar, "\", \"role\" : \"");
     if (pDev1->spare) {
-      pChar += rozofs_string_append(pChar, "spare\"");
+      pChar += rozofs_string_append(pChar, "spare\"");      
       pChar += rozofs_string_append(pChar, ", \"mark\" : \"");
       if (pDev1->spare_mark) {
         pChar += rozofs_string_append(pChar, pDev1->spare_mark);
       }
-      pChar += rozofs_string_append(pChar, "\"");
     }
     else {
       pChar += rozofs_u32_append(pChar,pDev1->cid);
@@ -4383,18 +4491,21 @@ void storage_show_enumerated_devices(char * argv[], uint32_t tcpRef, void *bufRe
       pChar += rozofs_u32_append(pChar,pDev1->sid);
       pChar += rozofs_string_append(pChar, "/");
       pChar += rozofs_u32_append(pChar,pDev1->dev);   
-      pChar += rozofs_string_append(pChar, "\"");
-    }    
+      pChar += rozofs_string_append(pChar, "");
+    }  
+      
+
+      
     if (pDev1->mounted) {
       char * mnt;
-      pChar += rozofs_string_append(pChar,", \"mountpath\" : \"");
+      pChar += rozofs_string_append(pChar,"\", \"mountpath\" : \"");
       mnt = rozofs_get_device_mountpath(pDev1->name);
       pChar += rozofs_string_append(pChar,mnt);
       if (mnt) xfree(mnt);
       pChar += rozofs_string_append(pChar,"\"");
     }
     else {
-      pChar += rozofs_string_append(pChar,", \"mountpath\" : \"Not mounted\"");
+      pChar += rozofs_string_append(pChar,"\", \"mountpath\" : \"Not mounted\"");
     }
     pChar += rozofs_string_append(pChar,"\n    }");
   }
@@ -4541,6 +4652,11 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev) {
     pDev->spare = 0;
     * pt = 0;
   }
+
+  /*
+  ** Set the disk label
+  */
+  rozofs_set_label(pDev);
   
   /*
   ** Device is mounted now
