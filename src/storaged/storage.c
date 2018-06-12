@@ -1893,11 +1893,14 @@ int storage_write_chunk_empty(storage_t * st, storio_device_mapping_t * fidCtx, 
     rozofs_stor_bins_file_hdr_t file_hdr;
     storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
     uint8_t   dev = storio_get_dev(fidCtx, chunk);
-
+    char * readBuffer = NULL;
     // No specific fault on this FID detected
     *is_fid_faulty = 0; 
-
-    dbg("%d/%d Write chunk %d : ", st->cid, st->sid, chunk);
+    struct iovec       vector[ROZOFS_MAX_BLOCK_PER_MSG*2]; 
+    int                i;
+    int                nb_read;
+    uint64_t          *pMsg;
+    dbg("%d/%d Write empty chunk %d : ", st->cid, st->sid, chunk);
    
   
     // If the device id is given as input, that proves that the file
@@ -1961,15 +1964,18 @@ open:
     length_to_write  = nb_proj * rozofs_disk_psize;
 
     /*
-    ** If the file is smaller than the offset to start writing on,
-    ** one just need to truncate the file to extend it.
+    ** Get the projection file size
     */
     if (fstat(fd, &sb) == -1) {
       storio_fid_error(fid, dev, chunk, bid, nb_proj,"fstat");       
       storage_error_on_device(st,dev);
       goto out;
     }
-
+    
+    /*
+    ** If the file is smaller than the offset to start writing on,
+    ** one just need to truncate the file to extend it.
+    */
     if (bins_file_offset >= sb.st_size) {
       /*
       ** Let's truncate the file
@@ -1981,12 +1987,56 @@ open:
       }
       goto out;
     }
+    
+    /*
+    ** If the end of the file is within what we are to write
+    ** just write it
+    */
+    if ((bins_file_offset+length_to_write) > sb.st_size) {
+      goto do_re_write;
+    } 
+           
+    /*
+    ** Read the file in order to see if it contains something else
+    ** than zeros, in which case we will need to re-write it
+    */
+    readBuffer = malloc(length_to_write);  
+    if (readBuffer == NULL) {
+      goto do_re_write;
+    }    
+    nb_read = pread(fd, readBuffer, length_to_write, bins_file_offset);             
+    
+    /*
+    ** Check for error
+    */
+    if (nb_read != length_to_write) {
+      /*
+      ** Let's re write the file
+      */
+      goto do_re_write;
+    }
+    
+    /*
+    ** Check the blocks content
+    */
+    pMsg = (uint64_t*) readBuffer;
+    for (i=0; i< length_to_write/8; i++,pMsg++) {
+      if (*pMsg != 0) {
+        goto do_re_write;
+      }
+    }     
+   
+    /*
+    ** All is zero. No need to rewrite
+    */
+    status = nb_proj * rozofs_msg_psize;
+    goto out;
+
+do_re_write:
 
     /*
     ** We have to write empty blocks to erase the file content
     */
-    struct iovec       vector[ROZOFS_MAX_BLOCK_PER_MSG*2]; 
-    int                i;
 
     if (nb_proj > (ROZOFS_MAX_BLOCK_PER_MSG*2)) {  
       severe("storage_write more blocks than possible %d vs max %d",
@@ -2031,6 +2081,10 @@ open:
     status = nb_proj * rozofs_msg_psize;	
 
 out:
+    if (readBuffer != NULL) {
+      free(readBuffer);
+      readBuffer = NULL;
+    }  
     if (fd != -1) {
       // Stat file for return the size of bins file after the write operation
       if (fstat(fd, &sb) == -1) {
