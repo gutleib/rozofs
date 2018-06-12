@@ -62,7 +62,13 @@ def setVolumeHosts(nbHosts,vid=None):
           c.add_sid_on_host((2*s)+1,0,(2*s)+2,1)
         
   return v1  
-    
+#_____________________________________ 
+def addPrivate(vol,layout=None,eid=63):
+
+  # Create on export for 4K, and one mount point
+  e = vol.add_export(rozofs.bsize4K(),layout,eid)
+  m = e.add_mount(0,name="private")
+  return e    
 #_____________________________________ 
 def addExport(vol,layout=None,eid=None):
 
@@ -182,12 +188,16 @@ setLayout(1)
 
 # Define volume 1 on some hosts
 vol = setVolumeHosts(4)
+
 # Create an export on this volume with layout 1
 e = addExport(vol,layout=1,eid=1)
-e = addExport(vol,layout=1,eid=9)
-e = addExport(vol,layout=1,eid=17)
 # Set thin provisionning
 #e.set_thin()
+
+e = addExport(vol,layout=1,eid=9)
+e = addExport(vol,layout=1,eid=17)
+
+addPrivate(vol,layout=1)
 
 # Add an other export on this volume with layout 1
 #addExport(vol,1)
