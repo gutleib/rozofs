@@ -1532,6 +1532,26 @@ void storio_device_error_log_reset();
 
 uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, sid_t * distrib);
 /*
+**____________________________________________________
+**
+** Allocate a device for a new chunk of a given file.
+** If the storage has #devices, the 1rst chunk within 
+** a slice of #devices is allocated following the 
+** round robin rule. The next chunks are allocated in
+** order to spread the chunks on every available devices.
+**
+** @param fidCtx    : the FID mapping context 
+** @param chunk     : the chunk number to allocate
+** @param st        : storage context
+** @param layout    : layout to be used for this file
+** @param distrib   : File projection distribution within the cluster
+*/
+uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
+                                         storio_device_mapping_t * fidCtx,
+                                         storage_t               * st, 
+                                         uint8_t                   layout, 
+                                         sid_t                   * distrib) ;
+/*
 ** 
 ** Create RozoFS storage subdirectories on a device
 **

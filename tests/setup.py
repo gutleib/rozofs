@@ -186,9 +186,9 @@ class host_class:
       if argv[i] == "-id": rebef = True
       param += " %s"%(argv[i])
     if rebef == True:
-      res=cmd_returncode("storage_rebuild --simu %s %s"%(exportd.get_config_name(),param))      
+      res=cmd_returncode("storage_rebuild %s"%(param))      
     else:  
-      res=cmd_returncode("storage_rebuild --simu %s -c %s -H localhost%s %s"%(exportd.get_config_name(),self.get_config_name(),self.number,param))  
+      res=cmd_returncode("storage_rebuild -c %s -H localhost%s %s"%(self.get_config_name(),self.number,param))  
     sys.exit(res)
 #____________________________________
 # Class sid
@@ -217,7 +217,7 @@ class sid_class:
     if rozofs.device_automount == True:
       return "/srv/rozofs/storages/storage_%s_%s"%(self.cid.cid,self.sid)
     else:   
-      return "%s/storage_%s_%s_%s"%(rozofs.get_config_path(),host_number,self.cid.cid,self.sid)  
+      return "%s/storage_%s_%s_%s"%(rozofs.get_simu_path(),host_number,self.cid.cid,self.sid)  
 
   def get_site_root_path(self,site):
     if len(self.host) < (int(site)+1): return None
@@ -280,7 +280,7 @@ class sid_class:
     
   def get_device_file_path(self,site): 
 #    if len(self.host) < (int(site)+1): return None  
-    return "%s/devices/site%d/cid%s/sid%s/"%(rozofs.get_config_path(),site,self.cid.cid,self.sid)
+    return "%s/devices/site%d/cid%s/sid%s/"%(rozofs.get_simu_path(),site,self.cid.cid,self.sid)
  
 
   def mount_device_file(self,dev,h):
@@ -376,11 +376,11 @@ class sid_class:
       if argv[i] == "-id": rebef = True
       param += " %s"%(argv[i])
     if rebef == True:
-      res=cmd_returncode("storage_rebuild --simu %s %s"%(exportd.get_config_name(),param))      
+      res=cmd_returncode("storage_rebuild %s"%(param))      
     else: 
       h = self.host[0]   
 #      res=cmd_returncode("valgrind --leak-check=full --track-origins=yes --log-file=/root/valgrind  storage_rebuild --simu %s -c %s -H localhost%s -s %d/%d %s"%(exportd.get_config_name(),h.get_config_name(),h.number,self.cid.cid,self.sid,param))  
-      res=cmd_returncode("storage_rebuild --simu %s -c %s -H localhost%s -s %d/%d %s"%(exportd.get_config_name(),h.get_config_name(),h.number,self.cid.cid,self.sid,param))  
+      res=cmd_returncode("storage_rebuild -c %s -H localhost%s -s %d/%d %s"%(h.get_config_name(),h.number,self.cid.cid,self.sid,param))  
     sys.exit(res)
                    
   def info(self):
@@ -467,13 +467,14 @@ class cid_class:
 #____________________________________
 class mount_point_class:
 
-  def __init__(self, eid, layout, site=0):
+  def __init__(self, eid, layout, site=0, name=None):
     global mount_points
     instance = len(mount_points)
     self.numanode=instance+1
     # When more than 2 storcli, use one rozofsmount instance upon 2
     if rozofs.nb_storcli > 2 : instance = 2 * instance       
     self.instance = instance
+    self.name = name
     self.eid = eid
     self.site= site    
     self.layout = layout
@@ -493,8 +494,6 @@ class mount_point_class:
     mount_points.append(self)
 
   def set_fast_reconnect(self):  
-
-        
     rozofs.set_client_fast_reconnect()
     
   def set_spare_tmr_ms(self,tmr): self.spare_tmr_ms=tmr
@@ -556,7 +555,10 @@ class mount_point_class:
     return   
     
   def get_mount_path(self):
-    return "%s/mnt%s_eid%s_site%s"%(rozofs.get_config_path(),self.instance,self.eid.eid,self.site)
+    if self.name == None:
+      return "/mnt/mnt%s_eid%s_site%s"%(self.instance,self.eid.eid,self.site)
+    else:
+      return "/mnt/%s"%(self.name)
     
   def create_path(self):
     global rozofs
@@ -738,13 +740,13 @@ class export_class:
     self.squota= quota            
 
   def get_root_path(self):
-    return "%s/export/export_%s"%(rozofs.get_config_path(),self.eid)  
+    return "%s/export/export_%s"%(rozofs.get_simu_path(),self.eid)  
 
   def get_name(self):
     return "eid%s"%(self.eid)  
      
-  def add_mount(self,site=0):
-    m = mount_point_class(self,self.layout,site)
+  def add_mount(self,site=0,name=None):
+    m = mount_point_class(self,self.layout,site=site,name=name)
     self.mount.append(m)
   
   def create_path(self):  
@@ -914,7 +916,7 @@ class exportd_class:
       return
     self.remove_all_ip() 
     self.add_ip(self.export_host.split('/')[0]) 
-    os.system("exportd -c %s"%(self.get_config_name()))    
+    os.system("exportd")    
     
   def stop(self):
     self.remove_all_ip() 
@@ -1224,6 +1226,12 @@ class rozofs_class:
     self.set_mkfscmd("mkfs.ext4 -b 4096 -m 0 -q ")      
 
   def get_config_path(self):
+    path = "/usr/local/etc/rozofs"
+    if not os.path.exists(path): 
+      os.makedirs(path)
+    return path
+
+  def get_simu_path(self):
     path = "%s/SIMU"%(os.getcwd())
     if not os.path.exists(path): 
       os.makedirs(path)
@@ -1231,7 +1239,7 @@ class rozofs_class:
       os.makedirs("%s/export"%(path))
     if not os.path.exists("%s/devices"%(path)):    
       os.makedirs("%s/devices"%(path))      
-    return path
+    return path    
     
   def core_dir(self)        :
     if not os.path.exists("/var/run/rozofs"): 
@@ -1363,7 +1371,7 @@ class rozofs_class:
   def newspare(self,mark=None):
     # Find a free spare number
     for idx in range(0,4096):
-      path="%s/devices/spare%s"%(self.get_config_path(),idx)
+      path="%s/devices/spare%s"%(self.get_simu_path(),idx)
       if not os.path.exists(path):
         rozofs.create_loopback_device_spare(path,mark)            
         return
@@ -1411,17 +1419,16 @@ class rozofs_class:
     
   def create_common_config(self):
     if not os.path.exists("/usr/local/etc/rozofs"): os.system("mkdir -p /usr/local/etc/rozofs")  
-    if not os.path.exists("/etc/rozofs/"):          os.system("mkdir -p /etc/rozofs/")  
+#    if not os.path.exists("/etc/rozofs/"):          os.system("mkdir -p /etc/rozofs/")  
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
     except:pass
-    try: os.remove('/etc/rozofs/rozofs.conf');
-    except:pass    
+#    try: os.remove('/etc/rozofs/rozofs.conf');
+#    except:pass    
     save_stdout = sys.stdout
-    sys.stdout = open("/usr/local/etc/rozofs/rozofs.conf","wr")
+    sys.stdout = open("%s/rozofs.conf"%(rozofs.get_config_path()),"wr")
     self.display_common_config()
     sys.stdout.close()
     sys.stdout = save_stdout    
-    shutil.copy2('/usr/local/etc/rozofs/rozofs.conf', '/etc/rozofs/rozofs.conf')
     
   def create_config(self):
     global hosts
@@ -1433,7 +1440,7 @@ class rozofs_class:
   def delete_config(self):
     global hosts
     exportd.delete_config()
-    mount="%s/export"%(rozofs.get_config_path())    
+    mount="%s/export"%(rozofs.get_simu_path())    
     os.system("umount -f %s > /dev/null 2>&1"%(mount))  
     for h in hosts: h.delete_config()
     geomgr.delete_config()
@@ -1482,7 +1489,7 @@ class rozofs_class:
     #	Delete spare devices
     for i in range(127):
       rozofs.delete_loopback_device("/dev/loop%d"%(i))
-    os.system("rm -rf %s/devices"%(rozofs.get_config_path()))  
+    os.system("rm -rf %s/devices"%(rozofs.get_simu_path()))  
         
   def resume(self):
     self.pause();
@@ -1496,8 +1503,8 @@ class rozofs_class:
   def configure(self):
     # Case of a loop device for metadata
     if rozofs.metadata_size != None:
-      path="%s/devices/exportd"%(rozofs.get_config_path())
-      mount="%s/export"%(rozofs.get_config_path())
+      path="%s/devices/exportd"%(rozofs.get_simu_path())
+      mount="%s/export"%(rozofs.get_simu_path())
       rozofs.create_export_loopback_device(path,mount,rozofs.metadata_size)  
     self.create_path()
     self.create_config()   

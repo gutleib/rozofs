@@ -166,7 +166,7 @@ static inline int test_no_extended_attr(lv2_entry_t *lv2) {
 ** @param p             The attributes to be returned to the rozofsmount
 **
 */
-static inline void export_recopy_extended_attributes(lv2_entry_t *lv2,struct inode_internal_t * attrs) {    
+static inline void export_recopy_extended_attributes(export_t *e,lv2_entry_t *lv2,struct inode_internal_t * attrs) {    
   
   /*
   ** Re-copy the whole exportd attribute structure except the xattributes
@@ -182,6 +182,16 @@ static inline void export_recopy_extended_attributes(lv2_entry_t *lv2,struct ino
   ** Clear extended attribute flag in mode field , when none is set
   */
   if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->attrs.mode);
+  
+  /*
+  ** In case thin provisioning is not configured, 
+  ** compute the number of blocks of a file from its size
+  */
+  if (S_ISREG(lv2->attributes.s.attrs.mode)) {
+    if (e->thin == 0) {
+      attrs->hpc_reserved.reg.nb_blocks_thin = (attrs->attrs.size+ROZOFS_BSIZE_BYTES(e->bsize)-1) / ROZOFS_BSIZE_BYTES(e->bsize);
+    }
+  }
 }  
 /*
 **__________________________________________________________________
@@ -2000,7 +2010,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     {
        if (strcmp(name,".")==0)
        {       
-          export_recopy_extended_attributes(plv2, attrs);
+          export_recopy_extended_attributes(e,plv2, attrs);
 	  memset(pattrs->attrs.fid,0, sizeof(fid_t));     
        }
        else
@@ -2011,7 +2021,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
 	  if (!(pplv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, plv2->attributes.s.pfid))) {
               goto out;
 	  }
-          export_recopy_extended_attributes(pplv2, attrs);          
+          export_recopy_extended_attributes(e,pplv2, attrs);          
 	  memset(pattrs->attrs.fid,0, sizeof(fid_t));     	         
        }
        status = 0;
@@ -2020,7 +2030,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     /*
     ** copy the parent attributes
     */
-    export_recopy_extended_attributes(plv2, pattrs);
+    export_recopy_extended_attributes(e,plv2, pattrs);
     int parent_state = 0;
     /*
     ** The parent fid might not have the delete bit asserted even if it has been deleted
@@ -2081,7 +2091,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
 	  goto out;
 	}
          
-        export_recopy_extended_attributes(lv2, attrs);
+        export_recopy_extended_attributes(e,lv2, attrs);
 	/*
 	** copy the fid provided in the input argument
 	*/
@@ -2119,7 +2129,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
 	 /*
 	 ** assert the del pending bit in the returned attributes of the parent and return the parent attributes
 	 */
-         export_recopy_extended_attributes(plv2, attrs);
+         export_recopy_extended_attributes(e,plv2, attrs);
 	 exp_metadata_inode_del_assert(attrs->attrs.fid);
 	 rozofs_inode_set_trash(attrs->attrs.fid);
 	 status = 0;
@@ -2167,7 +2177,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     ** take care of the case of the mover
     */
     rozofs_mover_check_for_validation(e,lv2,child_fid);
-    export_recopy_extended_attributes(lv2, attrs);
+    export_recopy_extended_attributes(e,lv2, attrs);
     /*
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
@@ -2320,7 +2330,7 @@ void export_get_parent_attributes(export_t *e, fid_t pfid, struct inode_internal
      memset(pattrs->attrs.fid, 0, sizeof (fid_t));
      return;
    }
-   export_recopy_extended_attributes(plv2, pattrs);
+   export_recopy_extended_attributes(e,plv2, pattrs);
 
 #ifdef ROZOFS_DIR_STATS
    /*
@@ -2369,7 +2379,7 @@ int export_getattr(export_t *e, fid_t fid, struct inode_internal_t *attrs,struct
     ** Recopy the nb of blocks in the children field 
     ** which is where the rozofsmount expects it to be in case of thin provisioning
     */
-    export_recopy_extended_attributes(lv2,attrs);   
+    export_recopy_extended_attributes(e,lv2,attrs);   
     memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
     /*
     ** check if the file has the delete pending bit asserted: if it is the
@@ -2678,12 +2688,12 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, struct
         goto out;
 
     // Return attributes
-    export_recopy_extended_attributes(target,attrs);
+    export_recopy_extended_attributes(e,target,attrs);
     
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(plv2,pattrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);
     status = 0;
 
 out:
@@ -3012,8 +3022,8 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     /*
     ** return the parent attributes and the child attributes
     */
-    export_recopy_extended_attributes(plv2,pattrs);
-    export_recopy_extended_attributes((lv2_entry_t*)&buf_attr_p,attrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);
+    export_recopy_extended_attributes(e,(lv2_entry_t*)&buf_attr_p,attrs);
     goto out;
 
 error:
@@ -3209,8 +3219,8 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
 		/*
 		** Let's respond the file has been created by this request
 		*/
-                export_recopy_extended_attributes(lv2_child,attrs);
-                export_recopy_extended_attributes(plv2,pattrs);
+                export_recopy_extended_attributes(e,lv2_child,attrs);
+                export_recopy_extended_attributes(e,plv2,pattrs);
 		status = 0;
 		goto out;	   
 	    }
@@ -3455,8 +3465,8 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     /*
     ** return the parent attributes and the child attributes
     */
-    export_recopy_extended_attributes(plv2,pattrs);
-    export_recopy_extended_attributes((lv2_entry_t*)&ext_attrs,attrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);
+    export_recopy_extended_attributes(e,(lv2_entry_t*)&ext_attrs,attrs);
     goto out;
 
 error:
@@ -3561,8 +3571,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       /*
       ** get the attributes of the directory and parent directory
       */
-      export_recopy_extended_attributes(plv2,attrs);
-      export_recopy_extended_attributes(plv2,pattrs);
+      export_recopy_extended_attributes(e,plv2,attrs);
+      export_recopy_extended_attributes(e,plv2,pattrs);
       /*
       ** assert the delete pending bit on the pseudo trash directory and set the key to ROZOFS_TRASH
       */
@@ -3609,8 +3619,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
 	     /*
 	     ** get the attributes of the directory and parent directory
 	     */
-             export_recopy_extended_attributes(lv2,attrs);
-             export_recopy_extended_attributes(plv2,pattrs);
+             export_recopy_extended_attributes(e,lv2,attrs);
+             export_recopy_extended_attributes(e,plv2,pattrs);
 	     status = 0;
 	     goto out;	   
   	  }
@@ -3835,8 +3845,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     /*
     ** return the parent and child attributes
     */
-    export_recopy_extended_attributes((lv2_entry_t *)&ext_attrs,attrs);
-    export_recopy_extended_attributes(plv2,pattrs);
+    export_recopy_extended_attributes(e,(lv2_entry_t *)&ext_attrs,attrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);
     goto out;
 
 error:
@@ -4158,7 +4168,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,str
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(plv2,pattrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);
     status = 0;
 
 out:
@@ -4844,7 +4854,7 @@ duplicate_deleted_file:
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(plv2,pattrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);
     status = 0;
     /*
     ** CHECK THE CASE OF THE RENAME
@@ -5615,7 +5625,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,struct inode_int
     */
     if (strcmp(name,ROZOFS_DIR_TRASH)==0)
     {
-      export_recopy_extended_attributes(plv2,pattrs);
+      export_recopy_extended_attributes(e,plv2,pattrs);
 // #warning clear the trash flag on rmdir rozofs-trash
 //      if (plv2->attributes.s.attrs.sids[1]!= 0) {
 //         plv2->attributes.s.attrs.sids[1] = 2;
@@ -5805,7 +5815,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,struct inode_int
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(plv2,pattrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);
     status = 0;
     /*
     ** Check the case of the rename
@@ -6074,8 +6084,8 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     /*
     ** return the parent and child attributes
     */
-    export_recopy_extended_attributes((lv2_entry_t*)&ext_attrs,attrs);
-    export_recopy_extended_attributes(plv2,pattrs);    
+    export_recopy_extended_attributes(e,(lv2_entry_t*)&ext_attrs,attrs);
+    export_recopy_extended_attributes(e,plv2,pattrs);    
     goto out;
 
 error:
@@ -6325,7 +6335,7 @@ int export_rename_trash(export_t *e, fid_t pfid, char *name, fid_t npfid,
     /*
     ** provide the attributes of the parent directory and assert the deleted by on the fid;
     */
-    export_recopy_extended_attributes(lv2_old_parent,attrs);    
+    export_recopy_extended_attributes(e,lv2_old_parent,attrs);    
     exp_metadata_inode_del_assert(attrs->attrs.fid);
     rozofs_inode_set_trash(attrs->attrs.fid);
     
@@ -6756,7 +6766,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     if (export_lv2_write_attributes(e->trk_tb_p,lv2_to_rename, 1/* sync */) != 0)
         goto out;
 
-    export_recopy_extended_attributes(lv2_to_rename,attrs);    
+    export_recopy_extended_attributes(e,lv2_to_rename,attrs);    
     status = 0;
 
 out:
@@ -6909,7 +6919,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	  ** write block should be ignored
 	  */
 	  length = len;
-          export_recopy_extended_attributes(lv2,attrs);    
+          export_recopy_extended_attributes(e,lv2,attrs);    
           memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
 	  goto out;	  
        }
@@ -6993,7 +7003,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(lv2,attrs);       
+    export_recopy_extended_attributes(e,lv2,attrs);       
     length = len;
     if (e->volume->georep) 
     {

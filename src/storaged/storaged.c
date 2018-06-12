@@ -168,7 +168,14 @@ uint32_t storio_device_mapping_allocate_device(storage_t * st, uint8_t layout, s
   severe("storio_device_mapping_allocate_device");
   return -1;
 }
-
+uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
+                                         storio_device_mapping_t * fidCtx,
+                                         storage_t               * st, 
+                                         uint8_t                   layout, 
+                                         sid_t                   * distrib) {
+  severe("storio_device_mapping_new_chunk");
+  return -1;
+}   
 
 pid_t session_id=0;
 
