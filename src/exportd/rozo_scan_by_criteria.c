@@ -1422,12 +1422,12 @@ static void usage(char * fmt, ...) {
 
   printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
   printf("This RozoFS utility enables to scan for files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
-  printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan [EXPORT] [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } [OUTPUT]\033[0m\n\n");
-  printf("\n\033[1mEXPORT:\033[0m\n");
-  printf("\tCan be omitted when current path is the RozoFS mountpoint one want to scan.\n");
-  printf("\tElse the target export must be given:\n");
+  printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan [FILESYSTEM] [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } [OUTPUT]\033[0m\n\n");
+  printf("\n\033[1mFILESYSTEM:\033[0m\n");
+  printf("\tThe FILESYSTEM can be omitted when current path is a RozoFS mountpoint on the file system one want to scan.\n");
+  printf("\tElse the targeted RozoFS file system must be provided by eid or by path:\n");
   printf("\tEither\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
-  printf("\tor\t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
+  printf("\tor    \t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
   printf("\n\033[1mOPTIONS:\033[0m\n");
   printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
   printf("\t\033[1m-h,--help\033[0m\t\tprint this message along with examples and exit.\n");
