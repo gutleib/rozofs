@@ -95,6 +95,7 @@ display_output() {
    "$STATE_UNKNOWN")    echo "UNKNOWN <$2> FREE $free $percent%";;    
   esac
   rm -f $VFSTAT
+  rm -f ${SYNCHRO}
   exit $1
 }
 set_default() {
