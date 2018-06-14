@@ -31,7 +31,6 @@ active=""
 # Register parameters
 #
 eid=""
-parameters=$*
 parameters=''
 while [ ! -z $1 ]
 do
@@ -83,6 +82,13 @@ then
     eid="-e "`echo ${res} | awk '{print $2}'`
   fi  
 else
+  if [ "${eid}" == "" ]
+  then
+    echo ""
+    echo "\"${PWD}\" is not a RozoFS mountpoint,"
+    echo "and neither -e nor -p option is not set to tell the targeted RozoFS file system."
+    exit 1
+  fi  
   #
   # This is not a RozoFS mountpoint
   # Read rozofs.conf file
@@ -90,7 +96,8 @@ else
   exports=`cat /etc/rozofs/rozofs.conf | grep export_hosts | awk -F'"' '{print $2}'`
   if [ $? -ne 0 ];
   then
-    echo "This is not a RozoFS mountpoint,"
+    echo
+    echo "\"${PWD}\" is not a RozoFS mountpoint,"
     echo "and rozofs.conf configuration file can not be read."
     exit 1
   fi
@@ -109,6 +116,17 @@ do
   fi 
   break
 done
+
+#
+# At least one parameter should be provided 
+#
+if [ "${parameters}" == "" ]
+then
+  echo 
+  echo "At least one parameter must be given."
+  echo "Request help with -h option."
+   exit
+fi
 
 # 
 # Is the current node the active export
