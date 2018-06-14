@@ -73,12 +73,28 @@ int display_ctime = 0;
 int display_update = 0;
 int display_priv = 0;
 int display_distrib = 0;
+int display_id = 0;
+int display_all = 0;
+int display_json = 0;
+int first_entry = 1;
+#define DO_DISPLAY           1
+#define DO_HUMAN_DISPLAY     2
+
+#define IF_DISPLAY(x)  if ((x!=0) || (display_all!=0))
+#define IF_DISPLAY_HUMAN(x) if ((x==DO_HUMAN_DISPLAY) || (display_all==DO_HUMAN_DISPLAY))
 
 char separator[128] = {0};
+
 #define NEW_FIELD(field) {\
-  if (separator[0]) printf(" %s "#field"=",separator);\
-  else printf(" "#field"=");\
-}  
+  if (display_json) {\
+    if (strlen(#field) < 6) printf(",\n       \""#field"\" \t\t: ");\
+    else                    printf(",\n       \""#field"\" \t: ");\
+  }\
+  else {\
+    if (separator[0]) printf(" %s "#field"=",separator);\
+    else printf(" "#field"=");\
+  } \
+}
 /*
 ** Privileges
 */
@@ -1232,6 +1248,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** This inode is valid
   */
+    
   switch(name_format) {
 
     case name_format_fid:
@@ -1265,21 +1282,38 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   if (pChar==NULL) {
     return 0;
   }  
-  
-  printf("%s",pChar);
 
-  if (display_uid) {
+  
+  if (display_json) {
+    if (first_entry) {
+      first_entry = 0;
+      printf("\n    {  \"name\" : \"%s\"",pChar);
+    }
+    else {
+      printf(",\n    {  \"name\" : \"%s\"",pChar);
+    }   
+  }
+  else {  
+    printf("%s",pChar);
+  }
+
+  IF_DISPLAY(display_uid) {
     NEW_FIELD(uid); 
     printf("%d", inode_p->s.attrs.uid);
   }
-  if (display_gid) {
+  IF_DISPLAY(display_gid) {
     NEW_FIELD(gid);   
     printf("%d", inode_p->s.attrs.gid);
   }
-  if (display_priv) {
-    NEW_FIELD(priv);   
-    printf("%3.3o", inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
-  }  
+  IF_DISPLAY(display_priv) {
+    NEW_FIELD(priv);  
+    if (display_json) {
+      printf("\"%4.4o\"", inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+    }
+    else {
+      printf("%4.4o", inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+    }  
+  }
 
   /*
   ** Directory
@@ -1287,30 +1321,30 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   if (S_ISDIR(inode_p->s.attrs.mode)) {
     ext_dir_mattr_t *ext_dir_mattr_p = (ext_dir_mattr_t*)inode_p->s.attrs.sids; 
 
-    if (display_size) {
+    IF_DISPLAY(display_size) {
       NEW_FIELD(size); 
       printf("%llu",(long long unsigned)ext_dir_mattr_p->s.nb_bytes);        
     }
-    if (display_children) {       
+    IF_DISPLAY(display_children) {       
       NEW_FIELD(children); 
       printf("%llu",(long long unsigned)inode_p->s.attrs.children);                
     }
-    if (display_deleted) {       
+    IF_DISPLAY(display_deleted) {       
       uint64_t deleted = inode_p->s.hpc_reserved.dir.nb_deleted_files;
       NEW_FIELD(deleted); 
       printf("%llu",(long long unsigned)deleted);                
     }
-    if (display_project) {
+    IF_DISPLAY(display_project) {
       NEW_FIELD(project);       
       printf("%d", inode_p->s.attrs.cid);
     }
-    if (display_update) {
+    IF_DISPLAY(display_update) {
       ext_dir_mattr_t * stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
       if (stats_attr_p->s.version >=  ROZOFS_DIR_VERSION_1) {
-        if (display_update==2) {
+        IF_DISPLAY_HUMAN(display_update) {
           char buftime[512];
           NEW_FIELD(hupdate);
-          rozofs_time2string(buftime,stats_attr_p->s.update_time);  
+          rozofs_time2string(buftime,stats_attr_p->s.update_time);            
           printf("\"%s\"", buftime);
         }
         else {
@@ -1325,36 +1359,39 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   ** Regular file
   */
   else {  
-    if (display_size) {
+    IF_DISPLAY(display_size) {
       NEW_FIELD(size);       
       printf("%llu",(long long unsigned)inode_p->s.attrs.size);        
     }  
-    if (display_nlink) {       
+    IF_DISPLAY(display_nlink) {       
       NEW_FIELD(nlink); 
       printf("%llu",(long long unsigned)inode_p->s.attrs.nlink);                
     }
-    if (display_project) {
+    IF_DISPLAY(display_project) {
       NEW_FIELD(project);       
       printf("%d", inode_p->s.hpc_reserved.reg.share_id);
     }
-    if (display_distrib) {
-      char fidString[40];
+    IF_DISPLAY(display_distrib) {
       NEW_FIELD(distrib);   
-      printf("%u/%u", inode_p->s.attrs.cid, inode_p->s.attrs.sids[0]);
+      printf("\"%u/%u", inode_p->s.attrs.cid, inode_p->s.attrs.sids[0]);
       int sid_idx;
       for (sid_idx=1; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
         if (inode_p->s.attrs.sids[sid_idx] == 0) break;
         printf("-%u",inode_p->s.attrs.sids[sid_idx]);
       }
-      NEW_FIELD(fid);  
-      rozofs_fid_append(fidString,inode_p->s.attrs.fid);
-      printf("%s", fidString);       
+      printf("\"");
     }     
   } 
   
-  
-  if (display_cr8) {
-    if (display_cr8==2) {
+  IF_DISPLAY(display_id) {
+    char fidString[40];
+    NEW_FIELD(fid);  
+    rozofs_fid_append(fidString,inode_p->s.attrs.fid);
+    printf("\"%s\"", fidString);       
+  }     
+   
+  IF_DISPLAY(display_cr8) {
+    IF_DISPLAY_HUMAN(display_cr8) {
       char buftime[512];
       rozofs_time2string(buftime,inode_p->s.cr8time);  
       NEW_FIELD(hcr8); 
@@ -1366,8 +1403,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }  
   }
   
-  if (display_mod) {
-    if (display_mod==2) {
+  IF_DISPLAY(display_mod) {
+    IF_DISPLAY_HUMAN(display_mod) {
       char buftime[512];
       rozofs_time2string(buftime,inode_p->s.attrs.mtime);  
       NEW_FIELD(hmod); 
@@ -1379,8 +1416,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }  
   }
   
-  if (display_ctime) {
-    if (display_ctime==2) {
+  IF_DISPLAY(display_ctime) {
+    IF_DISPLAY_HUMAN(display_ctime) {
       char buftime[512];
       rozofs_time2string(buftime,inode_p->s.attrs.ctime);  
       NEW_FIELD(hctime); 
@@ -1391,15 +1428,20 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       printf("%llu",(long long unsigned int)inode_p->s.attrs.ctime);  
     }  
   }   
-   
-  cur_entry_per_line++;
-  if (cur_entry_per_line >= entry_per_line) {
-    cur_entry_per_line = 0;
-    printf("\n");
+
+  if (display_json) {
+    printf("  }");    
   }
-  else {
-    printf("  %s ", separator);
-  }  
+  else {   
+    cur_entry_per_line++;
+    if (cur_entry_per_line >= entry_per_line) {
+      cur_entry_per_line = 0;
+      printf("\n");
+    }
+    else {
+      printf("  %s ", separator);
+    } 
+  }   
   return 1;
 }
 
@@ -1497,8 +1539,10 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1mupdate|hupdate\033[0m\t\tdisplay update directory time in seconds or human readable date.\n");
   printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
   printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution and FID.\n");
+  printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
   printf("\t\033[1mall|allh\033[0m\t\tdisplay every field (time in seconds or human readable date).\n");
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
+  printf("\t\033[1mjson\033[0m\t\toutput is in json format.\n");
   
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
@@ -1791,7 +1835,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
 */
 #define NEXT(p) { \
   while((*p!=',')&&(*p!=0)&&(*p!=' ')) p++;\
-  if (*p==',') {\
+  while (*p==',') {\
     p++;\
   }  \
   if ((*p==0)||(*p==' ')) {\
@@ -1831,89 +1875,93 @@ int rozofs_parse_output_format(char * fmt) {
       NEXT(p);
     }  
     
-    if (strncmp(p, "size", 4)==0) {
-      display_size = 1;
+    if (strncmp(p, "size", 2)==0) {
+      display_size = DO_DISPLAY;
       NEXT(p);
     }      
     
-    if (strncmp(p, "children", 5)==0) {
-      display_children = 1;
+    if (strncmp(p, "children", 2)==0) {
+      display_children = DO_DISPLAY;
       NEXT(p);
     }      
     
     if (strncmp(p, "deleted", 3)==0) {
-      display_deleted = 1;
+      display_deleted = DO_DISPLAY;
       NEXT(p);
     }      
 
     if (strncmp(p, "nlink", 5)==0) {
-      display_nlink = 1;
+      display_nlink = DO_DISPLAY;
       NEXT(p);
     }      
 
     if (strncmp(p, "project", 4)==0) {
-      display_project = 1;
+      display_project = DO_DISPLAY;
       NEXT(p);
     }      
 
-    if (strncmp(p, "uid", 3)==0) {
-      display_uid = 1;
+    if (strncmp(p, "uid", 1)==0) {
+      display_uid = DO_DISPLAY;
       NEXT(p);
     }      
 
-    if (strncmp(p, "gid", 3)==0) {
-      display_gid = 1;
+    if (strncmp(p, "gid", 1)==0) {
+      display_gid = DO_DISPLAY;
       NEXT(p);
     }   
     
-    if (strncmp(p, "cr8", 3)==0) {
-      display_cr8 = 1;
+    if (strncmp(p, "cr8", 2)==0) {
+      display_cr8 = DO_DISPLAY;
       NEXT(p);
     } 
-    if (strncmp(p, "hcr8", 4)==0) {
-      display_cr8 = 2;
+    if (strncmp(p, "hcr8", 3)==0) {
+      display_cr8 = DO_HUMAN_DISPLAY;
       NEXT(p);
     } 
 
     if (strncmp(p, "mod", 3)==0) {
-      display_mod = 1;
+      display_mod = DO_DISPLAY;
       NEXT(p);
     }              
 
-    if (strncmp(p, "hmod", 3)==0) {
-      display_mod = 2;
+    if (strncmp(p, "hmod", 2)==0) {
+      display_mod = DO_HUMAN_DISPLAY;
       NEXT(p);
     }              
 
-    if (strncmp(p, "ctime", 4)==0) {
-      display_ctime = 1;
+    if (strncmp(p, "ctime", 2)==0) {
+      display_ctime = DO_DISPLAY;
       NEXT(p);
     }              
 
-    if (strncmp(p, "hctime", 5)==0) {
-      display_ctime = 2;
+    if (strncmp(p, "hctime", 2)==0) {
+      display_ctime = DO_HUMAN_DISPLAY;
       NEXT(p);
     }              
 
 
-    if (strncmp(p, "update", 3)==0) {
-      display_update = 1;
+    if (strncmp(p, "update", 2)==0) {
+      display_update = DO_DISPLAY;
       NEXT(p);
     }              
 
-    if (strncmp(p, "hupdate", 3)==0) {
-      display_update = 2;
+    if (strncmp(p, "hupdate", 2)==0) {
+      display_update = DO_HUMAN_DISPLAY;
       NEXT(p);
     }              
 
  
-    if (strncmp(p, "priv", 4)==0) {
-      display_priv = 1;
+    if (strncmp(p, "priv", 2)==0) {
+      display_priv = DO_DISPLAY;
       NEXT(p);
     }        
           
     if (strncmp(p, "distrib", 4)==0) {
-      display_distrib = 1;
+      display_distrib = DO_DISPLAY;
+      NEXT(p);
+    }                       
+    if (strncmp(p, "id", 2)==0) {
+      display_id = DO_DISPLAY;
       NEXT(p);
     }                       
 
@@ -1926,38 +1974,36 @@ int rozofs_parse_output_format(char * fmt) {
       NEXT(p);
     } 
     if (strncmp(p, "allh", 4)==0) {
-      display_distrib = 1;
-      display_priv = 1;
-      display_update = 2;
-      display_mod = 2;
-      display_ctime = 2;
-      display_cr8 = 2;
-      display_gid = 1;
-      display_uid = 1;
-      display_project = 1;
-      display_nlink = 1;
-      display_deleted = 1;
-      display_children = 1;
-      display_size = 1;
+      display_all = DO_HUMAN_DISPLAY;
       NEXT(p);
     }      
     if (strncmp(p, "all", 3)==0) {
-      display_distrib = 1;
-      display_priv = 1;
-      display_update = 1;
-      display_mod = 1;
-      display_ctime = 1;
-      display_cr8 = 1;
-      display_gid = 1;
-      display_uid = 1;
-      display_project = 1;
-      display_nlink = 1;
-      display_deleted = 1;
-      display_children = 1;
-      display_size = 1;
+      display_all = DO_DISPLAY;
       NEXT(p);
-    }            
-     usage("Bad output format : unexpected format (char %d)", (int)(p-fmt));
+    }         
+    if (strncmp(p, "json", 2)==0) {
+      display_json = DO_DISPLAY;
+      NEXT(p);
+    }         
+       
+    { 
+      int i;
+      char msg[1024];   
+      char * pmsg = msg;
+      pmsg += sprintf(pmsg,"Unexpected output format\n");
+      pmsg += sprintf(pmsg,"     %s\n",fmt);
+
+      i = p-fmt+5;
+      while (i) {
+      *pmsg++ = ' ';
+       i--;
+      }
+      *pmsg++ = '^';
+      *pmsg++ = '\n'; 
+      *pmsg++ = 0; 
+      usage(msg); 
+    }
+
   }  
   return 0;
 }
@@ -2884,6 +2930,12 @@ int main(int argc, char *argv[]) {
     date_criteria_cbk = rozofs_check_trk_file_date;
   }
 
+  if (display_json) {
+    int i;
+    printf("{ \"command\" : \"rozo_scan");
+    for (i=1; i<argc; i++) printf(" %s",argv[i]);
+    printf("\",\n  \"results\" : [");
+  }  
   
   if (search_dir) {
     rz_scan_all_inodes(rozofs_export_p,ROZOFS_DIR,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
@@ -2891,7 +2943,9 @@ int main(int argc, char *argv[]) {
   else {
     rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
-
+  if (display_json) {
+    printf("\n  ]\n}\n");
+  }  
   /*
   ** Current ouput line is not yet finished.
   ** add a \n
