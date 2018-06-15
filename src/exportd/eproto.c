@@ -693,11 +693,11 @@ epgw_mount_msite_ret_t *ep_mount_msite_1_svc(epgw_mount_arg_t * arg, struct svc_
     ret.status_gw.ep_mount_msite_ret_t_u.export.msite = 0;
     
     /*
-    ** Tell whether thin provisionning is configured
-    */
-    if (exp->thin) {
-      ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_THIN_PROVISIONNING_BIT;
-    }
+    ** Always tell that thin provisionning is configured
+    ** Since the export always fill the field in the attributes toward the 
+    ** rozofsmount either from thin provisionning polling or computation from the size
+    */  
+    ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_THIN_PROVISIONNING_BIT;
 
     /* For each volume */
     list_for_each_forward(p, &exportd_config.volumes) {

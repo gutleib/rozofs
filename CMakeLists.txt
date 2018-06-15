@@ -21,8 +21,7 @@ project(rozofs C)
 
 set(MAJOR "3")
 set(MINOR "0")
-set(REVISION "~alpha33")
-
+set(REVISION "~alpha34")
 
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
