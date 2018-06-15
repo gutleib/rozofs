@@ -53,7 +53,7 @@ static inline int rozofs_time2string(char * pChar, time_t loc_time) {
 
   localtime_r(&loc_time,&date);
   return sprintf(pChar, 
-                 "%4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d", 
+                 "%4d-%2.2d-%2.2d-%2.2d:%2.2d:%2.2d", 
                  date.tm_year+1900, 
                  date.tm_mon+1, 
                  date.tm_mday,
