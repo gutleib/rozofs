@@ -50,13 +50,16 @@ typedef enum _rozofs_alignment_e {
  */
 static inline int rozofs_time2string(char * pChar, time_t loc_time) {
   struct tm date;
-  int       len;
 
-  localtime_r(&loc_time,&date); 
-  ctime_r(&loc_time,pChar);
-  len = strlen(pChar) - 1;
-  pChar[len] = 0;
-  return len;
+  localtime_r(&loc_time,&date);
+  return sprintf(pChar, 
+                 "%4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d", 
+                 date.tm_year+1900, 
+                 date.tm_mon+1, 
+                 date.tm_mday,
+                 date.tm_hour,
+                 date.tm_min,
+                 date.tm_sec);
 }      
 
 
