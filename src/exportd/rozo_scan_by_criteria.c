@@ -1527,8 +1527,8 @@ static void usage(char * fmt, ...) {
   printf("\t\t\t\t<regexfile> is the name of the text file containing the Perl regex to match.\n");
   printf("\t\033[1m--eq <val>\033[0m\t\tField must be equal to <val>.\n");
   printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
-  printf("\nDates must be expressed as:\n");
-  printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
+  printf("\nDates must be expressed in one of the following format:\n");
+  printf(" - YYYY-MM-DD\n - YYYY-MM-DD-HH\n - YYYY-MM-DD-HH:MM\n - YYYY-MM-DD-HH:MM:SS\n");
   printf("\n\033[1mOUTPUT:\033[0m\n");              
   printf("\t\033[1m-o,--out <f1,f2...>\033[0m\tDescribes requested output fields.\n");
   printf("\t\t\t\tDefault is to have one file/directory path per line.\n");
@@ -1557,9 +1557,9 @@ static void usage(char * fmt, ...) {
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
     printf("  \033[1mrozo_scan --xattr --size --ge 76000 --le 76100 --out size\033[0m\n");
     printf("Searching files with a modification date in february 2017 but created before 2017.\n");
-    printf("  \033[1mrozo_scan --hmod --ge \"2017-02-01\" --lt \"2017-03-01\" --hcr8 --lt \"2017-01-01\" -o hcr8,hmod,uid,sep=#\033[0m\n");
+    printf("  \033[1mrozo_scan --hmod --ge 2017-02-01 --lt 2017-03-01 --hcr8 --lt 2017-01-01 -o hcr8,hmod,uid,sep=#\033[0m\n");
     printf("Searching files created by user 4501 on 2015 January the 10th in the afternoon.\n");
-    printf("  \033[1mrozo_scan --uid --eq 4501 --hcr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\" -o hcr8,hmod,uid,gid\033[0m\n");
+    printf("  \033[1mrozo_scan --uid --eq 4501 --hcr8 --ge 2015-01-10-12:00 --le 2015-01-11 -o hcr8,hmod,uid,gid\033[0m\n");
     printf("Searching files owned by group 4321 in directory with FID 00000000-0000-4000-1800-000000000018.\n");
     printf("  \033[1mrozo_scan --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
     printf("Searching files whoes name constains captainNemo.\n");
@@ -1641,7 +1641,7 @@ static inline time_t rozofs_date2time(char * date) {
   int minute=0;
   int sec=0;
   
-  ret = sscanf(date,"%d-%d-%d %d:%d:%d",&year,&month,&day,&hour,&minute,&sec);
+  ret = sscanf(date,"%d-%d-%d-%d:%d:%d",&year,&month,&day,&hour,&minute,&sec);
   if (ret == 6) {
     return rozofs_date_in_seconds(year,month,day,hour,minute,sec);
   }    
