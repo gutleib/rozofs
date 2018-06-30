@@ -1010,8 +1010,10 @@ void ep_readlink_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ret.status_gw.status = EP_SUCCESS;
     goto out;
 error:
-    if (ret.status_gw.ep_readlink_ret_t_u.link != NULL)
+    if (ret.status_gw.ep_readlink_ret_t_u.link != NULL){
         free(ret.status_gw.ep_readlink_ret_t_u.link);
+        ret.status_gw.ep_readlink_ret_t_u.link = NULL;
+    }    
     ret.status_gw.status = EP_FAILURE;
     ret.status_gw.ep_readlink_ret_t_u.error = errno;
 out:
@@ -1786,8 +1788,10 @@ void ep_listxattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ret.status_gw.status = EP_SUCCESS;
     goto out;
 error:
-    if (ret.status_gw.ep_listxattr_ret_t_u.list.list_val != NULL)
+    if (ret.status_gw.ep_listxattr_ret_t_u.list.list_val != NULL) {
         free(ret.status_gw.ep_listxattr_ret_t_u.list.list_val);
+        ret.status_gw.ep_listxattr_ret_t_u.list.list_val = NULL;
+    }    
     ret.status_gw.status = EP_FAILURE;
     ret.status_gw.ep_listxattr_ret_t_u.error = errno;
 out:
