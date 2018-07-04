@@ -5912,6 +5912,14 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
         xerrno = EIO;
         goto error_read_only;
     }
+    
+    /*
+    ** Check parent GID bit
+    */
+    if (plv2->attributes.s.attrs.mode & S_ISGID) {
+      gid   = plv2->attributes.s.attrs.gid;
+    }  
+        
     /*
     ** get the slice of the parent
     */
