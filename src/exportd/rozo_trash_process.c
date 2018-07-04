@@ -410,8 +410,6 @@ int rozo_trash_check_atime(int64_t atime)
   int64_t curtime;
   int64_t older_time;
   
-  return 0;
-
    older_time = rozo_trash_ctx.older_time_sec_config;
    curtime=time(NULL);
    /*
@@ -946,7 +944,6 @@ void rozo_trash_read_configuration_file(void) {
   ** Read mtime and check if file has been modified
   */
   if (stat(rozo_trash_ctx.trashConfigFile,&stats) < 0) {
-    severe("fstat(%s) %s",rozo_trash_ctx.trashConfigFile,strerror(errno));
     return;
   }
   if (stats.st_mtime == trash_config_file_mtime) return;
