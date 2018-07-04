@@ -1124,5 +1124,26 @@ int lv2_cmp(void *k1, void *k2);
 
 */
 void export_dir_check_sync_write_on_lru(lv2_entry_t *dir);
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   stop a trashd process
 
+   @param eid: export identifier of the trashd process
+  
+   @retval none
+*/
+void export_stop_one_trashd(int eid);
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start a trashd process
+
+   @param eid: export identifier of the trashd process
+  
+   @retval none
+*/
+void export_start_one_trashd(int eid) ;
 #endif
