@@ -31,6 +31,7 @@ active=""
 # Register parameters
 #
 eid=""
+local="NO"
 parameters=''
 while [ ! -z $1 ]
 do
@@ -38,6 +39,14 @@ do
   if [ "$1" == "-x" ]
   then
     set -x
+    shift 1
+    continue
+  fi
+  
+  # local mode : no crm
+  if [ "$1" == "--local" ]
+  then
+    local="YES"
     shift 1
     continue
   fi
@@ -106,17 +115,21 @@ fi
 # 
 # Find out which of these exports is the active one asking crm
 #
-for export in `echo $exports | tr \/ ' '`
-do
-  active=`ssh ${export} "crm_resource --resource p-fs-exportd --locate -Q"`
-  if [ $? -ne 0 ];
-  then
-    active=""
-    continue
-  fi 
-  break
-done
-
+if [ "${local}" == "YES" ]
+then
+  active="$HOSTNAME"
+else
+  for export in `echo $exports | tr \/ ' '`
+  do
+    active=`ssh ${export} "crm_resource --resource p-fs-exportd --locate -Q"`
+    if [ $? -ne 0 ];
+    then
+      active=""
+      continue
+    fi 
+    break
+  done
+fi
 #
 # At least one parameter should be provided 
 #
