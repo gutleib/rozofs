@@ -5891,6 +5891,15 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     // get the lv2 parent
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid)))
         goto error;
+        
+    /*
+    ** Check meta data device left size
+    */
+    if (export_metadata_device_full(e,tic)) {
+      errno = ENOSPC;
+      goto error;      
+    }
+            
      /*
      ** load the root_idx bitmap of the parent
      */
