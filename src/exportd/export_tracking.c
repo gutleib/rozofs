@@ -98,6 +98,8 @@ int export_fid_recycle_ready = 0; /**< assert to 1 when fid recycle have been re
 int export_limit_rm_files;
 
 
+uint64_t exportd_nb_directory_bad_children_count = 0;
+
 
 typedef struct cnxentry {
     mclient_t *cnx;
@@ -1881,7 +1883,11 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
       else {
         e->load_trash_thread = 0;
       }
-    }  
+    } 
+    if (exportd_is_master()== 0) 
+    {
+      export_start_one_trashd(eid);   
+    }    
     return 0;
 }
 /*
@@ -5953,6 +5959,15 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     // get the lv2 parent
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid)))
         goto error;
+        
+    /*
+    ** Check meta data device left size
+    */
+    if (export_metadata_device_full(e,tic)) {
+      errno = ENOSPC;
+      goto error;      
+    }
+            
      /*
      ** load the root_idx bitmap of the parent
      */
@@ -5974,6 +5989,24 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
         xerrno = EIO;
         goto error_read_only;
     }
+    
+    /*
+    ** Check parent GID bit
+    */
+    if (plv2->attributes.s.attrs.mode & S_ISGID) {
+      gid   = plv2->attributes.s.attrs.gid;
+    }  
+
+    /*
+    **  check user, group and share quota enforcement
+    */
+    ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
+    if (ret < 0)
+    {
+      errno = ENOSPC;
+      goto error;
+    }         
+            
     /*
     ** get the slice of the parent
     */
@@ -7118,7 +7151,7 @@ out:
  *
  * @param e: the export managing the file
  * @param fid: the id of the directory
- * @param children: pointer to pointer where the first children we will stored
+ * @param buf_readdir: pointer to pointer where the first children we will stored
  * @param cookie: index mdirentries where we must begin to list the mdirentries
  * @param eof: pointer that indicates if we list all the entries or not
  *
@@ -7129,7 +7162,18 @@ int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
     int status = -1;
     lv2_entry_t *parent = NULL;
     int fdp = -1;
+    int readdir_from_start;
     
+    /*
+    ** When cookie is zero it a readdir from the start
+    ** else it is a readdir continuation
+    */
+    if (*cookie == 0) {
+      readdir_from_start = 1;
+    }  
+    else {
+      readdir_from_start = 0;
+    }  
         
     START_PROFILING(export_readdir);
 
@@ -7155,6 +7199,26 @@ int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
     */
     fdp = export_open_parent_directory(e,fid);
     status =list_mdirentries2(parent->dirent_root_idx_p,fdp, fid, buf_readdir, cookie, eof,&parent->attributes);
+
+    /*
+    ** The directory is empty
+    ** It contains only one 32 bytes entry for "." and one 32 bytes entry for ".."
+    */
+    if ((readdir_from_start) && (status == (2*32))) {
+      /*
+      ** The number of chilrden should be zero
+      */
+      if (parent->attributes.s.attrs.children != 0) {
+        char fidstring[256];
+        fid2string(fid,fidstring);
+        exportd_nb_directory_bad_children_count++;
+        warning("(%llu) Children count should be 0 instead of %d for %s", 
+                (long long unsigned int)exportd_nb_directory_bad_children_count,
+                parent->attributes.s.attrs.children, 
+                fidstring);
+        parent->attributes.s.attrs.children = 0;
+      }
+    }
 out:
     if (parent != NULL) export_dir_flush_root_idx_bitmap(e,fid,parent->dirent_root_idx_p);
 
@@ -7386,7 +7450,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 
 //    if (lv2->attributes.s.attrs.cid != 0)
     {
-       DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.attrs.cid);    
+       DISPLAY_ATTR_INT("PROJECT",lv2->attributes.s.attrs.cid);    
     }
     /*
     ** display trash information
@@ -7431,7 +7495,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   }  
   else {
     DISPLAY_ATTR_TXT("MODE", "REGULAR FILE");
-    DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.hpc_reserved.reg.share_id);    
+    DISPLAY_ATTR_INT("PROJECT",lv2->attributes.s.hpc_reserved.reg.share_id);    
     if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin); // Thin prov fix
     DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
   }
@@ -7754,7 +7818,8 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
   */  
-  if (sscanf(p," share = %llu", (long long unsigned int *)&valu64) == 1) 
+  if ((sscanf(p," share = %llu", (long long unsigned int *)&valu64) == 1) 
+  ||  (sscanf(p," project = %llu", (long long unsigned int *)&valu64) == 1))
   {
     if (valu64 > ((1024*64)-1))
     {

@@ -336,6 +336,73 @@ void export_rebalancer(int start) {
  *_______________________________________________________________________
  */
 /**
+*   trashd launcher pid file
+
+   @param eid: export identifier of the trashd
+  
+   @retval none
+*/
+static inline void export_trashd_pid_file(char * pidfile, int eid) {
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_trashd_eid%d.pid",eid);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   stop a trashd process
+
+   @param eid: export identifier of the trashd process
+  
+   @retval none
+*/
+void export_stop_one_trashd(int eid) {
+  char   pidfile[256];
+  int    ret = -1;
+
+  export_trashd_pid_file(pidfile,eid);
+
+  // Stop rozolauncher
+  ret = rozo_launcher_stop(pidfile);
+  if (ret !=0) {
+    severe("rozo_launcher_stop(%s) %s",pidfile, strerror(errno));
+    return;
+  }
+}
+
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start a trashd process
+
+   @param eid: export identifier of the trashd process
+  
+   @retval none
+*/
+void export_start_one_trashd(int eid) {
+  char cmd[1024];
+  char pidfile[256];
+  int  ret = -1;
+
+  char *cmd_p = &cmd[0];
+  cmd_p += sprintf(cmd_p, "rozo_trashd --cont --export %d --cfg "ROZOFS_CONFIG_DIR"/rozo_trashd_%d.conf", 
+                   eid, eid);
+
+  export_trashd_pid_file(pidfile,eid);
+
+  // Launch trashd
+  ret = rozo_launcher_start(pidfile, cmd);
+  if (ret !=0) {
+    severe("rozo_launcher_start(%s,%s) %s",pidfile, cmd, strerror(errno));
+    return;
+  }
+
+  info("start eid %d trashd ("ROZOFS_CONFIG_DIR"/rozo_trashd_%d.conf)", eid, eid);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
 *   start a remove server for storage node to execute some commands
   
    @retval none

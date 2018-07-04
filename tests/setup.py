@@ -172,7 +172,7 @@ class host_class:
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
-      if not "storaged" in line: continue
+      if not " storaged " in line: continue
       if not "storage_%s.conf"%(self.number) in line: continue
       pid=line.split()[1]
       console("\n_______________STORAGE localhost%s"%(self.number))    
