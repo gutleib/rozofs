@@ -558,13 +558,16 @@ char * econfig_get_export_path(econfig_t *config,int eid) {
 	found = 1;
 	break;
     }
-    if (found)
-    {
-        if (access(e1->root, F_OK) != 0) {
-            severe("can't access %s: %s.", e1->root, strerror(errno));
-            goto out;
-        }
+    
+    if (found == 0) {
+      return NULL;
+    }  
+
+    if (access(e1->root, F_OK) != 0) {
+        severe("can't access %s: %s.", e1->root, strerror(errno));
+        goto out;
     }
+
     return e1->root;
 out:
     return NULL;
