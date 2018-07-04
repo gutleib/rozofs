@@ -97,6 +97,8 @@ int export_fid_recycle_ready = 0; /**< assert to 1 when fid recycle have been re
 int export_limit_rm_files;
 
 
+uint64_t exportd_nb_directory_bad_children_count = 0;
+
 
 typedef struct cnxentry {
     mclient_t *cnx;
@@ -7084,7 +7086,7 @@ out:
  *
  * @param e: the export managing the file
  * @param fid: the id of the directory
- * @param children: pointer to pointer where the first children we will stored
+ * @param buf_readdir: pointer to pointer where the first children we will stored
  * @param cookie: index mdirentries where we must begin to list the mdirentries
  * @param eof: pointer that indicates if we list all the entries or not
  *
@@ -7095,7 +7097,18 @@ int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
     int status = -1;
     lv2_entry_t *parent = NULL;
     int fdp = -1;
+    int readdir_from_start;
     
+    /*
+    ** When cookie is zero it a readdir from the start
+    ** else it is a readdir continuation
+    */
+    if (*cookie == 0) {
+      readdir_from_start = 1;
+    }  
+    else {
+      readdir_from_start = 0;
+    }  
         
     START_PROFILING(export_readdir);
 
@@ -7121,6 +7134,26 @@ int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
     */
     fdp = export_open_parent_directory(e,fid);
     status =list_mdirentries2(parent->dirent_root_idx_p,fdp, fid, buf_readdir, cookie, eof,&parent->attributes);
+
+    /*
+    ** The directory is empty
+    ** It contains only one 32 bytes entry for "." and one 32 bytes entry for ".."
+    */
+    if ((readdir_from_start) && (status == (2*32))) {
+      /*
+      ** The number of chilrden should be zero
+      */
+      if (parent->attributes.s.attrs.children != 0) {
+        char fidstring[256];
+        fid2string(fid,fidstring);
+        exportd_nb_directory_bad_children_count++;
+        warning("(%llu) Children count should be 0 instead of %d for %s", 
+                (long long unsigned int)exportd_nb_directory_bad_children_count,
+                parent->attributes.s.attrs.children, 
+                fidstring);
+        parent->attributes.s.attrs.children = 0;
+      }
+    }
 out:
     if (parent != NULL) export_dir_flush_root_idx_bitmap(e,fid,parent->dirent_root_idx_p);
 
