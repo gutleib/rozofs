@@ -25,6 +25,10 @@ char * configFileName = EXPORTD_DEFAULT_CONFIG;
 lv2_cache_t            cache;
 mdirents_name_entry_t  bufferName;
 
+uint64_t nb_scanned_entries = 0;
+uint64_t nb_matched_entries = 0;
+uint64_t max_display = -1;
+
 typedef enum _scan_criterie_e {
   SCAN_CRITERIA_NONE=0,
   SCAN_CRITERIA_HCR8,
@@ -75,6 +79,7 @@ int display_cr8 = 0;
 int display_mod = 0;
 int display_ctime = 0;
 int display_update = 0;
+int display_atime = 0;
 int display_priv = 0;
 int display_distrib = 0;
 int display_id = 0;
@@ -575,6 +580,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   int          nameLen;
   char       * pName;
   export_t   * e = exportd;
+
+  nb_scanned_entries++;
   
   if (search_dir==0) {
     /*
@@ -1252,6 +1259,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** This inode is valid
   */
+  nb_matched_entries++;
     
   switch(name_format) {
 
@@ -1433,6 +1441,19 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }  
   }   
 
+  IF_DISPLAY(display_atime) {
+    IF_DISPLAY_HUMAN(display_atime) {
+      char buftime[512];
+      rozofs_time2string(buftime,inode_p->s.attrs.atime);  
+      NEW_FIELD(hatime); 
+      printf("\"%s\"", buftime);
+    }        
+    else {
+      NEW_FIELD(satime);
+      printf("%llu",(long long unsigned int)inode_p->s.attrs.atime);  
+    }  
+  }   
+
   if (display_json) {
     printf("  }");    
   }
@@ -1445,7 +1466,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     else {
       printf("  %s ", separator);
     } 
-  }   
+  } 
+  
+  if (nb_matched_entries >= max_display) {
+    rozo_lib_stop_var = 1;
+  }    
   return 1;
 }
 
@@ -1483,7 +1508,7 @@ static void usage(char * fmt, ...) {
   printf("\n\033[1mCRITERIA:\033[0m\n");
   printf("\t\033[1m-x,--xattr\033[0m\t\tfile/directory must have extended attribute.\n");
   printf("\t\033[1m-X,--noxattr\033[0m\t\tfile/directory must not have extended attribute.\n");    
-  printf("\t\033[1m-d,--dir\033[0m\t\tscan directories only. Without this options only files are scanned.\n");
+  printf("\t\033[1m-d,--dir\033[0m\t\tscan directories only. Without this option only files are scanned.\n");
   printf("\t\033[1m-S,--slink\033[0m\t\tinclude symbolink links in the scan. Default is not to scan symbolic links.\n");
   printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files from the scan.\n");
   printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
@@ -1545,12 +1570,14 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1msmod|hmod\033[0m\t\tdisplay modification time in seconds or human readable date.\n");
   printf("\t\033[1msctime|hctime\033[0m\t\tdisplay change time in seconds or human readable date.\n");
   printf("\t\033[1msupdate|hupdate\033[0m\t\tdisplay update directory time in seconds or human readable date.\n");
+  printf("\t\033[1msatime|hatime\033[0m\t\tdisplay access time in seconds or human readable date.\n");
   printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
   printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution and FID.\n");
   printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
   printf("\t\033[1malls|allh\033[0m\t\tdisplay every field (time in seconds or human readable date).\n");
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
   printf("\t\033[1mjson\033[0m\t\t\toutput is in json format.\n");
+  printf("\t\033[1mcount<val>\033[0m\t\t\tStop after displaying the <val> first found entries.\n");
   
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
@@ -1858,6 +1885,7 @@ int rozofs_parse_output_format(char * fmt) {
   
     if (strncmp(p, "line", 4)==0) {
       p+=4;
+      if (*p=='=') p++;
       if (*p==0) {
         usage("Bad output format for \"line\"\" : no line value.");           
       }
@@ -1867,6 +1895,18 @@ int rozofs_parse_output_format(char * fmt) {
       if ((entry_per_line<=0)||(entry_per_line>50)) {
         usage("Bad output format for \"line\" : value must be within [1..50] ");     
       }
+      NEXT(p);
+    }
+    
+    if (strncmp(p, "count", 5)==0) {
+      p+=5;
+      if (*p=='=') p++;
+      if (*p==0) {
+        usage("Bad output format for \"count\"\" : no count value.");           
+      }
+      if (sscanf(p,"%llu",(long long unsigned int*)&max_display)!=1) {
+        usage("Bad output format for \"count\" : integer value required");     
+      } 
       NEXT(p);
     }
     
@@ -1947,6 +1987,15 @@ int rozofs_parse_output_format(char * fmt) {
       NEXT(p);
     }              
 
+    if (strncmp(p, "satime", 3)==0) {
+      display_atime = DO_DISPLAY;
+      NEXT(p);
+    }              
+
+    if (strncmp(p, "hatime", 3)==0) {
+      display_atime = DO_HUMAN_DISPLAY;
+      NEXT(p);
+    }              
 
     if (strncmp(p, "supdate", 3)==0) {
       display_update = DO_DISPLAY;
@@ -2042,7 +2091,10 @@ int main(int argc, char *argv[]) {
     int   date_criteria_is_set = 0;
     check_inode_pf_t date_criteria_cbk;
     char  regex[1024];
-     
+    long long usecs;
+    struct timeval start;
+    struct timeval stop;
+        
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"path", required_argument, 0, 'p'},
@@ -2109,6 +2161,8 @@ int main(int argc, char *argv[]) {
 
         {0, 0, 0, 0}
     };
+
+    gettimeofday(&start,(struct timezone *)0);
 
     if (argc < 2)  usage(NULL);    
 
@@ -3155,7 +3209,14 @@ int main(int argc, char *argv[]) {
     rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
   }
   if (display_json) {
-    printf("\n  ]\n}\n");
+    printf("\n  ],\n");
+    printf("  \"scanned entries\" = %llu,\n", (long long unsigned int)nb_scanned_entries);
+    printf("  \"matched entries\" = %llu,\n", (long long unsigned int)nb_matched_entries);
+
+    gettimeofday(&stop,(struct timezone *)0); 
+    usecs   = stop.tv_sec  * 1000000 + stop.tv_usec;
+    usecs  -= (start.tv_sec  * 1000000 + start.tv_usec);
+    printf("  \"micro seconds\"   = %llu\n}\n", usecs);    
   }  
   /*
   ** Current ouput line is not yet finished.
