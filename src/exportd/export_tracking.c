@@ -5928,7 +5928,17 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     if (plv2->attributes.s.attrs.mode & S_ISGID) {
       gid   = plv2->attributes.s.attrs.gid;
     }  
-        
+
+    /*
+    **  check user, group and share quota enforcement
+    */
+    ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
+    if (ret < 0)
+    {
+      errno = ENOSPC;
+      goto error;
+    }         
+            
     /*
     ** get the slice of the parent
     */
