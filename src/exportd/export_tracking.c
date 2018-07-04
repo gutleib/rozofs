@@ -1869,7 +1869,11 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
       else {
         e->load_trash_thread = 0;
       }
-    }  
+    } 
+    if (exportd_is_master()== 0) 
+    {
+      export_start_one_trashd(eid);   
+    }    
     return 0;
 }
 /*
