@@ -7352,7 +7352,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 
 //    if (lv2->attributes.s.attrs.cid != 0)
     {
-       DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.attrs.cid);    
+       DISPLAY_ATTR_INT("PROJECT",lv2->attributes.s.attrs.cid);    
     }
     /*
     ** display trash information
@@ -7397,7 +7397,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   }  
   else {
     DISPLAY_ATTR_TXT("MODE", "REGULAR FILE");
-    DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.hpc_reserved.reg.share_id);    
+    DISPLAY_ATTR_INT("PROJECT",lv2->attributes.s.hpc_reserved.reg.share_id);    
     if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin); // Thin prov fix
     DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
   }
@@ -7720,7 +7720,8 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   /*
   ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
   */  
-  if (sscanf(p," share = %llu", (long long unsigned int *)&valu64) == 1) 
+  if ((sscanf(p," share = %llu", (long long unsigned int *)&valu64) == 1) 
+  ||  (sscanf(p," project = %llu", (long long unsigned int *)&valu64) == 1))
   {
     if (valu64 > ((1024*64)-1))
     {
