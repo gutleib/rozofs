@@ -91,7 +91,7 @@ static void usage(void)
 
 	char *ropt = "";
 	errstr(_("Usage:\n\
-  rozo_setquota [-u <user>|-g <group>|-s <share>]\n\
+  rozo_setquota [-u <user>|-g <group>|-s <project>]\n\
 \t<block-softlimit> <block-hardlimit> <inode-softlimit> <inode-hardlimit> -a|<eid> [-f exportconf]...\n\
   rozo_setquota {-u <user>|-g <group>|-s <project>}  <-p protouser|protogroup>  -a|<eid> [-f exportconf]..\n\
   rozo_setquota {-u <user>|-g <group>|-s <project>} -b [-c] -a|<eid> [-f exportconf]...\n\
