@@ -41,7 +41,7 @@
 #define INITQFNAMES { \
 	"user",    /* USRQUOTA */ \
 	"group",   /* GRPQUOTA */ \
-	"project", \
+	"share", \
 	"undefined", \
 };
 
