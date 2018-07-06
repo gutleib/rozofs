@@ -83,6 +83,7 @@ int display_atime = 0;
 int display_priv = 0;
 int display_distrib = 0;
 int display_id = 0;
+int display_xattr = 0;
 int display_all = 0;
 int display_json = 0;
 int first_entry = 1;
@@ -1309,14 +1310,25 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     printf("%s",pChar);
   }
 
+  /*
+  ** User id
+  */  
   IF_DISPLAY(display_uid) {
     NEW_FIELD(uid); 
     printf("%d", inode_p->s.attrs.uid);
   }
+
+  /*
+  ** Group id
+  */  
   IF_DISPLAY(display_gid) {
     NEW_FIELD(gid);   
     printf("%d", inode_p->s.attrs.gid);
   }
+  
+  /*
+  ** Linuxx privileges
+  */  
   IF_DISPLAY(display_priv) {
     NEW_FIELD(priv);  
     if (display_json) {
@@ -1325,6 +1337,19 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     else {
       printf("%4.4o", inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
     }  
+  }
+  
+  /*
+  ** Presence of extended attributes
+  */
+  IF_DISPLAY(display_xattr) {
+    NEW_FIELD(xattr);  
+    if (rozofs_has_xattr(inode_p->s.attrs.mode)) {
+      printf("\"YES\"");
+    }
+    else {
+      printf("\"NO\"");
+    }
   }
 
   /*
@@ -1384,14 +1409,17 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       printf("%d", inode_p->s.hpc_reserved.reg.share_id);
     }
     IF_DISPLAY(display_distrib) {
-      NEW_FIELD(distrib);   
-      printf("\"%u/%u", inode_p->s.attrs.cid, inode_p->s.attrs.sids[0]);
+      NEW_FIELD(cid); 
+      printf("%u",inode_p->s.attrs.cid);
+      NEW_FIELD(sid); 
+        
+      printf("[%u", inode_p->s.attrs.sids[0]);
       int sid_idx;
       for (sid_idx=1; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
         if (inode_p->s.attrs.sids[sid_idx] == 0) break;
-        printf("-%u",inode_p->s.attrs.sids[sid_idx]);
+        printf(",%u",inode_p->s.attrs.sids[sid_idx]);
       }
-      printf("\"");
+      printf("]");
     }     
   } 
   
@@ -1572,12 +1600,13 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1msupdate|hupdate\033[0m\t\tdisplay update directory time in seconds or human readable date.\n");
   printf("\t\033[1msatime|hatime\033[0m\t\tdisplay access time in seconds or human readable date.\n");
   printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
-  printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution and FID.\n");
+  printf("\t\033[1mxattr\033[0m\t\t \tdisplay extended attributes.\n");
+  printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution.\n");
   printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
   printf("\t\033[1malls|allh\033[0m\t\tdisplay every field (time in seconds or human readable date).\n");
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
   printf("\t\033[1mjson\033[0m\t\t\toutput is in json format.\n");
-  printf("\t\033[1mcount<val>\033[0m\t\t\tStop after displaying the <val> first found entries.\n");
+  printf("\t\033[1mcount<val>\033[0m\t\tStop after displaying the <val> first found entries.\n");
   
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
@@ -2011,12 +2040,18 @@ int rozofs_parse_output_format(char * fmt) {
     if (strncmp(p, "priv", 2)==0) {
       display_priv = DO_DISPLAY;
       NEXT(p);
-    }        
-          
+    }      
+      
+    if (strncmp(p, "xattr", 3)==0) {
+      display_xattr = DO_DISPLAY;
+      NEXT(p);
+    }     
+               
     if (strncmp(p, "distrib", 4)==0) {
       display_distrib = DO_DISPLAY;
       NEXT(p);
-    }                       
+    }       
+                    
     if (strncmp(p, "id", 2)==0) {
       display_id = DO_DISPLAY;
       NEXT(p);
@@ -3210,13 +3245,13 @@ int main(int argc, char *argv[]) {
   }
   if (display_json) {
     printf("\n  ],\n");
-    printf("  \"scanned entries\" = %llu,\n", (long long unsigned int)nb_scanned_entries);
-    printf("  \"matched entries\" = %llu,\n", (long long unsigned int)nb_matched_entries);
+    printf("  \"scanned entries\" : %llu,\n", (long long unsigned int)nb_scanned_entries);
+    printf("  \"matched entries\" : %llu,\n", (long long unsigned int)nb_matched_entries);
 
     gettimeofday(&stop,(struct timezone *)0); 
     usecs   = stop.tv_sec  * 1000000 + stop.tv_usec;
     usecs  -= (start.tv_sec  * 1000000 + start.tv_usec);
-    printf("  \"micro seconds\"   = %llu\n}\n", usecs);    
+    printf("  \"micro seconds\"   : %llu\n}\n", usecs);    
   }  
   /*
   ** Current ouput line is not yet finished.

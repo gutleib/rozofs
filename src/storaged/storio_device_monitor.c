@@ -93,6 +93,7 @@ typedef struct _storio_selfHealing_cxt_t {
   storio_selfHealing_status_e status;
   pid_t                      pid;
   time_t                     date;
+  char                       status_file[128];
 } storio_selfHealing_cxt_t;
 
 #define STORIO_SELFHEALING_CTX_NB      64
@@ -129,6 +130,8 @@ storio_selfHealing_cxt_t * storio_selfHealing_get_ctx() {
   p = &storio_selfHealing_tbl[found];
   p->date   = now;
   p->status = storio_selfHealing_status_allocated;
+  p->pid    = 0;
+  p->status_file[0] = 0;
   return p;
 }
 /*
@@ -170,6 +173,9 @@ void storio_selfHealing_man(char * pChar) {
       pChar += rozofs_time2string(pChar, p->date);\
       pChar += rozofs_string_append(pChar,"\", \"status\" : \"");\
       pChar += rozofs_string_append(pChar,storio_selfHealing_status_e2String(p->status));\
+      pChar += rozofs_string_append(pChar,"\",\n");\
+      pChar += rozofs_string_append(pChar,"      \"status file\" : \"");\
+      pChar += rozofs_string_append(pChar,p->status_file);\
       pChar += rozofs_string_append(pChar,"\"}");\
     }\
   }\
@@ -267,7 +273,7 @@ void * storio_device_rebuild_thread(void *arg) {
     }   
     if (pRebuild->mode == storio_selfHealing_mode_spare) {
       pChar += rozofs_string_append(pChar,".spare");
-    }   
+    } 
     
     if (pHostArray[0] != NULL) {
       pChar += rozofs_string_append(pChar," -H ");
@@ -335,7 +341,15 @@ int storio_device_rebuild(storage_t * st, int dev, storio_selfHealing_mode_e mod
   pRebuild->st      = st;
   pRebuild->dev     = dev;
   pRebuild->mode    = mode;
-  pRebuild->pid     = 0;
+  if (pRebuild->mode == storio_selfHealing_mode_relocate) {
+    sprintf(pRebuild->status_file,"%sselfhealing_cid%d_sid%d_dev%d.reloc",ROZOFS_RUNDIR_RBS_REBUILD,pRebuild->st->cid,pRebuild->st->sid,pRebuild->dev);
+  }   
+  else if (pRebuild->mode == storio_selfHealing_mode_resecure) {
+    sprintf(pRebuild->status_file,"%sselfhealing_cid%d_sid%d_dev%d.resec",ROZOFS_RUNDIR_RBS_REBUILD,pRebuild->st->cid,pRebuild->st->sid,pRebuild->dev);
+  }   
+  else if (pRebuild->mode == storio_selfHealing_mode_spare) {
+    sprintf(pRebuild->status_file,"%sselfhealing_cid%d_sid%d_dev%d.spare",ROZOFS_RUNDIR_RBS_REBUILD,pRebuild->st->cid,pRebuild->st->sid,pRebuild->dev);
+  } 
 
   err = pthread_attr_init(&attr);
   if (err != 0) {
