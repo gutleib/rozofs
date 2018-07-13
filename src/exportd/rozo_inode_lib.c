@@ -2015,7 +2015,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
                         (int)tracking_buffer.inode_idx_table[i]);
                 continue;        
               }
-	      ret = exp_trck_read_attributes_from_buffer((char*)metadata_buf_p,tracking_buffer.inode_idx_table[i],&ext_attr,sizeof(ext_attr));
+	      ret = exp_trck_read_attributes_from_buffer((char*)metadata_buf_p,tracking_buffer.inode_idx_table[i],&ext_attr,inode_metadata_p->entry_p[user_id]->max_attributes_sz);
 	      if (ret < 0)
 	      {
 		printf("error while reading attributes %d:%llu:%d\n",inode.s.usr_id,
@@ -2041,7 +2041,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
               /*
 	      ** check if the fid has been recycled
 	      */
-	      if (ext_attr.s.cr8time == 0) continue;
+              if ((type != ROZOFS_TRASH) && (ext_attr.s.cr8time == 0)) continue;
               match = 0;
               if (callback_fct != NULL) 
 	      {
