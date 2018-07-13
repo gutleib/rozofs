@@ -242,6 +242,10 @@ int         exclude_trash=0;
 int         only_trash=0;
 
 /*
+** Scan junk files
+*/
+int         only_junk=0;
+/*
 ** Whether to scan all tracking files or only those whose
 ** creation and modification time match the research date
 ** criteria
@@ -1501,7 +1505,175 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   }    
   return 1;
 }
+/*
+**_______________________________________________________________________
+*/
+/**
+*   RozoFS specific function for visiting
 
+   @param inode_attr_p: pointer to the inode data
+   @param exportd : pointer to exporthd data structure
+   @param p: always NULL
+   
+   @retval 0 no match
+   @retval 1 match
+*/
+int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
+{
+  rmfentry_disk_t *rmentry = inode_attr_p;
+//  export_t   * e = exportd;
+  char         fullName[64];
+
+  nb_scanned_entries++;
+
+  /*
+  ** Must have a size bigger than size_bigger
+  */ 
+  if (size_bigger != -1) {
+    if (rmentry->size < size_bigger) {
+      return 0;
+    }
+  }  
+
+  /*
+  ** Must have a size lower than size_lower
+  */    
+  if (size_lower != -1) {
+    if (rmentry->size > size_lower) {
+      return 0;
+    }
+  }     
+
+  /*
+  ** Must have a size equal to size_equal
+  */    
+  if (size_equal != -1) {
+    if (rmentry->size != size_equal) {
+      return 0;
+    }
+  }   
+
+  /*
+  ** Must have a size time different from size_diff
+  */    
+  if (size_diff != -1) {
+    if (rmentry->size == size_diff) {
+      return 0;
+    }
+  }
+
+  /*
+  ** Must have a cid equal to cid_equal
+  */    
+  if (cid_equal != -1) {
+    if (rmentry->cid != cid_equal) {
+      return 0;
+    }
+  }
+
+  /*
+  ** Must have an cid different from cid_diff
+  */    
+  if (cid_diff != -1) {
+    if (rmentry->cid == cid_diff) {
+      return 0;
+    }
+  }
+
+  /*
+  ** Must have a sid equal to sid_equal
+  */    
+  if (sid_equal != -1) {
+    int   sid_idx;
+    sid_t sid;
+    for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+      sid = rmentry->current_dist_set[sid_idx];
+      if ((sid == 0) || (sid_equal == sid)) break;
+    }
+    if (sid_equal != sid) {
+      return 0;
+    }
+  }
+
+  /*
+  ** Must not have a sid equal to sid_diff
+  */    
+  if (sid_diff != -1) {
+    int   sid_idx;
+    sid_t sid;
+    for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+      sid = rmentry->current_dist_set[sid_idx];
+      if ((sid == 0) || (sid_diff == sid)) break;
+    }
+    if (sid_diff == sid) {
+      return 0;
+    }
+  }
+             
+  /*
+  ** This inode is valid
+  */
+  nb_matched_entries++;
+   
+  rozofs_fid_append(fullName,rmentry->trash_inode);
+
+  
+  if (display_json) {
+    if (first_entry) {
+      first_entry = 0;
+      printf("\n    {  \"name\" : \"%s\"",fullName);
+    }
+    else {
+      printf(",\n    {  \"name\" : \"%s\"",fullName);
+    }   
+  }
+  else {  
+    printf("%s",fullName);
+  }
+
+  IF_DISPLAY(display_size) {
+    NEW_FIELD(size);       
+    printf("%llu",(long long unsigned)rmentry->size);        
+  }  
+
+  IF_DISPLAY(display_distrib) {
+    NEW_FIELD(cid); 
+    printf("%u",rmentry->cid);
+    NEW_FIELD(sid); 
+
+    printf("[%u", rmentry->current_dist_set[0]);
+    int sid_idx;
+    for (sid_idx=1; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+      printf(",%u",rmentry->current_dist_set[sid_idx]);
+    }
+    printf("]");
+  }     
+  
+  IF_DISPLAY(display_id) {
+    NEW_FIELD(fid);  
+    rozofs_fid_append(fullName,rmentry->fid);
+    printf("\"%s\"", fullName);       
+  }        
+
+  if (display_json) {
+    printf("  }");    
+  }
+  else {   
+    cur_entry_per_line++;
+    if (cur_entry_per_line >= entry_per_line) {
+      cur_entry_per_line = 0;
+      printf("\n");
+    }
+    else {
+      printf("  %s ", separator);
+    } 
+  } 
+  
+  if (nb_matched_entries >= max_display) {
+    rozo_lib_stop_var = 1;
+  }    
+  return 1;
+}
 /*
  *_______________________________________________________________________
  */
@@ -1541,6 +1713,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files from the scan.\n");
   printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
   printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
+  printf("\t\033[1m-j,--junk\033[0m\t\tScan junk files waiting for deletion process.\n");
   printf("\t\033[1m--U<x|w|r>\033[0m\t\tUser has <executable|write|read> priviledge.\n");
   printf("\t\033[1m--Un<x|w|r>\033[0m\t\tUser has not <executable|write|read> priviledge.\n");
   printf("\t\033[1m--G<x|w|r>\033[0m\t\tGroup has <executable|write|read> priviledge.\n");
@@ -2072,7 +2245,11 @@ int rozofs_parse_output_format(char * fmt) {
     if (strncmp(p, "alls", 4)==0) {
       display_all = DO_DISPLAY;
       NEXT(p);
-    }         
+    }    
+    if (strncmp(p, "all", 2)==0) {
+      display_all = DO_HUMAN_DISPLAY;
+      NEXT(p);
+    }               
     if (strncmp(p, "json", 2)==0) {
       display_json = DO_DISPLAY;
       NEXT(p);
@@ -2193,6 +2370,7 @@ int main(int argc, char *argv[]) {
         {"Ow", no_argument, 0, 17},
         {"Onw", no_argument, 0, 18},
         {"out", required_argument, 0, 'o'},
+        {"junk", required_argument, 0, 'j'},
 
         {0, 0, 0, 0}
     };
@@ -2225,7 +2403,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "<:-:>:+:=:!:*:abce:dfghk:lmno:p:rtsuvxyzACDMPRSTXY", long_options, &option_index);
+      c = getopt_long(argc, argv, "<:-:>:+:=:!:*:abcde:fghjk:lmno:p:rtsuvxyzACDMPRSTXY", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -2368,7 +2546,16 @@ int main(int argc, char *argv[]) {
                 usage("only trash (-t) and exclude trash (-T) are incompatible");     
               }
               break;                     
-          case 'T':
+          case 'j':
+              only_junk = 1;
+              if (only_trash) {
+                usage("only trash (-t) and junk files (-j) are incompatible");     
+              }
+              if (search_dir) {
+                usage("Directory (-d) and junk files (-j) are incompatible");     
+              }
+              break;                     
+           case 'T':
               exclude_trash = 1;
               break;                     
           /*
@@ -3239,6 +3426,9 @@ int main(int argc, char *argv[]) {
   
   if (search_dir) {
     rz_scan_all_inodes(rozofs_export_p,ROZOFS_DIR,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
+  }
+  else if (only_junk) {
+    rz_scan_all_inodes(rozofs_export_p,ROZOFS_TRASH,1,rozofs_visit_junk,NULL,date_criteria_cbk,NULL);    
   }
   else {
     rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,date_criteria_cbk,NULL);
