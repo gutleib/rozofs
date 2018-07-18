@@ -168,6 +168,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_buildfid_list
 %{_bindir}/rozo_rbsList
 %{_bindir}/rozo_trashd
+%{_bindir}/rozo_du
 %{_bindir}/rozo_geoRepList
 %{_bindir}/rozo_geoReplicationReinitialize
 %config(noreplace) %{_sysconfdir}/rozofs/export.conf

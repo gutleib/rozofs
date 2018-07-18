@@ -438,6 +438,12 @@ install(TARGETS rozo_trashd
     ARCHIVE DESTINATION lib
     COMPONENT rozo_trashd
 )
+install(TARGETS rozo_du
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_du
+)
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)
