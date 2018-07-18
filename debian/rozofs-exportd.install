@@ -9,6 +9,7 @@
 /usr/bin/rozo_rebalance
 /usr/bin/rozo_rcmd_server
 /usr/bin/rozo_trashd
+/usr/bin/rozo_du
 /usr/bin/rozo_buildfid_list
 /usr/bin/rozo_rbsList
 /usr/bin/rozo_geoRepList

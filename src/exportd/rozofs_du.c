@@ -23,6 +23,7 @@
 #include <rozofs/common/htable.h>
 #include <rozofs/rozofs.h>
 #include <rozofs/common/mattr.h>
+#include <rozofs/core/rozofs_fid_string.h>
 #include "export.h"
 #include "rozo_inode_lib.h"
 #include "exp_cache.h"
@@ -172,7 +173,7 @@ int rozodu_dir_search_pfid_fid(fid_t pfid,fid_t fid)
   {
      if (memcmp(pfid, fid_null, sizeof (fid_t)) == 0)
      {
-        printf("Root inode found\n");
+        //printf("Root inode found\n");
         root_found=1;
 	list_remove(&parent_p->link);
         list_push_front(&dir_head,&parent_p->link);   	
@@ -230,7 +231,7 @@ void rozodu_dump_dir_entry(void *exportd,rozofs_dir_layout_t *entry_p,rozofs_du_
        /*
        ** skip empty directories
        */
-       if (entry_p->nb_files !=0)
+//       if (entry_p->nb_files !=0)
        {
 	 lv2_entry_t *plv2;
 	 ext_mattr_t *inode_attr_p;
@@ -244,13 +245,20 @@ void rozodu_dump_dir_entry(void *exportd,rozofs_dir_layout_t *entry_p,rozofs_du_
 	   pChar = rozo_get_full_path(exportd,inode_attr_p, bufpath,sizeof(bufpath));
 	   if (pChar) 
 	   {
-             if (format_bytes )
+	     if(rozodu_dironly)
 	     {
-               ROZODU_PRINT("%-64s : (%u) %llu\n",pChar,entry_p->nb_files,(unsigned long long int)entry_p->nb_bytes);
+	       ROZODU_PRINT("%s\n",pChar);
 	     }
-	     else 
+	     else
 	     {
-	       ROZODU_PRINT("%-64s : (%u) %s\n",pChar,entry_p->nb_files,display_size(entry_p->nb_bytes,bufisze));
+               if (format_bytes )
+	       {
+        	 ROZODU_PRINT("%-64s : (%u) %llu\n",pChar,entry_p->nb_files,(unsigned long long int)entry_p->nb_bytes);
+	       }
+	       else 
+	       {
+		 ROZODU_PRINT("%-64s : (%u) %s\n",pChar,entry_p->nb_files,display_size(entry_p->nb_bytes,bufisze));
+	       }
 	     }
 	   } 
 	 } 
@@ -260,15 +268,18 @@ void rozodu_dump_dir_entry(void *exportd,rozofs_dir_layout_t *entry_p,rozofs_du_
 //    rozofs_uuid_unparse(entry_p->fid,buffer_all);
 //    printf("FID : %s count:%u file %u bytes : %llu\n",buffer_all,entry_p->nb_dir,entry_p->nb_files,entry_p->nb_bytes);    
 
-    /*
-    ** attempt to insert the directory in the big dir sorted tables
-    */
-    rozodu_insert_sorted(rozodu_big_dir_count_table,&rozodu_big_dir_count_table_sz,(uint64_t)entry_p->nb_files,entry_p->fid);
-    rozodu_insert_sorted(rozodu_big_dir_size_table,&rozodu_big_dir_size_table_sz,entry_p->nb_bytes,entry_p->fid);
-    if (prj_p!=NULL)
-    {
-      rozodu_insert_sorted( prj_p->big_table_p[ROZOPRJ_DIR_CNT],&prj_p->count[ROZOPRJ_DIR_CNT],(uint64_t)entry_p->nb_files,entry_p->fid);
-      rozodu_insert_sorted(prj_p->big_table_p[ROZOPRJ_DIR_SZ],&prj_p->count[ROZOPRJ_DIR_SZ],entry_p->nb_bytes,entry_p->fid);
+   if (entry_p->nb_files != 0)
+   {
+      /*
+      ** attempt to insert the directory in the big dir sorted tables
+      */
+      rozodu_insert_sorted(rozodu_big_dir_count_table,&rozodu_big_dir_count_table_sz,(uint64_t)entry_p->nb_files,entry_p->fid);
+      rozodu_insert_sorted(rozodu_big_dir_size_table,&rozodu_big_dir_size_table_sz,entry_p->nb_bytes,entry_p->fid);
+      if (prj_p!=NULL)
+      {
+	rozodu_insert_sorted( prj_p->big_table_p[ROZOPRJ_DIR_CNT],&prj_p->count[ROZOPRJ_DIR_CNT],(uint64_t)entry_p->nb_files,entry_p->fid);
+	rozodu_insert_sorted(prj_p->big_table_p[ROZOPRJ_DIR_SZ],&prj_p->count[ROZOPRJ_DIR_SZ],entry_p->nb_bytes,entry_p->fid);
+      }
     }
     list_for_each_forward(p, &entry_p->child_head) 
     {
@@ -864,9 +875,12 @@ void rozodu_check_one_project(void *exportd,fid_t fid,rozofs_du_project_t *prj_p
     dir_p = list_entry(p, rozofs_dir_layout_t, link);
     rozodu_dump_dir_entry(exportd,dir_p,prj_p);
   }
-  rozodu_display_sorted_table("Big Directory count table",exportd,prj_p->big_table_p[ROZOPRJ_DIR_CNT],prj_p->count[ROZOPRJ_DIR_CNT],0);
-  rozodu_display_sorted_table("Big Directory size table",exportd,prj_p->big_table_p[ROZOPRJ_DIR_SZ],prj_p->count[ROZOPRJ_DIR_SZ],1);
-  rozodu_display_sorted_table("Big file size table",exportd,prj_p->big_table_p[ROZOPRJ_FILE_SZ],prj_p->count[ROZOPRJ_FILE_SZ],1);
+  if (rozodu_dironly == 0)
+  {
+    rozodu_display_sorted_table("Big Directory count table",exportd,prj_p->big_table_p[ROZOPRJ_DIR_CNT],prj_p->count[ROZOPRJ_DIR_CNT],0);
+    rozodu_display_sorted_table("Big Directory size table",exportd,prj_p->big_table_p[ROZOPRJ_DIR_SZ],prj_p->count[ROZOPRJ_DIR_SZ],1);
+    rozodu_display_sorted_table("Big file size table",exportd,prj_p->big_table_p[ROZOPRJ_FILE_SZ],prj_p->count[ROZOPRJ_FILE_SZ],1);
+  }
 out:
   if (fd_out!=NULL)
   {
