@@ -96,6 +96,7 @@ typedef struct _rozodu_parsed_entry_t
 
 
 extern rozofs_du_project_t *rozofs_project_table[];
+extern int rozodu_dironly;
 /*
 **____________________________________________________
 */

@@ -52,6 +52,8 @@ typedef struct _rz_cids_stats_t
 
 
 
+int rozodu_dironly = 0;
+
 int  rozodu_big_dir_count_table_sz=0;     
 big_obj_t  rozodu_big_dir_count_table[ROZODU_MAX_OBJ+1];
 int  rozodu_big_dir_size_table_sz=0;     
@@ -475,7 +477,8 @@ static void usage() {
     printf("\t-i,--input:   fid of the objet or input filename \n");
     printf("\t-o,--output:   output path (optional, default is .) \n\n");
     printf("\t-c,--config:  exportd configuration file name (when different from %s)\n\n",configFileName);
-    printf("\t-v,--verbose  Display some execution statistics\n");
+    printf("\t-v,--verbose  Display some execution statistics\n");    
+    printf("\t-d,--dironly  get directories only\n");
 
 };
 
@@ -487,9 +490,10 @@ int main(int argc, char *argv[]) {
     void *rozofs_export_p;
     int i;
     char *root_path=NULL;
+
     char *input_path=NULL;   
     rozodu_verbose = 0;
-//    FILE *fd_in = NULL;
+//   FILE *fd_in = NULL;
     FILE *fd_out= NULL;
     rozodu_eid = -1;
     fid_t fid;
@@ -505,6 +509,7 @@ int main(int argc, char *argv[]) {
         {"verbose", required_argument, 0, 'v'},
         {"config", required_argument, 0, 'c'},	
         {"output", required_argument, 0, 'o'},	
+        {"dironly", required_argument, 0, 'd'},	
         {0, 0, 0, 0}
     };
     
@@ -520,7 +525,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "hvlrc:i:e:o:", long_options, &option_index);
+      c = getopt_long(argc, argv, "hvdlrc:i:e:o:", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -539,6 +544,9 @@ int main(int argc, char *argv[]) {
               break;
           case 'v':
               rozodu_verbose = 1;
+              break;    
+          case 'd':
+              rozodu_dironly = 1;
               break;    
           case 'e':
               rozodu_eid = (int)rozofs_scan_u64(optarg);
@@ -596,6 +604,7 @@ int main(int argc, char *argv[]) {
     }
   }
 #endif
+#if 1
   if (input_path != NULL)
   { 
      ret = rozofs_project_scan(input_path,rozodu_eid,rozodu_output_path);
@@ -607,7 +616,7 @@ int main(int argc, char *argv[]) {
      
      }
   }
-
+#endif
   /*
   ** clear the cluster table
   */
@@ -676,14 +685,17 @@ int main(int argc, char *argv[]) {
   /*
   ** let's scan all the file inodes
   */
-  rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,NULL,NULL);
-  printf("nb Directories : %u\n",nb_dirs);
-  printf("nb Files       : %llu\n",(unsigned long long int)nb_files);
-  if (format_bytes)
-    printf("total Bytes    :%llu\n",(unsigned long long int)total_bytes);
-  else
-    printf("total Bytes    :%s\n",display_size(total_bytes,bufsize));   
-  printf("\n");
+  if (rozodu_dironly == 0) 
+  {
+    rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,NULL,NULL);
+    printf("nb Directories : %u\n",nb_dirs);
+    printf("nb Files       : %llu\n",(unsigned long long int)nb_files);
+    if (format_bytes)
+      printf("total Bytes    :%llu\n",(unsigned long long int)total_bytes);
+    else
+      printf("total Bytes    :%s\n",display_size(total_bytes,bufsize));   
+    printf("\n");
+  }
   
   if (rozofs_is_project_enabled()) rozodu_check_projects(rozofs_export_p);
   else 
@@ -692,11 +704,13 @@ int main(int argc, char *argv[]) {
     rozodu_check(rozofs_export_p,one_fid_only,fid);
   }
   printf("\n");
-  rozodu_bufout_reinit(&rozodu_outctx,NULL);
-  rozodu_display_sorted_table("Big Directory count table",rozofs_export_p,rozodu_big_dir_count_table,rozodu_big_dir_count_table_sz,0);
-  rozodu_display_sorted_table("Big Directory size table",rozofs_export_p,rozodu_big_dir_size_table,rozodu_big_dir_size_table_sz,1);
-  rozodu_display_sorted_table("Big file size table",rozofs_export_p,rozodu_big_file_size_table,rozodu_big_file_table_sz,1);
-  
+  if (rozodu_dironly == 0) 
+  {
+    rozodu_bufout_reinit(&rozodu_outctx,NULL);
+    rozodu_display_sorted_table("Big Directory count table",rozofs_export_p,rozodu_big_dir_count_table,rozodu_big_dir_count_table_sz,0);
+    rozodu_display_sorted_table("Big Directory size table",rozofs_export_p,rozodu_big_dir_size_table,rozodu_big_dir_size_table_sz,1);
+    rozodu_display_sorted_table("Big file size table",rozofs_export_p,rozodu_big_file_size_table,rozodu_big_file_table_sz,1);
+  }  
   exit(EXIT_SUCCESS);  
   return 0;
 }
