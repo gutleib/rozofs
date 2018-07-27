@@ -822,7 +822,8 @@ static inline void ruc_buf_set_opaque_ref(void * bufRef,void * opaque_ref)
   retval > 0: current inuse value
   retval -1 error
 */
-static inline int ruc_buf_inuse_increment(void * bufRef)
+#define ruc_buf_inuse_increment(bufRef) ruc_buf_inuse_increment_internal(__FILE__,__LINE__,bufRef)
+static inline int ruc_buf_inuse_increment_internal(char * file, int line, void * bufRef)
 {
 
   ruc_buf_t *pelem;
@@ -835,7 +836,8 @@ static inline int ruc_buf_inuse_increment(void * bufRef)
   */
   if (pelem->type != BUF_ELEM)
   {
-    RUC_WARNING(pelem->type);
+    severe("%s:%d %p is not a buffer %d", file, line, pelem, pelem->type);
+    fatal("Not a buffer");
     return -1;
   }
   /*
@@ -846,7 +848,8 @@ static inline int ruc_buf_inuse_increment(void * bufRef)
     /*
     ** reject the service
     */
-    RUC_WARNING(pelem);
+    severe("%s:%d %p is not free %d", file, line, pelem, pelem->state);
+    fatal("Not a free buffer");
     return -1;
   }  
 #endif
