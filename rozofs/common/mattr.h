@@ -243,6 +243,13 @@ typedef struct _inode_fname_t
  } rozofs_inode_fname_t;
 
 
+/*___________________________________
+** Bits of bit field 1 in ext_mattr_t
+*/
+/* Wether locks on this file must be kept on export switchover */
+#define ROZOFS_BITFIELD1_PERSISTENT_FLOCK    1
+
+
 typedef union
 {
    char inode_buf[512];
@@ -253,7 +260,7 @@ typedef union
      uint32_t hash1;   /**< parent/name hash1  */
      uint32_t hash2;   /**< parent/name hash2  */
      uint8_t i_extra_isize;  /**< array reserved for extended attributes */
-     uint8_t filler1;  /**< reserve fot future use */
+     uint8_t bitfield1;  /**< reserve fot future use */
      uint8_t filler2;  /**< reserved for future use */
      uint8_t filler3;  /**<reserve for future use */
      uint8_t i_state;     /**< inode state               */

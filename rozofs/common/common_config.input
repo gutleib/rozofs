@@ -191,4 +191,6 @@ INT   	export expthin_guard_delay_sec		10  1:600
 INT   	export expdir_guard_delay_sec		10  1:7200
 // Maximum number of entries that the export level 2 cache can contain (unit is KB) 
 INT   	export level2_cache_max_entries_kb		512  1:4096
+// Whether file locks must be persistent on exportd restart/switchover or not
+BOOL   export  persistent_file_locks                False
 

@@ -740,7 +740,7 @@ class export_class:
     self.squota= quota            
 
   def get_root_path(self):
-    return "%s/export/export_%s"%(rozofs.get_simu_path(),self.eid)  
+    return "%s/export/export_%s"%(rozofs.get_config_path(),self.eid)  
 
   def get_name(self):
     return "eid%s"%(self.eid)  
@@ -923,9 +923,11 @@ class exportd_class:
     pid=self.pid()
     if pid == 0: return
     os.system("kill %s"%(pid))
+    time.sleep(2)
     pid=self.pid()
     if pid == 0: return
-    os.system("kill -9 %s"%(pid))    
+    os.system("kill -9 %s"%(pid)) 
+    return   
 
   def reset(self):
     pid=self.pid()
@@ -1440,7 +1442,7 @@ class rozofs_class:
   def delete_config(self):
     global hosts
     exportd.delete_config()
-    mount="%s/export"%(rozofs.get_simu_path())    
+    mount="%s/export"%(rozofs.get_config_path())    
     os.system("umount -f %s > /dev/null 2>&1"%(mount))  
     for h in hosts: h.delete_config()
     geomgr.delete_config()
@@ -1504,7 +1506,7 @@ class rozofs_class:
     # Case of a loop device for metadata
     if rozofs.metadata_size != None:
       path="%s/devices/exportd"%(rozofs.get_simu_path())
-      mount="%s/export"%(rozofs.get_simu_path())
+      mount="%s/export"%(rozofs.get_config_path())
       rozofs.create_export_loopback_device(path,mount,rozofs.metadata_size)  
     self.create_path()
     self.create_config()   

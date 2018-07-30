@@ -226,6 +226,7 @@ char * show_profiler_one(char * pChar, uint32_t eid) {
       SHOW_PROFILER_PROBE(export_set_file_lock);
       SHOW_PROFILER_PROBE(export_get_file_lock);
       SHOW_PROFILER_PROBE(export_poll_file_lock);
+      SHOW_PROFILER_PROBE(export_poll_owner_lock);
     }  
     SHOW_PROFILER_PROBE(ep_clearclient_flock);
     SHOW_PROFILER_PROBE(ep_clearowner_flock);
@@ -851,8 +852,27 @@ void show_flock(char * argv[], uint32_t tcpRef, void *bufRef) {
   @retval none
 */
 void show_flock_clients(char * argv[], uint32_t tcpRef, void *bufRef) {
-  display_file_lock_clients(uma_dbg_get_buffer());
-  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+  char * pChar = uma_dbg_get_buffer();
+  char * pBuf  = pChar;
+  
+  if (argv[1] != NULL) {
+    if (strcmp(argv[1],"json")==0) {
+      display_file_lock_clients_json(pChar);
+    }
+    else {
+      long long unsigned int client;
+      if (sscanf(argv[1], "%llx", &client) != 1) {
+        pChar += sprintf(pChar,"Unexpected client reference %s\n",argv[1]);
+      }
+      else {
+        display_file_lock_client(pChar,client);
+      }
+    }  
+  }
+  else {
+    display_file_lock_clients(pChar);
+  }  
+  uma_dbg_send(tcpRef, bufRef, TRUE, pBuf);
 }
 
 // For trace purpose

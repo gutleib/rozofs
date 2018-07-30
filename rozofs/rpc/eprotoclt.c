@@ -550,3 +550,18 @@ ep_readdir2_1(epgw_readdir_arg_t *argp, CLIENT *clnt)
 	}
 	return (&clnt_res);
 }
+
+epgw_lock_ret_t *
+ep_poll_owner_lock_1(epgw_lock_arg_t *argp, CLIENT *clnt)
+{
+	static epgw_lock_ret_t clnt_res;
+
+	memset((char *)&clnt_res, 0, sizeof(clnt_res));
+	if (clnt_call (clnt, EP_POLL_OWNER_LOCK,
+		(xdrproc_t) xdr_epgw_lock_arg_t, (caddr_t) argp,
+		(xdrproc_t) xdr_epgw_lock_ret_t, (caddr_t) &clnt_res,
+		TIMEOUT) != RPC_SUCCESS) {
+		return (NULL);
+	}
+	return (&clnt_res);
+}

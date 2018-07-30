@@ -1126,7 +1126,9 @@ int rozofs_expgateway_send_routing_common(uint32_t eid,fid_t fid,uint32_t prog,u
                               sys_recv_pf_t recv_cbk,void *fuse_buffer_ctx_p) ;
 
 
-
+int rozofs_expgateway_send_no_fuse_ctx(uint32_t eid,fid_t fid,uint32_t prog,uint32_t vers,
+                              int opcode,xdrproc_t encode_fct,void *msg2encode_p,
+                              sys_recv_pf_t recv_cbk,void *param) ;
 
 /**
 * API for creation a transaction towards an exportd

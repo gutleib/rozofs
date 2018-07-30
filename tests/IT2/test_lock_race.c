@@ -52,6 +52,7 @@ int * result;
 int blocking=1;
 int display=0;
 int bsd=0;
+int flockp=0;
 
 typedef struct _record_t {
   uint32_t  owner;
@@ -63,6 +64,7 @@ static void usage() {
     printf("-file <name>       file to do the test on\n" );
     printf("-nonBlocking       Lock in non blocking mode (default is blocking)\n");
     printf("-bsd               BSD mode lock (default is POSIX)\n");
+    printf("-flockp            Set permanent lock\n");
     printf("-display           Display lock traces\n");
     printf("[ -process <nb> ]  The test will be done by <nb> process simultaneously (default %d)\n", DEFAULT_NB_PROCESS);
     printf("[ -loop <nb> ]     <nb> test operations will be done (default %d)\n",DEFAULT_LOOP);
@@ -130,6 +132,12 @@ char *argv[];
             idx++;
             continue;
         }	
+        /* -flockp   */
+        if (strcmp(argv[idx], "-flockp") == 0) {
+            idx++;
+            flockp = 1;
+            continue;
+        }	
 		
         /* -loop <nb>  */
         if (strcmp(argv[idx], "-loop") == 0) {
@@ -151,6 +159,12 @@ char *argv[];
         usage();
     }
 }
+void set_flockp(char * name)  {
+  char cmd[256];
+
+  sprintf (cmd, "attr -s rozofs -V \" flockp = %d \" %s > /dev/null 2>&1", flockp, name);
+  system(cmd);
+}
 int create_file(char * name)  {
   char c;
   int fd;
@@ -163,6 +177,8 @@ int create_file(char * name)  {
     printf("open(%s) %s\n",name,strerror(errno));
     return -1;
   }
+  
+  set_flockp(name);
   
   memset(&record,0, sizeof(record));
   

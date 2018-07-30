@@ -235,6 +235,9 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"level2_cache_max_entries_kb")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(level2_cache_max_entries_kb,value,1,4096);
   }
+  if (strcmp(parameter,"persistent_file_locks")==0) {
+    COMMON_CONFIG_SET_BOOL(persistent_file_locks,value);
+  }
   pChar += rozofs_string_append(pChar,"No such parameter ");
   pChar += rozofs_string_append(pChar,parameter);
   pChar += rozofs_eol(pChar);\
@@ -479,6 +482,12 @@ char * show_common_config_module_export(char * pChar) {
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Maximum number of entries that the export level 2 cache can contain (unit is KB) \n");
   COMMON_CONFIG_SHOW_INT_OPT(level2_cache_max_entries_kb,512,"1:4096");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(persistent_file_locks,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Whether file locks must be persistent on exportd restart/switchover or not\n");
+  COMMON_CONFIG_SHOW_BOOL(persistent_file_locks,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -955,6 +964,12 @@ char * save_common_config_module_export(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Maximum number of entries that the export level 2 cache can contain (unit is KB) \n");
     COMMON_CONFIG_SHOW_INT_OPT(level2_cache_max_entries_kb,512,"1:4096");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(persistent_file_locks,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether file locks must be persistent on exportd restart/switchover or not\n");
+    COMMON_CONFIG_SHOW_BOOL(persistent_file_locks,False);
   }
   return pChar;
 }
@@ -1586,6 +1601,8 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(expdir_guard_delay_sec,10,1,7200);
   // Maximum number of entries that the export level 2 cache can contain (unit is KB)  
   COMMON_CONFIG_READ_INT_MINMAX(level2_cache_max_entries_kb,512,1,4096);
+  // Whether file locks must be persistent on exportd restart/switchover or not 
+  COMMON_CONFIG_READ_BOOL(persistent_file_locks,False);
   /*
   ** client scope configuration parameters
   */

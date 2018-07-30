@@ -1835,9 +1835,15 @@ void ep_set_file_lock_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
     arg->arg_gw.client_info.socketRef = req_ctx_p->socketRef;
     res = export_set_file_lock(exp, (unsigned char *) arg->arg_gw.fid, &arg->arg_gw.lock, &ret.gw_status.ep_lock_ret_t_u.lock, &arg->arg_gw.client_info);
-    if(res == 0) {
+    if(res >= 0) {
         ret.gw_status.status = EP_SUCCESS;
 	memcpy(&ret.gw_status.ep_lock_ret_t_u.lock,&arg->arg_gw.lock, sizeof(ep_lock_t));
+        /*
+        ** When some locks still exist clear the client ref
+        */
+        if (res == 0) {
+          ret.gw_status.ep_lock_ret_t_u.lock.client_ref = 0;
+        }
         goto out;
     }
     if (errno == EWOULDBLOCK) {
@@ -2014,5 +2020,53 @@ error:
 out:
     EXPORTS_SEND_REPLY(req_ctx_p);
     STOP_PROFILING(ep_poll_file_lock);
+    return ;
+}
+
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd poll file lock 
+
+    @param args 
+    
+    @retval: EP_SUCCESS : no returned value
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+void ep_poll_owner_lock_1_svc_nb( void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static epgw_lock_ret_t ret;
+    epgw_lock_arg_t * arg = pt; 
+    export_t *exp;
+    int       res;
+
+    // Set profiler export index
+    export_profiler_eid = arg->arg_gw.eid;
+
+    START_PROFILING(ep_poll_owner_lock);
+
+    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
+        goto error;
+
+    ret.gw_status.ep_lock_ret_t_u.lock.client_ref = arg->arg_gw.lock.client_ref;
+    ret.gw_status.ep_lock_ret_t_u.lock.owner_ref  = arg->arg_gw.lock.owner_ref;
+	
+    arg->arg_gw.client_info.socketRef = req_ctx_p->socketRef;
+    res = export_poll_owner_lock(exp, (unsigned char*)arg->arg_gw.fid, &arg->arg_gw.lock, &arg->arg_gw.client_info);
+    if (res == 0) {
+      /*
+      ** No more locks for this owner
+      */
+      ret.gw_status.ep_lock_ret_t_u.lock.client_ref = 0;
+    }
+
+    ret.gw_status.status = EP_SUCCESS;
+    goto out;
+error:
+    ret.gw_status.status = EP_FAILURE;
+    ret.gw_status.ep_lock_ret_t_u.error = errno;
+out:
+    EXPORTS_SEND_REPLY(req_ctx_p);
+    STOP_PROFILING(ep_poll_owner_lock);
     return ;
 }

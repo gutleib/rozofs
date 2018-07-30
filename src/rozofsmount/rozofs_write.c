@@ -2143,13 +2143,22 @@ void rozofs_ll_release_nb(fuse_req_t req, fuse_ino_t ino,
     /*
     ** Clear all the locks eventually pending on the file for this owner
     */
-    if (f->lock_owner_ref != 0) {
+    if (f->lock_owner_ref) {
       /*
-      ** Call file lock service to clear everything about this file descriptor
+      ** When some locks have been set previously with this file descriptor
+      ** remove all locks from this process
       */
       rozofs_clear_file_lock_owner(f);
     }
-
+    if ((fi->flock_release)&&(fi->lock_owner)) {
+      /*
+      ** When fuse tell us the owner of some locks to remove
+      ** load the owner in the file context and go
+      */
+      f->lock_owner_ref = fi->lock_owner;
+      rozofs_clear_file_lock_owner(f);      
+    }
+    
      if (rozofs_bugwatch) severe("BUGROZOFSWATCH release(%p) , buf_write_wait=%d, buf_write_pending=%d,",
                                    f,f->buf_write_wait,f->buf_write_pending);
 
