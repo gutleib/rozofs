@@ -203,3 +203,5 @@ INT   	export expdir_guard_delay_sec		10  1:7200
 INT   	export level2_cache_max_entries_kb		512  1:4096
 // When that flag is asserted, RozoFS operates in standalone mode only.
 BOOL 	global 	standalone	            False
+// Whether file locks must be persistent on exportd restart/switchover or not
+BOOL   export  persistent_file_locks                False

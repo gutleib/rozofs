@@ -151,6 +151,8 @@ typedef struct _common_config_t {
   int32_t     expdir_guard_delay_sec;
   // Maximum number of entries that the export level 2 cache can contain (unit is KB) 
   int32_t     level2_cache_max_entries_kb;
+  // Whether file locks must be persistent on exportd restart/switchover or not
+  int32_t     persistent_file_locks;
 
   /*
   ** client scope configuration parameters

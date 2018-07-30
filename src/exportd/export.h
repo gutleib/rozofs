@@ -61,6 +61,30 @@
 #define EXPORT_SET_ATTR_MTIME (1 << 5)
 
 
+
+#define ROZOFS_XATTR "rozofs"
+#define ROZOFS_USER_XATTR "user.rozofs"
+#define ROZOFS_ROOT_XATTR "trusted.rozofs"
+
+#define ROZOFS_XATTR_ID "rozofs_id"
+#define ROZOFS_USER_XATTR_ID "user.rozofs_id"
+#define ROZOFS_ROOT_XATTR_ID "trusted.rozofs_id"
+#define ROZOFS_XATTR_MAX_SIZE "rozofs_maxsize"
+#define ROZOFS_USER_XATTR_MAX_SIZE "user.rozofs_maxsize"
+#define ROZOFS_ROOT_XATTR_MAX_SIZE "trusted.rozofs_maxsize"
+
+#define ROZOFS_ROOT_SYMLINK "trusted.rozofs.symlink"
+
+#define ROZOFS_ROOT_DIRSYMLINK "trusted.rozofs.dirsymlink"
+#define ROZOFS_USER_DIRSYMLINK "user.rozofs.dirsymlink"
+
+#define ROZOFS_ROOT_DIRBACKUP "trusted.rozofs.dirbackup"
+#define ROZOFS_USER_DIRBACKUP "user.rozofs.dirbackup"
+
+
+#define ROZOFS_XATTR_FLOCKP "trusted.RozoFLOCK"
+
+
 /** Nb. max of entries to delete during one call of export_rm_bins function */
 #define RM_FILES_MAX 500
 /* Frequency calls of export_rm_bins function */
@@ -213,6 +237,7 @@ typedef struct export {
     /*  Some options */
     uint8_t thin:1;  //< Thin provisionning */
     uint8_t backup:1;  //< backupflag needed for asynchronous replication */
+    uint8_t flockp:1;  //< Whether this export has persistent file locks */
 
     /*
     ** To check metadat device resources
@@ -336,12 +361,13 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
    @param volume_fast: pointer to the fast volume context (null if none is associated with exportd
    @param hquota_fast: hardware quota associated with fast_volume
    @param suffix_file_idx: suffix file index
+ * @param: flockp whether persistent file lock is configured on this export
 
  * @return 0 on success -1 otherwise (errno is set)
  */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin,volume_t *volume_fast,uint64_t hquota_fast,int suffix_file_idx);
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin,volume_t *volume_fast,uint64_t hquota_fast,int suffix_file_idx, uint8_t flockp);
 
 /** initialize an export.
  *
@@ -861,6 +887,18 @@ int export_poll_file_lock(export_t *e, ep_lock_t * lock_requested, ep_client_inf
 /*
 **______________________________________________________________________________
 */
+/** Get a poll event from a client
+ *
+ * @param e: the export managing the file or directory.
+ * @param lock: the lock to set/remove
+ * 
+ * @return: On success, the size of the extended attribute value.
+ * On failure, -1 is returned and errno is set appropriately.
+ */
+int export_poll_owner_lock(export_t *e, fid_t fid, ep_lock_t * lock_requested, ep_client_info_t * info);
+/*
+**______________________________________________________________________________
+*/
 extern int export_instance_id;    /**< instance id of the export  : 0 is the master   */
 extern int export_master;         /**< assert to 1 for export Master                  */
 /*
@@ -1155,4 +1193,27 @@ void export_stop_one_trashd(int eid);
    @retval none
 */
 void export_start_one_trashd(int eid) ;
+/*
+**__________________________________________________________________________________
+**
+** Check whether a file should have persistent file locks
+**
+** @param e     export context
+** @param lv2   lv2 entry of the file
+**
+**__________________________________________________________________________________
+*/
+int rozofs_are_persistent_file_locks_configured(export_t *e, lv2_entry_t *lv2);
+/*
+**__________________________________________________________________________________
+**
+** Save locks in in root.RozoFLOCK extended attributes
+**
+** @param e     export context
+** @param lv2   entry to remove locks from
+**
+**__________________________________________________________________________________
+*/
+int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) ;
+
 #endif

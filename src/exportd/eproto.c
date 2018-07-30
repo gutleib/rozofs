@@ -2094,3 +2094,47 @@ out:
     STOP_PROFILING(ep_poll_file_lock);
     return &ret;
 }
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd poll file lock 
+
+    @param args 
+    
+    @retval: EP_SUCCESS : no returned value
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+epgw_lock_ret_t * ep_poll_owner_lock_1_svc(epgw_lock_arg_t * arg, struct svc_req * req) {
+    static epgw_lock_ret_t ret;
+    export_t *exp;
+    int       res;
+
+    // Set profiler export index
+    export_profiler_eid = arg->arg_gw.eid;
+
+    START_PROFILING(ep_poll_owner_lock);
+
+    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
+        goto error;
+
+    ret.gw_status.ep_lock_ret_t_u.lock.client_ref = arg->arg_gw.lock.client_ref;
+    ret.gw_status.ep_lock_ret_t_u.lock.owner_ref  = arg->arg_gw.lock.owner_ref;
+	
+    res = export_poll_owner_lock(exp, (unsigned char *)arg->arg_gw.fid, &arg->arg_gw.lock, &arg->arg_gw.client_info);
+    ret.gw_status.status = EP_SUCCESS;
+    
+    if (res == 0) {
+      /*
+      ** No more locks for this owner
+      */
+      ret.gw_status.ep_lock_ret_t_u.lock.client_ref = 0;
+    }
+    goto out;
+error:
+    ret.gw_status.status = EP_FAILURE;
+    ret.gw_status.ep_lock_ret_t_u.error = errno;
+out:
+    STOP_PROFILING(ep_poll_owner_lock);
+    return &ret;
+}

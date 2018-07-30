@@ -107,12 +107,14 @@ typedef struct file {
     uint64_t write_pos;  /**< absolute position of the first available byte to read*/
     uint64_t write_from; /**< absolute position of the last available byte to read */
     uint64_t current_pos;/**< Estimated current position in the file */
+
     /*
-    ** File lock stuff
+    ** To chain the file descriptors having a lock to request in rozofsmount_requested_lock_list
     */
+    list_t           next_file_in_requested_list;
+        
     uint64_t         lock_owner_ref; /**< Owner of the lock when a lock has been set. Used to release any
                                           pending lock at the time of the file close */
-    ruc_obj_desc_t   pending_lock;   /**< To queue the context waiting for a blocking lock */
     void           * fuse_req;       /**< Pointer to the saved fuse request when waiting for a blocking lock */
     int              lock_type;      /**< Type of requested lock : EP_LOCK_READ or EP_LOCK_WRITE */   
     int              lock_size;      
@@ -132,13 +134,6 @@ typedef struct file {
     uint64_t         off_wr_end;      /**< geo replication :write offset end  */
     int              pending_read_count; 
     int              open_flags;     /**< flags given at opening time */
-#if 0
-    char *buffer;
-    int buf_write_wait;
-    int buf_read_wait;
-    uint64_t buf_pos;
-    uint64_t buf_from;
-#endif
 } file_t;
 
 /**
@@ -285,7 +280,12 @@ static inline file_t * rozofs_file_working_var_init(void * ientry, fid_t fid)
     file->rotation_counter = 0;
     file->rotation_idx = 0;
     file->lock_owner_ref = 0;
-    ruc_listEltInitAssoc(&file->pending_lock,file);
+    
+    /*
+    ** List of owner of lock on this file
+    */
+    list_init(&file->next_file_in_requested_list);
+    
     file->fuse_req = NULL;
     file->lock_type = -1;
     ruc_listHdrInit(&file->pending_rd_list);

@@ -1641,7 +1641,7 @@ static void *load_trash_dir_thread(void *v) {
 */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin, volume_t *volume_fast,uint64_t hquota_fast,int suffix_file) {
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin, volume_t *volume_fast,uint64_t hquota_fast,int suffix_file, uint8_t flockp) {
 
     char fstat_path[PATH_MAX];
     char const_path[PATH_MAX];
@@ -1688,6 +1688,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     e->volume_fast = volume_fast;
     e->bsize = bsize;
     e->thin = thin;
+    e->flockp = flockp;
     e->lv2_cache = lv2_cache;
     if (layout<LAYOUT_MAX) {
       e->layout = layout; // Layout used for this volume
@@ -7235,24 +7236,7 @@ out:
  * @return: On success, the size of the extended attribute value.
  * On failure, -1 is returned and errno is set appropriately.
  */
-#define ROZOFS_XATTR "rozofs"
-#define ROZOFS_USER_XATTR "user.rozofs"
-#define ROZOFS_ROOT_XATTR "trusted.rozofs"
 
-#define ROZOFS_XATTR_ID "rozofs_id"
-#define ROZOFS_USER_XATTR_ID "user.rozofs_id"
-#define ROZOFS_ROOT_XATTR_ID "trusted.rozofs_id"
-#define ROZOFS_XATTR_MAX_SIZE "rozofs_maxsize"
-#define ROZOFS_USER_XATTR_MAX_SIZE "user.rozofs_maxsize"
-#define ROZOFS_ROOT_XATTR_MAX_SIZE "trusted.rozofs_maxsize"
-
-#define ROZOFS_ROOT_SYMLINK "trusted.rozofs.symlink"
-
-#define ROZOFS_ROOT_DIRSYMLINK "trusted.rozofs.dirsymlink"
-#define ROZOFS_USER_DIRSYMLINK "user.rozofs.dirsymlink"
-
-#define ROZOFS_ROOT_DIRBACKUP "trusted.rozofs.dirbackup"
-#define ROZOFS_USER_DIRBACKUP "user.rozofs.dirbackup"
 
 #define DISPLAY_ATTR_TITLE(name) {\
   p += rozofs_string_padded_append(p,8,rozofs_left_alignment,name); \
@@ -7338,7 +7322,6 @@ static int print_inode_name(ext_mattr_t *ino_p,char *buf)
 static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, int size) {
   char    * p=value;
   int       idx;
-  int       left;
   char      bufall[128];
   uint8_t   rozofs_safe = rozofs_get_rozofs_safe(e->layout);
   rozofs_inode_t inode; 
@@ -7571,46 +7554,25 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
   DISPLAY_ATTR_ULONG("SIZE",lv2->attributes.s.attrs.size);
 
-
+  if (lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK){
+    DISPLAY_ATTR_TXT("FLOCKP", "This file");
+  }
+  else if (e->flockp)  {
+    DISPLAY_ATTR_TXT("FLOCKP", "export.conf");
+  }
+  else if (common_config.persistent_file_locks) {
+    DISPLAY_ATTR_TXT("FLOCKP", "rozofs.conf");  
+  }
+  else {
+    DISPLAY_ATTR_TXT("FLOCKP", "NOT PERSISTENT");
+  }
+  
   DISPLAY_ATTR_UINT("LOCK",lv2->nb_locks);  
   if (lv2->nb_locks != 0) {
-    rozofs_file_lock_t *lock_elt;
-    list_t             * pl;
-    char               * sizeType;
-
-
-    /* Check for left space */
-    left = size;
-    left -= ((int)(p-value));
-    if (left < 110) {
-      if (left > 4) p += rozofs_string_append(p,"...");
-      return (p-value);
-    }
-    
-
-    /* List the locks */
-    list_for_each_forward(pl, &lv2->file_lock) {
-
-      lock_elt = list_entry(pl, rozofs_file_lock_t, next_fid_lock);	
-      switch(lock_elt->lock.user_range.size) {
-        case EP_LOCK_TOTAL:      sizeType = "TOTAL"; break;
-	case EP_LOCK_FROM_START: sizeType = "START"; break;
-	case EP_LOCK_TO_END:     sizeType = "END"; break;
-	case EP_LOCK_PARTIAL:    sizeType = "PARTIAL"; break;
-	default:                 sizeType = "??";
-      }  
-      p += sprintf(p,"   %-5s %-7s client %16.16llx owner %16.16llx [%"PRIu64":%"PRIu64"[ [%"PRIu64":%"PRIu64"[\n",
-	       (lock_elt->lock.mode==EP_LOCK_WRITE)?"WRITE":"READ",sizeType, 
-	       (long long unsigned int)lock_elt->lock.client_ref, 
-	       (long long unsigned int)lock_elt->lock.owner_ref,
-	       (uint64_t) lock_elt->lock.user_range.offset_start,
-	       (uint64_t) lock_elt->lock.user_range.offset_stop,
-	       (uint64_t) lock_elt->lock.effective_range.offset_start,
-	       (uint64_t) lock_elt->lock.effective_range.offset_stop);
-
-    }       
-  } 
-
+     DISPLAY_ATTR_TITLE( "SETLK"); 
+     p += rozofs_format_flockp_string(p,lv2);
+    *p++ = '\n';   
+  }
   return (p-value);  
 } 
 /*
@@ -7803,6 +7765,88 @@ out:
 }
 static char buf_xattr[1024];
 
+/*
+**__________________________________________________________________________________
+**
+** Remove locks saved in "root.RozoFLOCK extended attributes
+**
+** @param e     export context
+** @param lv2   entry to remove locks from
+**
+**__________________________________________________________________________________
+*/
+static inline void rozofs_remove_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) { 
+  export_removexattr(e, lv2->attributes.s.attrs.fid, ROZOFS_XATTR_FLOCKP);
+}
+/*
+**__________________________________________________________________________________
+**
+** Check whether a file should have permananet file locks
+**
+** @param e     export context
+** @param lv2   lv2 entry of the file
+**
+**__________________________________________________________________________________
+*/
+int rozofs_are_persistent_file_locks_configured(export_t *e, lv2_entry_t *lv2) {
+  /*
+  ** Check wether persistent file locks are configured
+  ** either common configuration (rozofs.conf)
+  ** or this export configuration (export.conf)
+  ** or this file (attr -s rozofs -V "flockp = 1 "
+  */
+  if (e->flockp) return 1; 
+  if (common_config.persistent_file_locks) return 1;
+  if ((lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK) != 0) return 1;
+  return 0;
+}     
+/*
+**__________________________________________________________________________________
+**
+** Save locks in in root.RozoFLOCK extended attributes
+**
+** @param e     export context
+** @param lv2   entry to remove locks from
+**
+**__________________________________________________________________________________
+*/
+int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) {
+  char * p = buf_xattr;
+
+  /*
+  ** Check wether persistent file locks are configured
+  */
+  if (rozofs_are_persistent_file_locks_configured(e,lv2) == 0) {
+    /*
+    ** No persistent flocks
+    */
+    return 0;
+  }
+    
+  /*
+  ** Remove old locks
+  */
+  rozofs_remove_flocks_in_xattr(e,lv2);
+    
+  /*
+  ** Format new ones
+  */  
+  p += rozofs_format_flockp_string(p,lv2);  
+  if (p == buf_xattr) return 0;
+
+  /*
+  ** Save formated string
+  */  
+  export_setxattr(e, lv2->attributes.s.attrs.fid, ROZOFS_XATTR_FLOCKP, buf_xattr, p-buf_xattr, 0, NULL);
+  return p-buf_xattr;
+}
+/*
+**__________________________________________________________________________________
+**
+** Set rozofs proprietary attribute
+**
+**__________________________________________________________________________________
+*/
 static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_buf,int length) {
   char       * p;
   int          idx,jdx;
@@ -7842,6 +7886,55 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     lv2->attributes.s.attrs.cid=(cid_t)valu64;
     return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
   }
+
+
+  /*
+  ** Set persistent file lock on this file. Lock are kept even on export switchover
+  */
+  if (sscanf(p," flockp = %llu", (long long unsigned int *)&valu64) == 1) {
+  
+    /*
+    ** Remove persistent lock
+    */
+    if (valu64 == 0) {
+
+      if ((lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK)==0) {
+        /* Already done */
+        return 0;
+      }  
+      /* Remove bit */
+      lv2->attributes.s.bitfield1 &= ~ROZOFS_BITFIELD1_PERSISTENT_FLOCK;
+
+      /* 
+      ** When persistent file locks are not set any more
+      ** remove specific RozoFS xattribute for persistent locks if any.
+      */
+      if (rozofs_are_persistent_file_locks_configured(e, lv2) == 0) {
+        rozofs_remove_flocks_in_xattr(e, lv2); 
+      }     
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);  
+    }
+    
+    /*
+    ** Set persistent lock
+    */
+    if ((lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK)!=0) {
+      /* ALready done */
+      return 0;
+    }  
+
+    /* Set bit */
+    lv2->attributes.s.bitfield1 |= ROZOFS_BITFIELD1_PERSISTENT_FLOCK;
+    
+    /* Format and save current locks in specific RozoFS xattribute */
+    rozofs_save_flocks_in_xattr(e, lv2);
+
+    /*
+    ** Save new distribution on disk
+    */
+    return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+  }
+  
   /*
   ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
   */  
@@ -8391,28 +8484,61 @@ out:
 /*
 **______________________________________________________________________________
 */
-/** Set a lock on a file
+/** Check whether ther is some pending locks for this client/owner on this given file
+ *
+ * @param lv2:  the file lvé entry
+ * @param lock_requested: the reference of the client and owner
+ * 
+ * @retval -1 On failure, errno is set appropriately.
+ * @retval 0 No pending lock for this client/owner 
+ * @retval 1 Some pendong lock exist for this client/owner
+ */
+int export_check_pending_file_lock(lv2_entry_t *lv2, ep_lock_t * lock_requested) {
+  list_t             * p;
+  rozofs_file_lock_t * lock_elt;
+     
+  /* Search the given lock */
+  list_for_each_forward(p, &lv2->file_lock) {
+
+    lock_elt = list_entry(p, rozofs_file_lock_t, next_fid_lock);	
+    if (lock_elt->lock.client_ref != lock_requested->client_ref) continue;
+    if (lock_elt->lock.owner_ref != lock_requested->owner_ref) continue;
+    
+    /*
+    ** Yes ther is some lock from this clieent/owner
+    */
+    return 1;
+  }
+  return 0;
+}   	       
+/*
+**______________________________________________________________________________
+*/
+/** Set/remove a lock on a file
  *
  * @param e: the export managing the file or directory.
  * @param fid: the id of the file or directory.
  * @param lock: the lock to set/remove
  * 
- * @return: On success, the size of the extended attribute value.
- * On failure, -1 is returned and errno is set appropriately.
+ * @retval -1 On failure, errno is set appropriately.
+ * @retval 0 Success and this clienr/owner does not hold any more locks on this file
+ * @retval 1 Success and this clienr/owner still holds some locks on this file
  */
 int export_set_file_lock(export_t *e, fid_t fid, ep_lock_t * lock_requested, ep_lock_t * blocking_lock, ep_client_info_t * info) {
     ssize_t status = -1;
     lv2_entry_t *lv2 = 0;
-    list_t      *p;
+    list_t      *p,*q;
     rozofs_file_lock_t * lock_elt;
     rozofs_file_lock_t * new_lock;
     int                  overlap=0;
     char                 string[256];
+    int                  updated = 0;
+    time_t               now = time(NULL);
 
     START_PROFILING(export_set_file_lock);
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
 	flock_request2string(string,fid,lock_requested);
-        severe("EXPORT_LOOKUP_FID set %s - %s", string, strerror(errno));
+        severe("export_set_file_lock : LOOKUP_FID %s - %s", string, strerror(errno));
         goto out;
     }
 
@@ -8435,13 +8561,29 @@ int export_set_file_lock(export_t *e, fid_t fid, ep_lock_t * lock_requested, ep_
       
 reloop:       
       /* Search the given lock */
-      list_for_each_forward(p, &lv2->file_lock) {
+      list_for_each_forward_safe(p, q, &lv2->file_lock) {
       
         lock_elt = list_entry(p, rozofs_file_lock_t, next_fid_lock);	
-	
-	if (must_file_lock_be_removed(e->eid,e->bsize,lock_requested, &lock_elt->lock, &new_lock, info)) {
+        if ((now-lock_elt->last_poll_time) > FILE_LOCK_POLL_DELAY_MAX) {
+          /*
+          ** Remove this out dated lock
+          */
+  	  flock_request2string(string,fid,&lock_elt->lock);
+          warning("outdated flock %s",string);
+          lv2_cache_free_file_lock(e->eid,lock_elt);
+          lv2->nb_locks--;
+          updated = 1;
+	  if (list_empty(&lv2->file_lock)) {
+	    lv2->nb_locks = 0;
+	    goto out;
+	  }          
+          continue;
+        }
+        	
+	if (must_file_lock_be_removed(lv2, e->eid,e->bsize,lock_requested, &lock_elt->lock, &new_lock, info)) {
 	  lv2_cache_free_file_lock(e->eid,lock_elt);
 	  lv2->nb_locks--;
+          updated = 1;
 	  if (list_empty(&lv2->file_lock)) {
 	    lv2->nb_locks = 0;
 	    goto out;
@@ -8450,8 +8592,7 @@ reloop:
 	}
 
 	if (new_lock) {
-	  list_push_front(&lv2->file_lock,&new_lock->next_fid_lock);
-	  lv2->nb_locks++;
+          updated = 1;
 	}
       }
       goto out; 
@@ -8460,10 +8601,19 @@ reloop:
     /*
     ** Setting a new lock. Check its compatibility against every already set lock
     */
-    list_for_each_forward(p, &lv2->file_lock) {
+    list_for_each_forward_safe(p, q,&lv2->file_lock) {
     
       lock_elt = list_entry(p, rozofs_file_lock_t, next_fid_lock);
-      
+      if ((now-lock_elt->last_poll_time) > FILE_LOCK_POLL_DELAY_MAX) {
+        /*
+        ** Remove this out dated lock
+        */
+  	flock_request2string(string,fid,&lock_elt->lock);
+        warning("outdated flock %s",string);
+        lv2_cache_free_file_lock(e->eid,lock_elt);
+        lv2->nb_locks--;
+        continue;
+      }      
       /*
       ** Check compatibility between 2 different applications
       */
@@ -8525,6 +8675,7 @@ concatenate:
           overlap--;
 	  lv2_cache_free_file_lock(e->eid,lock_elt);
 	  lv2->nb_locks--;
+          updated = 1;
 	  if (list_empty(&lv2->file_lock)) {
 	    lv2->nb_locks = 0;
 	  }
@@ -8537,22 +8688,30 @@ concatenate:
     ** Since we have reached this point all the locks are compatibles with the new one.
     ** and it does not overlap any more with an other lock. Let's insert this new lock
     */
-    lock_elt = lv2_cache_allocate_file_lock(e->eid,lock_requested, info);
-    list_push_front(&lv2->file_lock,&lock_elt->next_fid_lock);
-    lv2->nb_locks++;
+    lock_elt = lv2_cache_allocate_file_lock(lv2,e->eid,lock_requested, info);
+    updated = 1;
     status = 0; 
     
 out:
-#if 0
-    {
-      char BuF[4096];
-      char * pChar = BuF;
-      debug_file_lock_list(pChar);
-      info("%s",BuF);
-    }
-#endif      
+    if (lv2) {   
+    
+      /*
+      ** Save persistent locks in rozofs specific extended attributte when configure
+      */
+      if (updated) {
+        rozofs_save_flocks_in_xattr(e, lv2);
+      }
+    
+      /*
+      ** Check whether there are some remaining locks for this client/owner tupple 
+      ** on this FID.
+      */
+      if (status == 0) {
+        status = export_check_pending_file_lock(lv2, lock_requested);
+      }
 
-    if (lv2) lv2_cache_update_lru(e->lv2_cache, lv2);	
+      lv2_cache_update_lru(e->lv2_cache, lv2);
+    } 	
     STOP_PROFILING(export_set_file_lock);
     return status;
 }
@@ -8572,8 +8731,9 @@ int export_get_file_lock(export_t *e, fid_t fid, ep_lock_t * lock_requested, ep_
     ssize_t status = -1;
     lv2_entry_t *lv2 = 0;
     rozofs_file_lock_t *lock_elt;
-    list_t * p;
+    list_t * p, *q;
     char                 string[256];
+    time_t               now = time(NULL);
 
     START_PROFILING(export_get_file_lock);
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
@@ -8594,9 +8754,19 @@ int export_get_file_lock(export_t *e, fid_t fid, ep_lock_t * lock_requested, ep_
     /*
     ** Setting a new lock. Check its compatibility against every already set lock
     */
-    list_for_each_forward(p, &lv2->file_lock) {
+    list_for_each_forward_safe(p, q, &lv2->file_lock) {
     
       lock_elt = list_entry(p, rozofs_file_lock_t, next_fid_lock);
+      if ((now-lock_elt->last_poll_time) > FILE_LOCK_POLL_DELAY_MAX) {
+        /*
+        ** Remove this out dated lock
+        */
+  	flock_request2string(string,fid,&lock_elt->lock);
+        warning("outdated flock %s",string);        
+        lv2_cache_free_file_lock(e->eid,lock_elt);
+        lv2->nb_locks--;
+        continue;
+      }
 
       if (!are_file_locks_compatible(&lock_elt->lock,lock_requested)) {
 	memcpy(blocking_lock,&lock_elt->lock,sizeof(ep_lock_t));     
@@ -8624,8 +8794,7 @@ out:
 int export_clear_client_file_lock(export_t *e, ep_lock_t * lock_requested, ep_client_info_t * info) {
 
     START_PROFILING(export_clearclient_flock);
-    file_lock_remove_client(e->eid,lock_requested->client_ref);
-    file_lock_poll_client(e->eid,lock_requested->client_ref,info);
+    file_lock_clear_client_file_lock(e->eid,lock_requested->client_ref,info);
     STOP_PROFILING(export_clearclient_flock);
     return 0;
 }
@@ -8646,6 +8815,7 @@ int export_clear_owner_file_lock(export_t *e, fid_t fid, ep_lock_t * lock_reques
     list_t * p;
     rozofs_file_lock_t *lock_elt;
     char                 string[256];
+    int                  updated = 0;
     
     START_PROFILING(export_clearowner_flock);
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
@@ -8655,7 +8825,7 @@ int export_clear_owner_file_lock(export_t *e, fid_t fid, ep_lock_t * lock_reques
 	  goto out;
 	}	
 	flock_request2string(string,fid,lock_requested);
-        severe("EXPORT_LOOKUP_FID clear %s - %s", string, strerror(errno));
+        warning("EXPORT_LOOKUP_FID clear %s - %s", string, strerror(errno));
         goto out;
     }
     
@@ -8668,8 +8838,10 @@ reloop:
       if ((lock_elt->lock.client_ref == lock_requested->client_ref) &&
           (lock_elt->lock.owner_ref == lock_requested->owner_ref)) {
 	  /* Found a lock to free */
+  	  flock_request2string(string,fid,&lock_elt->lock);
 	  lv2_cache_free_file_lock(e->eid,lock_elt);
 	  lv2->nb_locks--;
+          updated = 1;
 	  if (list_empty(&lv2->file_lock)) {
 	    lv2->nb_locks = 0;
 	    // Remove it from the lru
@@ -8681,13 +8853,20 @@ reloop:
     }    
 
 out:
+    /*
+    ** Save persistent locks in rozofs specific extended attributte when configure
+    */
+    if (updated) {
+      rozofs_save_flocks_in_xattr(e, lv2);
+    }
     STOP_PROFILING(export_clearowner_flock);
     return status;
 }
 /*
 **______________________________________________________________________________
 */
-/** Get a poll event from a client
+/** Old client pooling. This single poll message renews the lease of all the locks
+** from any application for this client
  *
  * @param e: the export managing the file or directory.
  * @param lock: the lock to set/remove
@@ -8701,6 +8880,56 @@ int export_poll_file_lock(export_t *e, ep_lock_t * lock_requested, ep_client_inf
     file_lock_poll_client(e->eid,lock_requested->client_ref,info);
     STOP_PROFILING(export_poll_file_lock);
     return 0;
+}
+/*
+**______________________________________________________________________________
+*/
+/** New cleint polling. This poll message renews every locks of the given
+ ** client/woner/fid tupple
+ **
+ * @param e: the export managing the file or directory.
+ * @param lock: the lock to set/remove
+ * 
+ * @return: On success, the size of the extended attribute value.
+ * On failure, -1 is returned and errno is set appropriately.
+ */
+int export_poll_owner_lock(export_t *e, fid_t fid, ep_lock_t * lock_requested, ep_client_info_t * info) {
+    int                         result = 0;
+    lv2_entry_t               * lv2 = 0;  
+    fid_t                       fid_null;
+    
+    START_PROFILING(export_poll_owner_lock);
+
+    /*
+    ** Find out the lv2 entry for this FID
+    */
+    memset(fid_null, 0, sizeof(fid_t));
+    if ((memcmp(fid_null, fid, sizeof(fid_t))==0) && (lock_requested->owner_ref == 0)) {
+      /*
+      ** FID is NULL and owner ref also. This poll is just to upgrade the client
+      ** that owns no locks
+      */
+      result = file_lock_poll_owner(e->eid, NULL, lock_requested, info);
+      goto out;
+    }  
+
+    if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
+      /*
+      ** FID is not given but owner is. The file has been deleted....
+      */
+      if (lock_requested->owner_ref != 0) {
+         goto out;
+      }
+      /*
+      ** neither FID not owner is given . Just update the client presence
+      */
+    } 
+      
+    result = file_lock_poll_owner(e->eid, lv2, lock_requested, info);
+
+out:
+    STOP_PROFILING(export_poll_owner_lock);
+    return result;
 }
 /*
 **______________________________________________________________________________

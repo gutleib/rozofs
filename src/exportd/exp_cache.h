@@ -31,20 +31,6 @@
 #include "mslnk.h"
 
 
-#if 0
-#define FILE_LOCK_POLL_DELAY_MAX  480
-
-typedef struct _rozofs_file_lock_t {
-  list_t           next_fid_lock;
-  list_t           next_client_lock;
-  struct ep_lock_t lock;
-} rozofs_file_lock_t;
-
-
-void                 lv2_cache_free_file_lock(rozofs_file_lock_t * lock) ;
-rozofs_file_lock_t * lv2_cache_allocate_file_lock(ep_lock_t * lock) ;
-#endif
-
 
 /** API lv2 cache management functions.
  *
@@ -68,13 +54,6 @@ typedef struct lv2_entry {
     char        *symlink_target; ///< symbolic link target name (only for symlink) */
 
     list_t list;        ///< list used by cache    
-#if 0
-    union {
-        mreg_t mreg;    ///< regular file
-        mdir_t mdir;    ///< directory
-        mslnk_t mslnk;  ///< symlink
-    } container;
-#endif
     int          locked_in_cache:1;  /**< assert to 1 to lock the entry in the lv2 cache                    */
     int          dirty_bit:1;          /**< that bit is intended to be used by attributes related to directory to deal with per directory byte count   */
     int          filler:30;          /**< for future usage                                                  */

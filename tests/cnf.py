@@ -112,7 +112,7 @@ def addExport(vol,layout=None,eid=None):
 #_____________________________________ 
 
 # Set metadata device characteristics
-#rozofs.set_metadata_size(200)
+rozofs.set_metadata_size(200)
 rozofs.set_min_metadata_inodes(1000)
 rozofs.set_min_metadata_MB(5)
 
@@ -200,8 +200,7 @@ redundancy = 2
 nbclusters = 1
 
 # default is to have one mount point per site and export
-clients_nb = 1
-
+clients_nb = 2
 # Define default layout
 setLayout(1)
 
@@ -213,8 +212,8 @@ e = addExport(vol,layout=1,eid=1)
 # Set thin provisionning
 #e.set_thin()
 
-e = addExport(vol,layout=1,eid=9)
-e = addExport(vol,layout=1,eid=17)
+#e = addExport(vol,layout=1,eid=9)
+#e = addExport(vol,layout=1,eid=17)
 
 addPrivate(vol,layout=1)
 

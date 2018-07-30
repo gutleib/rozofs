@@ -26,6 +26,7 @@
 
 #include <rozofs/common/log.h>
 #include <rozofs/rpc/eproto.h>
+#include <rozofs/core/rozofs_fid_string.h>
 
 /*
 **______________________________________________________________________________
@@ -39,21 +40,21 @@
  * @return: On success, the size of the extended attribute value.
  * On failure, -1 is returned and errno is set appropriately.
  */
-char * flock_request2string(char * buffer, fid_t fid, ep_lock_t * lock) {
+static inline char * flock_request2string(char * buffer, fid_t fid, ep_lock_t * lock) {
   char * pChar = buffer;
 
-  fid2string(fid,pChar);
-  pChar += 37;
-  pChar += sprintf(pChar," client=%"PRIu64" owner=%"PRIu64" ", lock->client_ref, lock->owner_ref);
+  pChar = rozofs_fid2string(fid,pChar);
   switch(lock->mode) {
-    case EP_LOCK_FREE:  pChar += sprintf(pChar,"FR "); break;
-    case EP_LOCK_READ:  pChar += sprintf(pChar,"RD "); break;
-    case EP_LOCK_WRITE: pChar += sprintf(pChar,"WR "); break;
-    default:            pChar += sprintf(pChar,"%d ",lock->mode);
-  }  
-  pChar += sprintf(pChar,"[%"PRIu64":%"PRIu64"[",
-	       (uint64_t) lock->user_range.offset_start,
-	       (uint64_t) lock->user_range.offset_stop);
+    case EP_LOCK_FREE:  pChar += sprintf(pChar," F:"); break;
+    case EP_LOCK_READ:  pChar += sprintf(pChar," R:"); break;
+    case EP_LOCK_WRITE: pChar += sprintf(pChar," W:"); break;
+    default:            pChar += sprintf(pChar," %d:",lock->mode);
+  } 
+  pChar += sprintf(pChar,"%llx:%llx:%llx:%llx", 
+                  (long long unsigned int)lock->client_ref, 
+                  (long long unsigned int)lock->owner_ref,
+                  (long long unsigned int)lock->user_range.offset_start,
+                  (long long unsigned int)lock->user_range.offset_stop);
   return pChar;
 }
 

@@ -1589,7 +1589,8 @@ static int load_exports_conf() {
         // Initialize export
         if (export_initialize(&entry->export, volume, econfig->layout, econfig->bsize,
                 &cache, econfig->eid, econfig->root, econfig->name, econfig->md5,
-                econfig->squota, econfig->hquota, econfig->filter_name, econfig->thin,volume_fast,econfig->hquota_fast,econfig->suffix_file_idx) != 0) {
+                econfig->squota, econfig->hquota, econfig->filter_name, econfig->thin,volume_fast,econfig->hquota_fast,econfig->suffix_file_idx,
+                econfig->flockp) != 0) {
             severe("can't initialize export with path %s: %s\n",
                     econfig->root, strerror(errno));
             goto out;

@@ -1122,26 +1122,54 @@ def bigFName():
 #___________________________________________________
 def lock_race():
 #___________________________________________________ 
-  zefile='%s/%s'%(exepath,tst_file)
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
   try:
     os.remove(zefile)
   except:
     pass  
   return os.system("./IT2/test_lock_race.exe -process %d -loop %d -file %s "%(process,loop,zefile))  
 #___________________________________________________
+def flockp_race():
+#___________________________________________________ 
+  dir="%s/flockp"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_lock_race.exe -flockp -process %d -loop %d -file %s "%(process,loop,zefile))  
+#___________________________________________________
 def lock_posix_passing():
 #___________________________________________________ 
-  zefile='%s/%s'%(exepath,tst_file)
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
   try:
     os.remove(zefile)
   except:
     pass  
   return os.system("./IT2/test_file_lock.exe -process %d -loop %d -file %s -nonBlocking"%(process,loop,zefile))  
+#___________________________________________________
+def flockp_posix_passing():
+#___________________________________________________ 
+  dir="%s/flockp"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_file_lock.exe -flockp -process %d -loop %d -file %s -nonBlocking"%(process,loop,zefile))  
 
 #___________________________________________________
 def lock_posix_blocking():
 #___________________________________________________
-  zefile='%s/%s'%(exepath,tst_file)
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
   try:
     os.remove(zefile)
   except:
@@ -1149,11 +1177,38 @@ def lock_posix_blocking():
 
   ret=os.system("./IT2/test_file_lock.exe -process %d -loop %d -file %s"%(process,loop,zefile))
   return ret 
+#___________________________________________________
+def flockp_posix_blocking():
+#___________________________________________________
+  dir="%s/flockp"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+
+  ret=os.system("./IT2/test_file_lock.exe -flockp -process %d -loop %d -file %s"%(process,loop,zefile))
+  return ret 
+
+#___________________________________________________
+def flockp_bsd_passing():
+#___________________________________________________  
+  dir="%s/flockp"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_file_lock.exe -flockp -process %d -loop %d -file %s -nonBlocking -bsd"%(process,loop,zefile))
 
 #___________________________________________________
 def lock_bsd_passing():
 #___________________________________________________  
-  zefile='%s/%s'%(exepath,tst_file)
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
   try:
     os.remove(zefile)
   except:
@@ -1172,12 +1227,25 @@ def quiet(val=10):
 #___________________________________________________
 def lock_bsd_blocking():
 #___________________________________________________
-  zefile='%s/%s'%(exepath,tst_file)
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
   try:
     os.remove(zefile)
   except:
     pass  
   return os.system("./IT2/test_file_lock.exe -process %d -loop %d -file %s -bsd "%(process,loop,zefile))  
+#___________________________________________________
+def flockp_bsd_blocking():
+#___________________________________________________
+  dir="%s/flockp"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_file_lock.exe -flockp -process %d -loop %d -file %s -bsd "%(process,loop,zefile))  
 #___________________________________________________
 def check_one_criteria(attr,f1,f2):
 #___________________________________________________
@@ -2504,7 +2572,7 @@ TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all
 TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts']
 
 # File locking
-TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race']
+TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race']
 TST_COMPIL=['compil_rozofs','compil_openmpi']
 TST_TRASH=['trashNrestore','trashNrebuild']
 
