@@ -348,6 +348,13 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     local =  ep_poll_file_lock_1_svc_nb;
 	     size = sizeof(epgw_lock_arg_t);
 	     break;
+             
+     case EP_POLL_OWNER_LOCK:
+	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_lock_arg_t;
+	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_lock_ret_t;
+	     local =  ep_poll_owner_lock_1_svc_nb;
+	     size = sizeof(epgw_lock_arg_t);
+	     break;
     default:
       rozorpc_srv_ctx_p->xmitBuf = rozorpc_srv_ctx_p->recv_buf;
       rozorpc_srv_ctx_p->recv_buf = NULL;

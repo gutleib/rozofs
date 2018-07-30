@@ -67,5 +67,6 @@ void ep_clear_owner_file_lock_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_get_file_lock_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_poll_file_lock_1_svc_nb( void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_getxattr_raw_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
+void ep_poll_owner_lock_1_svc_nb( void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 
 #endif

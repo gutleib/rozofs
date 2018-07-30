@@ -53,12 +53,14 @@ int * result;
 int blocking=1;
 int display=0;
 int bsd=0;
+int flockp=0;
 
 static void usage() {
     printf("Parameters:\n");
     printf("-file <name>       file to do the test on\n" );
     printf("-nonBlocking       Lock in non blocking mode (default is blocking)\n");
     printf("-bsd               BSD mode lock (default is POSIX)\n");
+    printf("-flockp            Set permanent lock\n");
     printf("-display           Display lock traces\n");
     printf("[ -process <nb> ]  The test will be done by <nb> process simultaneously (default %d)\n", DEFAULT_NB_PROCESS);
     printf("[ -loop <nb> ]     <nb> test operations will be done (default %d)\n",DEFAULT_LOOP);
@@ -117,6 +119,13 @@ char *argv[];
             idx++;
             bsd = 1;
             continue;
+        }
+        	
+        /* -flockp   */
+        if (strcmp(argv[idx], "-flockp") == 0) {
+            idx++;
+            flockp = 1;
+            continue;
         }	
 	
 	/* -display   */
@@ -161,6 +170,12 @@ char *argv[];
         usage();
     }
 }
+void set_flockp(char * name)  {
+  char cmd[256];
+
+  sprintf (cmd, "attr -s rozofs -V \" flockp = %d \" %s > /dev/null 2>&1", flockp, name);
+  system(cmd);
+}
 int create_file(char * name, int size)  {
   char c;
   int fd;
@@ -174,6 +189,9 @@ int create_file(char * name, int size)  {
   }
   c = 0;
   pwrite(fd,&c, 1, size-1);  // Size the file
+  
+  set_flockp(name);
+  
   close(fd);
 }
 int display_flock(int ope, struct flock * flock,int retry) {

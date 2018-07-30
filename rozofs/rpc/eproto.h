@@ -1065,6 +1065,9 @@ extern  epgw_getxattr_raw_ret_t * ep_getxattr_raw_1_svc(epgw_getxattr_arg_t *, s
 #define EP_READDIR2 37
 extern  epgw_readdir2_ret_t * ep_readdir2_1(epgw_readdir_arg_t *, CLIENT *);
 extern  epgw_readdir2_ret_t * ep_readdir2_1_svc(epgw_readdir_arg_t *, struct svc_req *);
+#define EP_POLL_OWNER_LOCK 38
+extern  epgw_lock_ret_t * ep_poll_owner_lock_1(epgw_lock_arg_t *, CLIENT *);
+extern  epgw_lock_ret_t * ep_poll_owner_lock_1_svc(epgw_lock_arg_t *, struct svc_req *);
 extern int export_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -1176,6 +1179,9 @@ extern  epgw_getxattr_raw_ret_t * ep_getxattr_raw_1_svc();
 #define EP_READDIR2 37
 extern  epgw_readdir2_ret_t * ep_readdir2_1();
 extern  epgw_readdir2_ret_t * ep_readdir2_1_svc();
+#define EP_POLL_OWNER_LOCK 38
+extern  epgw_lock_ret_t * ep_poll_owner_lock_1();
+extern  epgw_lock_ret_t * ep_poll_owner_lock_1_svc();
 extern int export_program_1_freeresult ();
 #endif /* K&R C */
 

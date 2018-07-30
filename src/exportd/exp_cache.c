@@ -393,6 +393,11 @@ lv2_entry_t *lv2_cache_put(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache,
     */
     list_init(&entry->file_lock);
     entry->nb_locks = 0;
+    /*
+    ** Need eventually to re install the persistent file locks saved in extended attributes
+    */
+    rozofs_reload_flockp(entry,trk_tb_p);    
+    
     list_init(&entry->list);
     /*
     ** init of the move list

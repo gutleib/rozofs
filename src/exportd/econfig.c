@@ -63,6 +63,7 @@
 #define EIP4SUBNET  "ip4subnet"
 #define ESUBNETS    "subnets"
 #define ETHIN       "thin-provisioning"
+#define EFLOCKP     "flockp"
 
 /*
 ** constant for exportd gateways
@@ -210,7 +211,7 @@ void expgw_config_release(expgw_config_t *c) {
 
 
 int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t layout, uint32_t bsize,
-        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name, int thin) {
+        const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, const char *filter_name, int thin, int flockp) {
     DEBUG_FUNCTION;
 
     e->eid = eid;
@@ -222,7 +223,18 @@ int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t l
     strncpy(e->md5, md5, MD5_LEN);
     e->squota = squota;
     e->hquota = hquota;
-    e->thin   = thin;
+    if (thin) {
+      e->thin = 1;
+    }
+    else {
+      e->thin = 0;
+    }
+    if (flockp) {   
+      e->flockp = 1;
+    }
+    else {
+      e->flockp = 0;
+    }  
     if (filter_name == NULL) {
       e->filter_name = NULL;
     }  
@@ -987,6 +999,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         const char *name;
         const char *md5;
         int thin;
+        int flockp;
         // Check version of libconfig
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
                || (LIBCONFIG_VER_MAJOR > 1))
@@ -1128,7 +1141,17 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
 
         // Check for thin provisionning
         thin = 0;
-        config_setting_lookup_bool(mfs_setting, ETHIN, &thin);
+        if (config_setting_lookup_bool(mfs_setting, ETHIN, &thin)== FALSE) {
+          thin = 0;
+        }  
+
+        /*
+        ** Are persistent file locks configured
+        */
+        flockp = 0;
+        if (config_setting_lookup_bool(mfs_setting, EFLOCKP, &flockp) == FALSE) {
+          flockp = 0;
+        }  
 		
         // Lookup export layout if any
         if (config_setting_lookup_int(mfs_setting, ELAYOUT, &layout) == CONFIG_FALSE) {
@@ -1153,9 +1176,10 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
 	
         econfig = xmalloc(sizeof (export_config_t));
         if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
-                md5, squota, hquota, filter_name, thin) != 0) {
+                md5, squota, hquota, filter_name, thin, flockp) != 0) {
             severe("can't initialize export config.");
         }
+
         // Initialize export
 
         // Add this export to the list of exports

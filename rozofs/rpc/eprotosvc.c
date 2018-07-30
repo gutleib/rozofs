@@ -56,6 +56,7 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		epgw_cluster_arg_t ep_list_cluster2_1_arg;
 		epgw_getxattr_arg_t ep_getxattr_raw_1_arg;
 		epgw_readdir_arg_t ep_readdir2_1_arg;
+		epgw_lock_arg_t ep_poll_owner_lock_1_arg;
 	} argument;
 	char *result;
 	xdrproc_t _xdr_argument, _xdr_result;
@@ -276,6 +277,12 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_argument = (xdrproc_t) xdr_epgw_readdir_arg_t;
 		_xdr_result = (xdrproc_t) xdr_epgw_readdir2_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) ep_readdir2_1_svc;
+		break;
+
+	case EP_POLL_OWNER_LOCK:
+		_xdr_argument = (xdrproc_t) xdr_epgw_lock_arg_t;
+		_xdr_result = (xdrproc_t) xdr_epgw_lock_ret_t;
+		local = (char *(*)(char *, struct svc_req *)) ep_poll_owner_lock_1_svc;
 		break;
 
 	default:

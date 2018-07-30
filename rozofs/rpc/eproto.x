@@ -940,6 +940,9 @@ program EXPORT_PROGRAM {
         epgw_readdir2_ret_t
         EP_READDIR2(epgw_readdir_arg_t)            = 37;
 
+        epgw_lock_ret_t
+        EP_POLL_OWNER_LOCK(epgw_lock_arg_t)         = 38;      
+
 	
     } = 1;
 } = 0x20000001;

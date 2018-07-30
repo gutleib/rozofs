@@ -35,12 +35,14 @@
 typedef struct _rozofs_file_lock_t {
   list_t           next_fid_lock;
   list_t           next_client_lock;
+  time_t           last_poll_time;
+  lv2_entry_t    * lv2;
   struct ep_lock_t lock;
 } rozofs_file_lock_t;
 
 
 void                 lv2_cache_free_file_lock(uint32_t eid,rozofs_file_lock_t * lock) ;
-rozofs_file_lock_t * lv2_cache_allocate_file_lock(uint32_t eid, ep_lock_t * lock, ep_client_info_t * info) ;
+rozofs_file_lock_t * lv2_cache_allocate_file_lock(lv2_entry_t * lv2,uint32_t eid, ep_lock_t * lock, ep_client_info_t * info) ;
 
 /** API lv2 cache management functions.
  *
@@ -58,7 +60,15 @@ rozofs_file_lock_t * lv2_cache_allocate_file_lock(uint32_t eid, ep_lock_t * lock
  */
 char * lv2_cache_display(lv2_cache_t *cache, char * pChar) ;
 
-
+/*
+*___________________________________________________________________
+* Format a string describing the lock set
+*
+* 
+* @retval 1 when locks are compatible, 0 else
+*___________________________________________________________________
+*/
+int rozofs_format_flockp_string(char * string,lv2_entry_t *lv2);
 /*
 *___________________________________________________________________
 * lock service init 
@@ -93,6 +103,28 @@ void file_lock_remove_client(uint32_t eid, uint64_t client_ref) ;
 void file_lock_poll_client(uint32_t eid, uint64_t client_ref, ep_client_info_t * info) ;
 /*
 *___________________________________________________________________
+* Receive a poll request from a client
+*
+* @param eid            export identifier
+* @param client_ref     reference of the client to remove
+* @param info           client information
+* @param forget_locks   Client has just been restarted and has forgotten every lock
+*___________________________________________________________________
+*/
+int file_lock_clear_client_file_lock(uint32_t eid, uint64_t client_ref, ep_client_info_t * info);
+/*
+*___________________________________________________________________
+* Receive a poll request from a client
+*
+* @param eid            export identifier
+* @param lv2            File information in cache
+* @param client_ref     reference of the client/owner to remove
+* @param info           client information
+*___________________________________________________________________
+*/
+int file_lock_poll_owner(uint32_t eid, lv2_entry_t * lv2, ep_lock_t * lock, ep_client_info_t * info) ;
+/*
+*___________________________________________________________________
 * Check whether two lock2 must free or update lock1
 *
 * @param bsize       The blok size as defined in ROZOFS_BSIZE_E
@@ -102,7 +134,7 @@ void file_lock_poll_client(uint32_t eid, uint64_t client_ref, ep_client_info_t *
 * @retval 1 when locks are compatible, 0 else
 *___________________________________________________________________
 */
-int must_file_lock_be_removed(uint32_t eid,uint8_t bsize, struct ep_lock_t * lock_free, struct ep_lock_t * lock_set, rozofs_file_lock_t ** new_lock_ctx, ep_client_info_t * info) ;
+int must_file_lock_be_removed(lv2_entry_t * lv2,uint32_t eid,uint8_t bsize, struct ep_lock_t * lock_free, struct ep_lock_t * lock_set, rozofs_file_lock_t ** new_lock_ctx, ep_client_info_t * info) ;
 /*
 *___________________________________________________________________
 * Check whether two locks are compatible in oreder to set a new one.
@@ -148,5 +180,9 @@ int try_file_locks_concatenate(uint8_t bsize, struct ep_lock_t * lock1, struct e
 void file_lock_reload();
 
 char * display_file_lock(char * pChar) ;
+char * display_file_lock_client(char * pChar, uint64_t client_ref) ;
 char * display_file_lock_clients(char * pChar);
+char * display_file_lock_clients_json(char * pChar);
+void rozofs_reload_flockp(lv2_entry_t * lv2, export_tracking_table_t *trk_tb_p);
+
 #endif

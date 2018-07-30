@@ -82,6 +82,27 @@ buf_work_t *buf_dir_read_save = NULL;
 int count_threshold = 200000;
 
 extern export_tracking_table_t * export_tracking_table[];
+
+/*___________________________________________________________________________________________
+** COMPILATION STUB
+*/
+int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) {
+  return 0;
+}  
+/*___________________________________________________________________________________________
+** COMPILATION STUB
+*/
+ssize_t
+rozofs_getxattr(void *dentry, const char *name, void *buffer, size_t size)
+{
+  return -1;
+}
+/*___________________________________________________________________________________________
+** COMPILATION STUB
+*/
+int rozofs_are_persistent_file_locks_configured(export_t *e, lv2_entry_t *lv2) {
+  return 0; 
+}
 /*
 **_________________________________________________________________
 
