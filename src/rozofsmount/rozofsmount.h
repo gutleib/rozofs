@@ -518,6 +518,21 @@ static inline void ientry_update_parent(ientry_t * ie, fid_t pfid) {
 	memcpy(ie->pfid, pfid, sizeof(fid_t));
 }
 
+#define CLEAR_WRITE(p) \
+{ \
+  p->write_pos = 0;\
+  p->write_from = 0;\
+  p->buf_write_wait = 0;\
+}
+
+
+#define CLEAR_READ(p) \
+{ \
+  p->read_pos = 0;\
+  p->read_from = 0;\
+  p->buf_read_wait = 0;\
+}
+
 /*
 **__________________________________________________________________
 */
