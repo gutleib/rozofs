@@ -395,6 +395,49 @@ out:
 }
 
 
+/**
+*  Flush all write pending on a given ientry 
+
+ @param ie : pointer to the ientry in the cache
+ 
+ @retval none
+
+ */
+
+void rozofs_truncate_pending_write_buffer(ientry_t * ie) {
+    file_t              * f;
+    uint64_t              attr_size;
+
+    f = ie->write_pending;
+    
+    if (f == NULL) return; 
+
+    if (f->ie != ie) return;
+    /*
+    ** Get the new size from the ientry
+    */
+    attr_size = ie->attrs.attrs.size;
+    /*
+    ** Check if the content of the buffer shoudl be ignored
+    */
+    if (f->write_from > attr_size) 
+    {
+      /*
+      **  ignore the content of the buffer
+      */
+      CLEAR_WRITE(f);
+      CLEAR_READ(f);
+      return;
+    }
+    /*
+    ** check the write_pos
+    */
+    if (f->write_pos >= attr_size) 
+    {
+      f->write_pos = attr_size;
+      return;
+    }
+}
 
 
 /*
@@ -533,7 +576,12 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       ie->file_extend_running = 1;
       ie->file_extend_pending = 0; 
       ie->file_extend_size    = 0;               
-      
+      /*
+      ** adjust the write_from & write_pos according to the new size
+      ** before flushing iny data on disk since in asynchronous mode
+      ** we can have a wrong size in the local ientry
+      */
+      rozofs_truncate_pending_write_buffer(ie);
       /*
       ** Flush on disk any pending data in any buffer open on this file 
       ** before reading.

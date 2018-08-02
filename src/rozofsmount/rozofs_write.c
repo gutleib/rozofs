@@ -45,20 +45,7 @@ uint64_t    rozofs_write_buf_flush = 0;
 uint64_t    rozofs_aligned_write_start[2];
 uint64_t    rozofs_aligned_write_end[2];
 
-#define CLEAR_WRITE(p) \
-{ \
-  p->write_pos = 0;\
-  p->write_from = 0;\
-  p->buf_write_wait = 0;\
-}
 
-
-#define CLEAR_READ(p) \
-{ \
-  p->read_pos = 0;\
-  p->read_from = 0;\
-  p->buf_read_wait = 0;\
-}
 
 int ROZOFS_MAX_WRITE_PENDING = 1;
 typedef struct _WRITE_FLUSH_STAT_T {
