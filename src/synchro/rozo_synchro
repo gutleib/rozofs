@@ -1,0 +1,1046 @@
+#!/bin/bash
+# Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
+# This file is part of Rozofs.
+#
+# Rozofs is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, version 2.
+#
+# Rozofs is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+
+#set -x
+
+#_________________________________________________
+# Display one specific synchronization status
+#_________________________________________________
+syntax() {
+  PRG=`basename $0`
+  if [[ "$1" != "" ]]
+  then
+    printf "\n$* !!!\n\n"
+  fi
+  printf "\033[4musage :\033[0m\n"
+  printf "\033[1m${PRG} list [<name>]\033[0m\n"
+  printf "             To list configured RozoFS synchronizations.\n"
+  printf "\033[1m${PRG} details <name>\033[0m\n"
+  printf "             To get the detailed list of failed directories of RozoFS synchronization <N>.\n"
+  printf "\033[1m${PRG} history <name>\033[0m\n"
+  printf "             To get the history of this RozoFS synchronization.\n"
+  printf "\033[1m${PRG} create <name> [--period <p>] --source <S> [--project <P>] --target <T> --destination <D> [--sparse]\033[0m\n"
+  printf "             To create a new RozoFS synchronization.\n"
+  printf "\033[1m${PRG} modify <name> [--target <newT>][--destination <newD>][--period <p>][--full][--sparse|--nosparse]\033[0m\n"
+  printf "             To modify an existing RozoFS synchronization.\n"
+  printf "\033[1m${PRG} delete <name> \033[0m\n"
+  printf "             To delete an existing RozoFS synchronization.\n"
+  printf "\033[1m${PRG} run <name> [--full] [--dry] [--force]\033[0m\n"
+  printf "             To run an existing RozoFS synchronization.\n"
+  printf "\033[1m${PRG} abort <name>\033[0m\n"
+  printf "             To abort a running RozoFS synchronization.\n"
+  exit 1
+}
+#_________________________________________________
+# history syntax
+# history <name> 
+#_________________________________________________
+history_syntax() {
+  PRG=`basename $0`
+  if [[ "$1" != "" ]]
+  then
+    printf "\n$* !!!\n\n"
+  fi
+  printf "\033[4musage :\033[0m\n"
+  printf "  \033[1m${PRG} history <name> \033[0m\n"
+  printf "      \033[1m<name>\033[0m           The name of the RozoFS synchronization.\n"
+  exit 1
+}    
+#_________________________________________________
+# Display history of one specific synchronization
+#_________________________________________________
+history() {
+  #
+  # Control the name
+  #
+  if [[ "${NAME}" == "" ]]
+  then
+    history_syntax "Missing <name> for history"
+  fi 
+   
+  if [ ! -d ${RSYNCDIR}/${NAME} ]
+  then
+    history_syntax "RozoFS synchronization \"${NAME}\" does not exist"
+  fi
+
+  HISTORY="${RSYNCDIR}/${NAME}/history"
+  if [ -f ${HISTORY}.old ];
+  then
+    cat ${HISTORY}.old
+  fi
+  if [ -f ${HISTORY} ];
+  then
+    cat ${HISTORY}
+  fi
+}   
+#_________________________________________________
+# DComute next running date from last time stamp
+# and period
+#_________________________________________________
+compute_next_date() {
+
+  NEXT_RUN=""
+
+  if [[ "${PERIOD}" == "" ]]
+  then 
+    return
+  fi
+ 
+  if [[ "${timestamp}" == "" ]]
+  then 
+    return
+  fi
+  
+  NEXT_RUN=`date "+%Y-%m-%d-%H:%M:%S" --date="${timestamp} ${PERIOD} min"`
+}      
+#_________________________________________________
+# Display one specific synchronization status
+#_________________________________________________
+display_one_synchronization() {
+
+  if [[ "$1" == "" ]]
+  then
+    echo "Missing synchronization name"
+    exit 1
+  fi  
+
+  DIR="${RSYNCDIR}/$1"
+  
+  if [ ! -d ${DIR} ]
+  then
+    echo "$1 is not the name of a configured synchronization"
+    exit 1
+  fi  
+  total_success=0
+  total_failed=0
+  total_remaining=0
+  total=0
+  
+  # Build source list
+  DIRNAME=`echo $DIR | tr \/ _`
+
+  JOBLOG="/tmp/${DIRNAME}.log_gnu_parallel"
+  RSYNCLOG="/tmp/${DIRNAME}.log_rsync"
+  SCAN_RESULT="/tmp/${DIRNAME}.scan_result"
+  FAILED="${DIR}/failed_directories"
+  SUCCESS="/tmp/success_directories"
+  REMAINING="${DIR}/remaining_directories"
+  RESULTS="${DIR}/results"
+  
+  printf "\n    {\n"
+  printf "      \"%s\" \t\t: \"%s\",\n" "NAME" $1
+
+
+  if [ -f ${DIR}/timestamp ]
+  then    
+    timestamp=`cat ${DIR}/timestamp`
+  else
+    timestamp=""
+  fi  
+  printf "      \"%s\" \t\t: \"%s\",\n" "DATE" "${timestamp}"
+
+  PERIOD=`read_cfg PERIOD`
+  if [[ "${PERIOD}" == "" ]]
+  then
+    printf "      \"%s\" \t\t: \"%s\",\n" "PERIOD" "NONE"
+  else  
+    printf "      \"%s\" \t\t: %s,\n" "PERIOD" ${PERIOD}
+  fi
+  
+  compute_next_date   
+  if [[ "${NEXT_RUN}" != "" ]]
+  then
+    printf "      \"%s\" \t\t: \"%s\",\n" "NEXT" "${NEXT_RUN}" 
+  fi
+    
+  if [ -f ${DIR}/state ];
+  then   
+    state=`awk -F':' '{if ($1=="STATE ") print $2;}' ${DIR}/state`
+    state=${state:1:100}
+    cause=`awk -F':' '{if ($1=="CAUSE ") print $2;}' ${DIR}/state`
+    cause=${cause:1:100}
+  else
+    state="NONE"
+    cause="NONE"
+  fi        
+  printf "      \"%s\" \t\t: \"%s\",\n" "STATE" "${state}"
+  printf "      \"%s\" \t\t: \"%s\",\n" "CAUSE" "${cause}"
+
+
+  EID=`read_cfg EID`
+  printf "      \"%s\" \t\t: %s,\n" "EID" ${EID}
+
+  PROJECT=`read_cfg PROJECT`
+  if [[ "$PROJECT" == "" ]]
+  then
+    printf "      \"%s\" \t: \"ALL\",\n" "PROJECT" 
+  else  
+    printf "      \"%s\" \t: %s,\n" "PROJECT" ${PROJECT}
+  fi  
+
+  sparse=`read_cfg SPARSE`
+  if [ "${sparse}" == "" ]
+  then
+    sparse="NO"
+  fi
+  printf "      \"%s\" \t\t: \"%s\",\n" "SPARSE" ${sparse}
+
+  MNT=`read_cfg MNT`
+  printf "      \"%s\" \t: \"%s\",\n" "SRC MNT" ${MNT}
+
+  DIRECTORY=`read_cfg DIRECTORY` 
+  printf "      \"%s\" \t: \"%s\",\n" "SUB-DIR" ${DIRECTORY}
+
+  TARGET=`read_cfg TARGET`
+  printf "      \"%s\" \t\t: \"%s\",\n" "TARGET" ${TARGET}
+
+  BASE_DST=`read_cfg BASE_DST`          
+  printf "      \"%s\" \t\t: \"%s\"\n" "DEST" ${BASE_DST}
+
+  if [ ! -f ${RESULTS} ];
+  then
+    printf "    }\n"  
+    return
+  fi
+  
+  cat ${RESULTS}
+  
+  if [[ "$details" == "NO" ]]
+  then
+    printf "    }\n"
+    return
+  fi  
+  
+  printf "      , \"UNSUCCESSFULL DIRECTORIES\" : ["
+  FIRST="YES"
+
+  if [ -f ${FAILED} ]
+  then
+    for d in `cat ${FAILED}`
+    do
+      if [[ "$FIRST" == "YES" ]]
+      then
+        FIRST="NO"
+      else  
+        printf ","
+      fi 
+      printf "\n           { \"REASON\" : \"FAILED\", \"DIR\" : \"%s\" }" $d
+    done
+  fi
+
+  if [ -f ${REMAINING} ]
+  then  
+    for d in `cat ${REMAINING}`
+    do
+      if [[ "$FIRST" == "YES" ]]
+      then
+        FIRST="NO"
+      else  
+        printf ","
+      fi 
+      printf "\n           { \"REASON\" : \"REMAINING\", \"DIR\" : \"%s\" }" $d
+    done  
+  fi  
+  printf "\n      ]\n"
+  printf "    }\n"  
+  return
+
+}
+#_________________________________________________
+# Display one specific synchronization details
+#_________________________________________________
+details() {      
+  details="YES"
+  display_one_synchronization ${NAME}
+}             
+#_________________________________________________
+# List all configure synchronizations
+#_________________________________________________
+list() {
+
+  #
+  # If a name is given call display status
+  #
+  if [[ "${NAME}" != "" ]]
+  then
+    details="NO"
+    display_one_synchronization ${NAME}
+    exit 0
+  fi 
+  
+
+  FIRST="YES"
+  
+  printf "{ \"RozoFS synchronizations\" : \n"
+  printf "  ["
+  for dir in `ls ${RSYNCDIR}`
+  do
+    if [ -d ${RSYNCDIR}/${dir} ]
+    then
+      if [[ "$FIRST" == "YES" ]]
+      then
+        FIRST="NO"
+      else  
+        printf "    ,"
+      fi 
+      details="NO"
+      display_one_synchronization ${dir}
+    fi
+  done
+  printf "  ]\n}\n"  
+  exit 0
+}
+#_________________________________________________
+# Write configuration file
+#_________________________________________________
+write_cfg() {
+
+  echo "#${NAME}" > ${DIR}/cfg
+  
+  #
+  # Write the configuration file
+  #
+  if [[ "${PERIOD}" != "" ]]
+  then
+    printf "PERIOD = %s\n" ${PERIOD} >> ${DIR}/cfg 
+  fi    
+  printf "EID = %s\n" ${EID} >> ${DIR}/cfg
+  if [[ "${PROJECT}"  != "" ]]
+  then
+    printf "PROJECT = %s\n" ${PROJECT} >> ${DIR}/cfg
+  fi    
+  printf "MNT = %s\n" ${MNT} >> ${DIR}/cfg   
+  printf "DIRECTORY = %s\n" ${DIRECTORY} >> ${DIR}/cfg   
+  printf "TARGET = %s\n" ${TARGET} >> ${DIR}/cfg 
+  printf "BASE_DST = %s\n" ${BASE_DST} >> ${DIR}/cfg
+  printf "SPARSE = %s\n" ${sparse} >> ${DIR}/cfg
+      
+}
+#_________________________________________________
+# Re-initialize a synchro
+#_________________________________________________
+reinit() {
+
+  #
+  # Re-initialize the status
+  #
+  echo "INIT" > ${DIR}/state
+  rm -f ${DIR}/timestamp
+}
+#_________________________________________________
+# Read a configuration file element
+#_________________________________________________
+read_cfg() {
+  if [[ "$1" == "" ]]
+  then
+    echo ""
+  else  
+    awk '{if ($1==element) print $3;}' element=$1 ${DIR}/cfg
+  fi  
+}
+#_________________________________________________
+# Create syntax
+# create <name> --target <T> --source <S> --destination <D>  [--project <P>]
+#_________________________________________________
+create_syntax() {
+  PRG=`basename $0`
+  if [[ "$1" != "" ]]
+  then
+    printf "\n$* !!!\n\n"
+  fi
+  printf "\033[4musage :\033[0m\n"
+  printf "  \033[1m${PRG} create <name> [--period <p>] --source <S> [--project <P>] --target <T> --destination <D> [--sparse]\033[0m\n"
+  printf "      \033[1m<name>\033[0m           The name of the RozoFS synchronization.\n"
+  printf "      \033[1m[--period <p>]\033[0m       Period in minutes between each synchronization.\n"
+  printf "      \033[1m--source <S>\033[0m         The source directory within a RozoFS file system.\n"
+  printf "      \033[1m[--project <P>]\033[0m      Limits the synchronization to this project number.\n"
+  printf "      \033[1m--target <T>\033[0m         The destination hostname or IP address.\n"
+  printf "      \033[1m--destination <D>\033[0m    The destination directory.\n"
+  printf "      \033[1m[--sparse]\033[0m           rsync to keep wholes in files.\n"
+  exit 1
+}      
+#_________________________________________________
+# Create a new synchronizations
+#_________________________________________________
+create() {
+  #
+  # Control the name
+  #
+  if [[ "${NAME}" == "" ]]
+  then
+    create_syntax "Missing <name> for create"
+  fi
+
+  if [ -d ${RSYNCDIR}/${NAME} ]
+  then
+    create_syntax "RozoFS synchronization \"${NAME}\" already exists"
+  fi
+
+  #
+  # Control the source
+  #
+  if [[ "${DIRECTORY}" == "" ]]
+  then
+    create_syntax "Missing --source <S> for create"
+  fi    
+  if [ ! -d ${DIRECTORY} ]
+  then
+    create_syntax "\"${DIRECTORY}\" is not an existing directory"
+  fi
+  #
+  # Find out the eid
+  #
+  EID=`attr -g rozofs ${DIRECTORY} | awk '{if ($1=="EID") {print $3;}}'`
+  if [[ "${EID}" == "" ]]
+  then
+    create_syntax "\"${DIRECTORY}\" is not a valid RozoFS directory"
+  fi    
+  #
+  # Find out the mountpoint
+  #
+  MNT=`findmnt -nT ${DIRECTORY} | awk '{print $1}'`
+  if [[ "${MNT}" == "" ]]
+  then
+    create_syntax "Can not run findmnt on ${DIRECTORY}"
+  fi
+  #
+  # Substract the mountpoint at the begining of the input directory
+  #
+  DIRECTORY="${DIRECTORY//${MNT}/}" 
+
+  #
+  # Control the target
+  #
+  if [[ "${TARGET}" == "" ]]
+  then
+    create_syntax "Missing --target <T> for create"
+  fi     
+
+  #
+  # Control the destination
+  #
+  if [[ "${BASE_DST}" == "" ]]
+  then
+    create_syntax "Missing --destination <D> for create"
+  fi  
+  
+  #
+  # Control the project
+  #
+  if [[ "${PROJECT}" != "" ]]
+  then
+    #
+    # Project has to be an integer
+    #    
+    if [ "${PROJECT}" -eq "${PROJECT}" ] 2>/dev/null
+    then
+      #
+      # Project 0 does not exist
+      #             
+      if [ ${PROJECT} -eq 0 ]
+      then
+        create_syntax "--project can not be 0"          
+      fi
+      #
+      # Project is a 2 bytes value
+      #             
+      if [ ${PROJECT} -ge 65535 ]
+      then
+        create_syntax "--project must be lower than 65535"          
+      fi
+    else
+      create_syntax "--project must be an integer"
+    fi
+  fi
+  
+  #
+  # Control the period
+  #
+  if [[ "${PERIOD}" != "" ]]
+  then
+    #
+    # Period has to be an integer
+    #    
+    if [ "${PERIOD}" -eq "${PERIOD}" ] 2>/dev/null
+    then
+      #
+      # Period 0 no period
+      #             
+      if [ ${PERIOD} -eq 0 ]
+      then
+        PERIOD=""          
+      fi
+    else
+      create_syntax "--period must be an integer"
+    fi 
+  fi
+  
+  #
+  # sparse file option
+  #  
+  if [ "${sparse}" != "YES" ]
+  then
+    sparse="NO"
+  fi
+  
+  #
+  # Create the new synchronization directory
+  #
+  DIR="${RSYNCDIR}/${NAME}"
+  mkdir -p ${DIR}
+  
+  # 
+  # Create configuration file
+  #
+  write_cfg
+  reinit
+}
+#_________________________________________________
+# modify syntax
+# modify <name> [--target <newT>]|--destination <newD>][--period <p>]
+#_________________________________________________
+modify_syntax() {
+  PRG=`basename $0`
+  if [[ "$1" != "" ]]
+  then
+    printf "\n$* !!!\n\n"
+  fi
+  printf "\033[4musage :\033[0m\n"
+  printf "  \033[1m${PRG} modify <name> [--target <newT>][--destination <newD>][--period <p>][--full][--sparse|--nosparse]\033[0m\n"
+  printf "      \033[1m<name>\033[0m              The name of the RozoFS synchronization.\n"
+  printf "      \033[1m[--target <newT>]\033[0m       The destination hostname or IP address.\n"
+  printf "      \033[1m|--destination <newD>]\033[0m  The destination directory.\n"
+  printf "      \033[1m[--full]\033[0m                To request next synchronization to be a full synchronization.\n"
+  printf "      \033[1m[--sparse|--nosparse]\033[0m   rsync to (not to) keep wholes in files.\n"
+  printf "      \033[1m[--period <p>]\033[0m          Period in minutes between each synchronization.\n"
+  printf "                              A period of 0 means no period.\n"
+  exit 1
+}    
+#_________________________________________________
+# modify an existing synchronizations
+#_________________________________________________
+modify() {
+  mod="NO"
+  
+  #
+  # Control the name
+  #
+  if [[ "${NAME}" == "" ]]
+  then
+    modify_syntax "Missing <name> for modify"
+  fi  
+
+  if [ ! -d ${RSYNCDIR}/${NAME} ]
+  then
+    modify_syntax "RozoFS synchronization \"${NAME}\" does not exist"
+  fi
+  #
+  # Parse configuration file
+  #
+  DIR="${RSYNCDIR}/${NAME}"
+  EID=`read_cfg EID`
+  PROJECT=`read_cfg PROJECT`
+  MNT=`read_cfg MNT`
+  DIRECTORY=`read_cfg DIRECTORY`  
+
+  #
+  # Control the target
+  #
+  if [[ "${TARGET}" == "" ]]
+  then
+    TARGET=`read_cfg TARGET`
+  else  
+    mod="YES"
+    full="YES"
+  fi
+
+  #
+  # Control the modify 
+  #
+  if [[ "${BASE_DST}" == "" ]]
+  then
+    BASE_DST=`read_cfg BASE_DST`
+  else  
+    mod="YES"
+    full="YES"    
+  fi
+  
+  #
+  # Control the period
+  #
+  if [ "${PERIOD}" == "" ]
+  then
+    PERIOD=`read_cfg PERIOD`
+  else  
+    #
+    # Period has to be an integer
+    #    
+    if [ "${PERIOD}" -eq "${PERIOD}" ] 2>/dev/null
+    then
+      #
+      # Period 0 no period
+      #             
+      if [ ${PERIOD} -eq 0 ]
+      then
+        PERIOD=""          
+      fi
+    else
+      modify_syntax "--period must be an integer"
+    fi
+    mod="YES"
+  fi  
+  
+  #
+  # Rewrite the modified configuration file
+  #
+  if [ "${sparse}" == "UNDEFINED" ]
+  then
+    sparse=`read_cfg SPARSE`
+  else
+    mod="YES"  
+  fi  
+  
+  #  
+  #
+  # Rewrite the modified configuration file
+  #
+  if [ "${mod}" == "YES" ]
+  then
+    write_cfg
+  fi  
+  
+  #
+  # Next run will be a full synchro
+  #
+  if [ "${full}" != "" ]
+  then
+    reinit 
+  fi  
+}
+#_________________________________________________
+# delete syntax
+# delete <name> 
+#_________________________________________________
+delete_syntax() {
+  PRG=`basename $0`
+  if [[ "$1" != "" ]]
+  then
+    printf "\n$* !!!\n\n"
+  fi
+  printf "\033[4musage :\033[0m\n"
+  printf "  \033[1m${PRG} delete <name> \033[0m\n"
+  printf "      \033[1m<name>\033[0m                    The name of the RozoFS synchronization.\n"
+  exit 1
+}   
+#_________________________________________________
+# delete an existing synchronizations
+# delete <name> 
+#_________________________________________________
+delete() {
+  #
+  # Control the name
+  #
+  if [[ "${NAME}" == "" ]]
+  then
+    delete_syntax "Missing <name> for delete"
+  fi  
+  DIR="${RSYNCDIR}/${NAME}" 
+  if [ ! -d ${DIR} ]
+  then
+    delete_syntax "RozoFS synchronization \"${NAME}\" does not exist"
+  fi
+  
+  DIRNAME=`echo $DIR | tr \/ _`
+  
+  #
+  # Check whether the synchro is running
+  #
+  PID=`ps -ef | grep -v grep | grep -E ".*rozo_synchro.sh.*${RSYNCDIR}/${NAME}.*" | awk '{print $2}'`
+  if [[ "${PID}" != "" ]]
+  then
+    echo "RozoFS synchronization \"${NAME}\" is running."  
+    exit 1
+  fi
+  #
+  # Just delete the RozoFS synchronization directory
+  #
+  rm -rf ${RSYNCDIR}/${NAME}
+  rm -rf /tmp/${DIRNAME}.*
+}
+#_________________________________________________
+# run syntax
+# run <name> [--full] [--force][--dry]
+#_________________________________________________
+run_syntax() {
+  PRG=`basename $0`
+  if [[ "$1" != "" ]]
+  then
+    printf "\n$* !!!\n\n"
+  fi
+  printf "\033[4musage :\033[0m\n"
+  printf "  \033[1m${PRG} run <name> [--force][--full] \033[0m\n"
+  printf "      \033[1m<name>\033[0m          The name of the RozoFS synchronization.\n"
+  printf "      \033[1m[--force]\033[0m           By-pass time check comparison.\n"
+  printf "      \033[1m[--full]\033[0m            The process to a full synchronization.\n"
+  printf "      \033[1m[--dry]\033[0m             Just display the directories to synchronize.\n"
+  exit 1
+}   
+#_________________________________________________
+# run an existing synchronizations
+# delete <name> 
+#_________________________________________________
+run() {
+  #
+  # Control the name
+  #
+  if [[ "${NAME}" == "" ]]
+  then
+    run_syntax "Missing <name> for run"
+  fi  
+  if [ ! -d ${RSYNCDIR}/${NAME} ]
+  then
+    run_syntax "RozoFS synchronization \"${NAME}\" does not exist"
+  fi
+  
+  #
+  # Some controls when this is not a dry synchro
+  #
+  if [ "${dry}" == "" ]
+  then
+    #
+    # Check whether the synchro is already running
+    #
+    PID=`ps -ef | grep -v grep | grep -E ".*rozo_synchro.sh.*${RSYNCDIR}/${NAME}.*" | awk '{print $2}'`
+    if [[ "${PID}" != "" ]]
+    then
+      echo "RozoFS synchronization \"${NAME}\" is already running."  
+      return
+    fi
+
+    DIR="${RSYNCDIR}/${NAME}"
+
+    #
+    # Check it is time for periodic synchro 
+    # when force is not set
+    #
+    if [[ "${force}" == "NO" ]]
+    then
+      if [ -f ${DIR}/timestamp ]
+      then    
+        timestamp=`cat ${DIR}/timestamp`
+      else
+        timestamp=""
+      fi  
+      PERIOD=`read_cfg PERIOD`  
+      compute_next_date   
+      if [[ "${NEXT_RUN}" != "" ]]
+      then 
+        NOW=`date "+%Y-%m-%d-%H:%M:%S"`
+        if [[ ! "${NEXT_RUN}" < "${NOW}" ]];
+        then
+          echo "Next ${NAME} synchro is foreseen on ${NEXT_RUN}"
+          return
+        fi
+      fi
+    fi 
+     
+  fi  
+  #
+  # Launch the synchronization
+  #
+  rozo_synchro.sh ${verbose} ${full} ${dry} -d ${RSYNCDIR}/${NAME}
+}
+#_________________________________________________
+# abort syntax
+# abort <name> [--full] 
+#_________________________________________________
+abort_syntax() {
+  PRG=`basename $0`
+  if [[ ! "$1" == "" ]]
+  then
+    printf "\n$* !!!\n\n"
+  fi
+  printf "\033[4musage :\033[0m\n"
+  printf "  \033[1m${PRG} abort <name>\033[0m\n"
+  exit 1
+} 
+#_________________________________________________
+# abort an existing synchronization
+# abort <name> 
+#_________________________________________________
+abort() {
+  #
+  # Control the name
+  #
+  if [[ "${NAME}" == "" ]]
+  then
+    abort_syntax "Missing <name> for abort"
+  fi    
+
+  if [ ! -d ${RSYNCDIR}/${NAME} ]
+  then
+    abort_syntax "RozoFS synchronization \"${NAME}\" does not exist"
+  fi
+
+
+
+  #
+  # Check whether the synchro is running
+  #
+  PID=`ps -ef | grep -v grep | grep -E ".*rozo_synchro.sh.*${RSYNCDIR}/${NAME}.*" | awk '{print $2}'`
+  if [[ "${PID}" == "" ]]
+  then
+    printf "RozoFS synchronization \"${NAME}\" is not running\n"
+    exit 0
+  fi  
+ 
+  #
+  # kill the synchroniation
+  #
+  kill ${PID}
+}
+#_________________________________________________
+# Run every periodic synchronization
+#_________________________________________________
+periodic() {
+  #
+  # Loop an all configured synchronizations
+  for NAME in `ls ${RSYNCDIR}`
+  do
+    #
+    # Only keep directories
+    #
+    DIR="${RSYNCDIR}/${NAME}"    
+    if [ -d ${DIR} ]
+    then
+      #
+      # Check whether this synchro is periodic
+      #
+      PERIOD=`read_cfg PERIOD`
+      if [ "${PERIOD}" != "" ]
+      then
+        # 
+        # Launch it. If it is time to
+        # synchronization will occur 
+        run
+      fi  
+    fi
+  done
+  exit 0
+}
+          #_________________________________________________#
+          #                                                 #
+          #                    M A I N                      #
+          #_________________________________________________#
+
+#
+# Save the input command
+#
+saved_command=$*
+
+#_________________________________________________________
+# Parameter scanning
+#
+
+# 
+# Initialize parameter's defaults
+#    
+action=""
+NAME=""
+TARGET=""
+DIRECTORY=""
+MNT=""
+BASE_DST=""
+PROJECT=""
+PERIOD=""
+verbose=""
+full=""
+dry=""
+local="NO"
+force="NO"
+sparse="UNDEFINED"
+# 
+# Scan parameters
+#
+while [ ! -z $1 ];
+do
+  case "$1" in 
+
+    # Remote target name or address     
+    --target) {
+       TARGET=$2
+       shift 2
+    };;
+    
+    # Source directory of the RozoFS synchronization         
+    --source) {
+       DIRECTORY=$2
+       shift 2
+    };;
+
+    # Destination directory of the RozoFS synchronization         
+    --destination) {
+       BASE_DST=$2
+       shift 2
+    };;
+    
+    # Limit the source synchronization to a project        
+    --project) {
+       PROJECT=$2
+       shift 2
+    };;
+
+    # Periodic synchronization
+    --period) {
+       PERIOD=$2
+       shift 2
+    };;
+    
+    # Actions    
+    create|modify|delete|run|details|list|history|abort|periodic) {
+       action=$1
+       shift 1
+    };;     
+
+    # For full synchronization run    
+    --full) {
+       full=" -f "
+       shift 1
+    };;    
+     
+    # For sparse file   
+    --sparse) {
+       sparse="YES"
+       shift 1
+    };;     
+
+    # For sparse file   
+    --nosparse) {
+       sparse="NO"
+       shift 1
+    };;     
+
+    # For force synchronization run    
+    --force) {
+       force="YES"
+       shift 1
+    };;     
+    
+    # For synchronization dry run    
+    --dry) {
+       dry=" -D "
+       shift 1
+    };;     
+    # For synchronization dry run    
+    --local) {
+       local="YES"
+       shift 1
+    };;     
+
+
+    # help requested       
+    -h|--help["?") syntax "$1";;
+
+    # Verbose mode
+    -v) set -x; verbose=" -v "; shift 1;;
+    
+    # SHould be a name
+    *) {
+       if [[ "${NAME}" == "" ]]
+       then
+         NAME=$1
+       else  
+         syntax "Unexpected parameters \"$1\" & \"${NAME}\""
+       fi 
+       shift 1
+    };;
+
+  esac
+done
+
+#_________________________________________________________
+# Find out the active export node to run the command on it
+#
+
+if [[ "$local" == "NO" ]]
+then
+  # 
+  # Get the exportd hostnames for rozofs.conf
+  #
+  active=""
+  exports=`cat /etc/rozofs/rozofs.conf | grep export_hosts | awk -F'"' '{print $2}'`
+  if [ $? -ne 0 ];
+  then
+    echo "Can not read export hosts from /etc/rozofs/rozofs.conf"
+    exit 1
+  fi
+  # 
+  # Find out which of these exports is the active one asking crm
+  #
+  for export in `echo $exports | tr \/ ' '`
+  do
+    active=`ssh ${export} "crm_resource --resource p-fs-exportd --locate -Q"`
+    if [ $? -ne 0 ];
+    then
+      active=""
+      continue
+    fi 
+    break
+  done
+  # 
+  # Is the current node the active export
+  #
+  if [[ "$HOSTNAME" != "${active}" ]]
+  then
+    #
+    # Forward the command to the active axport
+    #
+    ssh ${active} "$0 ${saved_command}"
+    exit $?
+  fi
+fi
+#_________________________________________________________
+# This is the active export. Run the command
+#
+
+#
+# Find out the private RozoFS mount point
+#
+PRIVATE=`mount | awk '{if ($1=="rozofs") print $3;}' | awk -F"/" '{if ($NF=="private") print $0;}'`
+if [ $? -ne 0 ];
+then
+  echo "No private RozoFS mount point exist on this node"
+  exit 1
+fi
+
+#
+# Check rsuync directory under private
+#
+RSYNCDIR="${PRIVATE}/.rozo_synchro"
+if [ ! -d ${RSYNCDIR} ];
+then
+  mkdir ${RSYNCDIR}
+  touch ${RSYNCDIR}/.nodefile
+fi
+
+# 
+# Let's do it
+#
+case "${action}" in
+  create|modify|delete|run|details|list|history|abort|periodic) ${action};;
+  *) syntax;;
+esac
