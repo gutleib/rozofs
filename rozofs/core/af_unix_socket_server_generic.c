@@ -529,6 +529,7 @@ int af_unix_sock_accept_create(int socketRef,int af_family, char *nickname,af_un
   com_recv_template_t    *recv_p;
   uint32_t              ipAddr;
   uint16_t              port;
+  uint32_t              priority = 16; /**< default value */
   int ret = -1;
 
 
@@ -647,13 +648,14 @@ int af_unix_sock_accept_create(int socketRef,int af_family, char *nickname,af_un
    */
    if (conf_p->xmitPool != 0) xmit_p->xmitPoolRef = conf_p->xmitPool;
    if (conf_p->xmitPool != 0) recv_p->rcvPoolRef  = conf_p->recvPool;
+   if (conf_p->dscp != 0) priority = conf_p->dscp;
 
    /*
    ** OK, we are almost done, just need to connect with the socket controller
    */
    sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
                                               sock_p->nickname,   // name of the socket
-                                              16,                  // Priority within the socket controller
+                                              priority,                  // Priority within the socket controller
                                               (void*)sock_p,      // user param for socketcontroller callback
                                               &af_unix_generic_server_accepted_callBack_sock);  // Default callbacks
     if (sock_p->connectionId == NULL)
