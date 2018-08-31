@@ -1589,6 +1589,7 @@ int get_name_from_direntchunk(fid_t fid_child, char *root_path,fid_t fid,mdirent
     size = MDIRENTS_NAME_CHUNK_SZ*p->nb_chunk;
     if (pread(fd,bufchunk,size,offset)!=size)
     {
+       errno = EOVERFLOW ;
        //printf("error while reading %s:%s",path,strerror(errno));
        goto out;
     } 
@@ -1601,7 +1602,13 @@ int get_name_from_direntchunk(fid_t fid_child, char *root_path,fid_t fid,mdirent
       goto out; 
     }
 
-
+    if (buf->len > 1024)
+    {
+       errno = ENAMETOOLONG;
+       status = -1;
+       bufname[0]=0;
+       goto out;
+    }       
     memcpy(bufname,buf->name,buf->len);
     bufname[buf->len]=0;
     
@@ -1682,6 +1689,10 @@ char *_rozolib_get_fname(fid_t fid_child, export_t *e,char *bufout,rozofs_inode_
 }
 char *rozolib_get_fname(fid_t child_fid, void *e,char *bufout,void *fname,fid_t pfid)
 {
+  /*
+  ** make it empty
+  */
+  *bufout = 0;
   return _rozolib_get_fname(child_fid, (export_t *)e,bufout,(rozofs_inode_fname_t*)fname,pfid);
 }
 /*

@@ -7145,18 +7145,41 @@ int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
     ** It contains only one 32 bytes entry for "." and one 32 bytes entry for ".."
     */
     if ((readdir_from_start) && (status == (2*32))) {
-      /*
-      ** The number of chilrden should be zero
-      */
-      if (parent->attributes.s.attrs.children != 0) {
-        char fidstring[256];
-        fid2string(fid,fidstring);
-        exportd_nb_directory_bad_children_count++;
-        warning("(%llu) Children count should be 0 instead of %d for %s", 
-                (long long unsigned int)exportd_nb_directory_bad_children_count,
-                parent->attributes.s.attrs.children, 
-                fidstring);
-        parent->attributes.s.attrs.children = 0;
+
+     /*
+     ** Check if it is a non-deleted directory or a deleted directory
+     */
+     if (rozofs_inode_is_trash(fid) == 0)
+     {
+	/*
+	** Active directory  The number of chilrden should be zero
+	*/
+	if (parent->attributes.s.attrs.children != 0) {
+          char fidstring[256];
+          fid2string(fid,fidstring);
+          exportd_nb_directory_bad_children_count++;
+          warning("(%llu) Children count should be 0 instead of %d for %s", 
+                  (long long unsigned int)exportd_nb_directory_bad_children_count,
+                  parent->attributes.s.attrs.children, 
+                  fidstring);
+          parent->attributes.s.attrs.children = 0;
+	}
+      }
+      else
+      {
+         /*
+	 ** Deleted directory
+	 */
+	 if (parent->attributes.s.hpc_reserved.dir.nb_deleted_files != 0) {
+          char fidstring[256];
+          fid2string(fid,fidstring);
+          exportd_nb_directory_bad_children_count++;
+          warning("(%llu) Children count should be 0 instead of %d for %s", 
+                  (long long unsigned int)exportd_nb_directory_bad_children_count,
+                  parent->attributes.s.attrs.children, 
+                  fidstring);
+          parent->attributes.s.hpc_reserved.dir.nb_deleted_files = 0;
+	}      
       }
     }
 out:

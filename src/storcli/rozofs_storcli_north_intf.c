@@ -266,7 +266,8 @@ void rozofs_storcli_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *re
 
   NULL,  //    *userRef;             /* user reference that must be recalled in the callbacks */
   NULL,  //    *xmitPool; /* user pool reference or -1 */
-  NULL   //    *recvPool; /* user pool reference or -1 */
+  NULL,   //    *recvPool; /* user pool reference or -1 */
+  3  /**w used dscp to set the af_unix socket priority */
 }; 
 
 /*
