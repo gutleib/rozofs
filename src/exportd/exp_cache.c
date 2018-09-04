@@ -674,6 +674,11 @@ lv2_entry_t *export_lookup_fid_internal(export_tracking_table_t *trk_tb_p,lv2_ca
     */
     fid->fid[0] = fake_inode_src_p->fid[0];
     fid->fid[1] = fake_inode_src_p->fid[1];
+    
+    if ((fid->fid[0]==0) && (fid->fid[1]==0))
+    {
+      return NULL;
+    }   
     if ((fid->s.key == ROZOFS_REG_S_MOVER) || (fid->s.key == ROZOFS_REG_D_MOVER))
     {
        /*
