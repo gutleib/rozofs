@@ -386,7 +386,35 @@ int main(int argc, char *argv[]) {
         rozofs_numa_allocate_node(storio_instance,"cluster id");
       }
     }
-
+    
+    
+    /*
+    ** Kill the eventual storio with same instance that may be locked
+    */
+    {
+      char cmd[256];
+      pid_t pid = getpid();
+      
+      if (pHostArray[0] == NULL) {
+        sprintf(cmd,"ps -o pid,cmd -C storio |  grep \" -i %d \"  > /tmp/storio1.%d",
+                storio_instance, pid); 
+      }
+      else {
+        sprintf(cmd,"ps -o pid,cmd -C storio |  grep \" -i %d \" | grep \" -H %s$\" > /tmp/storio1.%d",
+                storio_instance, pHostArray[0], pid); 
+      }          
+      if (system(cmd)){};
+      
+      sprintf(cmd,"awk \'{if ($1!=pid) print $1; }\' pid=%d /tmp/storio1.%d >  /tmp/storio2.%d", pid, pid, pid); 
+      if (system(cmd)){};
+      
+      sprintf(cmd,"for p in `cat /tmp/storio2.%d`; do kill -9 $p; done", pid); 
+      if (system(cmd)){};
+      
+      sprintf(cmd,"rm -f /tmp/storio1.%d; rm -f /tmp/storio2.%d", pid, pid); 
+      if (system(cmd)){};
+    }
+    
     /*
     ** init of the crc32c
     */
