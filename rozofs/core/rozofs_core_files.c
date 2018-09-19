@@ -295,18 +295,23 @@ void rozofs_catch_error(int sig){
   int   idx;
   pid_t pid = getpid();
   
-  /*
-  ** Ignore SIGTERM within exception handler
-  */
-  rozofs_set_handler_signal_ignore(SIGTERM);
-  
+  syslog(LOG_INFO, rozofs_signal(sig));  
   /*
   ** Already processing a signal.
   ** We may have crashed within execution of a crash call back !
   ** Let's die immediatly
   */
   if  (rozofs_fatal_error_processing != 0) {
-    rozofs_die(sig);
+
+    /*
+    ** Ignore SIGTERM now
+    */
+    if (sig == SIGTERM) return;
+    
+    /*
+    ** Just crash on any other call back
+    */
+    rozofs_die(rozofs_fatal_error_processing);
   }  
   rozofs_fatal_error_processing = sig;
   
