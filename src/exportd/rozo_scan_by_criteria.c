@@ -50,6 +50,7 @@ typedef enum _scan_criterie_e {
   SCAN_CRITERIA_HUPDATE,     /**< directory update time */      
   SCAN_CRITERIA_SUPDATE,     /**< directory update time */      
   SCAN_CRITERIA_DELETED, 
+  SCAN_CRITERIA_TRASH, 
 } SCAN_CRITERIA_E;
 
 SCAN_CRITERIA_E scan_criteria = SCAN_CRITERIA_NONE;
@@ -84,6 +85,7 @@ int display_priv = 0;
 int display_distrib = 0;
 int display_id = 0;
 int display_xattr = 0;
+int display_trash_cfg = 0;
 int display_all = 0;
 int display_json = 0;
 int first_entry = 1;
@@ -1379,6 +1381,21 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       NEW_FIELD(project);       
       printf("%d", inode_p->s.attrs.cid);
     }
+    IF_DISPLAY(display_trash_cfg) {
+      uint8_t trash = ((rozofs_dir0_sids_t*)&inode_p->s.attrs.sids[0])->s.trash;
+      NEW_FIELD(trash);
+      if (trash) {
+        if (trash == ROZOFS_DIR_TRASH_RECURSIVE) {
+          printf("\"RECURSIVE\"");
+        }
+        else {
+          printf("\"ENABLED\"");
+        }   
+      }  
+      else {
+        printf("\"DISABLED\"");      
+      }
+    }    
     IF_DISPLAY(display_update) {
       ext_dir_mattr_t * stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
       if (stats_attr_p->s.version >=  ROZOFS_DIR_VERSION_1) {
@@ -1775,6 +1792,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
   printf("\t\033[1mxattr\033[0m\t\t \tdisplay extended attributes.\n");
   printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution.\n");
+  printf("\t\033[1mtrash\033[0m\t\t\tdisplay directory trash configuration.\n");
   printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
   printf("\t\033[1malls|allh\033[0m\t\tdisplay every field (time in seconds or human readable date).\n");
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
@@ -2222,6 +2240,11 @@ int rozofs_parse_output_format(char * fmt) {
                
     if (strncmp(p, "distrib", 4)==0) {
       display_distrib = DO_DISPLAY;
+      NEXT(p);
+    }       
+    
+    if (strncmp(p, "trash", 5)==0) {
+      display_trash_cfg = DO_DISPLAY;
       NEXT(p);
     }       
                     
