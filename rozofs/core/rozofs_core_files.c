@@ -295,7 +295,6 @@ void rozofs_catch_error(int sig){
   int   idx;
   pid_t pid = getpid();
   
-  syslog(LOG_INFO, rozofs_signal(sig));  
   /*
   ** Already processing a signal.
   ** We may have crashed within execution of a crash call back !
