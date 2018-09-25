@@ -3,6 +3,7 @@
 /usr/bin/storio
 /usr/bin/storage_rebuild
 /usr/bin/storage_list_rebuilder
+/usr/bin/rozo_storage_mount
 /usr/bin/rozodump
 /usr/bin/rozo_device
 /usr/bin/rozo_storage_fid2pathname

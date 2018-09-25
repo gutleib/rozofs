@@ -4185,21 +4185,6 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       }
       
       /*
-      ** Umount it when requested
-      */
-      if (unmount) {
-        if (storage_umount(pMount)==0) {
-	  pDev->mounted = 0;
-	}
-	/*
-	** Record device 
-	*/
-	storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
-	pDev = NULL;
-	CONT;
-      }
-      
-      /*
       ** Check it is mounted at the right place 
       */	          	
       pt = cmd;
@@ -4747,6 +4732,7 @@ int storage_mount_all_enumerated_devices() {
   int                           last_sid=0;
   int                           last_dev=0;
   int                           count = 0;
+  storage_t                   * st;
  
   /*
   ** Loop on every enumerated RozoFS devices
@@ -4778,8 +4764,16 @@ int storage_mount_all_enumerated_devices() {
     /*
     ** Already mounted
     */
-    if (pDev->mounted) continue;
-
+    if (pDev->mounted) {
+      /*
+      ** Lookup for the storage context
+      */    
+      st = storaged_lookup(pDev->cid, pDev->sid);
+      if (st == NULL) continue; // not mine
+      count++;   
+      continue;
+    }
+    
     /*
     ** Mount it
     */

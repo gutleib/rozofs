@@ -1587,5 +1587,22 @@ int storage_size_file(storage_t * st, fid_t fid, uint8_t spare, uint32_t * nb_ch
 **________________________________________________________________________
 */
 char * rozofs_st_header_read(char * path, cid_t cid, sid_t sid, fid_t fid, rozofs_stor_bins_file_hdr_t * hdr) ;
+/*
+ *_______________________________________________________________________
+ *
+ * Enumerate every RozoFS device 
+ *
+ * @param workDir   A directory to use to temporary mount the available 
+ *                  devices on it in order to check their content.
+ * @param unmount   Whether the devices should all be umounted during the procedure
+ */
+int storage_enumerate_devices(char * workDir, int unmount);
+/*
+ *_______________________________________________________________________
+ *
+ *  Try to mount every enumerated device at the rigth place
+ *
+ */
+int storage_mount_all_enumerated_devices();
 #endif
 

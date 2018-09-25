@@ -1,0 +1,70 @@
+.\" Process this file with
+.\" groff -man -Tascii rozo_storage_mount.8
+.\"
+.TH rozo_storage_mount 8 "SEPT 2018" RozoFS "User Manuals"
+.SH NAME
+rozo_storage_mount \- RozoFS storage mount utility
+.SH SYNOPSIS
+.B rozo_storage_mount 
+[
+.I options
+] 
+.B
+.SH DESCRIPTION
+This utility :  
+.RS
+- checks the storage configuration file syntax,  
+.RE
+.RS
+- creates the required mount directories (with X) for every device,  
+.RE
+.RS
+- mounts every available devices at its place,  
+.RE
+.RS
+- initializes the device subbdirectories.  
+.RE
+All these actions would else be done by the storaged at startup.
+.SH OPTIONS
+.IP "-h, --help"
+.RS
+Print help.
+.RE
+.IP "-c, --config <file>"
+.RS
+Use 
+.I <file>
+as configuration file. default is
+.I /etc/rozofs/storage.conf
+(or
+.I /usr/local/etc/rozofs/storage.conf
+according to install options)
+.SH FILES
+.I /etc/rozofs/storage.conf (/usr/local/etc/rozofs/storage.conf)
+.RS
+The storage configuration file. See
+.BR storage.conf (5)
+for further details.
+.\".SH ENVIRONMENT
+.\".SH DIAGNOSTICS
+.SH "REPORTING BUGS"
+Report bugs to <bugs@fizians.org>.
+.SH COPYRIGHT
+Copyright (c) 2013 Fizians SAS. <http://www.fizians.com>
+
+Rozofs is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published
+by the Free Software Foundation, version 2.
+
+Rozofs is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+.SH AUTHOR
+Fizians <http://www.fizians.org>
+.SH "SEE ALSO"
+.BR rozofs (7),
+.BR storage.conf (5)

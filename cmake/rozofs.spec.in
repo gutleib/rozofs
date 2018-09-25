@@ -198,6 +198,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/storio
 %{_bindir}/storage_rebuild
 %{_bindir}/storage_list_rebuilder
+%{_bindir}/rozo_storage_mount
 %{_bindir}/rozodump
 %{_bindir}/rozo_device
 %{_bindir}/rozo_storage_fid2pathname
