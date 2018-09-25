@@ -835,9 +835,9 @@ void rozofs_ll_getxattr_raw_cbk(void *this,void *param)
 	 ** clear the array
 	 */
          memset(dst,0,ROZOFS_INODE_SZ - ROZOFS_I_EXTRA_ISIZE);
-	 if (fake_lv2_p->extended_attr_p != NULL) xfree(fake_lv2_p->extended_attr_p);    
-	 fake_lv2_p->extended_attr_p = NULL;
-	 fake_lv2_p->attributes.s.i_file_acl = 0; 
+//	 if (fake_lv2_p->extended_attr_p != NULL) xfree(fake_lv2_p->extended_attr_p);    
+//	 fake_lv2_p->extended_attr_p = NULL;
+//	 fake_lv2_p->attributes.s.i_file_acl = 0; 
 	 ext4_clear_inode_state(fake_lv2_p, EXT4_STATE_XATTR);
       } 
       else
