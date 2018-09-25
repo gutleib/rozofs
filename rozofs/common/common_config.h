@@ -179,7 +179,9 @@ typedef struct _common_config_t {
   ** storage scope configuration parameters
   */
 
-  // Number of disk threads in the STORIO.
+  // Number of sub threads in the storaged
+  int32_t     nb_storaged_subthread;
+  /// Number of disk threads in the STORIO.
   int32_t     nb_disk_thread;
   // Whether STORIO is in multiple (1 STORIO per cluster) 
   // or single mode (only 1 STORIO).
