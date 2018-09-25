@@ -223,6 +223,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_distribution_check
 %{_bindir}/rozo_trash
 %{_bindir}/rozo_scan
+%{_bindir}/rozo_throughput
 %{_bindir}/rozofsmount_wrapper
 %if 0%{?rhel} >= 7
 %{_unitdir}/rozofs-rozofsmount.service
