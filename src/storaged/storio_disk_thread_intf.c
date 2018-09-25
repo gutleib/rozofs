@@ -90,30 +90,28 @@ static inline void storio_update_write_counter(uint32_t t, uint64_t count) {
 #define PCHAR_STRING(x)     pChar += rozofs_string_append(pChar,x)
 static inline void man_throughput (char * pChar) {
   PCHAR_STRING    ("Display storio throughput history.\n");
-  PCHAR_STRING_BLD("  throughput enable  ");
-  PCHAR_STRING    (" enable throughput measurements.\n");
-  PCHAR_STRING_BLD("  throughput disable ");
-  PCHAR_STRING    (" disble throughput measurements.\n");
-  PCHAR_STRING_BLD("  throughput [read|write] [col <#col>] [avg] [s|m|h|a]\n");
-  PCHAR_STRING_BLD("    read              ");
+  PCHAR_STRING_BLD(" throughput [read|write] [col <#col>] [avg] [s|m|h|a] [persec]\n");
+  PCHAR_STRING_BLD("    read         ");
   PCHAR_STRING    (" only display read counters.\n");
-  PCHAR_STRING_BLD("    write             ");
+  PCHAR_STRING_BLD("    write        ");
   PCHAR_STRING    (" only display write counters.\n");
   PCHAR_STRING    ("      when neither read nor write are set all counters are displayed.\n");
-  PCHAR_STRING_BLD("    [col <#col>]      ");
-  PCHAR_STRING    (" display history on ");
+  PCHAR_STRING_BLD("    [col <#col>] ");
+  PCHAR_STRING    (" request the display history on ");
   PCHAR_STRING_BLD("<#col>");
-  PCHAR_STRING    (" columns [1..6].\n");
-  PCHAR_STRING_BLD("    [avg]             ");
+  PCHAR_STRING    (" columns [1..15].\n");
+  PCHAR_STRING_BLD("    [avg]        ");
   PCHAR_STRING    (" display an average at the end of each column.\n");    
-  PCHAR_STRING_BLD("    s                 ");
+  PCHAR_STRING_BLD("    s            ");
   PCHAR_STRING    (" display last 60 seconds history (default)\n");    
-  PCHAR_STRING_BLD("    m                 ");
+  PCHAR_STRING_BLD("    m            ");
   PCHAR_STRING    (" display last 60 minutes history\n");  
-  PCHAR_STRING_BLD("    h                 ");
+  PCHAR_STRING_BLD("    h            ");
   PCHAR_STRING    (" display last 60 hours   history\n");  
-  PCHAR_STRING_BLD("    a                 ");
+  PCHAR_STRING_BLD("    a            ");
   PCHAR_STRING    (" display hour, minute and second history\n");  
+  PCHAR_STRING_BLD("    persec       ");
+  PCHAR_STRING    (" display throughput per second. Default is to have throughput per display step.\n"); 
 }
 /*_______________________________________________________________________
 * Display throughput counters
@@ -133,29 +131,10 @@ static inline void display_throughput_syntax (char * pChar,uint32_t tcpRef, void
 void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
   char * pChar = uma_dbg_get_buffer();
   int ret,val,what=0; 
-  int avg=0; 
   rozofs_thr_unit_e unit = rozofs_thr_unit_second;
 
   int i=1;
   while (argv[i] != NULL) {
-
-    if (strcasecmp(argv[i],"enable")==0) {
-      storio_throughput_enable = 1;
-      pChar += rozofs_string_append(pChar,"throughput measurement enabled\n");
-      storio_cnts[STORIO_RD_CNT] = rozofs_thr_cnts_allocate(storio_cnts[STORIO_RD_CNT],"Read");
-      storio_cnts[STORIO_WR_CNT] = rozofs_thr_cnts_allocate(storio_cnts[STORIO_WR_CNT],"Write");    
-      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
-      return;
-    }
-
-    if (strcasecmp(argv[i],"disable")==0) {
-      storio_throughput_enable = 0;
-      rozofs_thr_cnts_free(&storio_cnts[STORIO_RD_CNT]);
-      rozofs_thr_cnts_free(&storio_cnts[STORIO_WR_CNT]);
-      pChar += rozofs_string_append(pChar,"throughput measurement disabled\n");
-      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
-      return;
-    }  
     
     if (strcasecmp(argv[i],"col")==0) {
       i++;
@@ -168,7 +147,7 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
     }  
     if (strcasecmp(argv[i],"avg")==0) {  
       i++;
-      avg = 1;
+      rozofs_thr_set_average();
       continue;
     }     
          
@@ -183,7 +162,13 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
       what |= 2;
       continue;
     }  
-
+    
+    if (strcasecmp(argv[i],"persec")==0) {      
+      i++;
+      rozofs_thr_display_throughput_per_sec();
+      continue;
+    }
+    
     if (strcasecmp(argv[i],"s")==0) {       
       i++;
       unit = rozofs_thr_unit_second;
@@ -209,7 +194,11 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
     }      
         
     pChar += rozofs_string_append(pChar,"\nunexpected parameter ");
-    return display_throughput_syntax (pChar, tcpRef, bufRef);  
+    pChar += rozofs_string_append(pChar,argv[i]); 
+    pChar += rozofs_eol(pChar); 
+    man_throughput(pChar);   
+    display_throughput_syntax (pChar, tcpRef, bufRef);
+    return;  
   }     
 
   if (storio_throughput_enable == 0) {
@@ -218,8 +207,6 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
     return;
   }
   
-  rozofs_thr_set_average(avg);
-
   switch (what) {
     case 1:
       pChar = rozofs_thr_display_unit(pChar, &storio_cnts[STORIO_RD_CNT],1, unit);

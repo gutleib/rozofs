@@ -265,7 +265,7 @@ uint32_t ruc_init(uint32_t test, uint16_t debug_port,uint16_t export_listening_p
 #define PCHAR_STRING(x)     pChar += rozofs_string_append(pChar,x)
 static inline void man_throughput (char * pChar) {
   PCHAR_STRING    ("Display rozofsmount throughput history.\n");
-  PCHAR_STRING_BLD(" throughput [read|write] [col <#col>] [avg] [s|m|h|a]\n");
+  PCHAR_STRING_BLD(" throughput [read|write] [col <#col>] [avg] [s|m|h|a] [persec]\n");
   PCHAR_STRING_BLD("    read         ");
   PCHAR_STRING    (" only display read counters.\n");
   PCHAR_STRING_BLD("    write        ");
@@ -274,7 +274,7 @@ static inline void man_throughput (char * pChar) {
   PCHAR_STRING_BLD("    [col <#col>] ");
   PCHAR_STRING    (" request the display history on ");
   PCHAR_STRING_BLD("<#col>");
-  PCHAR_STRING    (" columns [1..6].\n");
+  PCHAR_STRING    (" columns [1..15].\n");
   PCHAR_STRING_BLD("    [avg]        ");
   PCHAR_STRING    (" display an average at the end of each column.\n");    
   PCHAR_STRING_BLD("    s            ");
@@ -285,6 +285,8 @@ static inline void man_throughput (char * pChar) {
   PCHAR_STRING    (" display last 60 hours   history\n");  
   PCHAR_STRING_BLD("    a            ");
   PCHAR_STRING    (" display hour, minute and second history\n");  
+  PCHAR_STRING_BLD("    persec       ");
+  PCHAR_STRING    (" display throughput per second. Default is to have throughput per display step.\n");  
 }
 /*_______________________________________________________________________
 * Display throughput counters
@@ -294,7 +296,6 @@ static inline void man_throughput (char * pChar) {
 void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
   char * pChar = uma_dbg_get_buffer();
   int ret,val,what=0;
-  int avg=0;
   rozofs_thr_unit_e unit = rozofs_thr_unit_second;
 
   int i=1;
@@ -320,7 +321,7 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
     
     if (strcasecmp(argv[i],"avg")==0) {
       i++;
-      avg=1;
+      rozofs_thr_set_average();
       continue;
     }  
     
@@ -333,6 +334,12 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
     if (strcasecmp(argv[i],"write")==0) {      
       i++;
       what |= 2;
+      continue;
+    }
+    
+    if (strcasecmp(argv[i],"persec")==0) {      
+      i++;
+      rozofs_thr_display_throughput_per_sec();
       continue;
     }
 
@@ -361,14 +368,13 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
     }  
         
     pChar += rozofs_string_append(pChar,"\nunexpected parameter ");
-    pChar += rozofs_string_append(pChar,argv[i]);       
-    pChar += rozofs_string_append(pChar,"\nthroughput [read|write|col <#col>|avg]\n");   
+    pChar += rozofs_string_append(pChar,argv[i]); 
+    pChar += rozofs_eol(pChar); 
+    man_throughput(pChar);   
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
     return;    
   } 
-  
-  rozofs_thr_set_average(avg);
-     
+       
   switch (what) {
     case 1:
       pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFS_READ_THR_E],1, unit);
@@ -382,7 +388,8 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
       pChar = rozofs_thr_display_unit(pChar, rozofs_thr_counter, 2, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer()); 
       return; 
-  }                  
+  }       
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());              
 }
 /*_______________________________________________________________________
 * Initialize the thoughput measurement service
