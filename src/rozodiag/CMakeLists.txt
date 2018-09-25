@@ -37,3 +37,4 @@ install(TARGETS rozodiag
 install(PROGRAMS rozo_status.py DESTINATION bin)
 install(PROGRAMS rozo_node_status.py DESTINATION bin)
 install(PROGRAMS rozo_dumpcnf DESTINATION bin)
+install(PROGRAMS rozo_memdump DESTINATION bin)

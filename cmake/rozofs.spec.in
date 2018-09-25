@@ -242,6 +242,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_status.py
 %{_bindir}/rozo_node_status.py
 %{_bindir}/rozo_dumpcnf
+%{_bindir}/rozo_memdump
 %{_mandir}/man8/rozodiag.8.gz
 %{_mandir}/man8/rozo_status.py.8.gz
 
