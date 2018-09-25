@@ -601,19 +601,33 @@ def mount_temporary_dir(blockdev,tmp):
 # 
 # Pormat a device 
 #
-def rozo_format_device(blockdev,lazzy,spare,cid,sid,dev) :
+def rozo_format_device(blockdev,lazzy,spare,cid,sid,dev,noUnicLabel) :
 
   MKFS = "mkfs.ext4 -F -b 4096 -m 0 -q"
   if lazzy == False:
     MKFS = MKFS+" -E lazy_itable_init=0,lazy_journal_init=0"
   
-  if spare == True:
-    MKFS = MKFS+" -L RozoFS_spare"  
+  if spare == True: LABEL = "RozoFS_spare"
   else:
-    MKFS = MKFS+" -L RozoFS_c%s_s%s_%s"%(cid,sid,dev)
+    LABEL = "RozoFS_c%s_s%s_%s"%(cid,sid,dev)
+    #
+    # Check whether some other device has already the label
+    #
+    string="lsblk -Pndo NAME,LABEL"
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:
+      device = line.split('"')[1].strip()
+      if device == blockdev: continue
+      label  = line.split('"')[3].strip()  
+      if label == LABEL:
+        if noUnicLabel == True:
+          print "WARNING: Device %s already holds label %s"%(device,LABEL)  
+          break
+        print "ERROR: Device %s already holds label %s !!!"%(device,LABEL)  
+        exit(-1)
         
-  MKFS = MKFS+" /dev/"+blockdev
-
+  MKFS += " -L " + LABEL + " /dev/" + blockdev
   parsed = shlex.split(MKFS)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stderr:
@@ -695,6 +709,7 @@ def syntax(string=None) :
   print "     options can be"
   print "         \033[1mforce\033[0m        to force formating aleady formated device."
   print "         \033[1mlazzy\033[0m        to format lazzyly."
+  print "         \033[1mnoUnicLabel\033[0m  not to check label unicity."  
   print "\033[4mExamples:\033[0m"
   print ". This command lists information about all block devices"
   print "  \033[1mrozo_device\033[0m"
