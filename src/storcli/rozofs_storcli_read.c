@@ -886,7 +886,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
     /* 
     ** When more than invers SID tell ENOENT let's say the file does not exist
     */
-    if (working_ctx_p->enoent_count > rozofs_inverse) {
+    if (working_ctx_p->enoent_count >= rozofs_inverse) {
       error = ENOENT;
       goto reject;	              
     }
