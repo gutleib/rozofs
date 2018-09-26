@@ -166,10 +166,13 @@ static void mount_devices() {
     */
     storage_umount("/tmp/storage_utility");     
 
-    if (count != expected_devices) {
+    if (count < expected_devices) {
       severe("%d expected devices and only %d found !!!", expected_devices, count);
       exit(EXIT_FAILURE);
     }   
+    else if (count > expected_devices) {
+      severe("More device mounted (%d) than expected (%d) !!!", count, expected_devices);
+    }
     else {
       info("%d mounted devices", count);    
     } 
