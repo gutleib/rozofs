@@ -124,7 +124,12 @@ mem_file.seek(offset)
 #
 # Read file
 #
-chunk = mem_file.read(size)
+try:
+  chunk = mem_file.read(size)
+except IOError:
+  print "Memory not accessible"
+  sys.exit(-1)
+    
 if chunk:
   new_line(offset)
   for byte in chunk: 
