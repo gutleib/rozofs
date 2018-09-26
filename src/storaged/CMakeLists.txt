@@ -42,6 +42,20 @@ add_executable(storaged
 )
 target_link_libraries(storaged rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
+
+add_executable(rozo_storage_mount
+    storage_mount.c
+    storage.c
+    sconfig.h
+    sconfig.c
+    storage.h
+    storaged.h
+    storio_crc32.c
+    storio_crc32.h   
+)    
+set_target_properties(rozo_storage_mount PROPERTIES COMPILE_FLAGS "-DSYSLOG2PRINT")
+target_link_libraries(rozo_storage_mount rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+
 add_executable(rozo_storage_fid2pathname
     rozo_storage_fid2pathname.c
 )
@@ -148,7 +162,12 @@ target_link_libraries(rozodump rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFI
 
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT storage)
-
+install(TARGETS rozo_storage_mount
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_storage_mount
+)
 install(TARGETS rozo_storage_fid2pathname
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
@@ -195,3 +214,4 @@ install(TARGETS rozodump
 install(FILES storage.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
 install(FILES storage.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
 install(PROGRAMS rozo_device DESTINATION bin)
+install(PROGRAMS rozo_df DESTINATION bin)

@@ -197,9 +197,20 @@ void rozofs_thr_set_column(int columns);
 *_______________________________________________________________________
 * Request for average display at the end of the colums
 *
-* @param average wether average is requested or not
 */
-void rozofs_thr_set_average(int average) ;
+void rozofs_thr_set_average() ;
+/*_______________________________________________________________________
+* Request for througput per second unit
+* i.e when display is done per minute step, the display throughput is a
+*     throughput per second
+*/
+void rozofs_thr_display_throughput_per_sec() ;
+/*_______________________________________________________________________
+* Request for througput per display step unit
+* i.e when display is done per minute step, the display throughput is a
+*     throughput per minute
+*/
+void rozofs_thr_display_throughput_per_step() ;
 #endif
 
 

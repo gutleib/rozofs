@@ -886,7 +886,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
     /* 
     ** When more than invers SID tell ENOENT let's say the file does not exist
     */
-    if (working_ctx_p->enoent_count > rozofs_inverse) {
+    if (working_ctx_p->enoent_count >= rozofs_inverse) {
       error = ENOENT;
       goto reject;	              
     }
@@ -1382,6 +1382,14 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
          working_ctx_p->prj_ctx[projection_id].prj_state = ROZOFS_PRJ_READ_ERROR; 
        }	 
        working_ctx_p->prj_ctx[projection_id].errcode = errno;
+       /*
+       ** Enough ENOENT to tell file does not actually exist
+       */
+       if (working_ctx_p->enoent_count > rozofs_inverse) {
+         error = ENOENT;
+         goto io_error;	              
+       }
+       
        /**
        * The error has been reported by the remote, we cannot retry on the same storage
        ** we imperatively need to select a different one. So if cannot select a different storage
