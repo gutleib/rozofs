@@ -820,6 +820,7 @@ if options.format != None:
   force = False  
   spare = False
   lazzy = False
+  noUnicLabel = False
   cid   = None
   sid   = None
   dev   = None
@@ -837,6 +838,7 @@ if options.format != None:
     if   opt == "force": force = True
     elif opt == "lazzy": lazzy = True
     elif opt == "spare": spare = True
+    elif opt == "noUnicLabel": noUnicLabel = True
     else:
       sp = opt.split("/")
       if len(sp) != 3: syntax("Unexpected format option %s"%(opt))
@@ -851,7 +853,7 @@ if options.format != None:
     print "%s is already formated in %s !!!\n(use force option to force format)"%(blockdev[0],fstype)
     exit(-1)       
         
-  rozo_format_device(blockdev[0],lazzy,spare,cid,sid,dev)  
+  rozo_format_device(blockdev[0],lazzy,spare,cid,sid,dev,noUnicLabel)  
   exit(0)  
 #
 #
