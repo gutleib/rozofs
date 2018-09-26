@@ -36,7 +36,7 @@ parameters=''
 while [ ! -z $1 ]
 do
   # Debug mode
-  if [ "$1" == "-x" ]
+  if [ "$1" == "--debug" ]
   then
     set -x
     shift 1
