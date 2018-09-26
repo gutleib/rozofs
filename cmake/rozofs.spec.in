@@ -198,6 +198,8 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/storio
 %{_bindir}/storage_rebuild
 %{_bindir}/storage_list_rebuilder
+%{_bindir}/rozo_storage_mount
+%{_bindir}/rozo_df
 %{_bindir}/rozodump
 %{_bindir}/rozo_device
 %{_bindir}/rozo_storage_fid2pathname
@@ -223,6 +225,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_distribution_check
 %{_bindir}/rozo_trash
 %{_bindir}/rozo_scan
+%{_bindir}/rozo_throughput
 %{_bindir}/rozofsmount_wrapper
 %if 0%{?rhel} >= 7
 %{_unitdir}/rozofs-rozofsmount.service
@@ -240,6 +243,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_status.py
 %{_bindir}/rozo_node_status.py
 %{_bindir}/rozo_dumpcnf
+%{_bindir}/rozo_memdump
 %{_mandir}/man8/rozodiag.8.gz
 %{_mandir}/man8/rozo_status.py.8.gz
 

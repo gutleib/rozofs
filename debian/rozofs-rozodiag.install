@@ -4,3 +4,4 @@
 /usr/share/man/man8/rozo_status.py.8
 /usr/bin/rozo_node_status.py
 /usr/bin/rozo_dumpcnf
+/usr/bin/rozo_memdump

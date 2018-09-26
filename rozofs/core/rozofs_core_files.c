@@ -281,6 +281,17 @@ void rozofs_clean_core(char * coredir) {
   RETURN: none
   ==========================================================================*/
 void rozofs_die(int sig){
+    
+  /* 
+  ** Set current directory to the core directory 
+  */
+  if (rozofs_core_file_path[0]) {
+    if (chdir(rozofs_core_file_path) == -1){}
+  }
+  
+  /*
+  ** Reset default handler and re-raise the signal
+  */
   signal (sig,SIG_DFL);
   raise (sig);
 }  
@@ -295,7 +306,6 @@ void rozofs_catch_error(int sig){
   int   idx;
   pid_t pid = getpid();
   
-  syslog(LOG_INFO, rozofs_signal(sig));  
   /*
   ** Already processing a signal.
   ** We may have crashed within execution of a crash call back !
@@ -315,11 +325,6 @@ void rozofs_catch_error(int sig){
   }  
   rozofs_fatal_error_processing = sig;
   
-  /* Log SIGTERM */
-  if (sig == SIGTERM) {
-    syslog(LOG_INFO, "%s", "SIGTERM"); 
-  }
-
   /*
   ** Session leaders must kill the whole session
   */
@@ -336,13 +341,9 @@ void rozofs_catch_error(int sig){
   for (idx = 0; idx <rozofs_crash_cbk_nb; idx++) {
     rozofs_crash_cbk[idx](sig);
   }
-    
-  /* 
-  ** Set current directory to the core directory 
-  */
-  if (rozofs_core_file_path[0]) {
-    if (chdir(rozofs_core_file_path) == -1){}
-  }
+
+  syslog(LOG_INFO, "SIG %s", rozofs_signal(sig)); 
+
 
   /* 
   ** Adios crual world !

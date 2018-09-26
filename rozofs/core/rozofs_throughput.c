@@ -26,21 +26,37 @@
 #include "rozofs_throughput.h"
 
 static uint32_t COLS=1;
+static uint32_t LINES=60;
 static int      AVERAGE=0;
+static int      PERSTEP=1;
 
-typedef uint64_t     colaverage_t[6];
-colaverage_t         elementaverage[30];
+typedef uint64_t     colaverage_t[15];
+colaverage_t         elementaverage[20];
 
  
-
+/*_______________________________________________________________________
+* Request for througput per second unit
+* i.e when display is done per minute step, the display throughput is a
+*     throughput per second
+*/
+void rozofs_thr_display_throughput_per_sec() {
+  PERSTEP = 0;
+}
+/*_______________________________________________________________________
+* Request for througput per display step unit
+* i.e when display is done per minute step, the display throughput is a
+*     throughput per minute
+*/
+void rozofs_thr_display_throughput_per_step() {
+  PERSTEP = 1;
+}
 /*
 *_______________________________________________________________________
 * Request for average display at the end of the colums
 *
-* @param average wether average is requested or not
 */
-void rozofs_thr_set_average(int average) {
-  AVERAGE = average;
+void rozofs_thr_set_average() {
+  AVERAGE = 1;
 }
 /*_______________________________________________________________________
 * Change the number of columns of the display
@@ -48,7 +64,51 @@ void rozofs_thr_set_average(int average) {
 * @param columns The number of columns per minutes
 */
 void rozofs_thr_set_column(int columns) {
-  if ((columns>0)&&(columns<=6)) COLS = columns;
+  switch(columns) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 10:
+    case 12:
+      COLS = columns;
+      LINES=60/COLS;      
+      break;
+    case 7:
+      COLS  = 7;
+      LINES = 9;      
+      break;
+    case 8:
+      COLS  = 8;
+      LINES = 8;      
+      break;
+    case 9:
+      COLS  = 9;
+      LINES = 7;      
+      break;
+    case 11:
+      COLS  = 11;
+      LINES = 5;      
+      break;
+    case 13:
+      COLS  = 13;
+      LINES = 4;      
+      break;
+    case 14:
+      COLS  = 14;
+      LINES = 4;      
+      break;
+    case 15:
+      COLS  = 15;
+      LINES = 4;      
+      break;       
+    default: 
+      COLS  = 6;
+      LINES = 10;      
+    break;
+  }    
 }
 /*_______________________________________________________________________
 * Make a string from a unit
@@ -80,10 +140,11 @@ char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int
   int    rank;
   int    idx,line,col;
   rozofs_thr_1_cnt_t *p;
-  uint32_t LINES;
+
   int      value;
   uint64_t count;
   char    * unitDisplay;
+  char    * unitString;
 
   if (AVERAGE) {
     memset(elementaverage,0, nb*sizeof(colaverage_t));
@@ -107,28 +168,24 @@ char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int
     return pChar;
   }   
      
-  LINES=60/COLS;
-
+//  LINES=60/COLS;
     
   gettimeofday(&tv,(struct timezone *)0);
-
-  pChar += rozofs_string_append(pChar,"___ AVERAGE THROUGHPUT PER SECOND HISTORY WITH A 1 ");  
-  switch(unit) {
-  
+  switch(unit) {  
     case rozofs_thr_unit_second: 
-      pChar += rozofs_string_append_bold(pChar,"SECOND ");
+      unitString = "SECOND";
       unitDisplay = "| SEC |";
       t = tv.tv_sec-1;
       break; 
 
     case rozofs_thr_unit_minute: 
-      pChar += rozofs_string_append_bold(pChar,"MINUTE ");
+      unitString = "MINUTE";    
       unitDisplay = "| MIN |";
       t = (tv.tv_sec/60)-1;
       break; 
 
     case rozofs_thr_unit_hour: 
-      pChar += rozofs_string_append_bold(pChar,"HOUR ");
+      unitString = "HOUR";    
       unitDisplay = "| HR  |";
       t = (tv.tv_sec/3600)-1;
       break;
@@ -139,7 +196,20 @@ char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int
       pChar += rozofs_string_append(pChar," !!!\n");
       return pChar;         
   } 
-  pChar += rozofs_string_append(pChar,"STEP ___\n");  
+
+  pChar += rozofs_string_append(pChar,"___ THROUGHPUT PER ");
+  /*
+  ** Pers step or per second unit display
+  */
+  if (PERSTEP) {
+    pChar += rozofs_string_append_bold(pChar,unitString);
+  }
+  else {
+     pChar += rozofs_string_append_bold(pChar,"SECOND");
+  }
+  pChar += rozofs_string_append(pChar," HISTORY WITH A 1 ");  
+  pChar += rozofs_string_append_bold(pChar,unitString);
+  pChar += rozofs_string_append(pChar," STEP ___\n");  
    
   rank = t % ROZOFS_THR_CNTS_NB;  
 
@@ -190,13 +260,15 @@ char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int
           case rozofs_thr_unit_minute: 
             p = &(counters[value]->minute[idx]);
             if (p->ts != (t-line-(col*LINES))) p->count = 0;	
-            count = p->count/60;	
+            count = p->count;	
+            if (PERSTEP==0) count /= 60;
             break; 
 
           case rozofs_thr_unit_hour: 
             p = &(counters[value]->hour[idx]);
             if (p->ts != (t-line-(col*LINES))) p->count = 0;
-            count = p->count/3600;	
+            count = p->count;	
+            if (PERSTEP==0) count /= 3600;
             break;    
              
           default:
@@ -240,5 +312,8 @@ char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int
     }           
   }
   pChar += rozofs_eol(pChar);  
+  
+  PERSTEP = 1;
+  AVERAGE = 0;
   return pChar;    
 }

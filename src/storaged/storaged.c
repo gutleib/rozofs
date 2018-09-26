@@ -609,14 +609,6 @@ int main(int argc, char *argv[]) {
       }
     }
     
-    /*
-    ** init of the crc32c
-    */
-    crc32c_init(common_config.crc32c_generate,
-                common_config.crc32c_check,
-                common_config.crc32c_hw_forced);
-
-
     if (justCheck) {
       closelog();
       exit(EXIT_SUCCESS);      

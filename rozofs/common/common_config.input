@@ -65,7 +65,7 @@ BOOL	export 	fid_recycle                     False
 BOOL	client 	wr_ack_on_inverse		False
 INT	export 	export_buf_cnt			128 32:1024
 // Number of sub threads in the storaged
-INT	storage nb_storaged_subthread         	4 1:8
+INT	storage nb_storaged_subthread         	8 2:16
 /// Number of disk threads in the STORIO.
 INT	storage nb_disk_thread         		4 2:64
 // Whether STORIO is in multiple (1 STORIO per cluster) 

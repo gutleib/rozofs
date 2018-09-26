@@ -733,106 +733,6 @@ char * display_file_lock_client(char * pChar, uint64_t client_ref) {
 }
 /*
 *___________________________________________________________________
-* Display file lock clients
-*___________________________________________________________________
-*/ 
-char * display_file_lock_clients_json(char * pChar) {  
-  list_t                    * p;
-  rozofs_file_lock_client_t * client;
-  uint64_t                    now;
-  uint32_t                    ipClient;
-  int                         idx;
-  int                         first = 1;
-  
-  now = time(0);
-
-  pChar += sprintf(pChar,"{ \"flock clients\" : {\n");
-  pChar += sprintf(pChar, "  \"timeout\" : %d,\n", FILE_LOCK_POLL_DELAY_MAX);
-  pChar += sprintf(pChar, "  \"clients\" : [\n");
-  
-  for (idx=0; idx<EXPGW_EID_MAX_IDX; idx++) {
-
-    if (list_empty(&file_lock_client_list[idx])) {
-      continue;
-    }  
-
-    /* Loop on the clients */
-    list_for_each_forward(p, &file_lock_client_list[idx]) {
-
-      client = list_entry(p, rozofs_file_lock_client_t, next_client);
-      ipClient = af_unix_get_remote_ip(client->info.socketRef);
-      if (first) {
-        first = 0;
-      }
-      else {
-        pChar += sprintf(pChar,",\n"); 
-      }
-
-      pChar += sprintf(pChar, "    { \"ref\" : \"%16.16llx\", \"eid\" : %2u, \"address\" : \"%u.%u.%u.%u:%u\", \"last poll\" : %2d, \"flock#\" : %d,  \"version\" : \"%s\"}",
-                       (long long unsigned int)client->client_ref, idx,  
-                       (ipClient>>24)&0xFF, (ipClient>>16)&0xFF,(ipClient>>8)&0xFF, ipClient&0xFF, client->info.diag_port,
-		       (int) (now-client->last_poll_time),
-		       (int)client->nb_lock,
-		       client->info.vers);  
-    }   
-  }
-  pChar += sprintf(pChar,"\n  ]\n}}\n"); 
-  return pChar;
-}
-/*
-*___________________________________________________________________
-* Display file lock clients
-*___________________________________________________________________
-*/ 
-char * display_file_lock_clients(char * pChar) {  
-  list_t                    * p;
-  rozofs_file_lock_client_t * client;
-  uint64_t                    now;
-  uint32_t                    ipClient;
-  char                        orig[32];
-  int                         idx;
-  
-  now = time(0);
-
-  *pChar = 0;
-    
-  for (idx=0; idx<EXPGW_EID_MAX_IDX; idx++) {
-
-    if (list_empty(&file_lock_client_list[idx])) {
-      continue;
-    }  
-  
-    pChar += sprintf(pChar,"client polling time out : %d sec\n", FILE_LOCK_POLL_DELAY_MAX);
-    pChar += sprintf(pChar, "+------------------+---------+-------+-------------------------+------------------------------\n");
-    pChar += sprintf(pChar, "| client ref       | poll(s) | #lock | client diagnostic srv   | version\n");  
-    pChar += sprintf(pChar, "+------------------+---------+-------+-------------------------+------------------------------\n");  
-    /* Loop on the clients */
-    list_for_each_forward(p, &file_lock_client_list[idx]) {
-
-      client = list_entry(p, rozofs_file_lock_client_t, next_client);
-
-      ipClient = af_unix_get_remote_ip(client->info.socketRef);
-
-      sprintf(orig,"%u.%u.%u.%u:%u", 
-             (ipClient>>24)&0xFF,
-	     (ipClient>>16)&0xFF,
-	     (ipClient>>8)&0xFF,
-	     ipClient&0xFF,
-	     client->info.diag_port);
-
-      pChar += sprintf(pChar, "| %16llx | %7d | %5d | %-23s | %s\n",
-                       (long long unsigned int)client->client_ref, 
-		       (int) (now-client->last_poll_time),
-		       (int)client->nb_lock,
-		       orig,
-		       client->info.vers);  
-    } 
-    pChar += sprintf(pChar, "+------------------+---------+-------+-------------------------+------------------------------\n");  
-  }
-  return pChar;
-}
-/*
-*___________________________________________________________________
 * Remove all the locks of a client and then remove the client 
 *
 * @param client_ref reference of the client to remove
@@ -876,6 +776,123 @@ static inline void file_lock_remove_one_client(eid_t eid, rozofs_file_lock_clien
   list_remove(&client->next_client);
   xfree(client);
   file_lock_stat.nb_client_file_lock--;
+}
+/*
+*___________________________________________________________________
+* Display file lock clients
+*___________________________________________________________________
+*/ 
+char * display_file_lock_clients_json(char * pChar) {  
+  list_t                    * p, * q;
+  rozofs_file_lock_client_t * client;
+  uint64_t                    now;
+  uint32_t                    ipClient;
+  int                         idx;
+  int                         first = 1;
+  
+  now = time(0);
+
+  pChar += sprintf(pChar,"{ \"flock clients\" : {\n");
+  pChar += sprintf(pChar, "  \"timeout\" : %d,\n", FILE_LOCK_POLL_DELAY_MAX);
+  pChar += sprintf(pChar, "  \"clients\" : [\n");
+  
+  for (idx=0; idx<EXPGW_EID_MAX_IDX; idx++) {
+
+    if (list_empty(&file_lock_client_list[idx])) {
+      continue;
+    }  
+
+    /* Loop on the clients */
+    list_for_each_forward_safe(p, q, &file_lock_client_list[idx]) {
+
+      client = list_entry(p, rozofs_file_lock_client_t, next_client);
+
+      /*
+      ** Remove old clients
+      */
+      if ((now-client->last_poll_time) > 600) {
+        file_lock_remove_one_client(idx+1, client);
+        continue;
+      }
+      
+      ipClient = af_unix_get_remote_ip(client->info.socketRef);
+      if (first) {
+        first = 0;
+      }
+      else {
+        pChar += sprintf(pChar,",\n"); 
+      }
+
+      pChar += sprintf(pChar, "    { \"ref\" : \"%16.16llx\", \"eid\" : %2u, \"address\" : \"%u.%u.%u.%u:%u\", \"last poll\" : %2d, \"flock#\" : %d,  \"version\" : \"%s\"}",
+                       (long long unsigned int)client->client_ref, idx+1,  
+                       (ipClient>>24)&0xFF, (ipClient>>16)&0xFF,(ipClient>>8)&0xFF, ipClient&0xFF, client->info.diag_port,
+		       (int) (now-client->last_poll_time),
+		       (int)client->nb_lock,
+		       client->info.vers);  
+    }   
+  }
+  pChar += sprintf(pChar,"\n  ]\n}}\n"); 
+  return pChar;
+}
+/*
+*___________________________________________________________________
+* Display file lock clients
+*___________________________________________________________________
+*/ 
+char * display_file_lock_clients(char * pChar) {  
+  list_t                    * p, * q;
+  rozofs_file_lock_client_t * client;
+  uint64_t                    now;
+  uint32_t                    ipClient;
+  char                        orig[32];
+  int                         idx;
+  
+  now = time(0);
+
+  *pChar = 0;
+    
+  for (idx=0; idx<EXPGW_EID_MAX_IDX; idx++) {
+
+    if (list_empty(&file_lock_client_list[idx])) {
+      continue;
+    }  
+  
+    pChar += sprintf(pChar,"client polling time out : %d sec\n", FILE_LOCK_POLL_DELAY_MAX);
+    pChar += sprintf(pChar, "+------------------+---------+-------+-------------------------+------------------------------\n");
+    pChar += sprintf(pChar, "| client ref       | poll(s) | #lock | client diagnostic srv   | version\n");  
+    pChar += sprintf(pChar, "+------------------+---------+-------+-------------------------+------------------------------\n");  
+    /* Loop on the clients */
+    list_for_each_forward_safe(p, q, &file_lock_client_list[idx]) {
+
+      client = list_entry(p, rozofs_file_lock_client_t, next_client);
+
+      /*
+      ** Remove old clients
+      */
+      if ((now-client->last_poll_time) > 600) {
+        file_lock_remove_one_client(idx+1, client);
+        continue;
+      }
+
+      ipClient = af_unix_get_remote_ip(client->info.socketRef);
+
+      sprintf(orig,"%u.%u.%u.%u:%u", 
+             (ipClient>>24)&0xFF,
+	     (ipClient>>16)&0xFF,
+	     (ipClient>>8)&0xFF,
+	     ipClient&0xFF,
+	     client->info.diag_port);
+
+      pChar += sprintf(pChar, "| %16llx | %7d | %5d | %-23s | %s\n",
+                       (long long unsigned int)client->client_ref, 
+		       (int) (now-client->last_poll_time),
+		       (int)client->nb_lock,
+		       orig,
+		       client->info.vers);  
+    } 
+    pChar += sprintf(pChar, "+------------------+---------+-------+-------------------------+------------------------------\n");  
+  }
+  return pChar;
 }
 /*
 *___________________________________________________________________

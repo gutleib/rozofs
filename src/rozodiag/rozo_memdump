@@ -1,0 +1,143 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+import datetime
+import shutil
+import string
+
+from optparse import OptionParser
+
+#______________________________________    
+def print_line():
+  global line_hexa 
+  global line_ascii
+  global line_len 
+  global is_colored
+  is_colored = False
+  line_ascii += NORMAL
+  if line_len != int(0): print "%s %s"%(line_hexa,line_ascii)
+#______________________________________    
+def new_line(offset):
+  global line_hexa 
+  global line_ascii
+  global line_len 
+  print_line()
+  line_hexa = "%8x"%(offset)
+  line_ascii = ""
+  line_len = int(0)  
+
+#______________________________________    
+def line_add(byte,offset):
+  global line_hexa 
+  global line_ascii
+  global line_len 
+  global is_colored
+
+  valint = ord(byte)
+  if line_len % 8 == 0:    
+    line_hexa += "  " + format(valint,'02x')
+  else:
+    line_hexa += " " + format(valint,'02x')
+  if valint in range(32,127):
+    if is_colored == False:
+      is_colored = True
+      line_ascii += CYAN
+    line_ascii += byte
+  else:
+    if is_colored == True:
+      is_colored = False
+      line_ascii += NORMAL
+    line_ascii += '.'
+  line_len += 1
+  if line_len == int(16): new_line(offset+1)
+     
+#______________________________________    
+line_hexa = ""
+line_ascii = ""
+line_len = int(0)  
+
+CYAN='\033[96m\033[40m'
+NORMAL='\033[0m'
+is_colored = False
+  
+parser = OptionParser()
+parser.add_option("-m","--map", action="store_true",default=False, dest="map", help="Display process memory map.")
+parser.add_option("-o","--offset", action="store",type="string", dest="offset", help="Memory offset to dump")
+parser.add_option("-s","--size", action="store",type="string", dest="size", help="Memory size to dump. ")
+parser.add_option("-p","--pid", action="store",type="string", dest="pid", help="PID to dump memory from ")
+(options, args) = parser.parse_args()
+
+if options.pid == None:
+  print "PID option is mandatory"
+  sys.exit(-1)
+else:
+  try: pid = int(options.pid)
+  except:
+    print "Bad PID option"
+    sys.exit(-1)
+  path = "/proc/%s/mem"%(pid)  
+  if not os.path.exists(path): 
+    print "PID %s does not exist"%(pid)
+    sys.exit(-1)
+
+if options.map == True:
+  path = "/proc/%s/maps"%(pid)  
+  os.system("cat %s"%(path))
+  sys.exit(0)
+  
+if options.offset == None:
+  print "Offset option is mandatory"
+  sys.exit(-1) 
+else:
+  try: offset = int(options.offset)
+  except: 
+    try: offset = int(options.offset,16)
+    except:
+      print "Bad offset option"
+      sys.exit(-1)
+ 
+if options.size == None:
+  size = int(4096)
+else:
+  try: size = int(options.size)
+  except:
+    print "Bad size option"
+    sys.exit(-1)
+ 
+#
+# Open file
+#     
+try: mem_file = open(path, 'rb')
+except:
+  print "Can not open %s"%(path)
+  sys.exit(-1)
+#
+# Seek offset
+#
+mem_file.seek(offset) 
+
+#
+# Read file
+#
+try:
+  chunk = mem_file.read(size)
+except IOError:
+  print "Memory not accessible"
+  sys.exit(-1)
+    
+if chunk:
+  new_line(offset)
+  for byte in chunk: 
+    line_add(byte, offset)
+    offset += 1
+print_line()
+#
+# Close file
+#
+mem_file.close()
+sys.exit(0)

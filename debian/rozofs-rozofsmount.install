@@ -2,6 +2,7 @@
 /usr/bin/storcli
 /usr/bin/rozo_trash
 /usr/bin/rozo_scan
+/usr/bin/rozo_throughput
 /usr/bin/rozo_mount_clusterstats
 /usr/bin/rozo_mount_repquota
 /usr/share/man/man8/rozofsmount.8

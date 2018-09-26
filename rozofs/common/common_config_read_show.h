@@ -77,7 +77,7 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
     COMMON_CONFIG_SET_INT_MINMAX(export_buf_cnt,value,32,1024);
   }
   if (strcmp(parameter,"nb_storaged_subthread")==0) {
-    COMMON_CONFIG_SET_INT_MINMAX(nb_storaged_subthread,value,1,8);
+    COMMON_CONFIG_SET_INT_MINMAX(nb_storaged_subthread,value,2,16);
   }
   if (strcmp(parameter,"nb_disk_thread")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(nb_disk_thread,value,2,64);
@@ -602,10 +602,10 @@ char * show_common_config_module_storage(char * pChar) {
   pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
   pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
 
-  COMMON_CONFIG_IS_DEFAULT_INT(nb_storaged_subthread,4);
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_storaged_subthread,8);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of sub threads in the storaged\n");
-  COMMON_CONFIG_SHOW_INT_OPT(nb_storaged_subthread,4,"1:8");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_storaged_subthread,8,"2:16");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_INT(nb_disk_thread,4);
@@ -1134,10 +1134,10 @@ char * save_common_config_module_storage(char * pChar) {
   pChar += rozofs_string_append(pChar," scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
 
-  COMMON_CONFIG_IS_DEFAULT_INT(nb_storaged_subthread,4);
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_storaged_subthread,8);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Number of sub threads in the storaged\n");
-    COMMON_CONFIG_SHOW_INT_OPT(nb_storaged_subthread,4,"1:8");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_storaged_subthread,8,"2:16");
   }
 
   COMMON_CONFIG_IS_DEFAULT_INT(nb_disk_thread,4);
@@ -1785,7 +1785,7 @@ static inline void common_config_generated_read(char * fname) {
   ** storage scope configuration parameters
   */
   // Number of sub threads in the storaged 
-  COMMON_CONFIG_READ_INT_MINMAX(nb_storaged_subthread,4,1,8);
+  COMMON_CONFIG_READ_INT_MINMAX(nb_storaged_subthread,8,2,16);
   /// Number of disk threads in the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,64);
   // Whether STORIO is in multiple (1 STORIO per cluster)  

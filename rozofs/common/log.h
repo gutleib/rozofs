@@ -40,10 +40,19 @@ static const int priorities[] = {
 	LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERR, LOG_ERR
 };
 
+
+#ifdef SYSLOG2PRINT
+/*
+** When compiled with this flag, syslog are transformed in printf
+*/
 #define logmsg(level, fmt, ...) {\
-    syslog(priorities[level], "%s - %d - %s: " fmt, basename(__FILE__), \
-            __LINE__, messages[level], ##__VA_ARGS__); \
+    printf("[%7s] %s - %d - %s: " fmt "\n", messages[level], basename(__FILE__), __LINE__, messages[level], ##__VA_ARGS__); \
 }
+#else
+#define logmsg(level, fmt, ...) {\
+    syslog(priorities[level], "%s - %d - %s: " fmt, basename(__FILE__), __LINE__, messages[level], ##__VA_ARGS__); \
+}
+#endif          
 
 #define info(fmt, ...) logmsg(EINFO, fmt, ##__VA_ARGS__)
 #define warning(fmt, ...) logmsg(EWARNING, fmt, ##__VA_ARGS__)
