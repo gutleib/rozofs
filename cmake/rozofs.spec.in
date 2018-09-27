@@ -212,6 +212,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %endif
 %{_mandir}/man5/storage.conf.5.gz
 %{_mandir}/man8/storaged.8.gz
+%{_mandir}/man8/rozo_storage_mount.8.gz
 %{_mandir}/man8/storage_rebuild.8.gz
 %{_mandir}/man8/rozodump.8.gz
 
