@@ -58,6 +58,8 @@ add_executable(rozo_storage_mount
     storaged.h
     storio_crc32.c
     storio_crc32.h   
+    storage_device_kpi.c
+    storage_device_kpi.h        
 )    
 set_target_properties(rozo_storage_mount PROPERTIES COMPILE_FLAGS "-DSYSLOG2PRINT")
 target_link_libraries(rozo_storage_mount rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
