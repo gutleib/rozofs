@@ -743,6 +743,7 @@ static inline void file_lock_remove_one_client(eid_t eid, rozofs_file_lock_clien
   lv2_entry_t               * lv2 ;         
   list_t                    * p, * q;
   export_t                  * e;
+  uint32_t                    nbLockRemoved = 1;
   
   file_lock_stat.nb_remove_client++;
        
@@ -751,25 +752,46 @@ static inline void file_lock_remove_one_client(eid_t eid, rozofs_file_lock_clien
 
     lock = list_first_entry(&client->file_lock_list,rozofs_file_lock_t, next_client_lock);   
     lv2 = lock->lv2;
-
-    /*
-    ** Remove every lock from this cient on this file
-    */
-    list_for_each_forward_safe(p, q, &lv2->file_lock) {
     
-      lock = list_first_entry(p,rozofs_file_lock_t, next_fid_lock);
-      if (lock->lock.client_ref == client->client_ref) {
-        file_lock_unlink(lock);
-        xfree(lock);
+    /*
+    ** We are relooping. Something is wrong...
+    ** Just remove this lock
+    */
+    if (nbLockRemoved == 0) {
+      /*
+      ** Just remove the current lock
+      */
+      file_lock_unlink(lock);
+      xfree(lock);
+      nbLockRemoved++; // Some lock has been removed. That's OK 
+    }
+    
+    
+    else {
+      /*
+      ** Remove every lock from this cient on this file
+      */
+      nbLockRemoved = 0; // No lock removed on this file
+      list_for_each_forward_safe(p, q, &lv2->file_lock) {
+
+        lock = list_entry(p,rozofs_file_lock_t, next_fid_lock);
+        if (lock->lock.client_ref == client->client_ref) {
+          file_lock_unlink(lock);
+          xfree(lock);
+          nbLockRemoved++; // Some lock has been removed.
+        }
       }
     } 
     /*
-    ** Save persistent locks in rozofs specific extended attribute when configure
+    ** When locks have been removed from this lv2 entry, rewrite updated persistent locks 
+    ** in rozofs specific extended attribute when configure
     */
-    e = exports_lookup_export(eid);
-    if (e) {
-      rozofs_save_flocks_in_xattr(e, lv2);
-    }      
+    if (nbLockRemoved != 0) { 
+      e = exports_lookup_export(eid);
+      if (e) {
+        rozofs_save_flocks_in_xattr(e, lv2);
+      }     
+    } 
   }
       
   /* No more lock on this client. Let's unlink this client */
