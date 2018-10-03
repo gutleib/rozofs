@@ -7737,8 +7737,13 @@ static char buf_xattr[1024];
 **
 **__________________________________________________________________________________
 */
-static inline void rozofs_remove_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) { 
-  export_removexattr(e, lv2->attributes.s.attrs.fid, ROZOFS_XATTR_FLOCKP);
+static inline void rozofs_remove_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) {    
+   struct dentry entry;
+   
+   entry.d_inode = lv2;
+   entry.trk_tb_p = e->trk_tb_p;
+
+   rozofs_removexattr(&entry, ROZOFS_XATTR_FLOCKP);
 }
 /*
 **__________________________________________________________________________________

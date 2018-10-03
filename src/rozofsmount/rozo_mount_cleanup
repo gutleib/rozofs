@@ -9,22 +9,41 @@ syntax() {
 # Get rozofsmount PID
 #
 get_pid() {
-  PID=`ps -o pid,cmd -C rozofsmount | awk '{if ($3==MNT) print $1;}' MNT=${mnt}`
+  PID=`ps -o pid,cmd -C rozofsmount | grep ${mnt} | awk '{print $1}'`
 }
 
+#
+# Remove trailing /
+#
+remove_trailing_slash() {
+  val=$1
+  while [ 1 ]
+  do
+    last=`echo ${val} | tail -c 2`
+    case "${last}" in
+      "/") val=${val:0:-1};;
+      *) echo ${val}; return;;
+    esac
+  done
+}
 
 base=`basename $0`
 case "$1" in
   "") syntax;;
 esac
 
-mnt=$1
+# 
+# Remove last / in the mount point
+#
+mnt=`remove_trailing_slash "$1"`
 
+      
 # Unmount
 umount ${mnt} 2> /dev/null
-sleep 0.6
+sleep 2
 umount -l ${mnt}  2> /dev/null
-sleep 0.6
+sleep 1
+
 
 
 get_pid
@@ -35,7 +54,7 @@ esac
 
 # Kill rozofsmount
 kill ${PID}
-sleep 0.4
+sleep 1
 
 get_pid
 # No PID => done
