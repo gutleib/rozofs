@@ -88,7 +88,7 @@ INT	storage disk_read_threshold  		0
 // Over which device write delay threashold should the STORIO log the event. 
 INT	storage disk_write_threshold  		0
 // Number of STORIO receive buffer.
-INT	storage storio_buf_cnt			128 32:1024
+INT	storage storio_buf_cnt			256 32:1024
 // Number of block to which the chunk files should be truncated on storage 
 // node at the time it is recycled.
 INT	storage recycle_truncate_blocks         0

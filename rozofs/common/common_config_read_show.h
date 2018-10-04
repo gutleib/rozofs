@@ -665,10 +665,10 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT(disk_write_threshold,0);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(storio_buf_cnt,128);
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_buf_cnt,256);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
-  COMMON_CONFIG_SHOW_INT_OPT(storio_buf_cnt,128,"32:1024");
+  COMMON_CONFIG_SHOW_INT_OPT(storio_buf_cnt,256,"32:1024");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_INT(recycle_truncate_blocks,0);
@@ -1197,10 +1197,10 @@ char * save_common_config_module_storage(char * pChar) {
     COMMON_CONFIG_SHOW_INT(disk_write_threshold,0);
   }
 
-  COMMON_CONFIG_IS_DEFAULT_INT(storio_buf_cnt,128);
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_buf_cnt,256);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
-    COMMON_CONFIG_SHOW_INT_OPT(storio_buf_cnt,128,"32:1024");
+    COMMON_CONFIG_SHOW_INT_OPT(storio_buf_cnt,256,"32:1024");
   }
 
   COMMON_CONFIG_IS_DEFAULT_INT(recycle_truncate_blocks,0);
@@ -1808,7 +1808,7 @@ static inline void common_config_generated_read(char * fname) {
   // Over which device write delay threashold should the STORIO log the event.  
   COMMON_CONFIG_READ_INT(disk_write_threshold,0);
   // Number of STORIO receive buffer. 
-  COMMON_CONFIG_READ_INT_MINMAX(storio_buf_cnt,128,32,1024);
+  COMMON_CONFIG_READ_INT_MINMAX(storio_buf_cnt,256,32,1024);
   // Number of block to which the chunk files should be truncated on storage  
   // node at the time it is recycled. 
   COMMON_CONFIG_READ_INT(recycle_truncate_blocks,0);

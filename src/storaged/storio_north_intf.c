@@ -51,9 +51,7 @@
 int storage_read_write_buf_count= 0;   /**< number of buffer allocated for read/write on north interface */
 int storage_read_write_buf_sz= 0;      /**<read:write buffer size on north interface */
 
-void *storage_receive_buffer_pool_p = NULL;  /**< reference of the read/write buffer pool */
-void *storage_xmit_buffer_pool_p = NULL;  /**< reference of the read/write buffer pool */
- 
+void *storage_receive_buffer_pool_p = NULL;  /**< reference of the read/write buffer pool */ 
 
 extern void storage_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf);
 
@@ -82,7 +80,7 @@ void * storio_north_RcvAllocBufCallBack(void *userRef,uint32_t socket_context_re
   /*
   ** We need at least a response buffer
   */
-  uint32_t free_count = ruc_buf_getFreeBufferCount(storage_xmit_buffer_pool_p);  
+  uint32_t free_count = ruc_buf_getFreeBufferCount(storage_receive_buffer_pool_p);  
   if (free_count < 1)
   {
     return NULL;
@@ -258,29 +256,7 @@ int storio_north_interface_buffer_init(int read_write_buf_count,int read_write_b
       }
     }
 #endif
-    /*
-    ** create the pool for sending requests to rozofsmount
-    */
-    storage_xmit_buffer_pool_p = ruc_buf_poolCreate(storage_read_write_buf_count, STORIO_BUF_XMIT_SZ);
-    if (storage_xmit_buffer_pool_p == NULL)
-    {
-       severe( "ruc_buf_poolCreate(%d,%d)", storage_read_write_buf_count, STORIO_BUF_XMIT_SZ ); 
-       return -1;
-    }
-    ruc_buffer_debug_register_pool("Pool_snd",  storage_xmit_buffer_pool_p);
-    /*
-    ** registration with the RDMA module
-    */
-#ifdef ROZOFS_RDMA
-    {
-      rozofs_rdma_memory_reg_t rdma_reg_ctx;
-      rdma_reg_ctx.mem = ruc_buf_get_pool_base_and_length(storage_xmit_buffer_pool_p,&rdma_reg_ctx.len);
-      if (rdma_reg_ctx.mem != NULL)
-      {
-	rozofs_rdma_user_memory_register(&rdma_reg_ctx);
-      }
-    }
-#endif
+
     return 0;
 
 }
