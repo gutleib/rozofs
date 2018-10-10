@@ -316,12 +316,15 @@ class sid_class:
   def umount_device_file(self,dev, h):
     cmd_silent("umount %s/%s"%(self.get_root_path(h.number),dev))
       
-  def create_device_file(self,device,h):
-  
-    if rozofs.disk_size_mb == None: return
+  def create_device_file(self,device,h,size):
+    if size == None: 
+      console("Missing device size for %s:%s:%s"%(self.cid.cid,self.sid,device))
+      return   
+#    if size == None: size = rozofs.disk_size_mb
+#    if size == None: return
         
     if device == "all":
-      for dev in range(self.cid.dev_total): self.create_device_file(dev,h)
+      for dev in range(self.cid.dev_total): self.create_device_file(dev,h,size)
       return          
 	  
     path=self.get_device_file_path(h.site) 
@@ -330,7 +333,7 @@ class sid_class:
     
     path="%s/%s"%(path,device)    
     if os.path.exists(path): return
-    rozofs.create_loopback_device_regular(path,self.cid.cid,self.sid,device)
+    rozofs.create_loopback_device_regular(path,self.cid.cid,self.sid,device,size)
 
   def delete_device_file(self,device,h):
 
@@ -346,12 +349,18 @@ class sid_class:
     self.umount_device_file(device,h)      
     if dev != None: rozofs.delete_loopback_device(dev)
           
-  def create_device(self,device,h):
+  def create_device(self,device,h,size=None):
+    if size == None:
+      if int(self.cid.dev_size) != int(0): 
+        size = self.cid.dev_size 
+      else: 
+        size = rozofs.disk_size_mb
+      
     if device == "all":
-      for dev in range(self.cid.dev_total): self.create_device(dev,h)
+      for dev in range(self.cid.dev_total): self.create_device(dev,h,size)
       return
              
-    self.create_device_file(device,h)
+    self.create_device_file(device,h,size)
     if rozofs.device_automount == True: return
 
     path=self.get_root_path(h.number)+"/%s"%(device)   
@@ -406,7 +415,7 @@ def get_cid(cid):
 
 class cid_class:
 
-  def __init__(self, volume, dev_total, dev_mapper, dev_red, dev_size):
+  def __init__(self, volume, dev_total, dev_mapper, dev_red, dev_size=0):
     global cids 
     global cid_nb
     cid_nb+=1
@@ -417,7 +426,7 @@ class cid_class:
     self.dev_red    = dev_red 
     self.volume     = volume
     self.georep     = None 
-    self.dev_size   = 0;
+    self.dev_size   = dev_size;
     cids.append(self) 
     
   @staticmethod
@@ -1297,7 +1306,7 @@ class rozofs_class:
       
     # Create the file with the given path
     os.system("rm -f %s > /dev/null 2>&1"%(path))
-    os.system("dd if=/dev/zero of=%s bs=1M count=%s  > /dev/null 2>&1"%(path, rozofs.disk_size_mb))
+    os.system("dd if=/dev/zero of=%s bs=1M count=%s  > /dev/null 2>&1"%(path, size))
     
     # Bind the loop back device to the file    
     string="losetup %s %s "%(loop,path)
@@ -1307,10 +1316,10 @@ class rozofs_class:
     return loop
     
         
-  def create_loopback_device_spare(self,path,mark=None):  
-    if rozofs.disk_size_mb == None: return
+  def create_loopback_device_spare(self,path,size,mark=None):
+    if size == None: return
     
-    loop = self.findout_loopback_device(path,rozofs.disk_size_mb)    
+    loop = self.findout_loopback_device(path,size)    
     if mark == None:
       os.system("./setup.py cmd rozo_device --format spare %s"%(loop))
       syslog.syslog("Created %s -> %s spare"%(path,loop))	  
@@ -1319,10 +1328,12 @@ class rozofs_class:
       syslog.syslog("Created %s -> %s spare(%s)"%(path,loop,mark))	  
     return  	 
 
-  def create_loopback_device_regular(self,path,cid,sid,dev):  
-    if rozofs.disk_size_mb == None: return   
+  def create_loopback_device_regular(self,path,cid,sid,dev,size):  
+    if size == None: 
+      console("Missing device size for %s:%s:%s"%(cid,sid,dev))
+      return   
 
-    loop = self.findout_loopback_device(path,rozofs.disk_size_mb)    
+    loop = self.findout_loopback_device(path,size)    
     os.system("./setup.py cmd rozo_device --format %s/%s/%s %s"%(cid,sid,dev,loop))
     syslog.syslog("Created %s -> %s (%s,%s,%s)"%(path,loop,cid,sid,dev))	  
     return  	
@@ -1370,12 +1381,12 @@ class rozofs_class:
       log("%s Deleted -> %s"%(path,devFile))	
     except: pass 
   
-  def newspare(self,mark=None):
+  def newspare(self,size,mark=None):
     # Find a free spare number
     for idx in range(0,4096):
       path="%s/devices/spare%s"%(self.get_simu_path(),idx)
       if not os.path.exists(path):
-        rozofs.create_loopback_device_spare(path,mark)            
+        rozofs.create_loopback_device_spare(path,size,mark)            
         return
     report("No free spare number for spare device file")
                
@@ -1406,7 +1417,7 @@ class rozofs_class:
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
     if self.client_fast_reconnect != 0: display_config_bool("client_fast_reconnect",True)
-    display_config_int("storio_buf_cnt",32)
+    display_config_int("storio_buf_cnt",64)
     display_config_int("export_buf_cnt",32)
     display_config_bool("spare_restore_enable",self.spare_restore)
     display_config_int("spare_restore_spare_ctx",1)
@@ -1767,9 +1778,9 @@ def syntax_ddd() :
   console("                         \t  i.e ddd -T mount:2, ddd -i localhost1 -T storio:1")
 #_____________________________________________  
 def syntax_sid() :
-  console("./setup.py \tsid     \t<cid> <sid>\tdevice-delete {all|<#device>} [<site>]")
-  console("./setup.py \tsid     \t<cid> <sid>\tdevice-create {all|<#device>} [<site>]")
-  console("./setup.py \tsid     \t<cid> <sid>\tdevice-clear  {all|<#device>} [<site>]")
+  console("./setup.py \tsid     \t<cid> <sid>\tdevice-delete {all|<#device>} ")
+  console("./setup.py \tsid     \t<cid> <sid>\tdevice-create {all|<#device>} [sizeMB]")
+  console("./setup.py \tsid     \t<cid> <sid>\tdevice-clear  {all|<#device>} ")
   console("./setup.py \tsid     \t<cid> <sid>\trebuild...")
   console("./setup.py \tsid     \t<cid> <sid>\tinfo")
 #_____________________________________________  
@@ -1810,6 +1821,7 @@ def syntax_all() :
   syntax_if()
   syntax_debug()
   syntax_diag()
+  console("./setup.py \tspare \t\t[sizeMB] [mark]")
   console("./setup.py \tprocess \t[pid]")
   console("./setup.py \tvnr ...")
   sys.exit(-1)   
@@ -1945,11 +1957,22 @@ def test_parse(command, argv):
   elif command == "rozofs.conf"        : rozofs.create_common_config()
   elif command == "diag"               : diag(argv)
     
-  elif command == "spare"              : 
-    try: 
-      rozofs.newspare(argv[2]) 
-    except:
-      rozofs.newspare() 
+  elif command == "spare" : 
+    size = rozofs.disk_size_mb
+    mark = None
+    if len(argv) > 3:
+      try:
+        size = int(argv[2])
+        mark = argv[3]
+      except:
+        size = int(argv[3])
+        mark = argv[2] 
+    elif len(argv) > 2:  
+      try:
+        size = int(argv[2])
+      except:  
+        mark = argv[2]
+    rozofs.newspare(size=size,mark=mark) 
       
   elif command == "ifup":
     itf=None 
@@ -2067,7 +2090,8 @@ def test_parse(command, argv):
        console("%d"%(len(volumes)))
 
   elif command == "sid" : 
-       if len(argv) <= 4: syntax("sid requires cid+sid numbers","sid")
+       if len(argv) <= 3: syntax("sid requires cid+sid numbers","sid")
+       if len(argv) <= 4: syntax("sid requires a command","sid")
 
        try:     cid = int(argv[2])
        except:  syntax("get_cid_sid requires an integer for cluster id","sid") 
@@ -2099,11 +2123,10 @@ def test_parse(command, argv):
 	 if len(argv) <= 6: s.create_device(argv[5],s.host[0])
 	 else:
 	   try:
-	     hnum=int(argv[6])
-	     h = s.host[hnum]
-	     s.create_device(argv[5],h)
+	     size=int(argv[6])
+             s.create_device(argv[5],s.host[0],size=size)
 	   except:
-	     console("unexpected site number %s"%(argv[6]))
+	     console("unexpected size %s"%(argv[6]))
 	     sys.exit(-1) 
 
        if argv[4] == "device-clear" : 

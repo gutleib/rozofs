@@ -43,10 +43,13 @@ BOOL 	global 	numa_aware			False
 // Number of slices in the STORIO.
 INT	global 	storio_slice_number		1024 8:(32*1024)
 // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
-// 0      = size balancing
-// 1      = weigthed round robin
-// 2 & 3  = strict round robin
-// 4      = read round robin
+// 0         = Cluster size balancing                   + device size balancing
+// 1,2,3     = Cluster strict round robin               + device write spreading
+// 4         = Cluster strict round robin               + device read spreading
+// 5         = Cluster weighted round robin (nb SID)    + device write spreading
+// 6         = Cluster weighted round robin (nb SID)    + device read spreading
+// 7         = Cluster weighted round robin (free size) + device write spreading
+// 6         = Cluster weighted round robin (free size) + device read spreading
 INT	global 	file_distribution_rule		0 0:100
 // DSCP for exchanges from/to the STORIO.
 INT	global 	storio_dscp  			46 0:46
@@ -205,3 +208,9 @@ INT   	export level2_cache_max_entries_kb		512  1:4096
 BOOL 	global 	standalone	            False
 // Whether file locks must be persistent on exportd restart/switchover or not
 BOOL   export  persistent_file_locks                False
+// Minimum % of free space in a volume.
+// When the free space of a volume reaches this value, file creation requests
+// receive back ENOSPC in order to try to avoid later write errors.
+// A value of 0 means there is no limit on the volume.
+// A value of 100 forbids every file creation.
+INT   	export minimum_free_size_percent	4  0:100

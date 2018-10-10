@@ -256,6 +256,9 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"persistent_file_locks")==0) {
     COMMON_CONFIG_SET_BOOL(persistent_file_locks,value);
   }
+  if (strcmp(parameter,"minimum_free_size_percent")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(minimum_free_size_percent,value,0,100);
+  }
   pChar += rozofs_string_append(pChar,"No such parameter ");
   pChar += rozofs_string_append(pChar,parameter);
   pChar += rozofs_eol(pChar);\
@@ -324,10 +327,13 @@ char * show_common_config_module_global(char * pChar) {
   COMMON_CONFIG_IS_DEFAULT_INT(file_distribution_rule,0);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.\n");
-  pChar += rozofs_string_append(pChar,"// 0      = size balancing\n");
-  pChar += rozofs_string_append(pChar,"// 1      = weigthed round robin\n");
-  pChar += rozofs_string_append(pChar,"// 2 & 3  = strict round robin\n");
-  pChar += rozofs_string_append(pChar,"// 4      = read round robin\n");
+  pChar += rozofs_string_append(pChar,"// 0         = Cluster size balancing                   + device size balancing\n");
+  pChar += rozofs_string_append(pChar,"// 1,2,3     = Cluster strict round robin               + device write spreading\n");
+  pChar += rozofs_string_append(pChar,"// 4         = Cluster strict round robin               + device read spreading\n");
+  pChar += rozofs_string_append(pChar,"// 5         = Cluster weighted round robin (nb SID)    + device write spreading\n");
+  pChar += rozofs_string_append(pChar,"// 6         = Cluster weighted round robin (nb SID)    + device read spreading\n");
+  pChar += rozofs_string_append(pChar,"// 7         = Cluster weighted round robin (free size) + device write spreading\n");
+  pChar += rozofs_string_append(pChar,"// 6         = Cluster weighted round robin (free size) + device read spreading\n");
   COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:100");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
@@ -512,6 +518,16 @@ char * show_common_config_module_export(char * pChar) {
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether file locks must be persistent on exportd restart/switchover or not\n");
   COMMON_CONFIG_SHOW_BOOL(persistent_file_locks,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(minimum_free_size_percent,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Minimum % of free space in a volume.\n");
+  pChar += rozofs_string_append(pChar,"// When the free space of a volume reaches this value, file creation requests\n");
+  pChar += rozofs_string_append(pChar,"// receive back ENOSPC in order to try to avoid later write errors.\n");
+  pChar += rozofs_string_append(pChar,"// A value of 0 means there is no limit on the volume.\n");
+  pChar += rozofs_string_append(pChar,"// A value of 100 forbids every file creation.\n");
+  COMMON_CONFIG_SHOW_INT_OPT(minimum_free_size_percent,4,"0:100");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -856,10 +872,13 @@ char * save_common_config_module_global(char * pChar) {
   COMMON_CONFIG_IS_DEFAULT_INT(file_distribution_rule,0);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.\n");
-    pChar += rozofs_string_append(pChar,"// 0      = size balancing\n");
-    pChar += rozofs_string_append(pChar,"// 1      = weigthed round robin\n");
-    pChar += rozofs_string_append(pChar,"// 2 & 3  = strict round robin\n");
-    pChar += rozofs_string_append(pChar,"// 4      = read round robin\n");
+    pChar += rozofs_string_append(pChar,"// 0         = Cluster size balancing                   + device size balancing\n");
+    pChar += rozofs_string_append(pChar,"// 1,2,3     = Cluster strict round robin               + device write spreading\n");
+    pChar += rozofs_string_append(pChar,"// 4         = Cluster strict round robin               + device read spreading\n");
+    pChar += rozofs_string_append(pChar,"// 5         = Cluster weighted round robin (nb SID)    + device write spreading\n");
+    pChar += rozofs_string_append(pChar,"// 6         = Cluster weighted round robin (nb SID)    + device read spreading\n");
+    pChar += rozofs_string_append(pChar,"// 7         = Cluster weighted round robin (free size) + device write spreading\n");
+    pChar += rozofs_string_append(pChar,"// 6         = Cluster weighted round robin (free size) + device read spreading\n");
     COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:100");
   }
 
@@ -1044,6 +1063,16 @@ char * save_common_config_module_export(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Whether file locks must be persistent on exportd restart/switchover or not\n");
     COMMON_CONFIG_SHOW_BOOL(persistent_file_locks,False);
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(minimum_free_size_percent,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Minimum % of free space in a volume.\n");
+    pChar += rozofs_string_append(pChar,"// When the free space of a volume reaches this value, file creation requests\n");
+    pChar += rozofs_string_append(pChar,"// receive back ENOSPC in order to try to avoid later write errors.\n");
+    pChar += rozofs_string_append(pChar,"// A value of 0 means there is no limit on the volume.\n");
+    pChar += rozofs_string_append(pChar,"// A value of 100 forbids every file creation.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(minimum_free_size_percent,4,"0:100");
   }
   return pChar;
 }
@@ -1689,10 +1718,13 @@ static inline void common_config_generated_read(char * fname) {
   // Number of slices in the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(storio_slice_number,1024,8,(32*1024));
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual. 
-  // 0      = size balancing 
-  // 1      = weigthed round robin 
-  // 2 & 3  = strict round robin 
-  // 4      = read round robin 
+  // 0         = Cluster size balancing                   + device size balancing 
+  // 1,2,3     = Cluster strict round robin               + device write spreading 
+  // 4         = Cluster strict round robin               + device read spreading 
+  // 5         = Cluster weighted round robin (nb SID)    + device write spreading 
+  // 6         = Cluster weighted round robin (nb SID)    + device read spreading 
+  // 7         = Cluster weighted round robin (free size) + device write spreading 
+  // 6         = Cluster weighted round robin (free size) + device read spreading 
   COMMON_CONFIG_READ_INT_MINMAX(file_distribution_rule,0,0,100);
   // DSCP for exchanges from/to the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(storio_dscp,46,0,46);
@@ -1758,6 +1790,12 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(level2_cache_max_entries_kb,512,1,4096);
   // Whether file locks must be persistent on exportd restart/switchover or not 
   COMMON_CONFIG_READ_BOOL(persistent_file_locks,False);
+  // Minimum % of free space in a volume. 
+  // When the free space of a volume reaches this value, file creation requests 
+  // receive back ENOSPC in order to try to avoid later write errors. 
+  // A value of 0 means there is no limit on the volume. 
+  // A value of 100 forbids every file creation. 
+  COMMON_CONFIG_READ_INT_MINMAX(minimum_free_size_percent,4,0,100);
   /*
   ** client scope configuration parameters
   */

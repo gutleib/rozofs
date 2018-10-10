@@ -64,8 +64,11 @@ def setVolumeHosts(nbHosts, nbSidPerHost=0,vid=None):
   # Create clusters on this volume
   for i in range(nbclusters):
 
-    c = v1.add_cid(devices,mapper,redundancy)  
+    devSIze = int(rozofs.disk_size_mb)
+    if int(xtraDevice) != int(0): devSIze += (i * xtraDevice)
+    c = v1.add_cid(devices,mapper,redundancy,dev_size=devSIze)  
     cnf_clusters.append(c)
+    nbSid = xtraSID * i
 
     # Create the required number of sid on each cluster
     # The 2 clusters use the same host for a given sid number
@@ -73,13 +76,19 @@ def setVolumeHosts(nbHosts, nbSidPerHost=0,vid=None):
       if georep == False:
         for f in range(nbSidPerHost):
           c.add_sid_on_host(s+1,(s % rozofs.site_number)+1)
+      
       else:
         # In geo replication 
 	# host2 on site 1 replicates host1 on site 0
 	# host4 on site 1 replicates host3 on site 0...	
         for f in range(nbSidPerHost):
           c.add_sid_on_host((2*s)+1,0,(2*s)+2,1)
-        
+    while nbSid != 0:
+      for s in range(nbHosts):
+        c.add_sid_on_host(s+1,(s % rozofs.site_number)+1)
+        nbSid -= 1
+        if nbSid == 0: break
+                 
   return v1  
 #_____________________________________ 
 def addPrivate(vol,layout=None,eid=63):
@@ -107,8 +116,6 @@ def addExport(vol,layout=None,eid=None):
         for site in range(0,rozofs.site_number+1): 
           m1 = e.add_mount(site)
   return e        
-
-    
 #_____________________________________ 
 
 # Set metadata device characteristics
@@ -139,7 +146,7 @@ rozofs.set_deletion_delay(12)
 #--------------STORIO GENERAL
 
 # Set original RozoFS file distribution
-rozofs.set_file_distribution(4)
+rozofs.set_file_distribution(5)
 
 # Set single storio mode
 # rozofs.storio_mode_single()
@@ -191,13 +198,19 @@ rozofs.set_nb_storcli(4)
 # Client fast reconnect
 #rozofs.set_client_fast_reconnect()
 
+# Unbalancing factor between clusters
+# Add extra SID on each new cluster
+xtraSID = 0
+# Add extra MB on devices of each new cluster
+xtraDevice = 0
+
 #-------------- NB devices per sid
 devices    = 2
 mapper     = 2
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 1
+nbclusters = 2
 
 # default is to have one mount point per site and export
 clients_nb = 2
@@ -209,13 +222,14 @@ vol = setVolumeHosts(4)
 
 # Create an export on this volume with layout 1
 e = addExport(vol,layout=1,eid=1)
+#e = addExport(vol,layout=1,eid=2)
 # Set thin provisionning
 #e.set_thin()
 
 #e = addExport(vol,layout=1,eid=9)
 #e = addExport(vol,layout=1,eid=17)
 
-addPrivate(vol,layout=1)
+#addPrivate(vol,layout=1)
 
 # Add an other export on this volume with layout 1
 #addExport(vol,1)

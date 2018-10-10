@@ -3196,6 +3196,14 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
       errno = ENOSPC;
       goto error;      
     }
+    
+    /*
+    ** Check whether volume is full
+    */
+    if (e->volume->full) {
+      errno = ENOSPC;
+      goto error;      
+    }    
 
     /*
     ** load the root_idx bitmap of the parent

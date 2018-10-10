@@ -82,10 +82,13 @@ typedef struct _common_config_t {
   // Number of slices in the STORIO.
   int32_t     storio_slice_number;
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
-  // 0      = size balancing
-  // 1      = weigthed round robin
-  // 2 & 3  = strict round robin
-  // 4      = read round robin
+  // 0         = Cluster size balancing                   + device size balancing
+  // 1,2,3     = Cluster strict round robin               + device write spreading
+  // 4         = Cluster strict round robin               + device read spreading
+  // 5         = Cluster weighted round robin (nb SID)    + device write spreading
+  // 6         = Cluster weighted round robin (nb SID)    + device read spreading
+  // 7         = Cluster weighted round robin (free size) + device write spreading
+  // 6         = Cluster weighted round robin (free size) + device read spreading
   int32_t     file_distribution_rule;
   // DSCP for exchanges from/to the STORIO.
   int32_t     storio_dscp;
@@ -153,6 +156,12 @@ typedef struct _common_config_t {
   int32_t     level2_cache_max_entries_kb;
   // Whether file locks must be persistent on exportd restart/switchover or not
   int32_t     persistent_file_locks;
+  // Minimum % of free space in a volume.
+  // When the free space of a volume reaches this value, file creation requests
+  // receive back ENOSPC in order to try to avoid later write errors.
+  // A value of 0 means there is no limit on the volume.
+  // A value of 100 forbids every file creation.
+  int32_t     minimum_free_size_percent;
 
   /*
   ** client scope configuration parameters

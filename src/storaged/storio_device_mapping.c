@@ -696,13 +696,15 @@ static inline uint32_t storio_device_mapping_allocate_device_round_robin(storage
 uint32_t storio_device_mapping_allocate_device_rw_round_robin(storage_t * st, uint8_t layout, sid_t * distrib) {
   uint8_t       inverse;
   int           idx;
+
+  rozofs_device_distribution_rule_e rule = rozofs_get_device_distribution_rule(common_config.file_distribution_rule);
   
   /*
   ** Read round robin
   ** When in the first inverse of the distribution use round robin distribution
   ** else try to equalize the devices
   */
-  if (common_config.file_distribution_rule == rozofs_file_distribution_read_round_robin) {
+  if (rule == rozofs_device_distribution_rule_read) {
     inverse = rozofs_get_rozofs_inverse(layout);
     for (idx=0; idx < inverse; idx++,distrib++) {
       if (st->sid == *distrib) break;

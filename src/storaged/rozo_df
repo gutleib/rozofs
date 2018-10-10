@@ -133,8 +133,16 @@ class rozofs_device:
   def display(self):
    global average
    global threshold
-   
+   global mini
+   global maxi   
    percent = int(self.free)*int(100)/int(self.total)
+
+   delta = int(self.total) * int(threshold)
+   delta /= 100
+   mini = int(average_free) - int(delta)
+   maxi = int(average_free) + int(delta)
+#   print "delta %s  mini %s maxi %s"%(delta,mini,maxi)
+   
    
    if int(self.free) == int(self.old_free):
      display_free = "%6s        "%(common_bytes_with_unit(self.free+"K"))
@@ -143,24 +151,58 @@ class rozofs_device:
    else: 
      display_free = "%6s(-%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.old_free)-int(self.free))))
 
-   if int(percent) < int(5):
-     color = RED+BOLD+REVERSE
-   elif (int(percent) < (int(average)-int(threshold))):
-     color = RED
-   elif (int(percent) > (int(average)+int(threshold))):
-     color = NORMAL
-   else:
-     color = CYAN   
-   LINE = "%12s  "%(self.name) + color + "%3s%%  "%(percent) + NORMAL
-   LINE += "%-17s/ %7s  %s"%(display_free, common_bytes_with_unit(self.total+"K"), self.mount)
+   LINE = "%12s  "%(self.name) 
+   #
+   # Compare % of free space
+   #
+   if options.freeSpace == False:
+     if int(percent) < int(5):
+       color = RED+BOLD+REVERSE
+     elif (int(percent) < (int(average)-int(threshold))):
+       color = RED
+     elif (int(percent) > (int(average)+int(threshold))):
+       color = NORMAL
+     else:
+       color = CYAN          
+     LINE += color + "%3s%% "%(percent) + NORMAL + " %-17s"%(display_free) 
+
+   #
+   # Compare free space
+   else:   
+     if int(self.free) == int(self.old_free):
+       display_free = "%6s        "%(common_bytes_with_unit(self.free+"K"))
+     elif int(self.free) > int(self.old_free):
+       display_free = "%6s(+%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.free)-int(self.old_free))))
+     else: 
+       display_free = "%6s(-%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.old_free)-int(self.free))))
+
+     if int(percent) < int(5):
+       color = RED+BOLD+REVERSE
+     elif (int(self.free) < int(mini)):
+       color = RED
+     elif (int(self.free) > int(maxi)):
+       color = NORMAL
+     else:
+       color = CYAN 
+     LINE += "%3s%% "%(percent) + color + " %-17s"%(display_free) + NORMAL 
+         
+   LINE += "/ %7s  %s"%(common_bytes_with_unit(self.total+"K"), self.mount)   
    print LINE
    
       
 def do_one_df():
+  global average_free
+
+  total_free   = 0
+  total_device = 0
+  
   now = datetime.datetime.now()
   print "____________________ %s ____________________"%(now.strftime("%Y-%m-%d %H:%M:%S"))
-  print "%12s  %4s  %-17s/ %7s  %s"%("NAME","%","FREE", "SIZE", "MOUNT POINT") 
-
+  if options.freeSpace == False:
+    print "        NAME  " + CYAN + "   % " + NORMAL + " FREE             /    SIZE  MOUNT POINT" 
+  else:   
+    print "        NAME     % " + CYAN + " FREE             " + NORMAL + "/    SIZE  MOUNT POINT" 
+    
   string = "df "
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -186,7 +228,11 @@ def do_one_df():
          rozofs_devices.sort(key=lambda k: "%s"%(k.mount))
       else:
          dev.update(free,total)
+      total_device += 1 
+      total_free   += int(free)   
       continue
+  average_free = int(total_free) /  int(total_device)
+      
 
 RED='\033[91m\033[40m'
 GREEN='\033[92m\033[40m'
@@ -203,16 +249,18 @@ NORMAL='\033[0m'
 parser = OptionParser()
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
 parser.add_option("-t","--threshold", action="store",type="string", dest="threshold", help="Tolerable difference in %")
+parser.add_option("-f","--free", action="store_true",default=False, dest="freeSpace", help="Compare free space. default is to compare % of free space")
  
 (options, args) = parser.parse_args()
 
 threshold = int(4)        
 period = int(0)
+average_free = int(0)
 
 if options.threshold != None:
   try: threshold = options.threshold
   except:
-    print "Unexpected threashold value"
+    print "Unexpected threshold value"
     sys.exit(-1)
 
 if options.period != None:

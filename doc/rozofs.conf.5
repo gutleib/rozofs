@@ -28,34 +28,49 @@ This parameter enables to choose the file distribution rule at file creation. Th
 .RS
 - 0 "size balancing" (default)
 .RS
-  The cluster with the more available disk space is chosen.
-  The SIDs with the more available disk space are chosen within this cluster.
-  The device with the more available disk space is chosen within a storio.
+ - The cluster with the more available disk space is chosen.  
+ - The SIDs with the more available disk space are chosen within this cluster.  
+ - The device with the more available disk space is chosen within the logical storage.  
 .RE
-- 1 "weighted round robin"
+- 1, 2 or 3 "round robin + write"
 .RS
-  The clusters are selected in a round robin manner.
-  The SIDs with the more available disk space are chosen within this cluster.
-  The devices are allocated in a round robin manner within a storio.
-  The clusters and storages are re-ordered in decreasing cluster and storage available disk space order every 12s.
+ - The clusters are selected in a strict round robin manner.
+ - The SIDs are chosen in a round robin manner.
+ - The devices are allocated in a round robin manner within a logical storage.
 .RE
-- 2 or 3 "strict round robin"
+- 4 "round robin + read"
 .RS
-  The clusters are selected in a round robin manner.
-  The SIDs are chosen in round robin manner.
-  The devices are allocated in a round robin manner within a storio.
+ - The clusters are distributed in a strict round robin manner.
+ - The SIDs are chosen in a round robin manner.
+ - The devices of the storages within the inverse storages of the file distribution are allocated in a round robin manner to favor reading on all the devices.
+ - The devices of the storages within the forward and safe storages of the file distribution are allocated in a size balancing manner to equalize the devices occupancy.
 .RE
-- 4 "read round robin"
+- 5 "weigthed round robin on SID number + write"
 .RS
-  The clusters are distributed in a round robin manner.
-  The storages within the cluster are then chosen in round robin manner.
-  The devices of the storages within the inverse storages of the file distribution 
-    are allocated in a round robin manner to favor reading on all the devices.
-  The devices of the storages within the forward and safe storages of the file distribution 
-    are allocated in a size balancing manner to equalize the devices occupancy.
+ - The clusters are distributed in a weigthed round robin manner based on the number of SID in the cluster.
+ - The SIDs are chosen in a round robin manner.
+ - The devices are allocated in a round robin manner within a logical storage.
 .RE
+- 6 "weithed round robin on SID number + read"
+.RS
+ - The clusters are distributed in a weigthed round robin manner based on the number of SID in the cluster.
+ - The SIDs are chosen in a round robin manner.
+ - The devices of the storages within the inverse storages of the file distribution are allocated in a round robin manner to favor reading on all the devices.
+ - The devices of the storages within the forward and safe storages of the file distribution are allocated in a size balancing manner to equalize the devices occupancy.
+.RE
+- 7 "weigthed round robin on free size + write"
+.RS
+ - The clusters are distributed in a weigthed round robin manner based on the cluster free space left.
+ - The SIDs are chosen in a round robin manner.
+ - The devices are allocated in a round robin manner within a logical storage.
+.RE
+- 8 "weigthed round robin on free size + read"
+.RS
+ - The clusters are distributed in a weigthed round robin manner based on the cluster free space left.
+ - The SIDs are chosen in a round robin manner.
+ - The devices of the storages within the inverse storages of the file distribution are allocated in a round robin manner to favor reading on all the devices.
+ - The devices of the storages within the forward and safe storages of the file distribution are allocated in a size balancing manner to equalize the devices occupancy.
 .RE	    
-
 .SS trashed_file_per_run
 Maximum number of files that the remove bins thread of a slave export can remove in a run. A 2 second delay occurs between every run. This provides the maximum deletion rate.
 .SS deletion_delay 
