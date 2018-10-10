@@ -1206,5 +1206,8 @@ int rozofs_are_persistent_file_locks_configured(export_t *e, lv2_entry_t *lv2);
 **__________________________________________________________________________________
 */
 int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) ;
-
+/*
+ *_______________________________________________________________________
+ */
+volume_t *volumes_lookup_volume(vid_t vid);
 #endif

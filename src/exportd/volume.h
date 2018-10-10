@@ -108,10 +108,12 @@ void cluster_release(cluster_t *cluster);
  */
 typedef struct volume {
     vid_t vid; ///< volume identifier
+    uint8_t full:1;     // Set to 1 by volume balance under a configured percent of free space
     uint8_t balanced:1; // Whether volume balance has already been called
     uint8_t layout:6;
     uint8_t georep:1; /**< asserted to 1 when geo-replication is enabled */
     uint8_t multi_site:1; /**< asserted to 1 when geo-replication is enabled */ 
+    void *  cluster_distibutor; /**< Table giving order of distribution of clusters */ 
     char *  rebalanceCfg; /**< rebalancer configuration file for this volume */
     list_t clusters; ///< cluster(s) list
     pthread_rwlock_t lock; ///< lock to be used by export
@@ -202,4 +204,5 @@ void volume_stat(volume_t *volume, volume_stat_t *volume_stat);
  * @param sids: the sids within the cluster
  */
 int volume_distribution_check(volume_t *volume, int rozofs_safe, int cid, int *sids);
+int volume_distrib_display(char * pChar, volume_t * volume);
 #endif

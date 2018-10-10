@@ -35,9 +35,28 @@
 #include <rozofs/rpc/export_profiler.h>
 #include <rozofs/rpc/epproto.h>
 #include <rozofs/rpc/mclient.h>
+#include <rozofs/core/uma_dbg_api.h>
 
 #include "volume.h"
 #include "export.h"
+
+/*
+** Cluster distribution table
+*/
+typedef struct _rozofs_cluster_distributor_t {
+  uint64_t counter;
+  int      max;
+  int      value[1];
+} rozofs_cluster_distributor_t;
+
+/*
+** Working structure needed to build the cluster distribution table
+*/
+typedef struct _cluster_desc_t {
+  uint16_t cid;
+  uint64_t weight;
+} cluster_desc_t;
+
 
 static int volume_storage_compare(list_t * l1, list_t *l2) {
     volume_storage_t *e1 = list_entry(l1, volume_storage_t, list);
@@ -113,6 +132,7 @@ int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep
     volume->georep = georep;
     volume->multi_site = multi_site;
     volume->balanced = 0; // volume balance not yet called
+    volume->full = 0;     // volume has enough free space
     volume->layout = layout;
     if (rebalanceCfg) {
       volume->rebalanceCfg = xstrdup(rebalanceCfg);
@@ -121,7 +141,8 @@ int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep
       volume->rebalanceCfg = NULL;
     }
     list_init(&volume->clusters);
-    
+        
+    volume->cluster_distibutor = NULL;
     volume->active_list = 0;
     list_init(&volume->cluster_distribute[0]);    
     list_init(&volume->cluster_distribute[1]);    
@@ -141,6 +162,14 @@ void volume_release(volume_t *volume) {
     if (volume->rebalanceCfg) {
       xfree(volume->rebalanceCfg);
       volume->rebalanceCfg = NULL;
+    }  
+    
+    /*
+    ** Release cluster distribution table
+    */
+    if (volume->cluster_distibutor != NULL) {
+      xfree(volume->cluster_distibutor);
+      volume->cluster_distibutor = NULL;
     }  
 
     list_for_each_forward_safe(p, q, &volume->clusters) {
@@ -190,6 +219,12 @@ int volume_safe_copy(volume_t *to, volume_t *from) {
     to->layout = from->layout;
     to->georep = from->georep;
     to->multi_site = from->multi_site;
+    
+    if (to->rebalanceCfg) {
+      xfree(to->rebalanceCfg);
+      to->rebalanceCfg = NULL;
+    }
+    
     if (from->rebalanceCfg) {
       to->rebalanceCfg = xstrdup(from->rebalanceCfg);
     }
@@ -218,6 +253,23 @@ int volume_safe_copy(volume_t *to, volume_t *from) {
           }
 	}
         list_push_back(&to->clusters, &to_cluster->list);
+    }
+    
+     /*
+     ** Release cluster distribution table
+     */
+    if (to->cluster_distibutor) {
+      xfree(to->cluster_distibutor);
+      to->cluster_distibutor = NULL;
+    }
+    /*
+    ** Re copy the cluster distribution table
+    */
+    if (from->cluster_distibutor){
+      rozofs_cluster_distributor_t * pDistributor = from->cluster_distibutor;
+      int size = sizeof(rozofs_cluster_distributor_t) + (sizeof(int)*(pDistributor->max-1));
+      to->cluster_distibutor = xmalloc(size);
+      memcpy(to->cluster_distibutor,pDistributor, size);
     }
 
     if ((errno = pthread_rwlock_unlock(&from->lock)) != 0) {
@@ -341,14 +393,485 @@ error:
     return -1;
 
 }
-uint8_t export_rotate_sid[ROZOFS_CLUSTERS_MAX] = {0};
+
+/*
+**________________________________________________________________________________________________
+** Find out whether a given prime number is a common divisor for every cluster weight
+** and divide when it is the case
+**
+** @param divisor    The prime number
+** @param nbCluster  Number of cluster
+** @param clusters   Cluster information
+**________________________________________________________________________________________________
+*/
+void static inline rozo_apply_common_divisor(int divisor,int nbCluster, cluster_desc_t * clusters) {
+  int idx;
+  /*
+  ** Divide as many times as possible
+  */
+  while (1) {
+    /*
+    ** Check whether divisor is a common divisor of all clusters
+    */
+    for (idx=0; idx < nbCluster; idx++) {
+      if ((clusters[idx].weight % divisor)!=0) break;
+    }
+    /*
+    ** Not a common divisor
+    */    
+    if (idx != nbCluster) return;
+    /*
+    ** Do divide and reloop
+    */
+    for (idx=0; idx < nbCluster; idx++) {
+      clusters[idx].weight /= divisor;
+    }
+  }   
+} 
+/*
+**________________________________________________________________________________________________
+** Find out whether some prime number is a common divisor for every cluster
+** and divide when it is the case
+**
+** @param nbCluster  Number of cluster
+** @param clusters   Cluster information
+**
+**________________________________________________________________________________________________
+*/
+void static inline rozofs_apply_common_divisors(int nbCluster, cluster_desc_t * clusters) {
+  rozo_apply_common_divisor(2,nbCluster,clusters);
+  rozo_apply_common_divisor(3,nbCluster,clusters);
+  rozo_apply_common_divisor(5,nbCluster,clusters);
+  rozo_apply_common_divisor(7,nbCluster,clusters);
+  rozo_apply_common_divisor(11,nbCluster,clusters);
+  rozo_apply_common_divisor(13,nbCluster,clusters);
+  rozo_apply_common_divisor(17,nbCluster,clusters);
+} 
+/*
+**________________________________________________________________________________________________
+** Trace distributor
+**________________________________________________________________________________________________
+*/ 
+int volume_distrib_display(char * pChar, volume_t * volume) {
+  char * pbuf = pChar;
+  rozofs_cluster_distributor_t *  pDistributor = (rozofs_cluster_distributor_t*) volume->cluster_distibutor;
+  int             idx;
+  uint32_t        clusterOccurence[ROZOFS_CLUSTERS_MAX] = {0};
+  int             first;
+
+  if (volume == NULL) return 0;
   
+  pbuf += sprintf(pbuf, "{ \"Distribution\" : {\n");
+  pbuf += sprintf(pbuf, "     \"rule\"              : \"");
+  pbuf += sprintf(pbuf, "%s\",\n",rozofs_file_distribution_rule_e2String(common_config.file_distribution_rule));
+  pbuf += sprintf(pbuf, "     \"cluster rule\"      : \"");
+  pbuf += sprintf(pbuf, "%s\",\n",rozofs_cluster_distribution_rule_e2String(rozofs_get_cluster_distribution_rule(common_config.file_distribution_rule)));
+  pbuf += sprintf(pbuf, "     \"device rule\"       : \"");
+  pbuf += sprintf(pbuf, "%s\"",rozofs_device_distribution_rule_e2String(rozofs_get_device_distribution_rule(common_config.file_distribution_rule)));
+
+  if (pDistributor != NULL) {
+    pbuf += sprintf(pbuf, ",\n     \"distributor size\"  : %d",pDistributor->max);
+    pbuf += sprintf(pbuf, ",\n     \"distributor count\" : %llu",(unsigned long long int)pDistributor->counter);
+    if (pDistributor->max != 0) {
+      pbuf += sprintf(pbuf, ",\n     \"entries\" : [ %d", pDistributor->value[0]);
+      clusterOccurence[pDistributor->value[0]-1]++;
+      for (idx=1; idx<pDistributor->max; idx++) {
+        pbuf += sprintf(pbuf,", %d", pDistributor->value[idx]);
+        clusterOccurence[pDistributor->value[idx]-1]++;
+      }       
+      pbuf += sprintf(pbuf, "],\n");
+      pbuf += sprintf(pbuf, "     \"weights\" : [");
+      first = 1;
+      for (idx=0; idx<ROZOFS_CLUSTERS_MAX; idx++) {
+        if (clusterOccurence[idx] == 0) continue;
+        if (first) {
+          first = 0;
+          pbuf += sprintf(pbuf, "\n");
+        }  
+        else pbuf += sprintf(pbuf, ",\n");
+        pbuf += sprintf(pbuf,"                   { \"cid\" : %d, \"weigth\" : %d}", idx+1, clusterOccurence[idx]);
+      }       
+      if (first) pbuf += sprintf(pbuf, "]");
+      else       pbuf += sprintf(pbuf, "\n                 ]");
+
+    }
+  }  
+  pbuf += sprintf(pbuf, "\n}}\n");
+  return pbuf - pChar;
+}
+/*
+**________________________________________________________________________________________________
+** Build a fair distribution sequence for a set of cluster, each cluster having ts specific weight
+**
+** @param nbCluster  Number of cluster
+** @param clusters   Cluster information (cid, weight)
+**
+**________________________________________________________________________________________________
+*/ 
+rozofs_cluster_distributor_t * rozofs_build_cluster_distributor(int nbCluster, cluster_desc_t * clusters) {
+  int   distributorSize;
+  int   idx1;
+  int   idx2;
+  int * p;
+  float frequency;
+  float floatingRank;
+  int   integerRank;
+  int   oldintegerRank;
+  int   steps;
+  rozofs_cluster_distributor_t * pDistributor;
+  
+  /*
+  ** Divide weight by common divisors
+  */
+  rozofs_apply_common_divisors(nbCluster,clusters);
+
+  /*
+  ** Order clusters in decreasing weight
+  */
+  for (idx1=1; idx1 < nbCluster; idx1++) {
+    for (idx2=0; idx2 < idx1; idx2++) {
+      if (clusters[idx2].weight < clusters[idx1].weight) {
+        cluster_desc_t cluster;
+        /*
+        ** Swap idx1 and idx2
+        */
+        memcpy(&cluster,&clusters[idx2],sizeof(cluster));
+        memcpy(&clusters[idx2],&clusters[idx1],sizeof(cluster));
+        memcpy(&clusters[idx1],&cluster,sizeof(cluster));        
+      }
+    }
+  }  
+ 
+  /*
+  ** Sum up the cluster weights
+  */ 
+  distributorSize  = 0;
+  for (idx1=0; idx1 < nbCluster; idx1++) {
+    distributorSize += clusters[idx1].weight;
+  }  
+  
+  /*
+  ** Allocate a distribution array
+  */  
+  int size = sizeof(rozofs_cluster_distributor_t) + (sizeof(int)*(distributorSize-1));
+  pDistributor = (rozofs_cluster_distributor_t *) xmalloc(size);
+  if (pDistributor == NULL) {
+    return NULL;
+  }
+  memset(pDistributor, 0, size);
+  pDistributor->counter = 0;
+  pDistributor->max     = distributorSize;
+  
+  /*
+  ** Install cluster id in distribution array in decreasing weight order
+  */
+  for (idx1=0;idx1 < nbCluster; idx1++) {
+
+    /*
+    ** Compute the floating frequency of this cluster in the free 
+    ** slots of the distribution sequence
+    */
+    frequency = distributorSize;
+    frequency /= clusters[idx1].weight;
+    floatingRank = frequency;
+
+    /*
+    ** p is the starting of the cluster sequence
+    */
+    p = &pDistributor->value[0];
+    oldintegerRank = 0;
+    integerRank    = floatingRank;
+    
+    while(integerRank <= distributorSize) {
+      /*
+      ** Compute steps to go in the array to reach the next
+      ** attributed slot to this cluster
+      */
+      steps = integerRank - oldintegerRank - 1;
+      /*
+      ** Jump <steps> free steps over the distribution
+      */
+      while(1) {
+        /*
+        ** Jump over already allocated slots
+        */
+        while (*p != 0) p++;
+        /*
+        ** This is the free slot to insert this cluster id
+        */
+        if (steps == 0) break;
+        /*
+        ** More steps to go
+        */
+        steps--;
+        p++;
+      } 
+      /*
+      ** Insert cluster id
+      */   
+      *p = clusters[idx1].cid;
+      /*
+      ** Add one floating frequency to the floating rank
+      */
+      floatingRank   += frequency; 
+      oldintegerRank = integerRank;
+      integerRank    = floatingRank;
+    }
+
+    /*
+    ** Less free slots in the distributor
+    */
+    distributorSize -= clusters[idx1].weight;
+  }
+  
+  return pDistributor;
+}
+/*
+**________________________________________________________________________________________________
+** Compute table of distribution betwen clusters in order to equally distribute upon every cluster
+** with different numbers of SID
+**
+** retval The distribution table
+**________________________________________________________________________________________________
+*/
+void * rozofs_cluster_distributor_create_wsid(list_t *cluster_list) {
+  cluster_desc_t                 cluster_desc[ROZOFS_CLUSTERS_MAX];
+  list_t                       * p;
+  list_t                       * q;
+  uint32_t                       nb_cluster = 0;
+  cluster_desc_t               * pCluster;
+
+
+  /*
+  ** Prepare the list of cluster from the configuration
+  */
+  pCluster = &cluster_desc[0];
+  list_for_each_forward(p, cluster_list) {
+
+    /*
+    ** Get cluster
+    */
+    cluster_t *volume_cluster = list_entry(p, cluster_t, list);
+
+    /*
+    ** Fill working structure
+    */
+    pCluster->weight = 0;    
+    pCluster->cid    = volume_cluster->cid;
+    
+    /*
+    ** The weight is the number of SID
+    */
+    list_for_each_forward(q, (&volume_cluster->storages[0])) {    
+      pCluster->weight ++;
+    }
+    
+    /*
+    ** Next cluster
+    */
+    nb_cluster++;
+    pCluster++;
+  }
+  
+  /*
+  ** Build the distribution sequence from this descriptor
+  */
+  return rozofs_build_cluster_distributor(nb_cluster,cluster_desc);
+}
+/*
+**________________________________________________________________________________________________
+** Compute table of distribution betwen clusters in order to equally distribute upon every cluster
+** with different numbers of SID
+**
+** retval The distribution table
+**________________________________________________________________________________________________
+*/
+void * rozofs_cluster_distributor_create_round_robin(list_t *cluster_list) {
+  cluster_desc_t                 cluster_desc[ROZOFS_CLUSTERS_MAX];
+  list_t                       * p;
+  uint32_t                       nb_cluster = 0;
+  cluster_desc_t               * pCluster;
+
+
+  /*
+  ** Prepare the list of cluster from the configuration
+  */
+  pCluster = &cluster_desc[0];
+  list_for_each_forward(p, cluster_list) {
+
+    /*
+    ** Get cluster
+    */
+    cluster_t *volume_cluster = list_entry(p, cluster_t, list);
+
+    /*
+    ** Fill working structure
+    */
+    pCluster->weight = 1;    
+    pCluster->cid    = volume_cluster->cid;
+    
+    /*
+    ** Next cluster
+    */
+    nb_cluster++;
+    pCluster++;
+  }
+  
+  /*
+  ** Build the distribution sequence from this descriptor
+  */
+  return rozofs_build_cluster_distributor(nb_cluster,cluster_desc);
+}
+/*
+**________________________________________________________________________________________________
+** Compute table of distribution betwen clusters in order to equally distribute upon every cluster
+** with different size
+**
+** retval The distribution table
+**________________________________________________________________________________________________
+*/
+#define ROZOFS_MAX_weight_FREE_SIZE 31
+void * rozofs_cluster_distributor_create_wfsz(list_t *cluster_list) {
+  cluster_desc_t                 cluster_desc[ROZOFS_CLUSTERS_MAX];
+  list_t                       * p;
+  uint32_t                       nb_cluster = 0;
+  cluster_desc_t               * pCluster;
+  uint64_t                       freeMax = 0;
+  int                            i;
+
+  /*
+  ** Prepare the list of cluster from the configuration
+  */
+  pCluster = &cluster_desc[0];
+  list_for_each_forward(p, cluster_list) {
+
+    /*
+    ** Get cluster
+    */
+    cluster_t *volume_cluster = list_entry(p, cluster_t, list);
+
+    /*
+    ** Fill workind structure
+    */
+    pCluster->cid   = volume_cluster->cid;
+    
+    /*
+    ** Get the maximum free size value of a cluster
+    */
+    if (volume_cluster->free > freeMax) {
+      freeMax = volume_cluster->free;
+    } 
+    /*
+    ** The weight is build from the free cluster size. We want 
+    ** ROZOFS_MAX_weight_FREE_SIZE to be the maximum weight of a cluster
+    */
+    pCluster->weight = volume_cluster->free * ROZOFS_MAX_weight_FREE_SIZE;
+    
+    /*
+    ** Next cluster
+    */
+    nb_cluster++;
+    pCluster++;
+  }
+  
+  /*
+  ** Well !!!
+  */
+  if (freeMax == 0) return NULL;
+  freeMax++;
+  
+  /*
+  ** Divide every weight by freeMax to get a maximum weight
+  ** of ROZOFS_MAX_weight_FREE_SIZE
+  */
+  pCluster = &cluster_desc[0];
+  for (i=0; i<nb_cluster; i++) {
+    pCluster->weight = pCluster->weight / freeMax;
+    if (pCluster->weight == 0) pCluster->weight = 1;
+    pCluster++;    
+  }
+  
+  /*
+  ** Build the distribution sequence from this descriptor
+  */
+  return rozofs_build_cluster_distributor(nb_cluster,cluster_desc);
+}
+/*
+**________________________________________________________________________________________________
+** Call the cluster distributor creator depending on the configuration
+**
+** @retval The distribution table
+**________________________________________________________________________________________________
+*/
+static inline void * rozofs_cluster_distributor_create(list_t *cluster_list) {
+  void * ret = NULL;
+  switch (common_config.file_distribution_rule) {
+
+    /*
+    ** Weight is given by the free size
+    */
+    case rozofs_file_distribution_wfsz_write:  
+    case rozofs_file_distribution_wfsz_read: 
+      ret = rozofs_cluster_distributor_create_wfsz(cluster_list);
+      if (ret != NULL) return ret;
+      warning("Can not allocate WFSZ distributor. Try WSID...");
+
+    /*
+    ** weight is given by the SID number
+    */
+    case rozofs_file_distribution_wsid_write:
+    case rozofs_file_distribution_wsid_read: 
+      ret = rozofs_cluster_distributor_create_wsid(cluster_list);
+      return ret;
+
+    /*
+    ** Strict round robin
+    */
+    default:
+      ret = rozofs_cluster_distributor_create_round_robin(cluster_list);
+      return ret;
+  }
+  return NULL;
+}        
+/*
+**________________________________________________________________________________________________
+** Get next cluster in the pre-calculated distribution sequence
+**
+** retval The distribution table
+**________________________________________________________________________________________________
+*/
+uint16_t rozofs_cluster_next(volume_t *volume) {
+  rozofs_cluster_distributor_t * pDistributor;
+  int                            idx;
+
+  pDistributor = volume->cluster_distibutor;
+  
+  idx = pDistributor->counter++;
+  idx %= pDistributor->max;
+  return pDistributor->value[idx];
+}  
+/*
+**________________________________________________________________________________________________
+** Poll every sid of the volume to get the updated size of the whole volume, and eventualy 
+** re-order the volume for further file allocation depending on the configured distribution
+** rule
+**
+** @param volume     The volume to work on
+**
+**________________________________________________________________________________________________
+*/
 void volume_balance(volume_t *volume) {
     list_t *p, *q;
     list_t   * pList;
     list_t     cnx;
     int        new;
+    rozofs_cluster_distributor_t * oldD=NULL;
+    rozofs_cluster_distributor_t * newD;
+    uint64_t   volume_free_space  = 0;
+    uint64_t   volume_total_space = 0;
     
+    rozofs_cluster_distribution_rule_e rule = rozofs_get_cluster_distribution_rule(common_config.file_distribution_rule);
+        
     START_PROFILING_0(volume_balance);
 
     list_init(&cnx);    
@@ -404,10 +927,28 @@ void volume_balance(volume_t *volume) {
               cluster->size += vs->stat.size;
             }
         }
-
-    }
+        
+        volume_free_space  += cluster->free;
+        volume_total_space += cluster->size;
+    } 
     mstoraged_release_cnx(&cnx);
-    
+
+    /*
+    ** Check whether the volume should be declared as full or not
+    */
+    if (common_config.minimum_free_size_percent == 0) {
+      volume->full = 0;
+    }
+    else if (volume_total_space != 0) {
+      volume_free_space *= 100;
+      volume_free_space /= volume_total_space;
+      if (volume_free_space <= common_config.minimum_free_size_percent) {
+        volume->full = 1;
+      }
+      else {
+        volume->full = 0;
+      }  
+    }
     
     /*
     ** case of the geo-replication
@@ -451,18 +992,15 @@ void volume_balance(volume_t *volume) {
     /* 
     ** Order the storages in the clusters, and then the cluster
     */
-    if ((common_config.file_distribution_rule == rozofs_file_distribution_size_balancing)
-	||  (common_config.file_distribution_rule == rozofs_file_distribution_weigthed_round_robin)) {
-	
+    if (rule == rozofs_cluster_distribution_rule_size_balancing) {
 	
       list_for_each_forward(p, pList) {
 	  
         cluster_t *cluster = list_entry(p, cluster_t, list);
-        export_rotate_sid[cluster->cid] = 0;
 		
         list_sort((&cluster->storages[local_site]), volume_storage_compare);
 
-	    if (volume->georep) {
+	if (volume->georep) {
     	  /*
     	  ** do it also for the remote site
     	  */
@@ -473,7 +1011,51 @@ void volume_balance(volume_t *volume) {
 	  
       list_sort(pList, cluster_compare_capacity);
     }
+
+    /*
+    ** Case of weighted round robin algorithm
+    */ 
     
+    oldD = NULL;
+    while (rule == rozofs_cluster_distribution_rule_weighted_round_robin) {
+    
+      oldD = (rozofs_cluster_distributor_t *) volume->cluster_distibutor;
+      
+      /*
+      ** Create 1rst distributor
+      */
+      if (oldD == NULL) {
+        newD = rozofs_cluster_distributor_create(pList); 
+        volume->cluster_distibutor = newD; 
+        break;
+      }
+      
+      /*
+      ** Create a new distributor
+      */      
+      newD = rozofs_cluster_distributor_create(pList); 
+      if (newD == NULL) {
+        oldD = NULL; // No update
+        break;          
+      }
+      
+      /*
+      ** Compare to old distributor
+      */              
+      if ((newD->max == oldD->max) && (memcmp(&newD->value[0], &oldD->value[0], newD->max * sizeof(int))==0)) {
+        xfree(newD);
+        newD = NULL;
+        oldD = NULL;  // No update
+        break;
+      }
+                    
+      /*
+      ** Switch distributors
+      */
+      newD->counter = oldD->counter;
+      volume->cluster_distibutor = newD;
+      break;  
+    }
     
     // Copy the result back to our volume
     if (volume_safe_from_list_copy(volume,pList) != 0) {
@@ -487,18 +1069,27 @@ void volume_balance(volume_t *volume) {
     ** --> exception: in stict round robin mode, keep the the distribution list as it is
     **     --> exception: on the 1rst call, the cluster distibution list has to be initialized
     */    
-    if  (volume->balanced == 0) goto swap;
-    switch(common_config.file_distribution_rule) {
-      case rozofs_file_distribution_strict_round_robin_forward: 
-      case rozofs_file_distribution_strict_round_robin_inverse: 
-      case rozofs_file_distribution_read_round_robin: 
-        goto out;
+    if (volume->balanced == 0) goto swap;
+    
+    if (rule == rozofs_cluster_distribution_rule_weighted_round_robin) { 
+       goto out;
     }
     
 swap:
     volume->active_list = 1 - volume->active_list;
     volume->balanced = 1;    
 out:
+    /*
+    ** Old distributor is to be freed : partir ayeeeeur....
+    */
+    if (oldD != NULL) {
+      /*
+      ** Let time to the main thread before freeing this distibutor
+      */
+      usleep(2000000);
+      xfree(oldD);
+      oldD = NULL;      
+    }
     STOP_PROFILING_0(volume_balance);
 }
 /*
@@ -595,7 +1186,7 @@ static int do_cluster_distribute_strict_round_robin(uint8_t layout,int site_idx,
       if (multi_site) location_bit = vs->siteNum;
       else            location_bit = vs->host_rank;
       if (ROZOFS_BITMAP64_TEST1(location_bit, locationBitMap)) {
-		DISTTRACE("sid%d location collision %x  weigth %d", vs->sid, location_bit, vs->inverseCounter);
+		DISTTRACE("sid%d location collision %x  weight %d", vs->sid, location_bit, vs->inverseCounter);
 		location_collision++;	    
 		continue;
       }
@@ -609,7 +1200,7 @@ static int do_cluster_distribute_strict_round_robin(uint8_t layout,int site_idx,
       vs->forwardCounter++;	
       sids[nb_selected++] = sid;
 
-      DISTTRACE("sid%d is #%d selected with location bit %x weigth %d", vs->sid, nb_selected, location_bit, vs->inverseCounter);
+      DISTTRACE("sid%d is #%d selected with location bit %x weight %d", vs->sid, nb_selected, location_bit, vs->inverseCounter);
 
       /* Enough sid found */
       if (rozofs_inverse==nb_selected) {
@@ -659,7 +1250,7 @@ forward:
       if (multi_site) location_bit = vs->siteNum;
       else            location_bit = vs->host_rank;
       if (ROZOFS_BITMAP64_TEST1(location_bit, locationBitMap)) {
-		DISTTRACE("sid%d location collision %x weigth %d", vs->sid, location_bit, vs->forwardCounter);
+		DISTTRACE("sid%d location collision %x weight %d", vs->sid, location_bit, vs->forwardCounter);
 		location_collision++;	    
 		continue;
       }
@@ -672,7 +1263,7 @@ forward:
       vs->forwardCounter++;	
       sids[nb_selected++] = sid;
 
-      DISTTRACE("sid%d is #%d selected with location bit %x weigth %d", vs->sid, nb_selected, location_bit, vs->forwardCounter);
+      DISTTRACE("sid%d is #%d selected with location bit %x weight %d", vs->sid, nb_selected, location_bit, vs->forwardCounter);
 
       /* Enough sid found */
       if (rozofs_forward==nb_selected) {
@@ -702,9 +1293,9 @@ spare:
   loop = 0;
   /* 
   ** The probability to receive a spare projection depends on the rank in the list of spare
-  ** so the weigth given to a spare role depends on the rank
-  ** in layout 1: 1rst spare has a weigth of 2, 2nd spare a weigth of 1
-  ** in layout 2: 1rst spare has a weigth of 4, 2nd spare a weigth of 3...
+  ** so the weight given to a spare role depends on the rank
+  ** in layout 1: 1rst spare has a weight of 2, 2nd spare a weight of 1
+  ** in layout 2: 1rst spare has a weight of 4, 2nd spare a weight of 3...
   */
   weight = rozofs_safe-rozofs_forward; 
   while (loop < 4) {
@@ -729,7 +1320,7 @@ spare:
       if (multi_site) location_bit = vs->siteNum;
       else            location_bit = vs->host_rank;
       if (ROZOFS_BITMAP64_TEST1(location_bit, locationBitMap)) {
-		DISTTRACE("sid%d location collision %x weigth %d", vs->sid, location_bit, vs->spareCounter);
+		DISTTRACE("sid%d location collision %x weight %d", vs->sid, location_bit, vs->spareCounter);
 		location_collision++;	    
 		continue;
       }
@@ -741,7 +1332,7 @@ spare:
       ROZOFS_BITMAP64_SET(location_bit,locationBitMap);
       vs->spareCounter += weight;
       if (weight > 1) {
-        weight--;	// Next spare will have lower weigth since less probability to receive a spare prj
+        weight--;	// Next spare will have lower weight since less probability to receive a spare prj
       }  
       sids[nb_selected++] = sid;
 
@@ -761,178 +1352,20 @@ spare:
   }
   return -1;  
 }
-static int do_cluster_distribute_weighted_round_robin(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint8_t multi_site) {
-  int        idx;
-  uint64_t   sid_taken=0;
-  uint64_t   taken_bit;  
-  uint64_t   location_mask;
-  uint64_t   location_bit;  
-  uint8_t    ms_ok = 0;;
-  int        nb_selected=0; 
-  int        location_collision; 
-  int        loop;
-  volume_storage_t *selected[ROZOFS_SAFE_MAX];
-  volume_storage_t *vs;
-  list_t           *pList = &cluster->storages[site_idx];
-  list_t           *p;
-  uint64_t          decrease_size;
 
-  uint8_t rozofs_inverse=0; 
-  uint8_t rozofs_forward=0;
-  uint8_t rozofs_safe=0;
-
-  rozofs_get_rozofs_invers_forward_safe(layout,&rozofs_inverse,&rozofs_forward,&rozofs_safe);
-  
-//  int modulo = export_rotate_sid[cluster->cid] % rozofs_forward;
-//  export_rotate_sid[cluster->cid]++;
-
-  /*
-  ** Loop on the sid and take only one per node on each loop
-  */    
-  loop = 0;
-  while (loop < 8) {
-    loop++;
-
-    idx                = -1;
-    location_mask      = 0;
-    location_collision = 0;
-
-    list_for_each_forward(p, pList) {
-
-      vs = list_entry(p, volume_storage_t, list);
-      idx++;
-
-      /* SID already selected */
-      taken_bit = (1ULL<<idx);
-      if ((sid_taken & taken_bit)!=0) {
-        //DISTTRACE("idx%d/sid%d already taken", idx, vs->sid);
-	    continue;
-      }
-
-      /* 
-      ** In multi site location is the site number.
-      ** else location is the host number within the cluter
-      ** Is there one sid already allocated on this location ?
-      */
-      if (multi_site) location_bit = (1ULL<<vs->siteNum);
-      else            location_bit = (1ULL<<vs->host_rank);
-      if ((location_mask & location_bit)!=0) {
-		//info("idx%d/sid%d location collision %x", idx, vs->sid, location_bit);
-		location_collision++;	    
-		continue;
-      }
-
-      /* Is there some available space on this server */
-      if (vs->status != 0 && vs->stat.free != 0)
-            ms_ok++;
-
-      /*
-      ** Take this guy
-      */
-      sid_taken     |= taken_bit;
-      location_mask |= location_bit;
-      selected[nb_selected++] = vs;
-
-      //info("idx%d/sid%d is #%d selected with location bit %x with status %d", idx, vs->sid, nb_selected, location_bit, vs->status);
-
-      /* Enough sid found */
-      if (rozofs_safe==nb_selected) {
-		if (ms_ok<rozofs_forward) return -1;
-		//info("selection done");
-		goto success;
-      }	  
-    }
-    //info("end loop %d nb_selected %d location_collision %d", loop, nb_selected, location_collision);
-    
-    if ((nb_selected+location_collision) < rozofs_safe) return  -1;    
-  }
-  return -1;
-  
-success:
-
-
-  
-  
-  /* 
-  ** In weigthed round robin and in size equalizing decrease the estimated size 
-  ** of the storages and re-order them in the cluster
-  */
-  decrease_size = common_config.alloc_estimated_mb*(1024*1024);
-  idx = 0;
-
-  while(idx < rozofs_inverse) {
-  
-    vs = selected[idx];
-    sids[idx] = vs->sid;
-    if (decrease_size) {
-      if (vs->stat.free > (256*decrease_size)) {
-	vs->stat.free -= decrease_size;
-      }
-      else if (vs->stat.free > (64*decrease_size)) {
-	vs->stat.free -= (decrease_size/2);      
-      }
-      else if (vs->stat.free > decrease_size) {
-	vs->stat.free -= (decrease_size/8);
-      }
-      else {
-	vs->stat.free /= 2;
-      }
-    }
-    idx++;
-  }
-  
-  decrease_size = decrease_size /2;
-  while(idx < rozofs_forward) {
-  
-    vs = selected[idx];
-    sids[idx] = vs->sid;
-
-    if (decrease_size) {
-      if (vs->stat.free > (256*decrease_size)) {
-	vs->stat.free -= decrease_size;
-      }
-      else if (vs->stat.free > (64*decrease_size)) {
-	vs->stat.free -= (decrease_size/2);      
-      }
-      else if (vs->stat.free > decrease_size) {
-	vs->stat.free -= (decrease_size/8);
-      }
-      else {
-	vs->stat.free /= 2;
-      }
-    }  
-    idx++;
-  } 
-
-  decrease_size = decrease_size /16;   
-  while(idx < rozofs_safe) {
-  
-    vs = selected[idx];
-    sids[idx] = vs->sid;
-
-    if (decrease_size) {
-      if (vs->stat.free > (256*decrease_size)) {
-	vs->stat.free -= decrease_size;
-      }
-      else if (vs->stat.free > (64*decrease_size)) {
-	vs->stat.free -= (decrease_size/2);      
-      }
-      else if (vs->stat.free > decrease_size) {
-	vs->stat.free -= (decrease_size/8);
-      }
-      else {
-	vs->stat.free /= 2;
-      }
-    }  
-    idx++;
-  }    
-  /*
-  ** Re-order the SIDs
-  */
-  list_sort(pList, volume_storage_compare);
-  return 0;
-}
-
+/*
+**___________________________________________________________________________________________________
+** Distribute files in a size balancing maner within a cluster
+**
+** @param layout        The layout to use
+** @param site_idx      Local site number for geo replication (deprecated)
+** @param cluster       Selected Cluster identifier (to be returned)
+** @param sids          Selected sids withing the cluster (to be returned)
+** @param multi_site    Whether multi site distribution has to be applied
+**
+** @retval 0 on success, -1 else (errno is set)
+**___________________________________________________________________________________________________
+*/
 static int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint8_t multi_site) {
   int        idx;
   uint64_t   sid_taken=0;
@@ -955,9 +1388,6 @@ static int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, clu
 
   rozofs_get_rozofs_invers_forward_safe(layout,&rozofs_inverse,&rozofs_forward,&rozofs_safe);
   
-//  int modulo = export_rotate_sid[cluster->cid] % rozofs_forward;
-//  export_rotate_sid[cluster->cid]++;
-
   /*
   ** Loop on the sid and take only one per node on each loop
   */    
@@ -1024,7 +1454,7 @@ success:
 
   
   /* 
-  ** In weigthed round robin and in size equalizing decrease the estimated size 
+  ** In weighted round robin and in size equalizing decrease the estimated size 
   ** of the storages and re-order them in the cluster
   */
   decrease_size = common_config.alloc_estimated_mb*(1024*1024);
@@ -1115,96 +1545,258 @@ success:
   cluster->free = free; 
   return 0;
 }
-static int do_cluster_distribute(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint8_t multi_site) {
+/*
+**___________________________________________________________________________________________________
+** Distribute files in a size balancing maner
+**
+** @param layout        The layout to use
+** @param volume        The volume to use
+** @param site_number   Local site number for geo replication (deprecated)
+** @param cid           Selected Cluster identifier (to be returned)
+** @param sids          Selected sids withing the cluster (to be returned)
+**
+** @retval 0 on success, -1 else (errno is set)
+**___________________________________________________________________________________________________
+*/
+static inline int volume_distribute_size_balancing(uint8_t layout, volume_t *volume,int site_number, cid_t *cid, sid_t *sids) {
+  list_t     * p,* q;
+  int          site_idx;
+  list_t     * cluster_distribute;
+
+  site_idx = export_get_local_site_number();
 
 
-  switch(common_config.file_distribution_rule) {
+  if (volume->georep)
+  {
+    site_idx = site_number;
+  }
+
+  /*
+  ** Get active cluster list
+  ** This list has been prepared by the volume balance process
+  ** Ths clusters are order in available size decreasing order
+  ** and sids whithin the cluster too.
+  */
+  cluster_distribute = &volume->cluster_distribute[volume->active_list];
+
+  list_for_each_forward(p, cluster_distribute) {
+
+    cluster_t *next_cluster;
+    cluster_t *cluster = list_entry(p, cluster_t, list);
+
+
+    if (do_cluster_distribute_size_balancing(layout, site_idx, cluster, sids, volume->multi_site) == 0) {
+
+      *cid = cluster->cid;
+
+      /*
+      ** In size equalizing, Re-order the clusters
+      */	      
+      while (1) {
+
+	q = p->next;
+
+	// This cluster is the last and so the smallest
+	if (q == cluster_distribute) break;
+
+	// Check against next cluster
+	next_cluster = list_entry(q, cluster_t, list);
+	if (cluster->free > next_cluster->free) break;
+
+	// Next cluster has to be set before the current one		
+	q->prev       = p->prev;
+	q->prev->next = q;
+	p->next       = q->next;
+	p->next->prev = p;
+	q->next       = p;
+	p->prev       = q;
+      }
+
+      return 0;
+    }
+  }
+
+  errno = ENOSPC;
+  return -1;
+}
+/*
+**___________________________________________________________________________________________________
+** Distribute file in a weighted round robin
+**
+** @param layout        The layout to use
+** @param volume        The volume to use
+** @param site_number   Local site number for geo replication (deprecated)
+** @param cid           Selected Cluster identifier (to be returned)
+** @param sids          Selected sids withing the cluster (to be returned)
+**
+** @retval 0 on success, -1 else (errno is set)
+**___________________________________________________________________________________________________
+*/
+static inline int volume_distribute_round_robin(uint8_t layout, volume_t *volume,int site_number, cid_t *cid, sid_t *sids) {
+  list_t    * p;
+  int         site_idx;
+  list_t    * cluster_distribute;
+
+
+  site_idx = export_get_local_site_number();
+
+  if (volume->georep)
+  {
+    site_idx = site_number;
+  }
+
+
+  /*
+  ** Get active cluster list
+  ** This list has been prepared by the volume balance process
+  ** The clusters are order in available size decreasing order
+  */
+
+  cluster_distribute = &volume->cluster_distribute[volume->active_list];
+
+  list_for_each_forward(p, cluster_distribute) {
+
+    cluster_t *cluster = list_entry(p, cluster_t, list);
+
+    if (do_cluster_distribute_strict_round_robin(layout,site_idx, cluster, sids, volume->multi_site) == 0) {
+
+      *cid = cluster->cid;
+
+      /* 
+      ** Put the cluster to the end of the list 
+      */    
+      list_remove(&cluster->list);
+      list_push_back(cluster_distribute, &cluster->list);
+      return 0;
+    }
+  }
+
+  errno = ENOSPC;
+  return -1;
+}
+/*
+**___________________________________________________________________________________________________
+** Distribute file in a size balancing maner
+**
+** @param layout        The layout to use
+** @param volume        The volume to use
+** @param site_number   Local site number for geo replication (deprecated)
+** @param cid           Selected Cluster identifier (to be returned)
+** @param sids          Selected sids withing the cluster (to be returned)
+**
+** @retval 0 on success, -1 else (errno is set)
+**___________________________________________________________________________________________________
+*/
+static inline int volume_distribute_weighted_round_robin(uint8_t layout, volume_t *volume,int site_number, cid_t *cid, sid_t *sids) {
+  list_t    * p;
+  int         site_idx;
+  list_t    * cluster_distribute;
+  uint16_t    next_cid;
+  int         loop;
+
+  /*
+  ** Check the distribution table is available
+  */
+  if (volume->cluster_distibutor == NULL) {
+    /*
+    ** No weighted distribution table. Go for strict round robin
+    */ 
+    return volume_distribute_round_robin(layout,volume, site_number, cid, sids);     
+  }
   
-    case rozofs_file_distribution_size_balancing:
-	  return do_cluster_distribute_size_balancing(layout, site_idx, cluster, sids, multi_site);
-	  break;
-	case rozofs_file_distribution_weigthed_round_robin:
-	  return do_cluster_distribute_weighted_round_robin(layout, site_idx, cluster, sids, multi_site);
-	  break;
-    case rozofs_file_distribution_strict_round_robin_forward:
-    case rozofs_file_distribution_strict_round_robin_inverse:
-    case rozofs_file_distribution_read_round_robin:
-      return do_cluster_distribute_strict_round_robin(layout, site_idx, cluster, sids, multi_site);	
+  site_idx = export_get_local_site_number();
+
+  if (volume->georep)
+  {
+    site_idx = site_number;
+  }
+
+  /*
+  ** Try to follow the pre-calculated list of CID to allocate from.
+  ** When allocation fails attempt the next CID in the list...
+  ** ...and so on for 3 trials 
+  */
+  for (loop=0; loop<3; loop++) { 
+
+    /*
+    ** Get next cluster id to allocate from 
+    */
+    next_cid = rozofs_cluster_next(volume);
+
+    /*
+    ** Get active cluster list
+    ** This list is never updated by the volume balance process
+    */
+    cluster_distribute = &volume->cluster_distribute[volume->active_list];
+
+    list_for_each_forward(p, cluster_distribute) {
+
+      cluster_t *cluster = list_entry(p, cluster_t, list);
+      if (cluster->cid != next_cid) continue;
+
+      if (do_cluster_distribute_strict_round_robin(layout,site_idx, cluster, sids,volume->multi_site) == 0) {
+
+        *cid = cluster->cid;
+
+	/* 
+        ** Put the cluster to the end of the list
+        ** which is the more probable next rank when it will be re-used 
+        */    
+	list_remove(&cluster->list);
+	list_push_back(cluster_distribute, &cluster->list);
+        return 0;
+      }
+      break;
+    }
+  }
+
+  /*
+  ** Get the first cluster that works
+  */ 
+  return volume_distribute_round_robin(layout,volume, site_number, cid, sids);   
+}
+/*
+**___________________________________________________________________________________________________
+** Call distribution algorithm for a new file that is being created
+**
+** @param layout        The layout to use
+** @param volume        The volume to use
+** @param site_number   Local site number for geo replication (deprecated)
+** @param cid           Selected Cluster identifier (to be returned)
+** @param sids          Selected sids withing the cluster (to be returned)
+**
+** @retval 0 on success, -1 else (errno is set)
+**___________________________________________________________________________________________________
+*/
+int volume_distribute(uint8_t layout, volume_t *volume,int site_number, cid_t *cid, sid_t *sids) {
+  int status = -1;
+  
+  START_PROFILING(volume_distribute);
+  errno = 0;
+    
+  switch(rozofs_get_cluster_distribution_rule(common_config.file_distribution_rule)) {
+
+    case rozofs_cluster_distribution_rule_size_balancing:
+      status = volume_distribute_size_balancing(layout, volume, site_number, cid, sids) ;
+      break;
+
+    case rozofs_cluster_distribution_rule_weighted_round_robin:
+      status = volume_distribute_weighted_round_robin(layout, volume, site_number, cid, sids) ;
+      break;        
+
+    default:
+      severe("No such distribution algorithm %d",common_config.file_distribution_rule);
+      status = volume_distribute_size_balancing(layout, volume, site_number, cid, sids) ;
       break;
   }	
   
-  severe("No such distribution rule %d\n",common_config.file_distribution_rule);
-  return -1;    
+  STOP_PROFILING(volume_distribute);
+  return status; 
 }
-int volume_distribute(uint8_t layout, volume_t *volume,int site_number, cid_t *cid, sid_t *sids) {
-    list_t *p,*q;
-    int xerrno = ENOSPC;
-    int site_idx;
-    list_t * cluster_distribute;
-    
-
-    DEBUG_FUNCTION;
-    START_PROFILING(volume_distribute);
-    
-    site_idx = export_get_local_site_number();
-
-    
-    if (volume->georep)
-    {
-      site_idx = site_number;
-    }
-
-    cluster_distribute = &volume->cluster_distribute[volume->active_list];
-    
-    list_for_each_forward(p, cluster_distribute) {
-    
-      cluster_t *next_cluster;
-      cluster_t *cluster = list_entry(p, cluster_t, list);
-
-      if (do_cluster_distribute(layout,site_idx, cluster, sids,volume->multi_site) == 0) {
-
-        *cid = cluster->cid;
-        xerrno = 0;
-
-	/* In round robin mode put the cluster to the end of the list */    
-	if (common_config.file_distribution_rule != rozofs_file_distribution_size_balancing){
-	  list_remove(&cluster->list);
-	  list_push_back(cluster_distribute, &cluster->list);
-	  break;
-	}
-
-	/*
-	** In size equalizing, Re-order the clusters
-	*/	      
-	while (1) {
-
-	  q = p->next;
-
-	  // This cluster is the last and so the smallest
-	  if (q == cluster_distribute) break;
-
-	  // Check against next cluster
-	  next_cluster = list_entry(q, cluster_t, list);
-	  if (cluster->free > next_cluster->free) break;
-
-	  // Next cluster has to be set before the current one		
-	  q->prev       = p->prev;
-	  q->prev->next = q;
-	  p->next       = q->next;
-	  p->next->prev = p;
-	  q->next       = p;
-	  p->prev       = q;
-	}
-
-        break;
-      }
-    }
-    
-    STOP_PROFILING(volume_distribute);
-    errno = xerrno;
-    return errno == 0 ? 0 : -1;
-}
-
+/*
+**___________________________________________________________________________________________________
+**___________________________________________________________________________________________________
+*/
 void volume_stat(volume_t *volume, volume_stat_t *stat) {
     list_t *p;
     DEBUG_FUNCTION;

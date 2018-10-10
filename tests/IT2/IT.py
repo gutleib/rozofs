@@ -58,10 +58,15 @@ def log(string):
 # output a message on the console
 def console(string): 
 #___________________________________________________
-  # Reset current line
-  clearline()  
+
   # Add carriage return to the message
-  string="\r"+string+"\n"
+  string=string+"\n"
+
+  if options.debug == False:    
+    # Reset current line
+    clearline()  
+    string="\r"+string
+    
   # write the message in the buffer
   sys.stdout.write(string)
   # force ouput
@@ -77,6 +82,15 @@ def report(string):
 def addline(string):
 #___________________________________________________
   global resetLine
+  global verbose
+  
+  if options.debug == True:    
+    # write the message in the buffer
+    sys.stdout.write(string)
+    # force ouput
+    sys.stdout.flush()
+    return
+    
   # Set bold and yellow effects
   sys.stdout.write(bold+yellow)
   # Add the string in the buffer
@@ -935,7 +949,7 @@ def crc32():
     report("Fail to find bins file name in /tmp/crc32loc")
     return -1    
     
-  backline("Truncate mapper/header file ")
+  backline("Truncate mapper/header file %s"%(mapper))
     
   # Truncate mapper file  
   with open(mapper,"w") as f: f.truncate(0)
@@ -968,7 +982,7 @@ def crc32():
     size=size-1
   f.close()
 
-  backline("Corrupt mapper/header file ")
+  backline("Corrupt mapper/header file %s"%(mapper))
       
   # Reset storage
   os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
@@ -1008,7 +1022,7 @@ def crc32():
   f.seek(size-11);
   f.write("DDT")       
   f.close()
-  backline("Corrupt bins file ")
+  backline("Corrupt bins file %s"%(bins))
 
   # Reset storages
   os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
@@ -1039,9 +1053,9 @@ def crc32():
  
   # Checl for CRC32 errors
   if check_storcli_crc(False) == True:
-    report("Bins file still has errors")
+    report("Bins file %s still has errors"%(bins))
     return 1     
-  backline("Bins file is repaired")
+  backline("Bins file %s is repaired"%(bins))
   
   if filecmp.cmp(crcfile,"./ref") == False: 
     report("%s and %s differ"%(crcfile,"./ref"))
@@ -2367,6 +2381,7 @@ def usage():
   console("      [--repeat <nb>]    The number of times the test list must be repeated." )  
   console("      [--cont]           To continue tests on failure." )
   console("      [--fusetrace]      To enable fuse trace on test. When set, --stop is automaticaly set.")
+  console("      [--debug]          ACtivate debug trace.")
   console("    extra:")
   console("      [--process <nb>]   The number of processes that will run the test in paralell. (default %d)"%(process))
   console("      [--count <nb>]     The number of loop that each process will do. (default %s)"%(loop) )
@@ -2404,6 +2419,7 @@ parser.add_option("-m","--mount", action="store", type="string", dest="mount", h
 parser.add_option("-R","--rebuildCheck", action="store_true", dest="rebuildCheck", default=False, help="To request for strong rebuild checks on each rebuild.")
 parser.add_option("-e","--exepath", action="store", type="string", dest="exepath", help="re-exported path to run the test on.")
 parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, help="Running through NFS.")
+parser.add_option("-d","--debug", action="store_true",dest="debug", default=False, help="Debug trace.")
 
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
