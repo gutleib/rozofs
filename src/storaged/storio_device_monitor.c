@@ -60,7 +60,7 @@ struct blkio_info {
 	unsigned int aveq;	/* Average queue length */
 };
 
-uint32_t STORIO_DEVICE_PERIOD=3;
+uint32_t STORIO_DEVICE_PERIOD = 5;
 extern time_t   storio_last_enumeration_date;
 extern int      re_enumration_required;
 
@@ -1179,14 +1179,6 @@ int storio_device_mapping_monitor_thread_start() {
   pthread_attr_t             attr;
   int                        err;
   pthread_t                  thrdId;
-
-  /*
-  ** Set the polling periodicity in seconds
-  */
-  if ((common_config.file_distribution_rule != rozofs_file_distribution_size_balancing)
-  &&  (common_config.file_distribution_rule != rozofs_file_distribution_read_round_robin))  {
-    STORIO_DEVICE_PERIOD = 10;
-  }
   
   /*
   ** 1rst call to monitoring function, and access to the disk 

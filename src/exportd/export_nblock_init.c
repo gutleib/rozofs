@@ -535,7 +535,46 @@ char * show_file_distibution_rule(char * pBuf) {
   pBuf += sprintf(pBuf,"File distibution rule = %s\n",rozofs_file_distribution_rule_e2String(common_config.file_distribution_rule)); 
   pBuf += sprintf(pBuf,"File estimated weigth = %d MB\n",common_config.alloc_estimated_mb);
   return pBuf;
-}   
+} 
+/*
+*_______________________________________________________________________
+*/
+/**
+*   Storage,Volumes, EID statistics
+
+  @param argv : standard argv[] params of debug callback
+  @param tcpRef : reference of the TCP debug connection
+  @param bufRef : reference of an output buffer 
+  
+  @retval none
+*/
+void show_distrib(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char *pbuf = uma_dbg_get_buffer();
+  int   vid;
+  volume_t * volume;
+
+  if (argv[1] == NULL) {
+    pbuf+=sprintf(pbuf, "Missing volume id\n");
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+    return;
+  }  
+
+  if (sscanf(argv[1],"%d", &vid) != 1) {
+    pbuf+=sprintf(pbuf, "Bad vid format\n");
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+    return;
+  }  
+  
+  volume = volumes_lookup_volume(vid);
+  if (volume == NULL) {
+    pbuf+=sprintf(pbuf, "No such volume\n");
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+    return;
+  }  
+  
+  pbuf += volume_distrib_display(pbuf,volume);
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+} 
 /*
 *_______________________________________________________________________
 */
@@ -1240,6 +1279,7 @@ int expgwc_start_nb_blocking_th(void *args) {
     uma_dbg_addTopic("vfstat_stor",show_vfstat_stor);
     uma_dbg_addTopic("vfstat_vol",show_vfstat_vol);
     uma_dbg_addTopic("exp_slave", show_export_slave);
+    uma_dbg_addTopic("distrib", show_distrib);
              
     /*
     ** do not provide volume stats for the case of the slaves

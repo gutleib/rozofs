@@ -55,20 +55,130 @@ static __inline__ unsigned long long rdtsc(void)
 
 }
 /*
+**_____________________________________________________________________________
 ** File distribution rules
 **
 */
-
 typedef enum _rozofs_file_distribution_rule_e {
   rozofs_file_distribution_size_balancing,
-  rozofs_file_distribution_weigthed_round_robin,
-  rozofs_file_distribution_strict_round_robin_forward,
-  rozofs_file_distribution_strict_round_robin_inverse,  
-  rozofs_file_distribution_read_round_robin,  
+  rozofs_file_distribution_round_robin_write_1,
+  rozofs_file_distribution_round_robin_write_2,
+  rozofs_file_distribution_round_robin_write_3,  
+  rozofs_file_distribution_round_robin_read,  
+  rozofs_file_distribution_wsid_write,  
+  rozofs_file_distribution_wsid_read,  
+  rozofs_file_distribution_wfsz_write,  
+  rozofs_file_distribution_wfsz_read,  
   rozofs_file_distribution_max
 } rozofs_file_distribution_rule_e;
 
 #include <rozofs/rozofs_file_distribution_rule_e2String.h>
+/*
+**_____________________________________________________________________________
+** List of existing cluster distribution rule 
+*/
+typedef enum _rozofs_cluster_distribution_rule_e {
+  //  Cluster size balancing 
+  rozofs_cluster_distribution_rule_size_balancing,
+  //  Cluster weighted round robin 
+  rozofs_cluster_distribution_rule_weighted_round_robin,
+} rozofs_cluster_distribution_rule_e;
+#include <rozofs/rozofs_cluster_distribution_rule_e2String.h>
+
+/*
+**_____________________________________________________________________________
+** Get the cluster distribution rule from the file distribution rule
+**
+** @param rule    The file distribution rule
+**
+** retval the cluster distribution rule deduced from the file distribution rule
+**_____________________________________________________________________________
+*/
+static inline rozofs_cluster_distribution_rule_e rozofs_get_cluster_distribution_rule(rozofs_file_distribution_rule_e rule) {
+  switch(rule) {
+    
+    /*
+    ** Cluster size balancing
+    */
+    case rozofs_file_distribution_size_balancing: 
+      return rozofs_cluster_distribution_rule_size_balancing;
+
+    /*
+    ** Cluster weighted round robin
+    */   
+    case rozofs_file_distribution_round_robin_write_1: 
+    case rozofs_file_distribution_round_robin_write_2:
+    case rozofs_file_distribution_round_robin_write_3:
+    case rozofs_file_distribution_round_robin_read: 
+    case rozofs_file_distribution_wsid_write:
+    case rozofs_file_distribution_wsid_read: 
+    case rozofs_file_distribution_wfsz_write:  
+    case rozofs_file_distribution_wfsz_read:  
+      return rozofs_cluster_distribution_rule_weighted_round_robin;
+
+    default:
+      severe("Unexpected distribution rule %d. Apply sb",rule);
+      break;     
+  }
+  return rozofs_cluster_distribution_rule_size_balancing;
+}
+/*
+**_____________________________________________________________________________
+** List of existing device distribution rule 
+*/
+typedef enum _rozofs_device_distribution_rule_e {
+  //  Device size balancing 
+  rozofs_device_distribution_rule_size_balancing,
+  //  Device write round robin 
+  rozofs_device_distribution_rule_write,
+  //  Device read round robin 
+  rozofs_device_distribution_rule_read,
+} rozofs_device_distribution_rule_e;
+#include <rozofs/rozofs_device_distribution_rule_e2String.h>
+/*
+**_____________________________________________________________________________
+** Get the device distribution rule from the file distribution rule
+**
+** @param rule    The file distribution rule
+**
+** retval the device distribution rule deduced from the file distribution rule
+**_____________________________________________________________________________
+*/
+static inline rozofs_device_distribution_rule_e rozofs_get_device_distribution_rule(rozofs_file_distribution_rule_e rule) {
+  switch(rule) {
+
+    /*  
+    ** Device size balancing 
+    */
+    case rozofs_file_distribution_size_balancing: 
+      return rozofs_device_distribution_rule_size_balancing;
+
+    /*  
+    ** Device write round robin
+    */    
+    case rozofs_file_distribution_round_robin_write_1: 
+    case rozofs_file_distribution_round_robin_write_2:
+    case rozofs_file_distribution_round_robin_write_3: 
+    case rozofs_file_distribution_wsid_write:
+    case rozofs_file_distribution_wfsz_write:  
+      return rozofs_device_distribution_rule_write;      
+
+
+    /*  
+    ** Device read round robin
+    */    
+    case rozofs_file_distribution_round_robin_read: 
+    case rozofs_file_distribution_wsid_read: 
+    case rozofs_file_distribution_wfsz_read:  
+      return rozofs_device_distribution_rule_read;
+      
+    default:
+      severe("Unexpected distribution rule %d. Apply sb",rule);
+      break;   
+  }
+  return rozofs_device_distribution_rule_size_balancing;
+}
+
 
 
 
