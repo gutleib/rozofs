@@ -180,7 +180,7 @@ typedef struct _rbs_parameter_t {
   char     rbs_export_hostname[ROZOFS_HOSTNAME_MAX];
   int      rbs_device_number;
   RBS_REBUILD_TYPE_E type;
-  char   * storaged_hostname;
+//  char   * storaged_hostname; deprecated
   int      cid;
   int      sid;
   fid_t    fid2rebuild;
@@ -456,7 +456,7 @@ void rbs_conf_init(rbs_parameter_t * par) {
   }  
   par->rbs_device_number    = -1;
   par->type                 = rbs_rebuild_type_storage;
-  par->storaged_hostname    = NULL;
+//  par->storaged_hostname    = NULL;
   par->cid                  = -1;
   par->sid                  = -1;
   memset(par->fid2rebuild,0,sizeof(fid_t));
@@ -544,7 +544,7 @@ void usage(char * fmt, ...) {
     printf("   -fg                       \tTo force foreground execution\n");
     printf("   -bg                       \tTo force background execution\n");
     printf(" mainly for tests:\n");
-    printf("   -H, --host=storaged-host  \tSpecify the hostname to rebuild\n");
+//    printf("   -H, --host=storaged-host  \tSpecify the hostname to rebuild\n");
     printf("   -c, --config=config-file  \tSpecify config file to use\n");
     printf("                             \t(default: %s).\n",STORAGED_DEFAULT_CONFIG);
 
@@ -814,7 +814,8 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
 				
     if (IS_ARG(-H) || IS_ARG(--host)) { 
       GET_PARAM(--host)
-      par->storaged_hostname = optarg;
+      // deprecated
+      //par->storaged_hostname = optarg;
       continue;
     }
 

@@ -69,11 +69,11 @@ uint32_t storio_nb = 0;
 DECLARE_PROFILING(spp_profiler_t);
 
 extern sconfig_t storaged_config;
-extern char * pHostArray[];
 
 int storaged_update_device_info(storage_t * st);
 
 void * storaged_decoded_rpc_buffer_pool = NULL;
+extern char storaged_config_file[];
 
 /*
  **_________________________________________________________________________
@@ -178,13 +178,7 @@ static void show_storio_nb(char * argv[], uint32_t tcpRef, void *bufRef) {
           
     pChar +=  rozofs_string_append(pChar,"storio_nb : ");
     pChar +=  rozofs_u32_append(pChar,storio_nb);
-    pChar +=  rozofs_string_append(pChar,"\nmode : ");
-    if (common_config.storio_multiple_mode) {
-      pChar +=  rozofs_string_append(pChar,"multiple");
-    }  
-    else {
-      pChar +=  rozofs_string_append(pChar,"single");
-    }      
+    pChar +=  rozofs_string_append(pChar,"\nmode : multiple");  
     pChar += rozofs_string_append(pChar,"\ncids : ");
              
     /* For each storage on configuration file */
@@ -464,7 +458,6 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
     uint32_t mx_tcp_client = 2;
     uint32_t mx_tcp_server = 8;
     uint32_t mx_tcp_server_cnx = 10;
-    uint32_t local_ip = INADDR_ANY;
     uint32_t        mx_af_unix_ctx = ROZO_AFUNIX_CTX_STORAGED;
 
     //#warning TCP configuration ressources is hardcoded!!
@@ -537,28 +530,35 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
          **--------------------------------------
          */
 
-	if (pHostArray[0] != NULL) {
-	  int idx=0;
-	  while (pHostArray[idx] != NULL) {
-	    rozofs_host2ip(pHostArray[idx], &local_ip);
-	    uma_dbg_init(10, local_ip, arg_p->debug_port);	    
-	    idx++;
-	  }  
-	}
-	else {
-	  local_ip = INADDR_ANY;
-	  uma_dbg_init(10, local_ip, arg_p->debug_port);
-	}  
+        {
+           int idx;
+           /*
+           ** Get number of configured IP addresses in config file
+           */           
+           int nbAddr = sconfig_get_nb_IP_address(&storaged_config);
+           
+           for (idx=0; idx< nbAddr; idx++) {
+	      uma_dbg_init(10, sconfig_get_this_IP(&storaged_config,idx), arg_p->debug_port);	                 
+           }
+           /*
+           ** When no configuration file is given, one uses the default config file.
+           ** Only one storaged and one storio of each instance can exist on this node.
+           ** One can listen on 127.0.0.1 for rozodiag commands           
+           */
+           if (strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0) {
+	      uma_dbg_init(10, 0x7F000001, arg_p->debug_port);	                              
+           }
+           
+        }   
         
 
         {
             char name[256];
-	    if (pHostArray[0] == 0) {
-	      sprintf(name, "storaged");
-	    }
-	    else {
-              sprintf(name, "storaged %s", pHostArray[0]);
-	    }  
+            char * pChar = name;
+            
+            pChar += sprintf(pChar, "storaged ");
+            pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
+
             uma_dbg_set_name(name);
         }
 
@@ -595,6 +595,9 @@ int storaged_start_nb_th(void *args) {
     int ret;
     storaged_start_conf_param_t *args_p = (storaged_start_conf_param_t*) args;
     int size;
+    char IPString[20];
+
+    rozofs_ipv4_append(IPString,sconfig_get_this_IP(&storaged_config,0));
 
     ret = ruc_init(FALSE, args_p);
     if (ret != RUC_OK) {
@@ -639,7 +642,7 @@ int storaged_start_nb_th(void *args) {
     /*
     ** Create storaged subthreads
     */
-    storaged_sub_thread_intf_create((pHostArray[0]==NULL)?"":pHostArray[0], common_config.nb_storaged_subthread);
+    storaged_sub_thread_intf_create(IPString, common_config.nb_storaged_subthread);
 
     /*
      ** add profiler subject 
@@ -651,13 +654,7 @@ int storaged_start_nb_th(void *args) {
     uma_dbg_addTopicAndMan("device",show_storage_device_status,man_storage_device_status,0);
     uma_dbg_addTopicAndMan("dstatus",show_storage_json_device_status,man_storage_json_device_status,0);
     
-    if (pHostArray[0] != NULL) {
-        info("storaged non-blocking thread started (host: %s, dbg port: %d).",
-                (pHostArray[0]==NULL)?"":pHostArray[0], args_p->debug_port);
-    } else {
-        info("storaged non-blocking thread started (dbg port: %d).", 
-                args_p->debug_port);
-    }
+    info("storaged non-blocking thread started (host: %s, dbg port: %d).",IPString, args_p->debug_port);
 
     /*
      ** main loop

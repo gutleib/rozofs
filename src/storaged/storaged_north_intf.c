@@ -46,6 +46,8 @@
 #include "storaged_north_intf.h"
 #include "mprotosvc.h"
 
+extern sconfig_t storaged_config;
+
 /**
 * Buffers information
 */
@@ -53,7 +55,6 @@ int storage_read_write_buf_count = 0;   /**< number of buffer allocated for read
 int storage_read_write_buf_sz = 0;      /**<read:write buffer size on north interface */
 
 void *storaged_buffer_pool_p = NULL;  /**< reference of the read/write buffer pool */
-extern char * pHostArray[];
 extern void * storaged_decoded_rpc_buffer_pool;
 /*
 **__________________________________________________________________________
@@ -533,46 +534,41 @@ int storaged_north_interface_init() {
   int ret = -1;
   uint32_t ip = INADDR_ANY; // Default IP to use
   uint16_t port=0;
-
-  /* Try to get debug port from /etc/services */    
+  int      nbAddr;  
+  int      idx;
+   
+  /* 
+  ** Try to get debug port from /etc/services 
+  */    
   port = rozofs_get_service_port_storaged_mproto();
+ 
   /*
-  ** set the dscp code
+  ** Get number of configured IP addresses in config file
   */
-  af_inet_rozofs_north_conf.dscp = (uint8_t) common_config.storio_dscp; 
-  af_inet_rozofs_north_conf.dscp = af_inet_rozofs_north_conf.dscp<<2;
-  // No host given => listen on every IP@
-  if (pHostArray[0] == NULL) {
-    ret = af_inet_sock_listening_create("MPROTO",ip, port, &af_inet_rozofs_north_conf);    
-    if (ret < 0) {
-      fatal("Can't create AF_INET listening socket %u.%u.%u.%u:%d",
-              ip>>24, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF, port);
-      return -1;
-    }  
-    return 0;
-  }  
-
-  int idx=0;
-  while (pHostArray[idx] != NULL) {
+  nbAddr = sconfig_get_nb_IP_address(&storaged_config);
   
-    // Resolve host
-    ret = rozofs_host2ip(pHostArray[idx],&ip);
-    if (ret != 0) {
-      fatal("storaged_north_interface_init can not resolve host \"%s\"", pHostArray[idx]);
-    }
+  for (idx=0; idx<nbAddr; idx++) {
+  
+    /*
+    ** Get this IP address
+    */
+    ip = sconfig_get_this_IP(&storaged_config,idx);
+
     /*
     ** set the dscp code
     */
     af_inet_rozofs_north_conf.dscp = (uint8_t) common_config.storio_dscp; 
     af_inet_rozofs_north_conf.dscp = af_inet_rozofs_north_conf.dscp<<2;
-    // Create the listening socket
+    
+    /*
+    ** Create the listening socket
+    */
     ret = af_inet_sock_listening_create("MPROTO",ip, port, &af_inet_rozofs_north_conf);    
     if (ret < 0) {
       fatal("Can't create AF_INET listening socket %u.%u.%u.%u:%d",
               ip>>24, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF, port);
       return -1;
     }
-    idx++;
   }  
   return 0;
 }

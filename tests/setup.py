@@ -121,7 +121,7 @@ class host_class:
   def start(self):
     if self.admin == False: return
     self.add_if() 
-    os.system("rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s -H %s &"%(self.number,self.get_config_name(),self.addr))
+    os.system("rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s&"%(self.number,self.get_config_name()))
 
   def stop(self):
     os.system("rozolauncher stop /var/run/launcher_storaged_%s.pid storaged"%(self.number))
@@ -188,7 +188,7 @@ class host_class:
     if rebef == True:
       res=cmd_returncode("storage_rebuild %s"%(param))      
     else:  
-      res=cmd_returncode("storage_rebuild -c %s -H localhost%s %s"%(self.get_config_name(),self.number,param))  
+      res=cmd_returncode("storage_rebuild -c %s %s"%(self.get_config_name(),param))  
     sys.exit(res)
 #____________________________________
 # Class sid
@@ -388,8 +388,7 @@ class sid_class:
       res=cmd_returncode("storage_rebuild %s"%(param))      
     else: 
       h = self.host[0]   
-#      res=cmd_returncode("valgrind --leak-check=full --track-origins=yes --log-file=/root/valgrind  storage_rebuild --simu %s -c %s -H localhost%s -s %d/%d %s"%(exportd.get_config_name(),h.get_config_name(),h.number,self.cid.cid,self.sid,param))  
-      res=cmd_returncode("storage_rebuild -c %s -H localhost%s -s %d/%d %s"%(h.get_config_name(),h.number,self.cid.cid,self.sid,param))  
+      res=cmd_returncode("storage_rebuild -c %s -s %d/%d %s"%(h.get_config_name(),self.cid.cid,self.sid,param))  
     sys.exit(res)
                    
   def info(self):
@@ -1152,7 +1151,6 @@ class rozofs_class:
     self.device_selfhealing_mode  = ""
     self.device_selfhealing_delay = 1
     self.nb_listen=1;
-    self.storio_mode="multiple";
     self.interface = "lo"
     self.read_mojette_threads = False
     self.write_mojette_threads = True
@@ -1194,7 +1192,6 @@ class rozofs_class:
     self.trash_threshold = threshold     
   def allow_disk_spin_down(self): self.spin_down_allowed = True    
   def set_trace(self): self.trace = True
-  def storio_mode_single(self):self.storio_mode = "single"  
   def set_storio_slice(self,sl):self.storio_slice = sl 
   def set_nb_listen(self,nb_listen):self.nb_listen = nb_listen  
   def set_nb_core_file(self,nb_core_file):self.nb_core_file = nb_core_file     
@@ -1398,8 +1395,6 @@ class rozofs_class:
     display_config_true("crc32c_hw_forced")
     display_config_int("storio_slice_number",rozofs.storio_slice)
     display_config_bool("numa_aware",True)
-    if self.storio_mode == "multiple": display_config_true("storio_multiple_mode")
-    else:                              display_config_false("storio_multiple_mode")
     display_config_bool("allow_disk_spin_down", rozofs.spin_down_allowed)
     display_config_int("file_distribution_rule",self.file_distribution)
     if self.fid_recycle == True: 

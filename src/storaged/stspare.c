@@ -54,7 +54,6 @@
 
 sconfig_t     storaged_config;
 static char   storaged_config_file[PATH_MAX] = STORAGED_DEFAULT_CONFIG;
-static char   storaged_hostname_buffer[512];
 
 
 storage_t storaged_storages[STORAGES_MAX_BY_STORAGE_NODE] = { { 0 } };
@@ -84,9 +83,6 @@ typedef struct _stspare_stat_t {
 } stspare_stat_t;
 stspare_stat_t stspare_stat={0};
 
-
-#define       MAX_STORAGED_HOSTNAMES 64
-char *        pHostArray[MAX_STORAGED_HOSTNAMES]={0};
 
 #define STSPARE_PID_FILE "stspare"
 
@@ -135,43 +131,7 @@ uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
   severe("storio_device_mapping_new_chunk");
   return -1;
 }   
-/*
-**____________________________________________________
-**
-** Parsing a / separated list of host
-** The result is an array pointer pHostArray[]
-** towards the given names or addresses
-**
-** @param host   A / separated list of host name or IP addresses    
-**____________________________________________________
-*/
-void parse_host_name(char * host) {
-  int    nb_names=0;
-  char * pHost;
-  char * pNext;
 
-  if (host == NULL) return;
-  
-  strcpy(storaged_hostname_buffer,host);
-  pHost = storaged_hostname_buffer;
-  while (*pHost=='/') pHost++;
-  
-  while (*pHost != 0) {
-  
-    pHostArray[nb_names++] = pHost;
-    
-    pNext = pHost;
-    
-    while ((*pNext != 0) && (*pNext != '/')) pNext++;
-    if (*pNext == '/') {
-      *pNext = 0;
-      pNext++;
-    }  
-
-    pHost = pNext;
-  }
-  pHostArray[nb_names++] = NULL;  
-}
 /*
 **____________________________________________________
 **
@@ -1425,7 +1385,6 @@ uint32_t ruc_init(uint16_t debug_port) {
   uint32_t mx_tcp_client = 2;
   uint32_t mx_tcp_server = 8;
   uint32_t mx_tcp_server_cnx = 10;
-  uint32_t local_ip = INADDR_ANY;
   uint32_t        mx_af_unix_ctx = ROZO_AFUNIX_CTX_STORAGED;
 
   /*
@@ -1486,45 +1445,42 @@ uint32_t ruc_init(uint16_t debug_port) {
                               2,1024*1, // xmit(count,size)
                               2,1024*1 // recv(count,size)
                               );
-    if (ret != RUC_OK) break;   
-	    /*
-     **--------------------------------------
-     **   D E B U G   M O D U L E
-     **--------------------------------------
-     */
+    if (ret != RUC_OK) break;  
+    /*
+    **--------------------------------------
+    **   D E B U G   M O D U L E
+    **--------------------------------------
+    */
+    {
+       int idx;
+       /*
+       ** Get number of configured IP addresses in config file
+       */           
+       int nbAddr = sconfig_get_nb_IP_address(&storaged_config);
 
-    if (pHostArray[0] != NULL) {
-      int idx=0;
-      while (pHostArray[idx] != NULL) {
-	rozofs_host2ip(pHostArray[idx], &local_ip);
-	uma_dbg_init(10, local_ip, debug_port);	    
-	idx++;
-      }  
-    }
-    else {
-      local_ip = INADDR_ANY;
-      uma_dbg_init(10, local_ip, debug_port);
-    }  
+       for (idx=0; idx< nbAddr; idx++) {
+          uma_dbg_init(10, sconfig_get_this_IP(&storaged_config,idx), debug_port);	                 
+       }
+       /*
+       ** When no configuration file is given, one uses the default config file.
+       ** Only one storaged and one storio of each instance can exist on this node.
+       ** One can listen on 127.0.0.1 for rozodiag commands
+       */
+       if (strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0) {
+	  uma_dbg_init(10, 0x7F000001, debug_port);	                              
+       }       
+    }   
 
 
     {
-      char name[256];
-      if (pHostArray[0] == 0) {
-	sprintf(name, "stspare");
-      }
-      else {
-        sprintf(name, "stspare %s", pHostArray[0]);
-      }  
-      uma_dbg_set_name(name);
-    }
+        char name[256];
+        char * pChar = name;
 
-#if 0
-    /*
-    ** RPC SERVER MODULE INIT
-    */
-    ret = rozorpc_srv_module_init();
-    if (ret != RUC_OK) break;  
-#endif	
+        pChar += sprintf(pChar, "stspare ");
+        pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
+
+        uma_dbg_set_name(name);
+    }
 
     break;
   }
@@ -1590,30 +1546,9 @@ static void on_stop() {}
 static void on_start() {
   int  debug_port;
   int  ret;
+  char IPString[20];
 
-  /*
-  ** read common config file
-  */
-  common_config_read(NULL);    
-
-  /*
-  ** Initialize the list of storage config
-  */
-  sconfig_initialize(&storaged_config);
-
-  /*
-  ** Read the configuration file
-  */
-  if (sconfig_read(&storaged_config, storaged_config_file,0) != 0) {
-    fatal("Failed to parse storage configuration file: %s.\n",strerror(errno));
-  }
-
-  /*
-  ** Check the configuration
-  */
-  if (sconfig_validate(&storaged_config) != 0) {
-    fatal("Inconsistent storage configuration file: %s.\n",strerror(errno));
-  }
+  rozofs_ipv4_append(IPString,sconfig_get_this_IP(&storaged_config,0));
 
   /*
   ** Initialization of the local storage configuration
@@ -1637,13 +1572,8 @@ static void on_start() {
   */
   stspare_thread_launch();
 
-
-  if (pHostArray[0] != NULL) {
-    info("storaged spare restorer started (host: %s, dbg port: %d).",
-            (pHostArray[0]==NULL)?"":pHostArray[0], debug_port);
-  } else {
-    info("storaged spare restorer started (dbg port: %d).", debug_port);
-  }
+  info("storaged spare restorer started (host: %s, dbg port: %d).",
+            IPString, debug_port);
 
   /*
    ** main loop
@@ -1681,7 +1611,6 @@ void usage(char * fmt, ...) {
   printf("RozoFS Storaged spare restorer - %s\n", VERSION);
   printf("Usage: %s [OPTIONS]\n\n",utility_name);
   printf("   -h, --help\t\t\tprint this message.\n");
-  printf("   -H, --host=storaged-host\tspecify the hostname to use for build pid name (default: none).\n");
   printf("   -c, --config=config-file\tspecify config file to use (default: %s).\n", STORAGED_DEFAULT_CONFIG);  
   
   if (fmt) exit(EXIT_FAILURE);
@@ -1702,7 +1631,8 @@ int main(int argc, char *argv[]) {
       { "host", required_argument, 0, 'H'},
       { 0, 0, 0, 0}
   };
-
+  char * pChar;
+  
   /*
   ** Change local directory to "/"
   */
@@ -1739,7 +1669,7 @@ int main(int argc, char *argv[]) {
         break;
 	
       case 'H':
-	parse_host_name(optarg);
+        // Deprecated
         break;
 	
       case '?':
@@ -1753,20 +1683,37 @@ int main(int argc, char *argv[]) {
   }
 
   /*
+  ** read common config file
+  */
+  common_config_read(NULL);    
+
+  /*
+  ** Initialize the list of storage config
+  */
+  sconfig_initialize(&storaged_config);
+
+  /*
+  ** Read the configuration file
+  */
+  if (sconfig_read(&storaged_config, storaged_config_file,0) != 0) {
+    fatal("Failed to parse storage configuration file: %s.\n",strerror(errno));
+  }
+
+  /*
+  ** Check the configuration
+  */
+  if (sconfig_validate(&storaged_config) != 0) {
+    fatal("Inconsistent storage configuration file: %s.\n",strerror(errno));
+  }
+
+  /*
   ** Prepare PID file name
   */
-  char *pid_name_p = pid_name;
-  if (pHostArray[0] != NULL) {
-      char * pChar = pid_name_p;
-      pChar += rozofs_string_append(pChar,STSPARE_PID_FILE);
-      *pChar++ = '_'; 
-      pChar += rozofs_string_append(pChar,pHostArray[0]);
-      pChar += rozofs_string_append(pChar,".pid");	
-  } else {
-      char * pChar = pid_name_p;
-      pChar += rozofs_string_append(pChar,STSPARE_PID_FILE);
-      pChar += rozofs_string_append(pChar,".pid");	
-  }
+  pChar = pid_name;
+  pChar += rozofs_string_append(pChar,STSPARE_PID_FILE);
+  *pChar++ = '_'; 
+  pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));      
+  pChar += rozofs_string_append(pChar,".pid");	
 
   /*
   ** Start without deamonizing

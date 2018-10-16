@@ -73,45 +73,12 @@
 
 static char * exe_path_name=NULL;
 
-static char storaged_config_file[PATH_MAX] = STORAGED_DEFAULT_CONFIG;
+char storaged_config_file[PATH_MAX] = STORAGED_DEFAULT_CONFIG;
 
 sconfig_t storaged_config;
 
 storage_t storaged_storages[STORAGES_MAX_BY_STORAGE_NODE] = { { 0 } };
 uint16_t  storaged_nrstorages = 0;
-
-#define MAX_STORAGED_HOSTNAMES 32
-static char   storaged_hostname_buffer[512];
-char *        pHostArray[MAX_STORAGED_HOSTNAMES]={0};
-
-void parse_host_name(char * host) {
-  int    nb_names=0;
-  char * pHost;
-  char * pNext;
-
-  if (host == NULL) return;
-  
-  strcpy(storaged_hostname_buffer,host);
-  pHost = storaged_hostname_buffer;
-  while (*pHost=='/') pHost++;
-  
-  while (*pHost != 0) {
-  
-    pHostArray[nb_names++] = pHost;
-    
-    pNext = pHost;
-    
-    while ((*pNext != 0) && (*pNext != '/')) pNext++;
-    if (*pNext == '/') {
-      *pNext = 0;
-      pNext++;
-    }  
-
-    pHost = pNext;
-  }
-  pHostArray[nb_names++] = NULL;  
-}
-
 
 static SVCXPRT *storaged_monitoring_svc = 0;
 
@@ -202,6 +169,7 @@ void storaged_start_spare_restorer_process() {
   char   pidfile[128];
   char * p;
   int    ret;
+  char IPString[20];
 
   p = cmd;
       
@@ -214,17 +182,9 @@ void storaged_start_spare_restorer_process() {
   }
   p += rozofs_string_append(p, "stspare -c ");
   p += rozofs_string_append(p,storaged_config_file);
-  if (pHostArray[0] != NULL) {
-    p += rozofs_string_append (p, " -H ");
-    p += rozofs_string_append (p, pHostArray[0]);
-    int idx=1;
-    while (pHostArray[idx] != NULL) {
-      *p++ ='/';
-      p += rozofs_string_append(p , pHostArray[idx++]);
-    }  
-  }	
-      
-  storaged_spare_restorer_pid_file(pidfile, pHostArray[0]);
+
+  rozofs_ipv4_append(IPString,sconfig_get_this_IP(&storaged_config,0));      
+  storaged_spare_restorer_pid_file(pidfile, IPString);
       
   // Launch process throufh rozo launcher
   ret = rozo_launcher_start(pidfile, cmd);
@@ -247,11 +207,8 @@ void storaged_automount_devices() {
 
   p = rozofs_storaged_path;
   p += rozofs_string_append(p, common_config.device_automount_path);
-  p += rozofs_string_append(p, "/storaged");
-  if (pHostArray[0] != NULL) {
-    p += rozofs_string_append (p, "_");
-    p += rozofs_string_append (p, pHostArray[0]);
-  }
+  p += rozofs_string_append(p, "/storaged_");
+  p += rozofs_ipv4_append(p, sconfig_get_this_IP(&storaged_config,0));
 
   /*
   ** Try to mount the devices
@@ -274,6 +231,7 @@ static void on_start() {
     storaged_start_conf_param_t conf;
     int ret = -1;
     list_t   *l;
+    char IPString[20];
           
     DEBUG_FUNCTION;
 
@@ -329,37 +287,7 @@ static void on_start() {
     /*
     ** Then start storio
     */
-    if (common_config.storio_multiple_mode==0) {
-      p = cmd;
-      
-      // Get storio executable from same directory as storaged 
-      if (exe_path_name) {
-        p += rozofs_string_append(p,exe_path_name);
-	*p++ ='/'; 
-      }
-      p += rozofs_string_append(p, "storio -i 0 -c ");
-      p += rozofs_string_append(p,storaged_config_file);
-      if (pHostArray[0] != NULL) {
-        p += rozofs_string_append (p, " -H ");
-	p += rozofs_string_append (p, pHostArray[0]);
-        int idx=1;
-	while (pHostArray[idx] != NULL) {
-	  *p++ ='/';
-	  p += rozofs_string_append(p , pHostArray[idx++]);
-	}  
-      }	
-      
-      storio_pid_file(pidfile, pHostArray[0], 0);
-      
-      // Launch storio
-      ret = rozo_launcher_start(pidfile, cmd);
-      if (ret !=0) {
-        severe("rozo_launcher_start(%s,%s) %s",pidfile, cmd, strerror(errno));
-      }
-
-      conf.nb_storio++;
-    }
-    else {
+    {
       uint64_t  bitmask[4] = {0};
       uint8_t   cid,rank,bit; 
          
@@ -389,20 +317,10 @@ static void on_start() {
       	p += rozofs_string_append(p, "storio -i ");
 	p += rozofs_u32_append(p,cid);
 	p += rozofs_string_append(p, " -c ");
-	p += rozofs_string_append(p,storaged_config_file);
-	if (pHostArray[0] != NULL) {
-
-          p += rozofs_string_append (p, " -H ");
-	  p += rozofs_string_append (p, pHostArray[0]);
-
-          int idx=1;
-	  while (pHostArray[idx] != NULL) {
-	    *p++ ='/';
-	    p += rozofs_string_append(p , pHostArray[idx++]);
-          }	
-	}		
+	p += rozofs_string_append(p,storaged_config_file);	
       
-        storio_pid_file(pidfile, pHostArray[0], cid); 
+        rozofs_ipv4_append(IPString,sconfig_get_this_IP(&storaged_config,0));
+        storio_pid_file(pidfile, IPString, cid); 
 	
         // Launch storio
 	ret = rozo_launcher_start(pidfile, cmd);
@@ -452,7 +370,6 @@ void usage(char * fmt, ...) {
   printf("RozoFS storage daemon - %s\n", VERSION);
   printf("Usage: storaged [OPTIONS]\n\n");
   printf("   -h, --help\t\t\tprint this message.\n");
-  printf("   -H, --host=storaged-host\tspecify the hostname to use for build pid name (default: none).\n");
   printf("   -c, --config=config-file\tspecify config file to use (default: %s).\n",
           STORAGED_DEFAULT_CONFIG);
   printf("   -C, --check\tthe storaged just checks the configuration and returns an exit status (0 when OK).\n");  
@@ -525,7 +442,7 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             case 'H':
-		parse_host_name(optarg);
+		// Deprecated
                 break;
             case '?':
                 usage(NULL);
@@ -534,12 +451,6 @@ int main(int argc, char *argv[]) {
                 usage("Unexpected option \'%c\'",c);
                 break;
         }
-    }
-    {
-         char path[256];
-	 
-	 sprintf(path,"%s/storage/%s/storaged/",ROZOFS_KPI_ROOT_PATH,(pHostArray[0]==NULL)?"localhost":pHostArray[0]);
-	 ALLOC_KPI_FILE_PROFILING(path,"profiler",spp_profiler_t);    
     }
     
     /*
@@ -561,6 +472,17 @@ int main(int argc, char *argv[]) {
         goto error;
     }
 
+    {
+         char path[256];
+         char * pChar = path;
+         
+	 pChar += rozofs_string_append(pChar,ROZOFS_KPI_ROOT_PATH);
+         pChar += rozofs_string_append(pChar,"/storage/");        
+         pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
+	 pChar += rozofs_string_append(pChar,"/storaged/");
+         
+	 ALLOC_KPI_FILE_PROFILING(path,"profiler",spp_profiler_t);    
+    }
     /*
     ** If any startup script has to be called, call it now
     */
@@ -582,31 +504,15 @@ int main(int argc, char *argv[]) {
     */
     if (storaged_config.numa_node_id != -1) {       
         /*
-        ** Use the node id of the storage.conf 
+        ** No node identifier set in storage.conf; Use IP address
         */
         rozofs_numa_allocate_node(storaged_config.numa_node_id,"storage.conf");
     }
     else {
       /*
       ** No node identifier set in storage.conf 
-      */ 
-      if (pHostArray[0] != NULL) {
-         /*
-         ** Use hostname to dispatch the storios on the nodes
-         ** This is a one node configuration
-         */
-         char *name;
-         name = pHostArray[0];
-         int instance;
-         int len = strlen(name);
-         instance = (int)name[len-1];
-         rozofs_numa_allocate_node(instance,"host name");
-      }
-      else {
-        /*
-        ** Let the storaged use whatever node
-        */
-      }
+      */       
+      rozofs_numa_allocate_node(sconfig_get_this_IP(&storaged_config,0),"host IP");
     }
     
     if (justCheck) {
@@ -614,17 +520,13 @@ int main(int argc, char *argv[]) {
       exit(EXIT_SUCCESS);      
     }
 
-    char *pid_name_p = pid_name;
-    if (pHostArray[0] != NULL) {
-        char * pChar = pid_name_p;
-	pChar += rozofs_string_append(pChar,STORAGED_PID_FILE);
-	*pChar++ = '_'; 
-	pChar += rozofs_string_append(pChar,pHostArray[0]);
-	pChar += rozofs_string_append(pChar,".pid");	
-    } else {
-        char * pChar = pid_name_p;
-	pChar += rozofs_string_append(pChar,STORAGED_PID_FILE);
-	pChar += rozofs_string_append(pChar,".pid");	
+    {
+         char * pChar = pid_name;
+         
+	 pChar += rozofs_string_append(pChar,STORAGED_PID_FILE);
+         pChar += rozofs_string_append(pChar,"_");        
+         pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
+	 pChar += rozofs_string_append(pChar,".pid");	
     }
     
     no_daemon_start("storaged", common_config.nb_core_file, pid_name, on_start,

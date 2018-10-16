@@ -64,5 +64,38 @@ int sconfig_read(sconfig_t *config, const char *fname,int cid);
 int sconfig_validate(sconfig_t *config);
 
 extern sconfig_t storaged_config;
-
+/*____________________________________________________
+**
+** Get the number of configured IP address in storage config file
+**
+** @param config The configuration read from the file in internal
+**               RozoFS structure.
+*/  
+static inline int sconfig_get_nb_IP_address(sconfig_t *config) {
+  return config->io_addr_nb;
+}
+/*____________________________________________________
+**
+** Get the Nth IP address from the storage config file
+**
+** @param config The configuration read from the file in internal
+**               RozoFS structure.
+** @param rank   Rank of this IP address
+*/  
+static inline uint32_t sconfig_get_this_IP(sconfig_t *config, int rank) {
+  if (rank >= config->io_addr_nb) return INADDR_ANY;
+  return config->io_addr[rank].ipv4;
+}
+/*____________________________________________________
+**
+** Get the Nth service port from the storage config file
+**
+** @param config The configuration read from the file in internal
+**               RozoFS structure.
+** @param rank   Rank of this IP address
+*/  
+static inline uint32_t sconfig_get_this_port(sconfig_t *config, int rank) {
+  if (rank >= config->io_addr_nb) return 0;
+  return config->io_addr[rank].port;
+}
 #endif
