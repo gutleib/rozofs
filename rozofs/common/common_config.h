@@ -196,9 +196,6 @@ typedef struct _common_config_t {
   int32_t     nb_storaged_subthread;
   /// Number of disk threads in the STORIO.
   int32_t     nb_disk_thread;
-  // Whether STORIO is in multiple (1 STORIO per cluster) 
-  // or single mode (only 1 STORIO).
-  int32_t     storio_multiple_mode;
   // Whether CRC32 MUST be checked by STORIO.
   int32_t     crc32c_check;
   // Whether CRC32 MUST be computed by STORIO.

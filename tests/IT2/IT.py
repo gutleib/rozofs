@@ -21,7 +21,7 @@ process=int(8)
 EXPORT_SID_NB=int(8)
 STORCLI_SID_NB=int(8)
 nbGruyere=int(256)
-stopOnFailure=True
+stopOnFailure=False
 fuseTrace=False
 DEFAULT_RETRIES=int(40)
 tst_file="tst_file"
@@ -1081,7 +1081,7 @@ def symlink():
 #___________________________________________________
 def readdir():
 #___________________________________________________ 
-  return os.system("./IT2/test_readdir.exe -process %d -loop %d -mount %s"%(process,loop,exepath))
+  return os.system("./IT2/test_readdir.exe -process %d -loop %d -mount %s"%(process/2,loop/2,exepath))
 
 #___________________________________________________
 def rename():
@@ -2534,7 +2534,7 @@ def usage():
   console("      [--fast]           The run 2 times faster tests.")
   console("      [--long]           The run 2 times longer tests.")
   console("      [--repeat <nb>]    The number of times the test list must be repeated." )  
-  console("      [--cont]           To continue tests on failure." )
+  console("      [--stop]           To stop tests on failure." )
   console("      [--fusetrace]      To enable fuse trace on test. When set, --stop is automaticaly set.")
   console("      [--debug]          ACtivate debug trace.")
   console("    extra:")
@@ -2565,7 +2565,7 @@ parser.add_option("-c","--count", action="store", type="string", dest="count", h
 parser.add_option("-f","--fileSize", action="store", type="string", dest="fileSize", help="The size in MB of the file for the test.")
 parser.add_option("-l","--list",action="store_true",dest="list", default=False, help="To display the list of test")
 parser.add_option("-k","--snipper",action="store",type="string",dest="snipper", help="To start a storage/storcli snipper.")
-parser.add_option("-s","--cont", action="store_true",dest="cont", default=False, help="To continue on failure.")
+parser.add_option("-s","--stop", action="store_true",dest="stop", default=False, help="To stop on failure.")
 parser.add_option("-t","--fusetrace", action="store_true",dest="fusetrace", default=False, help="To enable fuse trace on test.")
 parser.add_option("-F","--fast", action="store_true",dest="fast", default=False, help="To run 2 times faster tests.")
 parser.add_option("-S","--speed", action="store_true",dest="speed", default=False, help="To run 4 times faster tests.")
@@ -2626,8 +2626,8 @@ if options.list == True:
   do_list()
   exit(0)
     
-if options.cont == True:  
-  stopOnFailure=False 
+if options.stop == True:  
+  stopOnFailure=True 
 
 if options.fusetrace == True:  
   stopOnFailure=True 

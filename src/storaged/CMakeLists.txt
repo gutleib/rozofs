@@ -242,3 +242,4 @@ install(FILES storage.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT sto
 install(FILES storage.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
 install(PROGRAMS rozo_device DESTINATION bin)
 install(PROGRAMS rozo_df DESTINATION bin)
+install(PROGRAMS rozo_storage_throughput DESTINATION bin)

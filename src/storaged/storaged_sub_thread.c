@@ -502,7 +502,7 @@ int storaged_sub_thread_create(char * sockName, char * hostname, int nb_threads)
    thread_ctx_p = storaged_sub_thread_ctx_tb;
    for (i = 0; i < nb_threads ; i++) {
    
-     thread_ctx_p->hostname = hostname;
+     thread_ctx_p->hostname = strdup(hostname);
 
      /*
      ** create the thread specific socket to send the response from 

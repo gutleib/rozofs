@@ -82,9 +82,6 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"nb_disk_thread")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(nb_disk_thread,value,2,64);
   }
-  if (strcmp(parameter,"storio_multiple_mode")==0) {
-    COMMON_CONFIG_SET_BOOL(storio_multiple_mode,value);
-  }
   if (strcmp(parameter,"crc32c_check")==0) {
     COMMON_CONFIG_SET_BOOL(crc32c_check,value);
   }
@@ -630,13 +627,6 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_BOOL(storio_multiple_mode,True);
-  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// Whether STORIO is in multiple (1 STORIO per cluster) \n");
-  pChar += rozofs_string_append(pChar,"// or single mode (only 1 STORIO).\n");
-  COMMON_CONFIG_SHOW_BOOL(storio_multiple_mode,True);
-  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
-
   COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_check,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether CRC32 MUST be checked by STORIO.\n");
@@ -1173,13 +1163,6 @@ char * save_common_config_module_storage(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"/// Number of disk threads in the STORIO.\n");
     COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
-  }
-
-  COMMON_CONFIG_IS_DEFAULT_BOOL(storio_multiple_mode,True);
-  if (isDefaultValue==0) {
-    pChar += rozofs_string_append(pChar,"// Whether STORIO is in multiple (1 STORIO per cluster) \n");
-    pChar += rozofs_string_append(pChar,"// or single mode (only 1 STORIO).\n");
-    COMMON_CONFIG_SHOW_BOOL(storio_multiple_mode,True);
   }
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_check,True);
@@ -1826,9 +1809,6 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(nb_storaged_subthread,8,2,16);
   /// Number of disk threads in the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,64);
-  // Whether STORIO is in multiple (1 STORIO per cluster)  
-  // or single mode (only 1 STORIO). 
-  COMMON_CONFIG_READ_BOOL(storio_multiple_mode,True);
   // Whether CRC32 MUST be checked by STORIO. 
   COMMON_CONFIG_READ_BOOL(crc32c_check,True);
   // Whether CRC32 MUST be computed by STORIO. 

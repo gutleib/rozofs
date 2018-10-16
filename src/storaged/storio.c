@@ -75,39 +75,6 @@ storage_t storaged_storages[STORAGES_MAX_BY_STORAGE_NODE] = {
 };
 uint16_t storaged_nrstorages = 0;
 
-#define MAX_STORAGED_HOSTNAMES 32
-static char   storaged_hostname_buffer[512];
-char *        pHostArray[MAX_STORAGED_HOSTNAMES]={0};
-
-void parse_host_name(char * host) {
-  int    nb_names=0;
-  char * pHost;
-  char * pNext;
-
-  if (host == NULL) return;
-  
-  strcpy(storaged_hostname_buffer,host);
-  pHost = storaged_hostname_buffer;
-  while (*pHost=='/') pHost++;
-  
-  while (*pHost != 0) {
-  
-    pHostArray[nb_names++] = pHost;
-    
-    pNext = pHost;
-    
-    while ((*pNext != 0) && (*pNext != '/')) pNext++;
-    if (*pNext == '/') {
-      *pNext = 0;
-      pNext++;
-    }  
-
-    pHost = pNext;
-  }
-  pHostArray[nb_names++] = NULL;  
-}
-
-
 
 
 extern void storage_program_1(struct svc_req *rqstp, SVCXPRT *ctl_svc);
@@ -180,7 +147,7 @@ static void on_reload(int sig) {
 }
 static void on_start(void) {
     storaged_start_conf_param_t conf;
-
+    char *pChar ;
     DEBUG_FUNCTION;
 
 
@@ -192,24 +159,16 @@ static void on_start(void) {
     */
 
     storage_process_filename[0] = 0;
-    char *pid_name_p = storage_process_filename;
-    if (pHostArray[0] != NULL) {
-      char * pChar = pid_name_p;
-      pChar += rozofs_string_append(pChar,DAEMON_PID_DIRECTORY);
-      pChar += rozofs_string_append(pChar,STORIO_PID_FILE);
-      *pChar++ = '_';
-      pChar += rozofs_string_append(pChar,pHostArray[0]);	
-      *pChar++ = '.';      
-      pChar += rozofs_u32_append(pChar,storio_instance);
-      pChar += rozofs_string_append(pChar,".pid");
-    } else {
-      char * pChar = pid_name_p;
-      pChar += rozofs_string_append(pChar,DAEMON_PID_DIRECTORY);
-      pChar += rozofs_string_append(pChar,STORIO_PID_FILE);
-      *pChar++ = '.';      
-      pChar += rozofs_u32_append(pChar,storio_instance);
-      pChar += rozofs_string_append(pChar,".pid");
-    }
+    pChar = storage_process_filename;
+    
+    pChar += rozofs_string_append(pChar,DAEMON_PID_DIRECTORY);
+    pChar += rozofs_string_append(pChar,STORIO_PID_FILE);
+    *pChar++ = '_';
+    pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
+    *pChar++ = '.';      
+    pChar += rozofs_u32_append(pChar,storio_instance);
+    pChar += rozofs_string_append(pChar,".pid");
+
     int ppfd;
     if ((ppfd = open(storage_process_filename, O_RDWR | O_CREAT, 0640)) < 0) {
         severe("can't open process file");
@@ -241,7 +200,6 @@ void usage() {
     printf("Usage: storaged [OPTIONS]\n\n");
     printf("\t-h, --help\tprint this message.\n");
     printf("\t-i,--instance instance number\t\tstorage io instance number \n");
-    printf("\t-H,--host storaged hostname\t\tused to build to the pid name (default: none) \n");
     printf("\t-c, --config\tconfig file to use (default: %s).\n",
             STORAGED_DEFAULT_CONFIG);
 }
@@ -298,7 +256,7 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             case 'H':
-                parse_host_name(optarg);
+                // deprecated
                 break;
 	    case 'i':	
                 errno = 0;
@@ -320,12 +278,6 @@ int main(int argc, char *argv[]) {
                 break;
         }
     }    
-    {
-         char path[256];
-	 
-	 sprintf(path,"%s/storage/%s/storio_%d/",ROZOFS_KPI_ROOT_PATH,(pHostArray[0]==NULL)?"localhost":pHostArray[0],storio_instance);
-	 ALLOC_KPI_FILE_PROFILING(path,"profiler",spp_profiler_t);    
-    }
     
     /*
     ** read common config file
@@ -353,7 +305,19 @@ int main(int argc, char *argv[]) {
         fatal( "Inconsistent storage configuration file: %s.\n",strerror(errno));
     }
 
+    {
+         char   path[256];
+         char * pChar = path;
+         
+	 pChar += rozofs_string_append(pChar,ROZOFS_KPI_ROOT_PATH);
+         pChar += rozofs_string_append(pChar,"/storage/");        
+         pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
+	 pChar += rozofs_string_append(pChar,"/storio_");
+	 pChar += rozofs_u32_append(pChar,storio_instance);
 
+	 ALLOC_KPI_FILE_PROFILING(path,"profiler",spp_profiler_t);    
+    }
+    
     /*
     **  set the numa node for storio and its disk threads
     */
@@ -365,26 +329,9 @@ int main(int argc, char *argv[]) {
     }
     else {
       /*
-      ** No node identifier set in storage.conf 
-      */ 
-      if (pHostArray[0] != NULL) {
-         /*
-         ** Use hostname to dispatch the storios on the nodes
-         ** This is a one node configuration
-         */
-         char *name;
-         name = pHostArray[0];
-         int instance;
-         int len = strlen(name);
-         instance = (int)name[len-1];
-         rozofs_numa_allocate_node(instance,"host name");
-      }
-      else {
-        /*
-        ** Dispatch the storio depending on their cluster id
-        */
-        rozofs_numa_allocate_node(storio_instance,"cluster id");
-      }
+      ** No node identifier set in storage.conf; Use IP address + CID
+      */      
+      rozofs_numa_allocate_node(sconfig_get_this_IP(&storaged_config,0)+storio_instance,"host IP + cluster id");
     }
     
     
@@ -395,13 +342,22 @@ int main(int argc, char *argv[]) {
       char cmd[256];
       pid_t pid = getpid();
       
-      if (pHostArray[0] == NULL) {
+      /*
+      ** When no configuration file is given, one uses the default config file.
+      ** Only one storaged and one storio of each instance can exist on this node.
+      */
+      if (strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0) {
+
         sprintf(cmd,"ps -o pid,cmd -C storio |  grep \" -i %d \"  > /tmp/storio1.%d",
                 storio_instance, pid); 
       }
+      /*
+      ** Several storaged and storio of a same cluster may exist on this node,
+      ** but all have been launched with their own configuration file
+      */
       else {
-        sprintf(cmd,"ps -o pid,cmd -C storio |  grep \" -i %d \" | grep \" -H %s$\" > /tmp/storio1.%d",
-                storio_instance, pHostArray[0], pid); 
+        sprintf(cmd,"ps -o pid,cmd -C storio |  grep \" -i %d \" | grep \" -c %s\" > /tmp/storio1.%d",
+                storio_instance, storaged_config_file, pid); 
       }          
       if (system(cmd)){};
       

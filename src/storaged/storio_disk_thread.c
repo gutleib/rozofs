@@ -2360,7 +2360,7 @@ int storio_disk_thread_create(char * hostname, int nb_threads, int instance_id) 
    thread_ctx_p = rozofs_disk_thread_ctx_tb;
    for (i = 0; i < nb_threads ; i++) {
    
-     thread_ctx_p->hostname = hostname;
+     thread_ctx_p->hostname = strdup(hostname);
      /*
      ** create the thread specific socket to send the response from 
      */
