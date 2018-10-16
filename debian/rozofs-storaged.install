@@ -7,6 +7,7 @@
 /usr/bin/rozo_df
 /usr/bin/rozodump
 /usr/bin/rozo_device
+/usr/bin/rozo_storage_throughput
 /usr/bin/rozo_storage_fid2pathname
 /etc/rozofs/storage.conf
 /usr/share/man/man5/storage.conf.5
