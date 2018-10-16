@@ -45,8 +45,6 @@
 #include "storio_device_mapping.h"
 #include "storaged.h"
 
-extern char * pHostArray[];
-
 struct blkio_info {
 	unsigned int rd_ios;	/* Read I/O operations */
 	unsigned int rd_merges;	/* Reads merged */
@@ -221,7 +219,7 @@ void storio_selfHealing_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
 **  @retval 0 when the thread is succesfully started
 */
 extern char storaged_config_file[];
-extern char * storaged_hostname;
+
 void * storio_device_rebuild_thread(void *arg) {
   storio_selfHealing_cxt_t    * pRebuild = arg;
   storage_device_ctx_t    * pDev = &pRebuild->st->device_ctx[pRebuild->dev];
@@ -273,18 +271,7 @@ void * storio_device_rebuild_thread(void *arg) {
     }   
     if (pRebuild->mode == storio_selfHealing_mode_spare) {
       pChar += rozofs_string_append(pChar,".spare");
-    } 
-    
-    if (pHostArray[0] != NULL) {
-      pChar += rozofs_string_append(pChar," -H ");
-      pChar += rozofs_string_append(pChar,pHostArray[0]);
-      int idx=1;
-      while (pHostArray[idx] != NULL) {
-        *pChar++ = '/';
-        pChar += rozofs_string_append(pChar,pHostArray[idx++]);
-      }	
-    }
-            
+    }       
     rozofs_run_until_exit(cmd);	
   }
   

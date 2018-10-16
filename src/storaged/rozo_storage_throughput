@@ -153,33 +153,46 @@ def get_client_list(active,eid):
   
   total_watched_clients = 0 
   total_nb_clients = 0
-  
-  idx = int(eid) % 8
-  clients=""
-  string="rozodiag -i %s -T export:%s -c client"%(active,idx)
+
+  cidList = []  
+  idx     = int(eid) % 8
+  clients = ""
+  vid     = "NO.VID" 
+
+  string="rozodiag -i %s -T export:%s -c vfstat_exp"%(active,idx)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
     words = line.split('|')
     try:
-      int(words[3])
-      delay = int(words[2])
-      if delay > int(300) : continue
+      if int(words[0]) == int(eid):
+        vid = "%s"%(int(words[1]))
+    except:
+      continue
+           
+  string="rozodiag -i %s -T export:%s -c vstor"%(active,idx)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    words = line.split('|')
+    try:
+      cid = int(words[2])
+      ip  = words[4]
+      ref = "%s:%s"%(cid,ip)
+      if ref in cidList: 
+        continue
+      total_nb_clients += int(1)
+      if check_netmwork_filters(ip) == False: continue
+      cidList.append(ref)
+      total_watched_clients += int(1)  
     except:
       continue  
-    total_nb_clients += int(1)
-    ip = words[4].split(':')[0]
-    if check_netmwork_filters(ip) == False: continue
-    port = words[4].split(':')[1]
-    string="rozodiag -i %s -p %s -c mount"%(ip,port)
-    parsed = shlex.split(string)
-    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    for line in cmd.stdout:
-      if line.split()[0] != "eid": continue
-      if line.split()[2] != eid: continue
-      clients = clients + " -i %s -p %s"%(ip,port)     
-      total_watched_clients += int(1)  
-  return clients      
+  for ref in cidList:
+    cid = ref.split(':')[0]
+    ip  = ref.split(':')[1]      
+    clients = clients + " -i %s -T storio:%s "%(ip,cid)     
+     
+  return vid,clients      
 #______________________________
 def get_ip(ipString):
  if len(ipString.split('.')) != 4: int(a)
@@ -310,7 +323,7 @@ if options.Niprange != None:
 # clients on this eid from the export
 #    
 active,eid,export_path = get_active_export(options.local,path)
-clients = get_client_list(active,eid)
+vid,clients = get_client_list(active,eid)
 if clients == "":
   print "No client found"
   sys.exit(-1)
@@ -340,7 +353,7 @@ while True :
   loop = loop + int(1)
   if loop == 11: 
     active,eid,export_path = get_active_export(options.local,path)
-    clients = get_client_list(active,eid)
+    vid,clients = get_client_list(active,eid)
     loop = 0
     
 
@@ -454,7 +467,7 @@ while True :
     LINE = "Last " + REVERSE + "60 minutes" + NORMAL + " throughput history.\n"  
   else: 
     LINE = "\n"      
-  LINE += zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid " + eid + " (" +export_path + ")  - max " 
+  LINE += zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS storio on volume " + vid + " - max " 
   #
   # Max 
   #

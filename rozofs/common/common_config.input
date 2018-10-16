@@ -71,9 +71,6 @@ INT	export 	export_buf_cnt			128 32:1024
 INT	storage nb_storaged_subthread         	8 2:16
 /// Number of disk threads in the STORIO.
 INT	storage nb_disk_thread         		4 2:64
-// Whether STORIO is in multiple (1 STORIO per cluster) 
-// or single mode (only 1 STORIO).
-BOOL	storage storio_multiple_mode 		True
 // Whether CRC32 MUST be checked by STORIO.
 BOOL	storage crc32c_check			True
 // Whether CRC32 MUST be computed by STORIO.
