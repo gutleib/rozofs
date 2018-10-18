@@ -296,21 +296,29 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
          **--------------------------------------
          */  
         {
-           int idx;
+           int     idx;
+           int      bindOnAnyAddr = 0;
+           uint32_t ip;
+
            /*
            ** Get number of configured IP addresses in config file
            */           
            int nbAddr = sconfig_get_nb_IP_address(&storaged_config);
            
            for (idx=0; idx< nbAddr; idx++) {
-	      uma_dbg_init(10, sconfig_get_this_IP(&storaged_config,idx), arg_p->debug_port);	                 
+              ip = sconfig_get_this_IP(&storaged_config,idx);
+              if (ip == INADDR_ANY) {
+                bindOnAnyAddr = 1;
+              }           
+	      uma_dbg_init(10, ip, arg_p->debug_port);	                 
            }
            /*
            ** When no configuration file is given, one uses the default config file.
            ** Only one storaged and one storio of each instance can exist on this node.
            ** One can listen on 127.0.0.1 for rozodiag commands       
            */
-           if (strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0) {
+           if ((strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0)
+           &&  (bindOnAnyAddr == 0)) {         
 	      uma_dbg_init(10, 0x7F000001, arg_p->debug_port);	                              
            }
         }                
