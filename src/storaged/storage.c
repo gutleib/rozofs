@@ -3638,8 +3638,11 @@ out:
 
 
 
-#define ROZOFS_LABEL_SIZE    32
-#define ROZOFS_MODEL_SIZE    32
+#define ROZOFS_LABEL_SIZE    20
+#define ROZOFS_MODEL_SIZE    44
+
+#define ROZOFS_SPARE_LABEL     "RozoSp_"
+#define ROZOFS_REGULAR_LABEL   "Rozo_%u_%u_%u"
 
 
 /*
@@ -3675,15 +3678,158 @@ int                           storage_enumerated_device_nb=0;
  void rozofs_set_label(storage_enumerated_device_t * pDev) {
    char label[ROZOFS_LABEL_SIZE];
    char cmd[256];
-
-   sprintf(label, "RozoFS_c%u_s%u_%u",pDev->cid, pDev->sid, pDev->dev);  
    
+   if (pDev->spare) {
+     char * pt = label;
+     pt += sprintf(label, "%s", ROZOFS_REGULAR_LABEL); 
+     if (pDev->spare_mark) {
+       pt += sprintf(label, "%s",pDev->spare_mark);  
+     } 
+   }
+   else {
+     sprintf(label, ROZOFS_REGULAR_LABEL ,pDev->cid, pDev->sid, pDev->dev);  
+   }
+     
    if (strcmp(pDev->label,label) == 0) return;
    
    sprintf(cmd, "e2label %s %s", pDev->name, label);
    if (system(cmd)==0) {
      strcpy(pDev->label, label);
    }
+}   
+
+/*
+ *_______________________________________________________________________
+ *
+ *  Analyze label of a device
+ *
+ * @param pDev       Enumerated device context address
+ * 
+ * @retval    0 when this is a valid RozoFS label , -1 else
+ *            spare, cid, sid and dev field are update in pDev
+ */
+int rozofs_analyze_label(storage_enumerated_device_t * pDev) {
+  uint32_t    cid;
+  uint32_t    sid;
+  uint32_t    dev;
+  storage_t * st;
+  int         length;  
+  int         unknow_label;
+
+  /*
+  ** Initialized device ctx fileds 
+  */
+  pDev->spare = 0;
+  pDev->date  = 0;
+  pDev->cid   = 0;
+  pDev->sid   = 0;
+  pDev->dev   = 0;   
+  if (pDev->spare_mark) {
+    xfree(pDev->spare_mark);
+    pDev->spare_mark = NULL;
+  } 
+    
+  if (common_config.mandatory_device_label) {  
+    /*
+    ** When label is mandatory, no label return -1
+    */ 
+    unknow_label = -1;
+  }
+   else {
+   /*
+    ** When label is not mandatory, no label return 0
+    */ 
+    unknow_label = 0;
+  }
+      
+  /*
+  ** Check for RozoFS regular device label
+  */
+  if (sscanf(pDev->label, ROZOFS_REGULAR_LABEL, &cid, &sid, &dev) == 3) {
+
+    /*
+    ** This is a RozoFS regular device label. 
+    ** Check whether CID/SID matches with this storage configuration.
+    */
+    st = storaged_lookup(cid, sid);
+    if (st == NULL) {
+      /*
+      ** Not my device
+      */
+      return -1;
+    }     
+
+    /*
+    ** This is our device
+    */
+    pDev->cid   = cid;
+    pDev->sid   = sid;
+    pDev->dev   = dev;
+    return 0;
+  } 
+
+  /*
+  ** Check for spare device label
+  */
+  if (strncmp(pDev->label,ROZOFS_SPARE_LABEL, strlen(ROZOFS_SPARE_LABEL)) != 0) {
+    /*
+    ** This is not a RozoFS device
+    */
+    return unknow_label;
+  }     
+
+  /*
+  ** This is a spare device.
+  */
+  pDev->spare = 1; 
+
+  /*
+  ** Check for spare mark at the end of the label "RozoFS_spare.<spare mark>"
+  */
+  length = strlen(pDev->label);
+  if (length > strlen(ROZOFS_SPARE_LABEL)) {    
+    /*
+    ** Read the spare mark
+    */
+    length -= strlen(ROZOFS_SPARE_LABEL); 
+    length++;    
+    pDev->spare_mark = xmalloc(length);
+    strcpy(pDev->spare_mark, &pDev->label[strlen(ROZOFS_SPARE_LABEL)]);       
+  }
+
+  /*
+  ** Does the mark fit with the configuration
+  */
+  st = NULL;
+  while ((st = storaged_next(st)) != NULL) {
+    /*
+    ** This storage requires a mark in the spare file
+    */
+    if (st->spare_mark != NULL) {
+      /*
+      ** There is none in this spare file
+      */
+      if (pDev->spare_mark == NULL) continue;
+      /*
+      ** There is one but not the expected one
+      */
+      if (strcmp(st->spare_mark,pDev->spare_mark)!= 0) continue;
+      /*
+      ** This spare device is usable by this logical storage
+      */
+      return 0;
+    }
+    /*
+    ** This storage requires no spare mark
+    */
+    if (pDev->spare_mark == NULL) {
+      return 0;
+    }
+  }     
+  /*
+  ** The mark file do not fit with this storage configuration
+  */
+  return -1;
 }   
 /*
  *_______________________________________________________________________
@@ -3998,7 +4144,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   pt += rozofs_string_append(pt,".dev");
   
   pt = cmd;
-  pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL | awk -F '\"' '{print $2\":\"$4\":\"$6\":\"$8\":\"$10\":\";}' > ");
+  pt += rozofs_string_append(pt,"lsblk -Pndo KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL | awk -F '\"' '{print $2\":\"$4\":\"$6\":\"$8\":\"$10\":\";}' > ");
   pt += rozofs_string_append(pt,fdevice);
   if (system(cmd)==0) {}
   
@@ -4104,6 +4250,16 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     if (strlen(pLabel) < ROZOFS_LABEL_SIZE) {
       strcpy(pDev->label, pLabel);
     }
+    
+    /*
+    ** Check from label whether this device can not be ours
+    */
+    if (rozofs_analyze_label(pDev) == -1) {
+      /*
+      ** This device has not our label
+      */
+      CONT;                            
+    }                       
 
     /*
     ** Get the model
@@ -4173,6 +4329,12 @@ int storage_enumerate_devices(char * workDir, int unmount) {
 	** Record device in enumeration table when relevent
 	*/
         if (st != NULL) {
+
+          /*
+          ** Write the correct label on it
+          */
+          rozofs_set_label(pDev);              
+        
   	  storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
 	  pDev = NULL;
         }  
@@ -4200,6 +4362,12 @@ int storage_enumerate_devices(char * workDir, int unmount) {
 	  pDev->mounted = 0;
 	}
       }	
+      
+      /*
+      ** Write the correct label on it
+      */
+      rozofs_set_label(pDev);      
+      
       storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
       pDev = NULL;     	
       CONT;       

@@ -211,3 +211,6 @@ BOOL   export  persistent_file_locks                False
 // A value of 0 means there is no limit on the volume.
 // A value of 100 forbids every file creation.
 INT   	export minimum_free_size_percent	4  0:100
+// Whether RozoFS devices must mandatorily be identified by a valid label.
+// Storages will not mount any device not having a valid RozoFS label.
+BOOL 	storage mandatory_device_label	        True

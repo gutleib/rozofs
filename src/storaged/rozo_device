@@ -607,9 +607,16 @@ def rozo_format_device(blockdev,lazzy,spare,cid,sid,dev,noUnicLabel) :
   if lazzy == False:
     MKFS = MKFS+" -E lazy_itable_init=0,lazy_journal_init=0"
   
-  if spare == True: LABEL = "RozoFS_spare"
+  if spare == True: 
+    if options.mark:
+      if len(options.mark) > 9:
+        print "Spare mark must be less than 9 characters"
+        exit(-1)
+      LABEL = "RozoSp_%s"%(options.mark)
+    else:
+      LABEL = "RozoSp_"
   else:
-    LABEL = "RozoFS_c%s_s%s_%s"%(cid,sid,dev)
+    LABEL = "Rozo_%s_%s_%s"%(cid,sid,dev)
     #
     # Check whether some other device has already the label
     #
@@ -658,7 +665,7 @@ def rozo_mark_spare(tmp,blockdev) :
      os.system("echo  %s > %s/rozofs_spare"%(options.mark, tmp))   
      print "%s formated for spare with \"%s\" mark"%(blockdev,options.mark)
      return 
-  os.system("touch %s/rozofs_spare"%(tmp))   
+  os.system("truncate -s 0 %s/rozofs_spare"%(tmp))   
   syslog.syslog("%s formated for spare"%(blockdev))
      
 #_____________________________________________     

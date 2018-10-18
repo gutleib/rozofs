@@ -132,7 +132,7 @@ georep = False
 #rozofs.set_trace()
 
 # Trash rate
-#rozofs.set_trashed_file_per_run(1000)
+rozofs.set_trashed_file_per_run(1000)
 rozofs.set_alloc_mb(0);
 
 # Change number of core files
@@ -147,9 +147,6 @@ rozofs.set_deletion_delay(12)
 
 # Set original RozoFS file distribution
 rozofs.set_file_distribution(5)
-
-# Set single storio mode
-# rozofs.storio_mode_single()
 
 # Disable CRC32
 # rozofs.set_crc32(False)

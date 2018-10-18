@@ -256,6 +256,9 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"minimum_free_size_percent")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(minimum_free_size_percent,value,0,100);
   }
+  if (strcmp(parameter,"mandatory_device_label")==0) {
+    COMMON_CONFIG_SET_BOOL(mandatory_device_label,value);
+  }
   pChar += rozofs_string_append(pChar,"No such parameter ");
   pChar += rozofs_string_append(pChar,parameter);
   pChar += rozofs_eol(pChar);\
@@ -784,6 +787,13 @@ char * show_common_config_module_storage(char * pChar) {
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Spare file restoring : Number of spare file context in 1K unit\n");
   COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Whether RozoFS devices must mandatorily be identified by a valid label.\n");
+  pChar += rozofs_string_append(pChar,"// Storages will not mount any device not having a valid RozoFS label.\n");
+  COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -1322,6 +1332,13 @@ char * save_common_config_module_storage(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Spare file restoring : Number of spare file context in 1K unit\n");
     COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,True);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether RozoFS devices must mandatorily be identified by a valid label.\n");
+    pChar += rozofs_string_append(pChar,"// Storages will not mount any device not having a valid RozoFS label.\n");
+    COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,True);
   }
   return pChar;
 }
@@ -1872,6 +1889,9 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(storio_fidctx_ctx,256);
   // Spare file restoring : Number of spare file context in 1K unit 
   COMMON_CONFIG_READ_INT(spare_restore_spare_ctx,16);
+  // Whether RozoFS devices must mandatorily be identified by a valid label. 
+  // Storages will not mount any device not having a valid RozoFS label. 
+  COMMON_CONFIG_READ_BOOL(mandatory_device_label,True);
   /*
   ** storcli scope configuration parameters
   */
