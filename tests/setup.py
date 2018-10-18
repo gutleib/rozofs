@@ -1177,6 +1177,7 @@ class rozofs_class:
     self.min_metadata_MB = None
     self.mkfscmd = None
     
+  def set_trashed_file_per_run(self,val): rozofs.trashed_file_per_run = val
   def set_min_metadata_inodes(self,val): self.min_metadata_inodes = val
   def set_min_metadata_MB(self,val): self.min_metadata_MB = val
   def set_metadata_size(self,size): self.metadata_size = size;
