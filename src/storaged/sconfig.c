@@ -364,6 +364,11 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         if (config_setting_lookup_string(ms, SSPARE_MARK, &spare_mark) == CONFIG_FALSE) {
           spare_mark = NULL;
         }
+        else {
+          if (strlen(spare_mark) > 9) {
+            severe("cid%d/sid%d has too long spare-mark : strlen(%s) = %d >9.", cid, sid, spare_mark, (int)strlen(spare_mark));
+          }
+        }
 
         new = xmalloc(sizeof (storage_config_t));
         if (storage_config_initialize(new, (cid_t) cid, (sid_t) sid,

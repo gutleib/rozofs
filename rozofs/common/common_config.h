@@ -255,6 +255,9 @@ typedef struct _common_config_t {
   int32_t     storio_fidctx_ctx;
   // Spare file restoring : Number of spare file context in 1K unit
   int32_t     spare_restore_spare_ctx;
+  // Whether RozoFS devices must mandatorily be identified by a valid label.
+  // Storages will not mount any device not having a valid RozoFS label.
+  int32_t     mandatory_device_label;
 } common_config_t;
 
 extern common_config_t common_config;
