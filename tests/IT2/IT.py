@@ -1081,7 +1081,7 @@ def symlink():
 #___________________________________________________
 def readdir():
 #___________________________________________________ 
-  return os.system("./IT2/test_readdir.exe -process %d -loop %d -mount %s"%(process/2,loop/2,exepath))
+  return os.system("./IT2/test_readdir.exe -process %d -loop %d -mount %s"%(process,loop,exepath))
 
 #___________________________________________________
 def rename():
