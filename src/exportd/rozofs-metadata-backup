@@ -1,0 +1,439 @@
+#! /bin/bash
+
+### Set default variables
+
+# Which directory to save
+if [ -z "${EXPORT_DIR_TO_SAVE}" ];
+then
+    EXPORT_DIR_TO_SAVE=/srv/rozofs/exports
+fi
+
+# Where the backup will be saved
+if [ -z "${BACKUP_DIR}" ];
+then
+    BACKUP_DIR=
+fi
+
+# Limited throughput to respect
+if [ -z "${TAR_THROUGHPUT}" ];
+then
+    TAR_THROUGHPUT=30m
+fi
+
+# Nb. of backup max by directory (nb. max of backup is equal to 3x this value (monthly,weekly,daily) )
+if [ -z "${NB_BACKUP_MAX}" ];
+then
+    NB_BACKUP_MAX=3
+fi
+
+# Is it a HA exportd
+if [ -z "${HA_EXPORTD}" ];
+then
+    HA_EXPORTD=yes
+fi
+
+### Functions
+
+# Function to get if it is a monthly,weekly or daily backup
+function which_backup
+{
+    # Get day of month
+    day_of_month=`date +%-d`
+    if [ $? -gt 0 ]; then
+        echo ${day_of_month}
+        return $?
+    fi
+    if [ "${day_of_month}" = "1" ]; then
+        echo "monthly"
+        return 0
+    fi
+
+    # Get day of week
+    day_of_week=`date +%-u`
+    if [ $? -gt 0 ]; then
+        echo ${day_of_week}
+        return $?
+    fi
+    if [ "${day_of_week}" = "1" ]; then
+        echo "weekly"
+        return 0
+    fi
+
+    echo "daily"
+    return 0
+}
+
+# Function for checking if we are the current master
+function am_i_master
+{
+    hostname_master=`/usr/sbin/crm_resource --resource p-fs-exportd --locate -Q`
+    if [ $? -gt 0 ]; then
+        echo ${hostname_master}
+        return $?
+    fi
+
+    my_hostname=`/bin/hostname`
+
+    if [ "${hostname_master}" != "${my_hostname}" ]; then
+        echo "Info: no backup because the master node is ${hostname_master}"
+        return 200
+    fi
+    return 0
+}
+
+# Function to cleanup old backups
+function clean_backup
+{
+    if [ -z ${1+x} ]; then 
+        echo "Error clean_backup: arg is not valid";
+        return 1
+    fi
+
+    # Check directory exists
+    if [ ! -d $1 ]; then
+        echo "Error: clean_backup failed, $1 is not a directory";
+        return 1
+    fi
+
+    # Compute Nb. of backup to remove
+    nb_current_backup=`ls -l ${1} | grep backup | wc -l`
+    nb_to_delete=$(($nb_current_backup - $NB_BACKUP_MAX + 1))
+
+    if [ ${nb_to_delete} -le 0 ]; then
+        echo "no backup to delete"
+        return 0
+    fi
+
+    echo "$nb_to_delete files to delete"
+    # Remove old backup
+    i=0
+    for f in `ls -rt ${1}`; do
+
+        # Safeguards
+        if [[ ! ${1}/${f} == *"backup-"* ]]; then
+            echo "Error: clean_backup failed, safeguard for file ${f}";
+            continue
+        fi
+        if [ ! -f ${1}/${f} ]; then
+            echo "Error: clean_backup failed, ${f} is not a file";
+            continue
+        fi
+        # Remove file
+        rm -f ${1}/${f}
+        if [ $? -gt 0 ]; then
+            return $?
+        fi
+        echo "${1}/${f} deleted"
+        i=$(($i + 1))
+        if [ $i -ge $nb_to_delete ]; then
+            break
+        fi
+    done;
+}
+
+# Function to make a backup of metadata with tar
+function backup
+{
+    # Check if variable is set
+    if [ -z ${TAR_THROUGHPUT+x} ]; then 
+        echo "Error: TAR_THROUGHPUT is not valid";
+        return 1
+    fi
+
+    tar_file=${BACKUP_DIR}/backup-`date "+%Y%m%d_%Hh%Mm%Ss"`.tar.gz
+    echo "Save tar as $tar_file"
+    time tar -zchf - ${EXPORT_DIR_TO_SAVE} | pv -L ${TAR_THROUGHPUT} > ${tar_file}
+    return ${PIPESTATUS[0]}
+}
+
+# Function to compute free size in bytes for one FS
+function get_fs_available_bytes
+{
+    # Check if variable is set
+    if [ -z ${1+x} ]; then 
+        echo "Error: get_fs_available_bytes has no argument";
+        return 1
+    fi
+
+    # Check directory exists
+    if [ ! -d $1 ]; then
+        echo "Error: get_fs_available_bytes failed, $1 is not a directory";
+        return 1
+    fi
+
+    free_blocks=`stat -f --printf="%f" $1`
+    if [ $? -gt 0 ]; then
+        echo ${free_blocks}
+        return $?
+    fi 
+    block_size=`stat -f --printf="%S" $1`
+    if [ $? -gt 0 ]; then
+        echo ${block_size}
+        return $?
+    fi 
+
+    # Compute number of bytes free
+    bytes_free=$(($free_blocks * $block_size))
+    echo ${bytes_free}
+    return 0
+}
+
+# Function to compute used size in bytes for one FS
+function get_fs_used_bytes
+{
+    # Check if variable is set
+    if [ -z ${1+x} ]; then 
+        echo "Error: get_fs_used_bytes has no argument";
+        return 1
+    fi
+
+    # Check directory exists
+    if [ ! -d $1 ]; then
+        echo "Error: get_fs_used_bytes failed, $1 is not a directory";
+        return 1
+    fi
+
+    total_blocks=`stat -f --printf="%b" $1`
+    if [ $? -gt 0 ]; then
+        echo ${total_blocks}
+        return $?
+    fi    
+    free_blocks=`stat -f --printf="%f" $1`
+    if [ $? -gt 0 ]; then
+        echo ${free_blocks}
+        return $?
+    fi    
+    block_size=`stat -f --printf="%S" $1`
+    if [ $? -gt 0 ]; then
+        echo ${block_size}
+        return $?
+    fi
+
+    # Compute number of bytes free
+    bytes_used=$((($total_blocks -  $free_blocks) * $block_size))
+    echo ${bytes_used}
+    return 0
+}
+
+# Function to compute free inodes for one FS
+function get_fs_available_inodes
+{
+    # Check if variable is set
+    if [ -z ${1+x} ]; then 
+        echo "Error: get_fs_available_inodes has no argument";
+        return 1
+    fi
+
+    # Check directory exists
+    if [ ! -d $1 ]; then
+        echo "Error: get_fs_available_inodes failed, $1 is not a directory";
+        return 1
+    fi
+
+    free_inodes=`stat -f --printf="%d" $1`
+    if [ $? -gt 0 ]; then
+        echo ${free_inodes}
+        return $?
+    fi    
+
+    echo ${free_inodes}
+    return 0
+}
+
+# Function to compute the nb. of inodes used for one FS
+function get_fs_used_inodes
+{
+    # Check if variable is set
+    if [ -z ${1+x} ]; then 
+        echo "Error: get_fs_used_inodes has no argument";
+        return 1
+    fi
+
+    # Check directory exists
+    if [ ! -d $1 ]; then
+        echo "Error: get_fs_used_inodes failed, $1 is not a directory";
+        return 1
+    fi
+
+    total_inodes=`stat -f --printf="%c" $1`
+    if [ $? -gt 0 ]; then
+        echo ${total_inodes}
+        return $1
+    fi
+    free_inodes=`stat -f --printf="%d" $1`
+    if [ $? -gt 0 ]; then
+        echo ${free_inodes}
+        return $1
+    fi
+
+    # Compute number of inodes used
+    inodes_used=$(($total_inodes - $free_inodes))
+
+    echo ${inodes_used}
+    return 0
+}
+
+
+# Function to get the hexa id of a filesystem
+function get_fs_id
+{
+    # Check if variable is set
+    if [ -z ${1+x} ]; then 
+        echo "Error: get_fs_id has no argument"
+        return 1
+    fi
+
+    # Check directory exists
+    if [ ! -d $1 ]; then
+        echo "Error: get_fs_id failed, $1 is not a directory";
+        return 1
+    fi
+
+    id=`stat -f --printf="%i" $1`
+    if [ $? -gt 0 ]; then
+        echo ${id}
+        return $?
+    fi
+
+    echo ${id}
+    return 0
+}
+
+# Function to check if a package is installed
+function check_pkg
+{
+	if [[ $(which $1) == "" ]] ; then
+		echo -n "Package '$1' not found! Please install it "
+        exit 1
+	fi
+}
+
+### Check if the server is the current master
+echo "Check if we are the current exportd master (HA case)"
+master=`am_i_master` 
+ret=$?
+if [ $ret -gt 0 ]; then
+    if [ $ret == 200 ]; then
+        echo $master
+        exit 0
+    fi
+    echo $master
+    exit $ret
+fi
+
+### Check packages
+echo "Check packages..."
+check_pkg tar
+check_pkg pv
+check_pkg stat
+check_pkg date
+check_pkg time
+
+echo "Check if backup directory exists"
+# Check directory exists
+if [ -z "${BACKUP_DIR}" ]; then 
+    echo "Error: backup dir is not set";
+    exit 1
+fi
+if [ ! -d ${BACKUP_DIR} ]; then
+    echo "Error: the backup path ${BACKUP_DIR} is not a directory";
+    exit 1
+fi
+
+echo "Check which backup is it..."
+backup_type=`which_backup`
+ret=$?
+if [ $ret -gt 0 ]; then
+    echo $backup_type
+    exit $ret
+fi
+
+echo "Backup type is $backup_type"
+BACKUP_DIR=${BACKUP_DIR}/${backup_type}
+if [ ! -d ${BACKUP_DIR} ]; then
+    echo "Create directory ${BACKUP_DIR}"
+    mkdir ${BACKUP_DIR}
+    if [ $ret -gt 0 ]; then
+        exit $ret
+    fi
+fi
+
+### Clean backup 
+echo "Remove old backup..."
+clean_backup ${BACKUP_DIR}
+ret=$?
+if [ $ret -gt 0 ]; then
+    exit $ret
+fi
+
+### Check if the backup directory is not on the same filesystem than the metadata
+echo "Check that file systems are different..."
+backup_fs_id=`get_fs_id ${BACKUP_DIR}`
+ret=$?
+if [ $ret -gt 0 ]; then
+    echo $backup_fs_id
+    exit $ret
+fi
+export_fs_id=`get_fs_id ${EXPORT_DIR_TO_SAVE}`
+ret=$?
+if [ $ret -gt 0 ]; then
+    echo $export_fs_id
+    exit $ret
+fi
+if [ "${backup_fs_id}" = "${export_fs_id}" ]; then
+    echo "Error: ${BACKUP_DIR} and ${EXPORT_DIR_TO_SAVE} are on the same filesystem"
+    exit 1
+fi
+
+### Check if the backup dir has enough space
+echo "Check that backup file has enough available space..."
+free_backup_bytes=`get_fs_available_bytes ${BACKUP_DIR}`
+ret=$?
+if [ $ret -gt 0 ]; then
+    echo $free_backup_bytes
+    exit $ret
+fi
+used_export_bytes=`get_fs_used_bytes ${EXPORT_DIR_TO_SAVE}`
+ret=$?
+if [ $ret -gt 0 ]; then
+    echo $used_export_bytes
+    exit $ret
+fi
+echo "The export file system uses ${used_export_bytes} bytes"
+if [ ${used_export_bytes} -ge ${free_backup_bytes} ]; then
+    echo "Error: ${BACKUP_DIR} has not enough available space"
+    exit 1
+fi
+
+### Check if the backup dir has enough inodes
+echo "Check that backup FS has enough available inodes..."
+free_backup_inodes=`get_fs_available_inodes ${BACKUP_DIR}`
+ret=$?
+if [ $ret -gt 0 ]; then
+    echo $free_backup_inodes
+    exit $ret
+fi
+if [ ${free_backup_inodes} -lt 10 ]; then
+    echo "Error: ${BACKUP_DIR} has not enough available inodes (10 is the minimum)"
+    exit 1
+fi
+
+### Check infos about inodes in export (only for info)
+used_export_inodes=`get_fs_used_inodes ${EXPORT_DIR_TO_SAVE}`
+ret=$?
+if [ $ret -gt 0 ]; then
+    echo $used_export_inodes
+    exit $ret
+fi
+echo "The export file system has ${used_export_inodes} inodes"
+
+### Backup metadata
+echo "Perform backup..."
+backup
+ret=$?
+if [ $ret -gt 0 ]; then
+    exit $ret
+fi
+
+echo "Backup exited successfully"
+exit 0

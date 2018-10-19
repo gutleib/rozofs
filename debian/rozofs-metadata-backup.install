@@ -1,0 +1,2 @@
+/usr/bin/rozofs-metadata-backup
+debian/rozofs-metadata-backup.timer /lib/systemd/system/
