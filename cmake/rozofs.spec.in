@@ -295,8 +295,10 @@ mkdir -p %{buildroot}%{_initrddir}
 %files metadata-backup
 %defattr(-,root,root)
 %{_bindir}/rozofs-metadata-backup
+%if 0%{?rhel} >= 7
 %{_unitdir}/rozofs-metadata-backup.service
 %{_unitdir}/rozofs-metadata-backup.timer
+%endif
 
 %if 0%{?rhel} >= 7
 %post exportd
