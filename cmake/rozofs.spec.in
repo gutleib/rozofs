@@ -96,6 +96,16 @@ Requires: libconfig rozofs-rozolauncher
 %description geomgr
 Geo-replication daemon for RozoFS.
 
+%package metadata-backup
+Summary: RozoFS metadata backup utility.
+License: GPLv2
+Group: System Environment/Daemons
+Requires: pv tar time
+%description metadata backup
+rozofs-metadata-backup is a utility to backup all rozofs metadata to
+another filesystem (useful only when the HA is dead). This backup is
+made with tar and compressed with gzip. Backups could be schedule
+automatically with the rozofs-metadata-backup systemd timer.
 
 %prep
 %setup -q
@@ -131,6 +141,8 @@ mkdir -p %{buildroot}%{_unitdir}
 %{__cp} redhat/rozofs-manager-agent.service %{buildroot}%{_unitdir}/rozofs-manager-agent.service
 %{__cp} redhat/rozofs-geomgr.service %{buildroot}%{_unitdir}/rozofs-geomgr.service
 %{__cp} redhat/rozofs-rozofsmount.service %{buildroot}%{_unitdir}/rozofs-rozofsmount.service
+%{__cp} redhat/rozofs-metadata-backup.service %{buildroot}%{_unitdir}/rozofs-metadata-backup.service
+%{__cp} redhat/rozofs-metadata-backup.timer %{buildroot}%{_unitdir}/rozofs-metadata-backup.timer
 %else
 #install init script (sysVinit)
 mkdir -p %{buildroot}%{_initrddir}
@@ -280,6 +292,12 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_initrddir}/rozofs-geomgr
 %endif
 
+%files metadata-backup
+%defattr(-,root,root)
+%{_bindir}/rozofs-metadata-backup
+%{_unitdir}/rozofs-metadata-backup.service
+%{_unitdir}/rozofs-metadata-backup.timer
+
 %if 0%{?rhel} >= 7
 %post exportd
 %systemd_post rozofs-exportd.service
@@ -348,6 +366,9 @@ fi
 %endif
 
 %changelog
+
+* Mon Oct 22 2018 RozoFS <devel@rozofs.org> 3.0.alpha60-1
+- Added rozofs-metadata-backup package
 
 * Fri Aug 12 2016 RozoFS <devel@rozofs.org> 2.1.alpha16-1
 - Added rozofs-rozofsmount unit file
