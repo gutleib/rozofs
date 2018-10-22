@@ -101,7 +101,7 @@ Summary: RozoFS metadata backup utility.
 License: GPLv2
 Group: System Environment/Daemons
 Requires: pv tar time
-%description metadata backup
+%description metadata-backup
 rozofs-metadata-backup is a utility to backup all rozofs metadata to
 another filesystem (useful only when the HA is dead). This backup is
 made with tar and compressed with gzip. Backups could be schedule
@@ -368,7 +368,7 @@ fi
 %changelog
 
 * Mon Oct 22 2018 RozoFS <devel@rozofs.org> 3.0.alpha60-1
-- Added rozofs-metadata-backup package
+- Added rozofs-metadata-backup
 
 * Fri Aug 12 2016 RozoFS <devel@rozofs.org> 2.1.alpha16-1
 - Added rozofs-rozofsmount unit file
