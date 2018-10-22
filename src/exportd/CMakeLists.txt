@@ -447,4 +447,4 @@ install(TARGETS rozo_du
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)
-
+install(PROGRAMS rozofs-metadata-backup DESTINATION bin)

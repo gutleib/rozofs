@@ -183,3 +183,21 @@ Description: RozoFS filesystem (Nagios plugins)
  coding and Mojette Transform algorithm for data distribution. RozoFS
  designed to provide very high availability levels with optimized raw
  capacity usage on heterogeneous commodity hardware
+
+Package: rozofs-metadata-backup
+Architecture: any
+Depends: ${shlibs:Depends},
+		 ${misc:Depends},
+		 pv,
+		 tar (>= 1.26),
+		 time
+Description: RozoFS metadata backup utility
+ rozofs-metadata backup is a utility to backup all rozofs metadata to
+ another filesystem (useful only when the HA is dead). This backup is
+ made with tar and compressed with gzip. Backups could be schedule
+ automatically with the rozofs-metadata-backup systemd timer. 
+ .
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware

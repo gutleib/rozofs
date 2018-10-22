@@ -1,0 +1,19 @@
+[Unit]
+Description=Backup of RozoFS metadata
+Requires=network.target
+After=network.target rozofs-exportd.service rozofs-storaged.service corosync.service pacemaker.service
+#OnFailure=status-email-user@%n.service
+
+[Service]
+# Lowest piority
+Nice=19 
+#Idle
+IOSchedulingClass=2 
+# Lowest priority
+IOSchedulingPriority=7 
+Type=simple
+ExecStart=/usr/bin/rozofs-metadata-backup
+Environment="BACKUP_DIR="
+
+[Install]
+WantedBy=multi-user.target
