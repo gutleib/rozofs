@@ -64,6 +64,12 @@ rozo_bpo() {
     xenial)
       ROZO_BPO="~xenial0+1"
     ;;
+    bionic)
+      ROZO_BPO="~bionic0+1"
+    ;;
+    cosmic)
+      ROZO_BPO="~cosmic0+1"
+    ;;
     *)
       ROZO_BPO=""
     ;;

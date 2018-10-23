@@ -34,3 +34,6 @@ override_dh_auto_configure:
 override_dh_strip:
 	dh_strip --dbg-package=rozofs-dbg
 
+override_dh_builddeb:
+		# keep tar.gz for aptly
+       dh_builddeb -- -Zgzip
