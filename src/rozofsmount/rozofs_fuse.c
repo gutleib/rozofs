@@ -47,6 +47,7 @@ uint64_t rozofs_fuse_req_eagain_count = 0;
 uint64_t rozofs_fuse_req_enoent_count = 0;
 uint64_t rozofs_fuse_req_tic = 0;
 uint64_t rozofs_fuse_buffer_depletion_count = 0;
+uint64_t rozofs_fuse_rcv_buf_depletion_count = 0;
 uint64_t rozofs_storcli_buffer_depletion_count = 0;
 int rozofs_fuse_loop_count = 2;
 int fuse_sharemem_init_done = 0;
@@ -454,7 +455,16 @@ uint32_t rozofs_fuse_rcvReadysock(void * rozofs_fuse_ctx_p,int socketId)
       rozofs_fuse_buffer_depletion_count++;
       return FALSE;
     }
+     /*
+    ** Check if rozofsmount does not run out of fuse receive buffer
+    */
     
+    if (list_empty(&rozofs_fuse_rcv_buf_head))
+    {
+      rozofs_fuse_rcv_buf_depletion_count++;
+      return FALSE;    
+    
+    }    
     /*
     ** check the number of requests towards the storcli
     */
@@ -657,6 +667,11 @@ int rozofs_fuse_session_loop(rozofs_fuse_ctx_t *ctx_p, int * empty)
         }
         break;
     }
+    /*
+    ** Check if there is some data to process
+    ** on the af_unix response socket (either release of a read buffer or sending a write request
+    */
+    af_unix_fuse_scheduler_entry_point(0);
 /*
 ** to be reworked
 */
@@ -741,6 +756,7 @@ static char *rozofs_fuse_show_usage(char *pChar)
   pChar += sprintf(pChar,"usage:\n");
   pChar += sprintf(pChar,"fuse kernel               : generate a printk from the rozofs fuse.ko module \n");
   pChar += sprintf(pChar,"fuse loop <count>         : set the max. fuse requests polled from the device queue(default:2) \n");
+  pChar += sprintf(pChar,"fuse bypass [size]        : set the minimum size in bytes of write size before using ioctl (default %u)\n",ROZOFS_MAX_FILE_BUF_SZ);
   pChar += sprintf(pChar,"fuse dir <enable|disable> :enable/disable dir attributes invalidation on mkdir/rmdir/unlink/create and mknod \n");
   pChar += sprintf(pChar,"fuse                      :display statistics \n");
   return pChar;
@@ -751,6 +767,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
   char                status[16];
   int   new_val; 
   int   ret;
+  unsigned long rozofs_bypass_size;
   
   char *pChar = uma_dbg_get_buffer();
 
@@ -802,6 +819,35 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 	 return;
       }
+
+      if (strcmp(argv[1],"bypass")==0) 
+      {
+	 errno = 0;
+	 if (argv[2] == NULL)
+	 {
+	   rozofs_bypass_size = ROZOFS_MAX_FILE_BUF_SZ;
+	   conf.rozofs_bypass_size = rozofs_bypass_size;
+	   ioctl(rozofs_fuse_ctx_p->fd,6,&rozofs_bypass_size);
+           pChar += sprintf(pChar, "Done!\n");
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	  	  
+	 }
+	 new_val = (int) strtol(argv[2], (char **) NULL, 10);   
+	 if (errno != 0) {
+           pChar += sprintf(pChar, "bad value %s\n",argv[2]);
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;
+	 }
+ 
+	 rozofs_bypass_size = new_val;
+	 conf.rozofs_bypass_size = rozofs_bypass_size;
+	 ioctl(rozofs_fuse_ctx_p->fd,6,&rozofs_bypass_size);
+         pChar += sprintf(pChar, "Done!\n");
+	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	 return;
+      }
+
       if (strcmp(argv[1],"dir")==0) 
       {
 	 if (rozofs_fuse_ctx_p->ioctl_supported==0)
@@ -926,6 +972,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
                                                      (long long unsigned int)rozofs_fuse_req_enoent_count);  
 
   pChar +=sprintf(pChar,"fuse buffer depletion    : %8llu\n",(long long unsigned int)rozofs_fuse_buffer_depletion_count);  
+  pChar +=sprintf(pChar,"fuse rcvbuf depletion    : %8llu\n",(long long unsigned int)rozofs_fuse_rcv_buf_depletion_count);  
   pChar +=sprintf(pChar,"storcli buffer depletion : %8llu\n",(long long unsigned int)rozofs_storcli_buffer_depletion_count);
   pChar +=sprintf(pChar,"pending storcli requests : %8d\n",rozofs_storcli_pending_req_count);
   pChar +=sprintf(pChar,"fuse kernel xoff/xon     : %8llu/%llu\n",(long long unsigned int)rozofs_storcli_xoff_count,
@@ -933,6 +980,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 
   rozofs_storcli_buffer_depletion_count =0;
   rozofs_fuse_buffer_depletion_count =0;
+  rozofs_fuse_rcv_buf_depletion_count =0;
   rozofs_fuse_req_count = 0;
   rozofs_fuse_req_byte_in = 0;
   rozofs_fuse_req_eagain_count = 0;
@@ -943,6 +991,8 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
   *  read/write statistics
   */
   pChar +=sprintf(pChar,"big write count           : %8llu\n",(long long unsigned int)rozofs_fuse_read_write_stats_buf.big_write_cpt);  
+  pChar +=sprintf(pChar,"big write count iotcl     : %8llu\n",(long long unsigned int)rozofs_fuse_read_write_stats_buf.big_write_ioctl_cpt);  
+  pChar +=sprintf(pChar,"small write count ioctl   : %8llu\n",(long long unsigned int)rozofs_fuse_read_write_stats_buf.small_write_ioctl_cpt);  
   pChar +=sprintf(pChar,"flush buf. count          : %8llu\n",(long long unsigned int)rozofs_fuse_read_write_stats_buf.flush_buf_cpt);  
   pChar +=sprintf(pChar,"  start aligned/unaligned : %8llu/%llu\n",
                  (long long unsigned int)rozofs_aligned_write_start[0],
@@ -1151,6 +1201,7 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
      ** send XON to the fuse channel
      */
      {
+        unsigned long rozofs_bypass_size;
         int ret;
 	rozofs_fuse_ctx_p->ioctl_supported = 1;
 	rozofs_fuse_ctx_p->data_xon        = 1;
@@ -1165,6 +1216,7 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
 	     break;
 
 	  }
+#if 0
           if (rozofs_fuse_ctx_p->dir_attr_invalidate == 0)
 	  {
 	    ret = ioctl(rozofs_fuse_ctx_p->fd,3,NULL);
@@ -1176,6 +1228,10 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
 	       break;
 	    }		
 	  }
+#endif
+	   rozofs_bypass_size = ROZOFS_MAX_FILE_BUF_SZ;
+	   ioctl(rozofs_fuse_ctx_p->fd,6,&rozofs_bypass_size);
+	  
 	  break;     
         }
      }

@@ -21,7 +21,7 @@
 
 #define FUSE_USE_VERSION 26
 #include <fuse/fuse_lowlevel.h>
-
+#include <sys/ioctl.h>
 #include <rozofs/common/htable.h>
 #include <rozofs/rpc/rozofs_rpc_util.h>
 #include <rozofs/core/rozofs_tx_common.h>
@@ -31,9 +31,10 @@
 #include "file.h"
 #include "rozofs_ext4.h"
 
-#define ROZOFSMOUNT_MAX_EXPORT_TX 32
-#define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_STANDALONE  32
-#define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_PER_PROCESS  24
+#define ROZOFSMOUNT_MAX_EXPORT_TX 128
+#define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_STANDALONE  128
+#define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_PER_PROCESS  48
+#define ROZOFSMOUNT_MAX_4_STORCLI_TX_PER_PROCESS  48
 
 #define hash_xor8(n)    (((n) ^ ((n)>>8) ^ ((n)>>16) ^ ((n)>>24)) & 0xff)
 #define ROOT_INODE 1
@@ -117,7 +118,8 @@ typedef struct rozofsmnt_conf {
     unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */
     unsigned numanode;  
     unsigned wbcache;  /**< writeback cache fuse */    
-    unsigned nb_writeThreads;  /**< number of write threads (default:0                             */     
+    unsigned nb_writeThreads;  /**< number of write threads (default:0                             */ 
+    unsigned long rozofs_bypass_size;     
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 
@@ -164,6 +166,7 @@ typedef struct ientry {
     uint64_t    symlink_ts;
     int         pending_getattr_cnt;   /**< pending get attr count  */
     int         pending_setattr_with_size_update; /**< number of pending setattr triggered by a truncate callback */
+//    uint32_t    io_write_error_counter;   /**< incremented each time there is an I/O write error for that i-node  */
     struct inode_internal_t attrs;   /**< attributes caching for fs_mode = block mode   */
     /* !!!WARNING !!! DO NOT ADD ANY FIELD BELOW attrs since that array can be extended for storing extended attributes */
 } ientry_t;
@@ -470,6 +473,7 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
         ie->symlink_ts     = 0;
 	ie->pending_getattr_cnt= 0;
 	ie->pending_setattr_with_size_update = 0;
+//	ie->io_write_error_counter = 0;
 	put_ientry(ie);
 	/*
 	** when the ientry stores the extended attributes we should initialize the ext_mattr section

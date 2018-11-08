@@ -762,7 +762,7 @@ int rozofs_storcli_wr_thread_send(int rpc_opcode,void *msg2encode_p,xdrproc_t en
     msg_thread_p->opcode      = ROZOFS_FUSE_WRITE_BUF;
     msg_thread_p->status      = 0;
     msg_thread_p->storcli_idx = storcli_idx;
-    msg_thread_p->rozofs_fuse_cur_rcv_buf = rozofs_fuse_cur_rcv_buf; 
+    msg_thread_p->rozofs_fuse_cur_rcv_buf = NULL; //rozofs_fuse_cur_rcv_buf; 
     msg_thread_p->rpc_opcode  = rpc_opcode;
     msg_thread_p->encode_fct  = encode_fct;
     /*
@@ -824,10 +824,12 @@ int rozofs_storcli_wr_thread_send(int rpc_opcode,void *msg2encode_p,xdrproc_t en
     rozofs_storcli_pending_req_count++;
     
     rozofs_sendto_wr_fuse_thread(msg_thread_p);
+#if 0 /** not needed with IOCTL */
     /*
-    ** Clear the reference of the fuse receive buffer
+    ** Clear the reference of the fuse receive buffer: 
     */
     rozofs_fuse_cur_rcv_buf = NULL;
+#endif
     return 0;
 
     
@@ -926,7 +928,7 @@ void af_unix_fuse_write_process_response(void *msg_p)
     SAVE_FUSE_PARAM(fuse_ctx_p,deferred_fuse_write_response);    
     STOP_PROFILING_NB(fuse_ctx_p,rozofs_ll_write);
 out:
-    rozofs_fuse_release_rcv_buffer_pool(fuse_rcv_buf_p);
+    if (fuse_rcv_buf_p != NULL) rozofs_fuse_release_rcv_buffer_pool(fuse_rcv_buf_p);
     return;  
     
 error:
@@ -1009,11 +1011,31 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
        errno = ENOMEM;
        goto error;
     } 
+    if (common_config.storcli_read_parallel == 0)
+    {
+      /*
+      ** Insert this transaction so that every other following trasnactions
+      ** for the same FID will follow the same path
+      */
+      stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);
+    }
+    else
     /*
-    ** Insert this transaction so that every other following trasnactions
-    ** for the same FID will follow the same path
+    ** Read parallel case: mainly for network with high latency
     */
-    stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);
+    {
+//#warning all is parallel when flag is asserted
+      /*
+      ** Write cannot follow the same behavior because of the first write when the projection does not exist on the storio side
+      **  need to see how to address it in order to make it work in parallel for both cases.
+      */
+#if 1
+      if (opcode != STORCLI_READ)
+      {
+        stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);      
+      }    
+#endif
+    }
       
     /*
     ** Get the load balancing group reference associated with the storcli
@@ -1061,11 +1083,11 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
     ** check the case of the READ since, we must set the value of the xid
     ** at the top of the buffer
     */
-#if 1
     if ((opcode == STORCLI_READ)||(opcode == STORCLI_WRITE))
     {
        uint32_t *share_p;
        void *shared_buf_ref;
+       void * kernel_fuse_write_request;
 
         RESTORE_FUSE_PARAM(fuse_ctx_p,shared_buf_ref);
         if (shared_buf_ref != NULL)
@@ -1092,12 +1114,32 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
 	     */
 	     uint8_t * buf_start = (uint8_t *)&share_p[4];
 	     buf_start += alignment;
-	     
-	     memcpy(buf_start,wr_args->data.data_val,len);	  
+	     RESTORE_FUSE_PARAM(fuse_ctx_p,kernel_fuse_write_request);
+	     /*
+	     ** Check if we need to do an ioctl to get the data
+	     */
+	     if (kernel_fuse_write_request != NULL)
+	     {
+	        ioctl_big_wr_t data;
+		
+	        data.req = kernel_fuse_write_request;
+                data.user_buf = buf_start;      
+                data.user_bufsize = len;
+	        ret = ioctl(rozofs_fuse_ctx_p->fd,5,&data); 
+		if (ret != 0)
+		{
+		   errno = EIO;
+        	   severe("ioctl write error %s",strerror(errno));   
+		  goto error;
+		} 
+	     }
+	     else
+	     {
+	       memcpy(buf_start,wr_args->data.data_val,len);	
+	     }  
 	  }
         }
     }
-#endif
 	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
 	/* XXX: prog and vers have been long historically :-( */
 	call_msg.rm_call.cb_prog = (uint32_t)prog;

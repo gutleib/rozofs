@@ -185,7 +185,7 @@ void *fuse_reply_thread(void *arg) {
                     (policy == SCHED_RR)    ? "SCHED_RR" :
                     "???");
  #if 1
-      my_priority.sched_priority= 97;
+      my_priority.sched_priority= 99;
       policy = SCHED_RR;
       ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
       if (ret < 0) 

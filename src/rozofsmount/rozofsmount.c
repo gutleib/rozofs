@@ -446,7 +446,8 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(noReadFaultTolerant);
   DISPLAY_UINT32_CONFIG(xattrcache);
   DISPLAY_UINT32_CONFIG(asyncsetattr);
-  DISPLAY_UINT32_CONFIG(wbcache);
+  DISPLAY_UINT32_CONFIG(wbcache);  
+  DISPLAY_UINT32_CONFIG(rozofs_bypass_size);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
@@ -600,6 +601,55 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
   if (strcmp(argv[1],"count")==0) {
       pChar += sprintf(pChar, "ientry counter: %llu\n", (long long unsigned int) rozofs_ientries_count);
       pChar += sprintf(pChar, "wr_blk retries: %d\n",  list_wr_block_count);
+      pChar += sprintf(pChar, "large size: %u\n",  ROZOFS_IENTRY_LARGE_SZ);
+      pChar += sprintf(pChar, "ientry_size    : %u\n",  sizeof(ientry_t));
+      pChar += sprintf(pChar, "mattr_sz       : %u\n",  sizeof(mattr_t));
+      pChar += sprintf(pChar, "internal_ino_sz: %u\n",  sizeof(struct inode_internal_t));
+      pChar += sprintf(pChar, "lv2_entry_sz   : %u\n",  sizeof(lv2_entry_t));
+      {
+        mattr_t  fake_inode;
+	pChar += sprintf(pChar,"fid      =%u\n",    (void*)&fake_inode.fid - (void*)&fake_inode); 
+	pChar += sprintf(pChar,"sid      =%u\n",     (void*)&fake_inode.sids[0] - (void*)&fake_inode); 
+	pChar += sprintf(pChar,"cid      =%u\n",     (void*)&fake_inode.cid - (void*)&fake_inode); 
+	pChar += sprintf(pChar,"mode     =%u\n",     (void*)&fake_inode.mode - (void*)&fake_inode);
+	pChar += sprintf(pChar,"uid      =%u\n",     (void*)&fake_inode.uid - (void*)&fake_inode);
+	pChar += sprintf(pChar,"gid      =%u\n",     (void*)&fake_inode.gid - (void*)&fake_inode);
+	pChar += sprintf(pChar,"nlink    =%u\n",     (void*)&fake_inode.nlink - (void*)&fake_inode);
+	pChar += sprintf(pChar,"ctime    =%u\n",     (void*)&fake_inode.ctime - (void*)&fake_inode); 
+	pChar += sprintf(pChar,"atime    =%u\n",     (void*)&fake_inode.atime - (void*)&fake_inode);
+	pChar += sprintf(pChar,"mtime    =%u\n",     (void*)&fake_inode.mtime - (void*)&fake_inode); 
+	pChar += sprintf(pChar,"size     =%u\n",     (void*)&fake_inode.size - (void*)&fake_inode);
+	pChar += sprintf(pChar,"children =%u\n",     (void*)&fake_inode.children - (void*)&fake_inode);       
+      
+      }
+      {
+          ext_mattr_t fake_inode;
+	  pChar += sprintf(pChar,"attrs          =%u\n",    (void*) &fake_inode.s.attrs - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"cr8time        =%u\n",     (void*) &fake_inode.s.cr8time - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"pfid           =%u\n",     (void*) &fake_inode.s.pfid - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"hash1          =%u\n",     (void*) &fake_inode.s.hash1 - (void*) &fake_inode);
+	  pChar += sprintf(pChar,"hash2          =%u\n",     (void*) &fake_inode.s.hash2 - (void*) &fake_inode);
+	  pChar += sprintf(pChar,"i_extra_isize  =%u\n",     (void*) &fake_inode.s.i_extra_isize - (void*) &fake_inode);
+	  pChar += sprintf(pChar,"bitfield1      =%u\n",     (void*) &fake_inode.s.bitfield1 - (void*) &fake_inode);
+	  pChar += sprintf(pChar,"filler2        =%u\n",     (void*) &fake_inode.s.filler2 - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"filler3        =%u\n",     (void*) &fake_inode.s.filler3 - (void*) &fake_inode);
+	  pChar += sprintf(pChar,"filler4        =%u\n",     (void*) &fake_inode.s.filler4 - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"filler5        =%u\n",     (void*) &fake_inode.s.filler5 - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"filler6        =%u\n",     (void*) &fake_inode.s.filler6 - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"i_file_acl     =%u\n",     (void*) &fake_inode.s.i_file_acl - (void*) &fake_inode);
+	  pChar += sprintf(pChar,"i_link_name    =%u\n",     (void*) &fake_inode.s.i_link_name - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"i_link_name    =%u\n",     (void*) &fake_inode.s.i_link_name - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"hpc_reserved   =%u\n",     (void*) &fake_inode.s.hpc_reserved - (void*) &fake_inode); 
+	  pChar += sprintf(pChar,"fname          =%u\n",     (void*) &fake_inode.s.fname - (void*) &fake_inode);       
+      
+	  pChar += sprintf(pChar,"fname_sz       =%u\n",     sizeof(rozofs_inode_fname_t));       
+      
+      
+      }
+      
+      
+
+      
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
   }
@@ -2044,7 +2094,8 @@ int fuseloop(struct fuse_args *args, int fg) {
     rozofs_fuse_conf.ch = ch;
     rozofs_fuse_conf.exportclt = (void*) &exportclt;
     if (conf.nbstorcli > 1) {
-     rozofs_max_storcli_tx = ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_PER_PROCESS*conf.nbstorcli;
+     if ( conf.nbstorcli == 4) rozofs_max_storcli_tx = ROZOFSMOUNT_MAX_4_STORCLI_TX_PER_PROCESS*conf.nbstorcli;
+     else rozofs_max_storcli_tx = ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_PER_PROCESS*conf.nbstorcli;
     }
     else
     {

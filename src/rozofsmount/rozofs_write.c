@@ -19,6 +19,7 @@
 //#define TRACE_FS_READ_WRITE 1
 //#warning TRACE_FS_READ_WRITE active
 
+#include <linux/fuse.h>
 #include <rozofs/rpc/eproto.h>
 #include <rozofs/rpc/storcli_proto.h>
 
@@ -28,6 +29,8 @@
 #include "rozofs_sharedmem.h"
 #include "rozofs_kpi.h"
 DECLARE_PROFILING(mpp_profiler_t);
+
+
 
 void export_write_block_nb(void *fuse_ctx_p, file_t *file_p);
 void export_write_block_error_nb(void *fuse_ctx_p, file_t *file_p);
@@ -949,7 +952,11 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
    
    if (ROZOFS_MAX_WRITE_THREADS != 0)
    {
-     if (rozofs_fuse_is_current_rcv_buffer((char*)buf) != 0) use_write_thread = 1;
+     void * kernel_fuse_write_request;
+     
+     RESTORE_FUSE_PARAM(buffer_p,kernel_fuse_write_request);
+//     if (rozofs_fuse_is_current_rcv_buffer((char*)buf) != 0) use_write_thread = 1;
+     if (kernel_fuse_write_request!= NULL) use_write_thread = 1;
    }  
 
     // Fill request
@@ -1110,7 +1117,19 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
     off_t off_aligned;
     rozo_buf_rw_status_t status;
    int deferred_fuse_write_response;
+
+   struct fuse_write_in *fuse_kern_wr_p;
+   struct fuse_in_header *fuse_in_hdr_p;
+   void * kernel_fuse_write_request = NULL;   
+   
    errno = 0;
+   
+   fuse_kern_wr_p = (struct fuse_write_in*) buf;
+   fuse_kern_wr_p -=1;
+   fuse_in_hdr_p = (struct fuse_in_header* )fuse_kern_wr_p;
+   fuse_in_hdr_p -=1;
+   
+
 
    const char *buf_out = buf;
    off_t off_out       = off;
@@ -1140,6 +1159,44 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
       errno = ENOMEM;
       goto error;
     }
+    /*
+    ** check the case of a big write
+    */
+//    info("FDL opcode %d buf %p lock_owner %p padding %x off %llu size %u ",fuse_in_hdr_p->opcode,buf,fuse_kern_wr_p->lock_owner,fuse_kern_wr_p->padding,off,size);
+    if (fuse_kern_wr_p->padding)
+    {
+       ioctl_big_wr_t data;
+       int status;
+       
+       kernel_fuse_write_request = (void*)fuse_kern_wr_p->lock_owner; 
+       /*
+       ** The size must be greater than the one of the buffer associated with the file context
+       */
+       if (size >= ROZOFS_MAX_FILE_BUF_SZ)
+       {
+         /*
+	 ** we can use the threads for the write
+	 */
+	 rozofs_fuse_read_write_stats_buf.big_write_ioctl_cpt++;
+         SAVE_FUSE_PARAM(buffer_p,kernel_fuse_write_request);
+       }
+       else
+       {
+
+	 rozofs_fuse_read_write_stats_buf.small_write_ioctl_cpt++;
+         data.req = kernel_fuse_write_request;
+         data.user_buf = (void*)buf;      
+         data.user_bufsize = size;
+	 status = ioctl(rozofs_fuse_ctx_p->fd,5,&data); 
+	 if (status != 0)
+	 {
+	    errno = EIO;
+            severe("ioctl write error %s",strerror(errno));   
+	   goto error;
+	 }
+       }
+    }
+
     START_PROFILING_IO_NB(buffer_p,rozofs_ll_write, size);
 
     SAVE_FUSE_PARAM(buffer_p,req);
@@ -1272,7 +1329,8 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
     */
     if (ROZOFS_MAX_WRITE_THREADS != 0)
     {
-      if (size >=ROZOFS_MAX_FILE_BUF_SZ)
+      if (kernel_fuse_write_request!= NULL)
+//      if (size >=ROZOFS_MAX_FILE_BUF_SZ)
       {
 	 /*
 	 ** clear the reference of the buffer since it is under the control of the fuse
@@ -1294,14 +1352,29 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
       write_flush_stat.non_synchroneous++;
       buffer_p = NULL;
       goto out;
-    }        
-    /*
-    ** Maximum number of write pending is reached. 
-    ** Let's differ the FUSE response until the STORCLI response
-    */
+    }   
+    
     write_flush_stat.synchroneous++;
-    deferred_fuse_write_response = 1;
-    SAVE_FUSE_PARAM(buffer_p,deferred_fuse_write_response);    
+    if (common_config.wr_pending_anticipated)
+    {     
+      /*
+      ** Maximum number of write pending is reached. 
+      ** Let's differ the FUSE response until the STORCLI response
+      */
+      deferred_fuse_write_response = 0;
+      SAVE_FUSE_PARAM(buffer_p,deferred_fuse_write_response);   
+      /*
+      ** save the request in the file context
+      */
+      file->req = req;
+      file->size = size;
+      file->deferred_fuse_write_response = 1;
+    }
+    else
+    {
+      deferred_fuse_write_response = 1;
+      SAVE_FUSE_PARAM(buffer_p,deferred_fuse_write_response);           
+    }     
     buffer_p = NULL;
     goto out;
     
@@ -1439,7 +1512,24 @@ void rozofs_ll_write_cbk(void *this,void *param)
       RESTORE_FUSE_PARAM(param,size);
       fuse_reply_write(req, size);
       write_flush_stat.synchroneous_success++;      
-    }    
+    } 
+    /*
+    ** case of RDMA write with latency
+    */
+    if (file->deferred_fuse_write_response)
+    {      
+      int count;
+      if (ROZOFS_MAX_WRITE_PENDING < 8) count = 0;
+      else  count = ROZOFS_MAX_WRITE_PENDING-8;
+      if (file->buf_write_pending <= count)
+      {
+        //warning("FDL buf_write_pending %d\n",file->buf_write_pending); 
+	fuse_reply_write(file->req, file->size);
+	write_flush_stat.synchroneous_success++; 
+	file->req = NULL;
+	file->deferred_fuse_write_response = 0;
+      }
+    }
     /*
     ** no error, so get the length of the data part
     */
@@ -1474,6 +1564,19 @@ error:
       RESTORE_FUSE_PARAM(param,req);
       fuse_reply_err(req, errno);
       write_flush_stat.synchroneous_error++;      
+    }
+    /*
+    ** case of RDMA write with latency
+    */
+    if (file->deferred_fuse_write_response)
+    {      
+      if (file->buf_write_pending <= (ROZOFS_MAX_WRITE_PENDING/2))
+      {
+	fuse_reply_err(file->req, errno);
+	write_flush_stat.synchroneous_error++; 
+	file->req = NULL;
+	file->deferred_fuse_write_response = 0;
+      }
     }
       
     /*

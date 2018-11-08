@@ -23,6 +23,7 @@
 
 #include "rozofsmount.h"
 
+void af_unix_fuse_scheduler_entry_point(uint64_t current_time);
 #define ROZOFS_FUSE_CTX_MAX 64
 extern ruc_obj_desc_t  rozofs_lookup_queue[];  /**< pending list of the lookup */
 typedef enum
@@ -48,6 +49,8 @@ typedef struct _rozofs_fuse_read_write_stats
     uint64_t   read_req_cpt;    /**< number of times a read request is sent to storio       */
     uint64_t   read_fuse_cpt;    /**< number of times read request is received from fuse       */
     uint64_t   big_write_cpt;    /**< big write counter: greater or equal to 256K       */
+    uint64_t   big_write_ioctl_cpt;    /**< big write counter: greater or equal to 256K  done with ioctl     */
+    uint64_t   small_write_ioctl_cpt;    /**< small write counter: greater or equal to 256K  done with ioctl     */
 }  rozofs_fuse_read_write_stats;
 
 #define ROZOFS_PAGE_SZ  4096
@@ -115,6 +118,7 @@ typedef struct _rozofs_fuse_save_ctx_t
    int to_set;
    dev_t rdev;
    uint64_t time;
+   void     *kernel_fuse_write_request;   /**< pointer to the fuse kernel request context for BIG WRITE with threads */
    dirbuf_t db;
    fuse_end_tx_recv_pf_t proc_end_tx_cbk;   /**< callback that must be call at end of transaction (mainly used by write/flush and close */ 
    uint64_t buf_flush_offset;               /**< offset of the first byte to flush    */

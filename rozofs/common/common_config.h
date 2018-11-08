@@ -169,6 +169,8 @@ typedef struct _common_config_t {
 
   // Whether STORCLI acknowleges write request on inverse or forward STORIO responses.
   int32_t     wr_ack_on_inverse;
+  // To indicate if we can respond before write_pending reaches 0.
+  int32_t     wr_pending_anticipated;
   // To activate rozofsmount reply fuse threads.
   int32_t     rozofsmount_fuse_reply_thread;
   // To activate fast reconnect from client to exportd
@@ -187,6 +189,8 @@ typedef struct _common_config_t {
   int32_t     statfs_period;
   // number of Fuse threads
   int32_t     reply_thread_count;
+  // When that flag is asserted any storcli can be selected for reading.
+  int32_t     storcli_read_parallel;
 
   /*
   ** storage scope configuration parameters
@@ -196,6 +200,10 @@ typedef struct _common_config_t {
   int32_t     nb_storaged_subthread;
   /// Number of disk threads in the STORIO.
   int32_t     nb_disk_thread;
+  /// Number of RDMA write threads in the STORIO.
+  int32_t     nb_write_rdma_threads;
+  // assert that Boolean to activate the RDMA write threads.
+  int32_t     rdma_write_thread_enable;
   // Whether CRC32 MUST be checked by STORIO.
   int32_t     crc32c_check;
   // Whether CRC32 MUST be computed by STORIO.
@@ -269,10 +277,21 @@ typedef struct _common_config_t {
 
   // When that flag is asserted, the storcli uses RDMA when storio supports it
   int32_t     rdma_enable;
+  // When that flag is asserted, the storcli uses RDMA for data transfer and RPC messages
+  int32_t     rdma_full;
   // Minimum read/write size in KB to trigger RDMA transfer
   int32_t     min_rmda_size_KB;
   // number of Mojette threads
   int32_t     mojette_thread_count;
+
+  /*
+  ** storio scope configuration parameters
+  */
+
+  // RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)
+  int32_t     rdma_delay_ms;
+  // RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called
+  int32_t     rdma_delay_threshold;
 } common_config_t;
 
 extern common_config_t common_config;

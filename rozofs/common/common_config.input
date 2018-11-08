@@ -66,11 +66,17 @@ INT	export 	trash_high_threshold            1000 0:1000000
 BOOL	export 	fid_recycle                     False
 // Whether STORCLI acknowleges write request on inverse or forward STORIO responses.
 BOOL	client 	wr_ack_on_inverse		False
+// To indicate if we can respond before write_pending reaches 0.
+BOOL	client 	wr_pending_anticipated		False
 INT	export 	export_buf_cnt			128 32:1024
 // Number of sub threads in the storaged
 INT	storage nb_storaged_subthread         	8 2:16
 /// Number of disk threads in the STORIO.
 INT	storage nb_disk_thread         		4 2:64
+/// Number of RDMA write threads in the STORIO.
+INT	storage nb_write_rdma_threads         	4 2:64
+// assert that Boolean to activate the RDMA write threads.
+BOOL	storage rdma_write_thread_enable 	False
 // Whether CRC32 MUST be checked by STORIO.
 BOOL	storage crc32c_check			True
 // Whether CRC32 MUST be computed by STORIO.
@@ -191,8 +197,14 @@ INT	export 	thin_lv1_hash_tb_size		10 6:128
 INT   	export expthin_guard_delay_sec		10  1:600
 // When that flag is asserted, the storcli uses RDMA when storio supports it
 BOOL 	storcli 	rdma_enable	            False
+// When that flag is asserted, the storcli uses RDMA for data transfer and RPC messages
+BOOL 	storcli 	rdma_full	            False
 // Minimum read/write size in KB to trigger RDMA transfer
 INT     storcli min_rmda_size_KB                   64
+// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)
+INT     storio rdma_delay_ms                   0
+// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called
+INT     storio rdma_delay_threshold            12  0:64
 // number of Mojette threads
 INT     storcli mojette_thread_count                4  1:4
 // number of Fuse threads
@@ -205,6 +217,7 @@ INT   	export level2_cache_max_entries_kb		512  1:4096
 BOOL 	global 	standalone	            False
 // Whether file locks must be persistent on exportd restart/switchover or not
 BOOL   export  persistent_file_locks                False
+
 // Minimum % of free space in a volume.
 // When the free space of a volume reaches this value, file creation requests
 // receive back ENOSPC in order to try to avoid later write errors.
@@ -214,3 +227,6 @@ INT   	export minimum_free_size_percent	4  0:100
 // Whether RozoFS devices must mandatorily be identified by a valid label.
 // Storages will not mount any device not having a valid RozoFS label.
 BOOL 	storage mandatory_device_label	        True
+
+// When that flag is asserted any storcli can be selected for reading.
+BOOL    client storcli_read_parallel 		False     

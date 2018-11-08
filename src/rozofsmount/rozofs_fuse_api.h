@@ -49,6 +49,17 @@ extern uint64_t rozofs_write_merge_stats_tab[];
 /**< number of pending requests on the storcli side  */
 extern int rozofs_storcli_pending_req_count;
 
+/*
+** structure to get data from kernel with IOCTL
+*/
+typedef struct _ioctl_big_wr_t
+{
+   void *req;                  /**< context of the request  */
+   void *user_buf;             /**< pointer to the user buffer */
+   unsigned long user_bufsize; /**< buffer size   */
+   int status;                 /**< operation status  */
+} ioctl_big_wr_t;
+
 
 typedef enum {
    rozofs_trc_type_def = 0,
@@ -628,6 +639,7 @@ static inline void *_rozofs_fuse_alloc_saved_context(char *name )
   fuse_save_ctx_p->fi      = NULL;
   fuse_save_ctx_p->flock   = NULL;
   fuse_save_ctx_p->stbuf   = NULL;
+  fuse_save_ctx_p->kernel_fuse_write_request = NULL;
   fuse_save_ctx_p->shared_buf_ref  = NULL;
   /*
   ** init of the routing context

@@ -32,6 +32,7 @@
 #include <rozofs/rpc/rozofs_rpc_util.h>
 #include <rozofs/rozofs_timer_conf.h>
 #include <rozofs/core/rozofs_tx_common.h>
+#include <rozofs/common/log.h>
 #include <rozofs/core/rozofs_tx_api.h>
 #include "rozofs_storcli.h"
 #include "rozofs_storcli_rpc.h"
@@ -844,10 +845,16 @@ void rozofs_storcli_write_standalone_req_processing_cbk(void *this,void *param)
    void *rdma_buf_ref;
    int status;   
    int error;
+
    /*
    ** Get the reference of the buffer that contains the projection from the transaction context
    */
    rdma_buf_ref = rozofs_tx_read_rdma_bufref(this);
+   /*
+   ** decrement the in_use counter of the RDMA buffer which is the projection buffer reference within the storcli context
+   ** It might be incremented again in case of TMO
+   */
+   ruc_buf_inuse_decrement(rdma_buf_ref);
    
    status = rozofs_tx_get_status(this);
    if (status < 0)
@@ -984,6 +991,11 @@ int rozofs_sorcli_sp_write_standalone(uint32_t lbg_id,uint32_t socket_context_re
     */
     rozofs_tx_set_rdma_bufref( rozofs_tx_ctx_p,proj_buf);
     /*
+    ** increment the in_use counter since the storcli context can be release while there is
+    ** a transaction that has been engaged with that buffer
+    */
+    ruc_buf_inuse_increment(proj_buf);
+    /*
     ** store the reference of the xmit buffer in the transaction context: might be useful
     ** in case we want to remove it from a transmit list of the underlying network stacks
     */
@@ -1091,7 +1103,14 @@ int rozofs_sorcli_sp_write_standalone(uint32_t lbg_id,uint32_t socket_context_re
     return 0;  
     
   error:
-    if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);
+    if (rozofs_tx_ctx_p != NULL) 
+    {
+       /*
+       ** decrement the in_use of the projection buffer since the transaction is going to be aborted
+       */
+       ruc_buf_inuse_decrement(proj_buf);
+       rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);
+    }
     /*
     ** need to check with the tx module: since the buffer is also refernce in it
     */

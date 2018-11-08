@@ -134,6 +134,12 @@ typedef struct file {
     uint64_t         off_wr_end;      /**< geo replication :write offset end  */
     int              pending_read_count; 
     int              open_flags;     /**< flags given at opening time */
+    /*
+    ** For the case of the RDMA write
+    */
+    int              deferred_fuse_write_response; /**< asserted with the write pending threshold is reached  */
+    fuse_req_t       req;    /**< fuse request on which the deferred response must be applied   */
+    size_t           size;   /**< size of the write request that was deferred   */
 } file_t;
 
 /**
@@ -298,7 +304,12 @@ static inline file_t * rozofs_file_working_var_init(void * ientry, fid_t fid)
     file->file2create = 0;
     file->pending_read_count = 0;
     rozofs_geo_write_reset(file);
-
+    /*
+    ** case of the write pending with RDMA and latency
+    */
+    file->deferred_fuse_write_response = 0;
+    file->req = NULL;
+    file->size = 0;
     rozofs_opened_file++;
     
     return file;

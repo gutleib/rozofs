@@ -108,12 +108,12 @@ error:
 uint32_t ruc_init(uint32_t test, uint16_t debug_port,uint16_t export_listening_port) {
     int ret;
 
-
+#warning: STORCLI_PER_FSMOUNT need to be use to compute the number of LBG
     uint32_t mx_tcp_client = 10;
     uint32_t mx_tcp_server = 10;
     uint32_t mx_tcp_server_cnx = 10;
     uint32_t mx_af_unix_ctx = ROZO_AFUNIX_CTX_ROZOFSMOUNT;
-    uint32_t mx_lbg_north_ctx = 32;
+    uint32_t mx_lbg_north_ctx = 48;
 
     //#warning TCP configuration ressources is hardcoded!!
     /*

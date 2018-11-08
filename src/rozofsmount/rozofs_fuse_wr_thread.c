@@ -166,7 +166,9 @@ static inline void rozofs_fuse_th_fuse_write_buf(rozofs_fuse_thread_ctx_t *threa
     uint32_t *share_p;
     void *shared_buf_ref;
     void *fuse_ctx_p;
-
+    void * kernel_fuse_write_request;
+    int ret;
+    
     rozofs_tx_ctx_p = msg->rozofs_tx_ctx_p;
 
     gettimeofday(&timeDay,(struct timezone *)0);  
@@ -241,8 +243,27 @@ static inline void rozofs_fuse_th_fuse_write_buf(rozofs_fuse_thread_ctx_t *threa
     */
     uint8_t * buf_start = (uint8_t *)&share_p[4];
     buf_start += alignment;
+    
+    RESTORE_FUSE_PARAM(fuse_ctx_p,kernel_fuse_write_request);
+    if (kernel_fuse_write_request != NULL)
+    {
+       ioctl_big_wr_t data;
 
-    memcpy(buf_start,wr_args->data.data_val,len);	  
+       data.req = kernel_fuse_write_request;
+       data.user_buf = buf_start;      
+       data.user_bufsize = len;
+       ret = ioctl(rozofs_fuse_ctx_p->fd,5,&data); 
+       if (ret != 0)
+       {
+          msg->errval = EIO;
+	  goto error;
+       }
+    }
+    else
+    {
+       fatal("kernel_fuse_write_request NULL not supported !");
+       memcpy(buf_start,wr_args->data.data_val,len);	  
+    }
 
     call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
     /* XXX: prog and vers have been long historically :-( */

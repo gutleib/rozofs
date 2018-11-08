@@ -73,6 +73,9 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"wr_ack_on_inverse")==0) {
     COMMON_CONFIG_SET_BOOL(wr_ack_on_inverse,value);
   }
+  if (strcmp(parameter,"wr_pending_anticipated")==0) {
+    COMMON_CONFIG_SET_BOOL(wr_pending_anticipated,value);
+  }
   if (strcmp(parameter,"export_buf_cnt")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(export_buf_cnt,value,32,1024);
   }
@@ -81,6 +84,12 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   }
   if (strcmp(parameter,"nb_disk_thread")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(nb_disk_thread,value,2,64);
+  }
+  if (strcmp(parameter,"nb_write_rdma_threads")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(nb_write_rdma_threads,value,2,64);
+  }
+  if (strcmp(parameter,"rdma_write_thread_enable")==0) {
+    COMMON_CONFIG_SET_BOOL(rdma_write_thread_enable,value);
   }
   if (strcmp(parameter,"crc32c_check")==0) {
     COMMON_CONFIG_SET_BOOL(crc32c_check,value);
@@ -232,8 +241,17 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"rdma_enable")==0) {
     COMMON_CONFIG_SET_BOOL(rdma_enable,value);
   }
+  if (strcmp(parameter,"rdma_full")==0) {
+    COMMON_CONFIG_SET_BOOL(rdma_full,value);
+  }
   if (strcmp(parameter,"min_rmda_size_KB")==0) {
     COMMON_CONFIG_SET_INT(min_rmda_size_KB,value);
+  }
+  if (strcmp(parameter,"rdma_delay_ms")==0) {
+    COMMON_CONFIG_SET_INT(rdma_delay_ms,value);
+  }
+  if (strcmp(parameter,"rdma_delay_threshold")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(rdma_delay_threshold,value,0,64);
   }
   if (strcmp(parameter,"mojette_thread_count")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(mojette_thread_count,value,1,4);
@@ -258,6 +276,9 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   }
   if (strcmp(parameter,"mandatory_device_label")==0) {
     COMMON_CONFIG_SET_BOOL(mandatory_device_label,value);
+  }
+  if (strcmp(parameter,"storcli_read_parallel")==0) {
+    COMMON_CONFIG_SET_BOOL(storcli_read_parallel,value);
   }
   pChar += rozofs_string_append(pChar,"No such parameter ");
   pChar += rozofs_string_append(pChar,parameter);
@@ -550,6 +571,12 @@ char * show_common_config_module_client(char * pChar) {
   COMMON_CONFIG_SHOW_BOOL(wr_ack_on_inverse,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
+  COMMON_CONFIG_IS_DEFAULT_BOOL(wr_pending_anticipated,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// To indicate if we can respond before write_pending reaches 0.\n");
+  COMMON_CONFIG_SHOW_BOOL(wr_pending_anticipated,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
   COMMON_CONFIG_IS_DEFAULT_BOOL(rozofsmount_fuse_reply_thread,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To activate rozofsmount reply fuse threads.\n");
@@ -603,6 +630,12 @@ char * show_common_config_module_client(char * pChar) {
   pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
   COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:4");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(storcli_read_parallel,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted any storcli can be selected for reading.\n");
+  COMMON_CONFIG_SHOW_BOOL(storcli_read_parallel,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -628,6 +661,18 @@ char * show_common_config_module_storage(char * pChar) {
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"/// Number of disk threads in the STORIO.\n");
   COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_write_rdma_threads,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"/// Number of RDMA write threads in the STORIO.\n");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_write_rdma_threads,4,"2:64");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_write_thread_enable,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// assert that Boolean to activate the RDMA write threads.\n");
+  COMMON_CONFIG_SHOW_BOOL(rdma_write_thread_enable,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_check,True);
@@ -816,6 +861,12 @@ char * show_common_config_module_storcli(char * pChar) {
   COMMON_CONFIG_SHOW_BOOL(rdma_enable,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_full,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, the storcli uses RDMA for data transfer and RPC messages\n");
+  COMMON_CONFIG_SHOW_BOOL(rdma_full,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
   COMMON_CONFIG_IS_DEFAULT_INT(min_rmda_size_KB,64);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Minimum read/write size in KB to trigger RDMA transfer\n");
@@ -826,6 +877,32 @@ char * show_common_config_module_storcli(char * pChar) {
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// number of Mojette threads\n");
   COMMON_CONFIG_SHOW_INT_OPT(mojette_thread_count,4,"1:4");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** storio scope configuration parameters
+**
+*/
+char * show_common_config_module_storio(char * pChar) {
+
+  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n");
+  pChar += rozofs_string_append_bold(pChar,"# ");
+  pChar += rozofs_string_append_bold(pChar,"storio");
+  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)\n");
+  COMMON_CONFIG_SHOW_INT(rdma_delay_ms,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_threshold,12);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called\n");
+  COMMON_CONFIG_SHOW_INT_OPT(rdma_delay_threshold,12,"0:64");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -1095,6 +1172,12 @@ char * save_common_config_module_client(char * pChar) {
     COMMON_CONFIG_SHOW_BOOL(wr_ack_on_inverse,False);
   }
 
+  COMMON_CONFIG_IS_DEFAULT_BOOL(wr_pending_anticipated,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To indicate if we can respond before write_pending reaches 0.\n");
+    COMMON_CONFIG_SHOW_BOOL(wr_pending_anticipated,False);
+  }
+
   COMMON_CONFIG_IS_DEFAULT_BOOL(rozofsmount_fuse_reply_thread,False);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// To activate rozofsmount reply fuse threads.\n");
@@ -1148,6 +1231,12 @@ char * save_common_config_module_client(char * pChar) {
     pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
     COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:4");
   }
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(storcli_read_parallel,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted any storcli can be selected for reading.\n");
+    COMMON_CONFIG_SHOW_BOOL(storcli_read_parallel,False);
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -1173,6 +1262,18 @@ char * save_common_config_module_storage(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"/// Number of disk threads in the STORIO.\n");
     COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_write_rdma_threads,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"/// Number of RDMA write threads in the STORIO.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_write_rdma_threads,4,"2:64");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_write_thread_enable,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// assert that Boolean to activate the RDMA write threads.\n");
+    COMMON_CONFIG_SHOW_BOOL(rdma_write_thread_enable,False);
   }
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_check,True);
@@ -1361,6 +1462,12 @@ char * save_common_config_module_storcli(char * pChar) {
     COMMON_CONFIG_SHOW_BOOL(rdma_enable,False);
   }
 
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_full,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted, the storcli uses RDMA for data transfer and RPC messages\n");
+    COMMON_CONFIG_SHOW_BOOL(rdma_full,False);
+  }
+
   COMMON_CONFIG_IS_DEFAULT_INT(min_rmda_size_KB,64);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Minimum read/write size in KB to trigger RDMA transfer\n");
@@ -1371,6 +1478,32 @@ char * save_common_config_module_storcli(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// number of Mojette threads\n");
     COMMON_CONFIG_SHOW_INT_OPT(mojette_thread_count,4,"1:4");
+  }
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** storio scope configuration parameters
+**
+*/
+char * save_common_config_module_storio(char * pChar) {
+
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
+  pChar += rozofs_string_append(pChar,"# ");
+  pChar += rozofs_string_append(pChar,"storio");
+  pChar += rozofs_string_append(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)\n");
+    COMMON_CONFIG_SHOW_INT(rdma_delay_ms,0);
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_threshold,12);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called\n");
+    COMMON_CONFIG_SHOW_INT_OPT(rdma_delay_threshold,12,"0:64");
   }
   return pChar;
 }
@@ -1434,6 +1567,13 @@ static inline int common_config_generated_save(char * pChar) {
     return -1;
   }
   pBuff = save_common_config_module_storcli(myBigBuffer);
+  if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
+    pChar += rozofs_string_append(pChar,"Can not write ");
+    pChar += rozofs_string_append(pChar,common_config_file_name);
+    close(fd);
+    return -1;
+  }
+  pBuff = save_common_config_module_storio(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
     pChar += rozofs_string_append(pChar,"Can not write ");
     pChar += rozofs_string_append(pChar,common_config_file_name);
@@ -1568,6 +1708,19 @@ char *pHead;
       uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
       return;
     }
+    else if (strcmp("storio",argv[1])==0) {
+      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+        severe( "ruc_buf_getPayload(%p)", bufRef );
+        return;
+      }
+      /*
+      ** Set the command recall string
+      */
+      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+      pChar = show_common_config_module_storio(pChar);
+      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+      return;
+    }
     else {
       pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -1649,6 +1802,21 @@ char *pHead;
   *pChar = 0;
   
   pChar = show_common_config_module_storcli(pChar);
+  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
+  
+  bufRef = uma_dbg_get_new_buffer(tcpRef);
+  if (bufRef == NULL) {
+    warning( "uma_dbg_get_new_buffer() Buffer depletion");
+    return;
+  }
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return;
+  }
+  pChar = pHead+sizeof(UMA_MSGHEADER_S);
+  *pChar = 0;
+  
+  pChar = show_common_config_module_storio(pChar);
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
   bufRef = uma_dbg_get_new_buffer(tcpRef);
@@ -1801,6 +1969,8 @@ static inline void common_config_generated_read(char * fname) {
   */
   // Whether STORCLI acknowleges write request on inverse or forward STORIO responses. 
   COMMON_CONFIG_READ_BOOL(wr_ack_on_inverse,False);
+  // To indicate if we can respond before write_pending reaches 0. 
+  COMMON_CONFIG_READ_BOOL(wr_pending_anticipated,False);
   // To activate rozofsmount reply fuse threads. 
   COMMON_CONFIG_READ_BOOL(rozofsmount_fuse_reply_thread,False);
   // To activate fast reconnect from client to exportd 
@@ -1819,6 +1989,8 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(statfs_period,10);
   // number of Fuse threads 
   COMMON_CONFIG_READ_INT_MINMAX(reply_thread_count,2,1,4);
+  // When that flag is asserted any storcli can be selected for reading. 
+  COMMON_CONFIG_READ_BOOL(storcli_read_parallel,False);
   /*
   ** storage scope configuration parameters
   */
@@ -1826,6 +1998,10 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(nb_storaged_subthread,8,2,16);
   /// Number of disk threads in the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,64);
+  /// Number of RDMA write threads in the STORIO. 
+  COMMON_CONFIG_READ_INT_MINMAX(nb_write_rdma_threads,4,2,64);
+  // assert that Boolean to activate the RDMA write threads. 
+  COMMON_CONFIG_READ_BOOL(rdma_write_thread_enable,False);
   // Whether CRC32 MUST be checked by STORIO. 
   COMMON_CONFIG_READ_BOOL(crc32c_check,True);
   // Whether CRC32 MUST be computed by STORIO. 
@@ -1897,10 +2073,19 @@ static inline void common_config_generated_read(char * fname) {
   */
   // When that flag is asserted, the storcli uses RDMA when storio supports it 
   COMMON_CONFIG_READ_BOOL(rdma_enable,False);
+  // When that flag is asserted, the storcli uses RDMA for data transfer and RPC messages 
+  COMMON_CONFIG_READ_BOOL(rdma_full,False);
   // Minimum read/write size in KB to trigger RDMA transfer 
   COMMON_CONFIG_READ_INT(min_rmda_size_KB,64);
   // number of Mojette threads 
   COMMON_CONFIG_READ_INT_MINMAX(mojette_thread_count,4,1,4);
+  /*
+  ** storio scope configuration parameters
+  */
+  // RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency) 
+  COMMON_CONFIG_READ_INT(rdma_delay_ms,0);
+  // RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called 
+  COMMON_CONFIG_READ_INT_MINMAX(rdma_delay_threshold,12,0,64);
  
   config_destroy(&cfg);
 }
