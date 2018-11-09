@@ -26,6 +26,26 @@
 void af_unix_fuse_scheduler_entry_point(uint64_t current_time);
 #define ROZOFS_FUSE_CTX_MAX 64
 extern ruc_obj_desc_t  rozofs_lookup_queue[];  /**< pending list of the lookup */
+
+
+/**
+*  RozoFS IOCTL 7
+*   set the value for ra_pages, max_background & congestion_threshold
+*/
+#define ROZOFS_RA_PAGE 1
+#define ROZOFS_MAX_BACKGROUND 2 
+#define ROZOFS_CONGESTION_THRESHOLD 4
+typedef struct _rozofs_cnx_param_t
+{
+   int read;  /**< assert to 1 for read and 0 for write */
+   unsigned dev; /** read only */
+   unsigned to_set;
+   unsigned long ra_pages; /* read/write */
+   unsigned max_background;  /* read/write */
+   unsigned congestion_threshold;  /* read/write */
+} rozofs_cnx_param_t;
+
+
 typedef enum
 {
    RZ_FUSE_WRITE_0 = 0,

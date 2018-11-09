@@ -758,6 +758,10 @@ static char *rozofs_fuse_show_usage(char *pChar)
   pChar += sprintf(pChar,"fuse loop <count>         : set the max. fuse requests polled from the device queue(default:2) \n");
   pChar += sprintf(pChar,"fuse bypass [size]        : set the minimum size in bytes of write size before using ioctl (default %u)\n",ROZOFS_MAX_FILE_BUF_SZ);
   pChar += sprintf(pChar,"fuse dir <enable|disable> :enable/disable dir attributes invalidation on mkdir/rmdir/unlink/create and mknod \n");
+  pChar += sprintf(pChar,"fuse cnx                  :display connection info \n");
+  pChar += sprintf(pChar,"fuse ra_pages <nb_pages>  :set the max readahead (unit is Linux page) \n");
+  pChar += sprintf(pChar,"fuse max_background <count>        :set fuse max background requests count \n");
+  pChar += sprintf(pChar,"fuse congestion_threshold <count>  :set fuse congestion threshold \n");
   pChar += sprintf(pChar,"fuse                      :display statistics \n");
   return pChar;
 }
@@ -768,6 +772,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
   int   new_val; 
   int   ret;
   unsigned long rozofs_bypass_size;
+  rozofs_cnx_param_t cnx_param;
   
   char *pChar = uma_dbg_get_buffer();
 
@@ -785,6 +790,152 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
            pChar += sprintf(pChar, "ioctl not supported with that fuse kernel version\n");
 	 }
 
+	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	 return;
+      }
+
+      if (strcmp(argv[1],"cnx")==0) 
+      {
+	 if (rozofs_fuse_ctx_p->ioctl_supported)
+	 {
+	   cnx_param.read = 1;
+	   ret = ioctl(rozofs_fuse_ctx_p->fd,7,&cnx_param);  
+	   if (ret == 0)
+	   {
+	     pChar +=sprintf(pChar,"Device path          : /sys/fs/fuse/connections/%u\n",cnx_param.dev);
+	     pChar +=sprintf(pChar,"ra_pages             : %u\n",cnx_param.ra_pages);
+	     pChar +=sprintf(pChar,"max_background       : %u\n",cnx_param.max_background);
+	     pChar +=sprintf(pChar,"congestion_threshold : %u\n",cnx_param.congestion_threshold);	   	   
+	   }
+	   else
+	   {
+           pChar += sprintf(pChar, "IOCTL error\n");
+	   }
+	 } 
+	 else
+	 { 
+           pChar += sprintf(pChar, "ioctl not supported with that fuse kernel version\n");
+	 }
+
+	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	 return;
+      }
+
+      if (strcmp(argv[1],"ra_pages")==0) 
+      {
+	 errno = 0;
+	 if (rozofs_fuse_ctx_p->ioctl_supported == 0)
+	 {
+	   pChar += sprintf(pChar, "ioctl not supported with that fuse kernel version\n");
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	 
+	 }
+	 if (argv[2] == NULL)
+	 {
+           pChar += sprintf(pChar, "argument is missing\n");
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	  	  
+	 }
+	 new_val = (int) strtol(argv[2], (char **) NULL, 10);   
+	 if (errno != 0) {
+           pChar += sprintf(pChar, "bad value %s\n",argv[2]);
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;
+	 }
+	 cnx_param.read = 0;
+	 cnx_param.to_set = ROZOFS_RA_PAGE;
+	 cnx_param.ra_pages = new_val;
+	 
+	 ret = ioctl(rozofs_fuse_ctx_p->fd,7,&cnx_param);   
+         if (ret != 0)
+	 {
+	   pChar += sprintf(pChar,"error!! (%s)\n",strerror(ret));
+	 }
+	 else
+           pChar += sprintf(pChar, "Done!\n");
+	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	 return;
+      }
+
+      if (strcmp(argv[1],"max_background")==0) 
+      {
+	 errno = 0;
+	 if (rozofs_fuse_ctx_p->ioctl_supported == 0)
+	 {
+	   pChar += sprintf(pChar, "ioctl not supported with that fuse kernel version\n");
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	 
+	 }
+	 if (argv[2] == NULL)
+	 {
+           pChar += sprintf(pChar, "argument is missing\n");
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	  	  
+	 }
+	 new_val = (int) strtol(argv[2], (char **) NULL, 10);   
+	 if (errno != 0) {
+           pChar += sprintf(pChar, "bad value %s\n",argv[2]);
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;
+	 }
+	 if (new_val == 0)
+	 {
+	    pChar += sprintf(pChar, "max_background must be different from 0!!\n");
+            uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	    return;	 
+	 }
+	 cnx_param.read = 0;
+	 cnx_param.to_set = ROZOFS_MAX_BACKGROUND;
+	 cnx_param.max_background = new_val;
+	 
+	 ret = ioctl(rozofs_fuse_ctx_p->fd,7,&cnx_param);   
+         if (ret != 0)
+	 {
+	   pChar += sprintf(pChar,"error!! (%s)\n",strerror(ret));
+	 }
+	 else
+           pChar += sprintf(pChar, "Done!\n");
+	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	 return;
+      }
+      if (strcmp(argv[1],"congestion_threshold")==0) 
+      {
+	 errno = 0;
+	 if (rozofs_fuse_ctx_p->ioctl_supported == 0)
+	 {
+	   pChar += sprintf(pChar, "ioctl not supported with that fuse kernel version\n");
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	 
+	 }
+	 if (argv[2] == NULL)
+	 {
+           pChar += sprintf(pChar, "argument is missing\n");
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	  	  
+	 }
+	 new_val = (int) strtol(argv[2], (char **) NULL, 10);   
+	 if (errno != 0) {
+           pChar += sprintf(pChar, "bad value %s\n",argv[2]);
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;
+	 }
+	 cnx_param.read = 0;
+	 cnx_param.to_set = ROZOFS_CONGESTION_THRESHOLD;
+	 cnx_param.congestion_threshold = new_val;
+	 
+	 ret = ioctl(rozofs_fuse_ctx_p->fd,7,&cnx_param);   
+         if (ret != 0)
+	 {
+	   pChar += sprintf(pChar,"error!! (%s)\n",strerror(ret));
+	 }
+	 else
+           pChar += sprintf(pChar, "Done!\n");
 	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 	 return;
       }
@@ -1073,6 +1224,7 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
 {
   int status = 0;
   int i;
+  rozofs_cnx_param_t cnx_param;
   
 //   return 0;
 
@@ -1231,7 +1383,21 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
 #endif
 	   rozofs_bypass_size = ROZOFS_MAX_FILE_BUF_SZ;
 	   ioctl(rozofs_fuse_ctx_p->fd,6,&rozofs_bypass_size);
-	  
+         /*
+	 ** apply the fuse profile
+	 */
+	 {
+	    rozofs_fuse_profile_t *fuse_profile_p;
+	    
+	    fuse_profile_p = &fuse_kern_profile[conf.idx_fuse_profile];
+	    
+	    cnx_param.read = 0;
+	    cnx_param.to_set = ROZOFS_RA_PAGE | ROZOFS_MAX_BACKGROUND|ROZOFS_CONGESTION_THRESHOLD ;
+	    cnx_param.ra_pages = fuse_profile_p->ra_pages;
+	    cnx_param.max_background = fuse_profile_p->max_background;
+	    cnx_param.congestion_threshold = fuse_profile_p->congestion_threshold;
+	    ioctl(rozofs_fuse_ctx_p->fd,7,&cnx_param);
+	  }
 	  break;     
         }
      }

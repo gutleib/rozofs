@@ -39,6 +39,15 @@
 #define hash_xor8(n)    (((n) ^ ((n)>>8) ^ ((n)>>16) ^ ((n)>>24)) & 0xff)
 #define ROOT_INODE 1
 
+typedef struct _rozofs_fuse_profile_t
+{
+   unsigned long ra_pages; 
+   unsigned max_background;  
+   unsigned congestion_threshold; 
+} rozofs_fuse_profile_t;
+
+extern rozofs_fuse_profile_t fuse_kern_profile[];
+
 extern exportclt_t exportclt;
 
 extern list_t inode_entries;
@@ -120,6 +129,7 @@ typedef struct rozofsmnt_conf {
     unsigned wbcache;  /**< writeback cache fuse */    
     unsigned nb_writeThreads;  /**< number of write threads (default:0                             */ 
     unsigned long rozofs_bypass_size;     
+    unsigned idx_fuse_profile;
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 

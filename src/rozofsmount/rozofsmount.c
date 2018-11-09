@@ -96,6 +96,16 @@ uint64_t hash_inode_cur_collisions;
 uint64_t rozofs_opened_file;
 
 uint64_t   rozofs_client_hash=0;
+
+rozofs_fuse_profile_t fuse_kern_profile[]={
+  {1024,64,48}, /* profile 0 */
+  {1024,1024,1022}, /* profile 1 */
+  {4096,1024,1022}, /* profile 2 : large readahead: WAN case with latency smaller than 50 ms */
+  {8192,1024,1022}, /* profile 3 : large readahead: WAN case with latency greater than 50 ms */
+};
+
+#define  ROZOFS_DEFAULT_FUSE_PROFILE 1
+#define ROZOFS_MAX_PROFILE (sizeof(fuse_kern_profile)/ sizeof(rozofs_fuse_profile_t))
 /**
 * fuse request/reponse trace parameters
 */
@@ -227,6 +237,7 @@ static void usage() {
     fprintf(stderr, "    -o numanode=<#node>\tpin rozofsmount as well as its STORCLI on numa node <node#>\n");
     fprintf(stderr, "    -o wbcache\t\tactivate Linux writeback cache\n");
     fprintf(stderr, "    -o nb_writeThreads=N\tDefine the number of active write threads\n");
+    fprintf(stderr, "    -o fuse_profile=N\tDefine the fuse profile to apply(default %u/max %u)\n",(unsigned int)ROZOFS_DEFAULT_FUSE_PROFILE,(unsigned int)(ROZOFS_MAX_PROFILE-1));
 
 }
 
@@ -292,6 +303,7 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("xattrcache", xattrcache, 0),
     MYFS_OPT("asyncsetattr", asyncsetattr,0),
     MYFS_OPT("wbcache", wbcache,1),
+    MYFS_OPT("fuse_profile=%u", idx_fuse_profile,1),
    
     FUSE_OPT_KEY("-H ", KEY_EXPORT_HOST),
     FUSE_OPT_KEY("-E ", KEY_EXPORT_PATH),
@@ -394,7 +406,7 @@ void rozofs_ll_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup) {
 
 #define DISPLAY_UINT32_CONFIG(field) {\
   if (conf.field==-1) pChar += sprintf(pChar,"%-25s = UNDEFINED\n",#field);\
-  else                pChar += sprintf(pChar,"%-25s = %u\n",#field, conf.field);\
+  else                pChar += sprintf(pChar,"%-25s = %u\n",#field, (unsigned int)conf.field);\
 }
 
 #define DISPLAY_INT32_CONFIG(field)   pChar += sprintf(pChar,"%-25s = %d\n",#field, conf.field); 
@@ -448,6 +460,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(asyncsetattr);
   DISPLAY_UINT32_CONFIG(wbcache);  
   DISPLAY_UINT32_CONFIG(rozofs_bypass_size);
+  DISPLAY_UINT32_CONFIG(idx_fuse_profile);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
@@ -601,48 +614,47 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
   if (strcmp(argv[1],"count")==0) {
       pChar += sprintf(pChar, "ientry counter: %llu\n", (long long unsigned int) rozofs_ientries_count);
       pChar += sprintf(pChar, "wr_blk retries: %d\n",  list_wr_block_count);
-      pChar += sprintf(pChar, "large size: %u\n",  ROZOFS_IENTRY_LARGE_SZ);
-      pChar += sprintf(pChar, "ientry_size    : %u\n",  sizeof(ientry_t));
-      pChar += sprintf(pChar, "mattr_sz       : %u\n",  sizeof(mattr_t));
-      pChar += sprintf(pChar, "internal_ino_sz: %u\n",  sizeof(struct inode_internal_t));
-      pChar += sprintf(pChar, "lv2_entry_sz   : %u\n",  sizeof(lv2_entry_t));
+      pChar += sprintf(pChar, "large size: %u\n",  (unsigned int) ROZOFS_IENTRY_LARGE_SZ);
+      pChar += sprintf(pChar, "ientry_size    : %u\n",  (unsigned int)sizeof(ientry_t));
+      pChar += sprintf(pChar, "mattr_sz       : %u\n",  (unsigned int)sizeof(mattr_t));
+      pChar += sprintf(pChar, "internal_ino_sz: %u\n",  (unsigned int)sizeof(struct inode_internal_t));
+      pChar += sprintf(pChar, "lv2_entry_sz   : %u\n",  (unsigned int)sizeof(lv2_entry_t));
       {
         mattr_t  fake_inode;
-	pChar += sprintf(pChar,"fid      =%u\n",    (void*)&fake_inode.fid - (void*)&fake_inode); 
-	pChar += sprintf(pChar,"sid      =%u\n",     (void*)&fake_inode.sids[0] - (void*)&fake_inode); 
-	pChar += sprintf(pChar,"cid      =%u\n",     (void*)&fake_inode.cid - (void*)&fake_inode); 
-	pChar += sprintf(pChar,"mode     =%u\n",     (void*)&fake_inode.mode - (void*)&fake_inode);
-	pChar += sprintf(pChar,"uid      =%u\n",     (void*)&fake_inode.uid - (void*)&fake_inode);
-	pChar += sprintf(pChar,"gid      =%u\n",     (void*)&fake_inode.gid - (void*)&fake_inode);
-	pChar += sprintf(pChar,"nlink    =%u\n",     (void*)&fake_inode.nlink - (void*)&fake_inode);
-	pChar += sprintf(pChar,"ctime    =%u\n",     (void*)&fake_inode.ctime - (void*)&fake_inode); 
-	pChar += sprintf(pChar,"atime    =%u\n",     (void*)&fake_inode.atime - (void*)&fake_inode);
-	pChar += sprintf(pChar,"mtime    =%u\n",     (void*)&fake_inode.mtime - (void*)&fake_inode); 
-	pChar += sprintf(pChar,"size     =%u\n",     (void*)&fake_inode.size - (void*)&fake_inode);
-	pChar += sprintf(pChar,"children =%u\n",     (void*)&fake_inode.children - (void*)&fake_inode);       
+	pChar += sprintf(pChar,"fid      =%u\n",(unsigned int)((void*)&fake_inode.fid - (void*)&fake_inode)); 
+	pChar += sprintf(pChar,"sid      =%u\n",(unsigned int)( (void*)&fake_inode.sids[0] - (void*)&fake_inode)); 
+	pChar += sprintf(pChar,"cid      =%u\n",(unsigned int)( (void*)&fake_inode.cid - (void*)&fake_inode)); 
+	pChar += sprintf(pChar,"mode     =%u\n",(unsigned int)( (void*)&fake_inode.mode - (void*)&fake_inode));
+	pChar += sprintf(pChar,"uid      =%u\n",(unsigned int)( (void*)&fake_inode.uid - (void*)&fake_inode));
+	pChar += sprintf(pChar,"gid      =%u\n",(unsigned int)( (void*)&fake_inode.gid - (void*)&fake_inode));
+	pChar += sprintf(pChar,"nlink    =%u\n",(unsigned int)( (void*)&fake_inode.nlink - (void*)&fake_inode));
+	pChar += sprintf(pChar,"ctime    =%u\n",(unsigned int)( (void*)&fake_inode.ctime - (void*)&fake_inode)); 
+	pChar += sprintf(pChar,"atime    =%u\n",(unsigned int)( (void*)&fake_inode.atime - (void*)&fake_inode));
+	pChar += sprintf(pChar,"mtime    =%u\n",(unsigned int)( (void*)&fake_inode.mtime - (void*)&fake_inode)); 
+	pChar += sprintf(pChar,"size     =%u\n",(unsigned int)( (void*)&fake_inode.size - (void*)&fake_inode));
+	pChar += sprintf(pChar,"children =%u\n",(unsigned int)((void*)&fake_inode.children - (void*)&fake_inode));       
       
       }
       {
           ext_mattr_t fake_inode;
-	  pChar += sprintf(pChar,"attrs          =%u\n",    (void*) &fake_inode.s.attrs - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"cr8time        =%u\n",     (void*) &fake_inode.s.cr8time - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"pfid           =%u\n",     (void*) &fake_inode.s.pfid - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"hash1          =%u\n",     (void*) &fake_inode.s.hash1 - (void*) &fake_inode);
-	  pChar += sprintf(pChar,"hash2          =%u\n",     (void*) &fake_inode.s.hash2 - (void*) &fake_inode);
-	  pChar += sprintf(pChar,"i_extra_isize  =%u\n",     (void*) &fake_inode.s.i_extra_isize - (void*) &fake_inode);
-	  pChar += sprintf(pChar,"bitfield1      =%u\n",     (void*) &fake_inode.s.bitfield1 - (void*) &fake_inode);
-	  pChar += sprintf(pChar,"filler2        =%u\n",     (void*) &fake_inode.s.filler2 - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"filler3        =%u\n",     (void*) &fake_inode.s.filler3 - (void*) &fake_inode);
-	  pChar += sprintf(pChar,"filler4        =%u\n",     (void*) &fake_inode.s.filler4 - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"filler5        =%u\n",     (void*) &fake_inode.s.filler5 - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"filler6        =%u\n",     (void*) &fake_inode.s.filler6 - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"i_file_acl     =%u\n",     (void*) &fake_inode.s.i_file_acl - (void*) &fake_inode);
-	  pChar += sprintf(pChar,"i_link_name    =%u\n",     (void*) &fake_inode.s.i_link_name - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"i_link_name    =%u\n",     (void*) &fake_inode.s.i_link_name - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"hpc_reserved   =%u\n",     (void*) &fake_inode.s.hpc_reserved - (void*) &fake_inode); 
-	  pChar += sprintf(pChar,"fname          =%u\n",     (void*) &fake_inode.s.fname - (void*) &fake_inode);       
+	  pChar += sprintf(pChar,"attrs          =%u\n",    (unsigned int)((void*) &fake_inode.s.cr8time - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"pfid           =%u\n",    (unsigned int)((void*) &fake_inode.s.pfid - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"hash1          =%u\n",    (unsigned int)( (void*) &fake_inode.s.hash1 - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"hash2          =%u\n",    (unsigned int)((void*) &fake_inode.s.hash2 - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"i_extra_isize  =%u\n",    (unsigned int)((void*) &fake_inode.s.i_extra_isize - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"bitfield1      =%u\n",    (unsigned int)((void*) &fake_inode.s.bitfield1 - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"filler2        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler2 - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"filler3        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler3 - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"filler4        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler4 - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"filler5        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler5 - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"filler6        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler6 - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"i_file_acl     =%u\n",    (unsigned int)((void*) &fake_inode.s.i_file_acl - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"i_link_name    =%u\n",    (unsigned int)((void*) &fake_inode.s.i_link_name - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"i_link_name    =%u\n",    (unsigned int)((void*) &fake_inode.s.i_link_name - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"hpc_reserved   =%u\n",    (unsigned int)((void*) &fake_inode.s.hpc_reserved - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"fname          =%u\n",    (unsigned int)((void*) &fake_inode.s.fname - (void*) &fake_inode));       
       
-	  pChar += sprintf(pChar,"fname_sz       =%u\n",     sizeof(rozofs_inode_fname_t));       
+	  pChar += sprintf(pChar,"fname_sz       =%u\n", (unsigned int)    sizeof(rozofs_inode_fname_t));       
       
       
       }
@@ -2342,6 +2354,7 @@ int main(int argc, char *argv[]) {
     conf.noReadFaultTolerant = 0; // Give back blocks with 0 on read for corrupted block instead of EIO
     conf.wbcache = 0;
     conf.nb_writeThreads = 0;
+    conf.idx_fuse_profile = ROZOFS_DEFAULT_FUSE_PROFILE;
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
     }
@@ -2626,7 +2639,33 @@ int main(int argc, char *argv[]) {
               return 1;
           }		
 	}
-    }  
+    } 
+    /*
+    ** set the readahead, congestion_threshold and max_background
+    */
+    {
+      rozofs_fuse_profile_t *fuse_profile_p;
+      char bufall[128];
+      
+      fuse_profile_p = &fuse_kern_profile[conf.idx_fuse_profile];      
+      sprintf(bufall,"-omax_readahead=%u ",(unsigned int)fuse_profile_p->ra_pages);
+      if (fuse_opt_add_arg(&args,bufall) == -1) {
+          fprintf(stderr, "fuse_opt_add_arg failed\n");
+          return 1;
+      }	
+      sprintf(bufall,"-omax_background=%u ",(unsigned int)fuse_profile_p->max_background);
+      if (fuse_opt_add_arg(&args,bufall) == -1) {
+          fprintf(stderr, "fuse_opt_add_arg failed\n");
+          return 1;
+      }	
+
+      sprintf(bufall,"-ocongestion_threshold=%u ",(unsigned int)fuse_profile_p->congestion_threshold);
+      if (fuse_opt_add_arg(&args,bufall) == -1) {
+          fprintf(stderr, "fuse_opt_add_arg failed\n");
+          return 1;
+      }	
+    } 
+
     if (fuse_parse_cmdline(&args, &rozofs_mountpoint, NULL, &fg) == -1) {
         fprintf(stderr, "see: %s -h for help\n", argv[0]);
         return 1;
