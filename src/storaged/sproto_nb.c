@@ -40,7 +40,7 @@
 #include "storio_disk_thread_intf.h"
 #include "storio_device_mapping.h"
 #include "storio_serialization.h"
-
+#include "storage_enumeration.h"
 
 /*
 ** Detailed time counters for read and write operation
@@ -1694,8 +1694,6 @@ out:
 /*
 **___________________________________________________________
 */
-extern int      re_enumration_required;
-
 void sp_clear_error_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static sp_status_ret_t    ret;
     sp_clear_error_arg_t    * clear_error_arg_p = (sp_clear_error_arg_t *) pt;
