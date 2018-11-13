@@ -519,7 +519,7 @@ void rbs_conf_init(rbs_parameter_t * par) {
   par->parallel             = common_config.device_self_healing_process;
   par->relocate             = 0;
   par->resecure             = 0;
-  par->max_reloop           = DEFAULT_REBUILD_RELOOP;
+  par->max_reloop           = common_config.default_rebuild_reloop;
   par->output               = NULL;
   par->clear                = 0;
   par->rebuildRef           = 0;
@@ -585,7 +585,7 @@ void usage(char * fmt, ...) {
     printf("   -g, --geosite             \tTo force site number in case of geo-replication\n");
     printf("   -R, --relocate            \tTo rebuild a device by relocating files\n");
     printf("   -S, --reSecure            \tTo resecure files of a failed device on their spare location\n");
-    printf("   -l, --loop                \tNumber of reloop in case of error (default %d)\n",DEFAULT_REBUILD_RELOOP);
+    printf("   -l, --loop                \tNumber of reloop in case of error (default %d)\n",common_config.default_rebuild_reloop);
     printf("   -q, --quiet               \tDo not display messages\n");
     printf("   -C, --clear               \tClear the status of the device after it has been set OOS\n");
     printf("   -K, --clearOnly           \tJust clear the status of the device, but do not rebuild it\n");

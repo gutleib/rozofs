@@ -240,12 +240,7 @@ void * storio_device_rebuild_thread(void *arg) {
       pChar += rozofs_string_append(pChar," -S");
     } 
 
-#if 0
-#warning ROZOFS_SIMULATION flag is set
-    pChar += rozofs_string_append(pChar," -l 3 --simu /home/jean-pierre/rozoClients/hotfix/tests/SIMU/export.conf");
-#else    
-    pChar += rozofs_string_append(pChar," --quiet -l 6");
-#endif    
+    pChar += rozofs_string_append(pChar," --quiet "); 
     pChar += rozofs_string_append(pChar," -p ");
     pChar += rozofs_u32_append(pChar,common_config.device_self_healing_process);
     pChar += rozofs_string_append(pChar," -t ");

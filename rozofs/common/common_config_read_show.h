@@ -190,6 +190,9 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"spare_restore_loop_delay")==0) {
     COMMON_CONFIG_SET_INT(spare_restore_loop_delay,value);
   }
+  if (strcmp(parameter,"default_rebuild_reloop")==0) {
+    COMMON_CONFIG_SET_INT(default_rebuild_reloop,value);
+  }
   if (strcmp(parameter,"spare_restore_read_throughput")==0) {
     COMMON_CONFIG_SET_INT(spare_restore_read_throughput,value);
   }
@@ -743,6 +746,13 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT(spare_restore_loop_delay,240);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
+  COMMON_CONFIG_IS_DEFAULT_INT(default_rebuild_reloop,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Default rebuild reloop value \n");
+  pChar += rozofs_string_append(pChar,"// Mainly used to help simulation\n");
+  COMMON_CONFIG_SHOW_INT(default_rebuild_reloop,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
   COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,2);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
@@ -1244,6 +1254,13 @@ char * save_common_config_module_storage(char * pChar) {
     COMMON_CONFIG_SHOW_INT(spare_restore_loop_delay,240);
   }
 
+  COMMON_CONFIG_IS_DEFAULT_INT(default_rebuild_reloop,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Default rebuild reloop value \n");
+    pChar += rozofs_string_append(pChar,"// Mainly used to help simulation\n");
+    COMMON_CONFIG_SHOW_INT(default_rebuild_reloop,4);
+  }
+
   COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,2);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
@@ -1740,6 +1757,9 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_BOOL(spare_restore_enable,True);
   // Spare file restoring : how often the process runs   
   COMMON_CONFIG_READ_INT(spare_restore_loop_delay,240);
+  // Default rebuild reloop value  
+  // Mainly used to help simulation 
+  COMMON_CONFIG_READ_INT(default_rebuild_reloop,4);
   // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s 
   // 0 means no limit 
   COMMON_CONFIG_READ_INT(spare_restore_read_throughput,2);
