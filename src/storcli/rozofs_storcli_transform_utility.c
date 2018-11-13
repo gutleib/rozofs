@@ -315,7 +315,7 @@ static inline int rozofs_storcli_transform_inverse_check_timestamp_tb(rozofs_sto
       ** A valid TS must be written forward times !
       ** so the number of time a TS is found + the number of non readable storage
       */
-      if (left_storage+ p->count >= rozofs_forward) {
+      if (left_storage+ p->count >= rozofs_inverse) {
           // info("Bloc %d TS %llu has count %d and left %d : this could work", block_idx, p->timestamp, p->count, left_storage);
 	  return -1;      
       }
