@@ -44,6 +44,7 @@
 #include <rozofs/rozofs_srv.h>
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/core/rozofs_string.h>
+#include <rozofs/rpc/mproto.h>
 #include "storio_cache.h"
 #include "storio_bufcache.h"
 #include "storio_device_mapping.h"
@@ -3272,6 +3273,96 @@ void storage_rm_best_effort(storage_t * st, fid_t fid, uint8_t spare) {
     close(dirfd);
   }    
 }
+/*_____________________________________________________________________________
+** Find out any header or bins file for this FID
+**
+** @param st                  The logical storage context
+** @param fid                 The FID of the target file
+** @param spare               Whether this storage is spare for this file
+** @param nb_chunk            returned number of created chunk
+** @param sizeBytes returned nfile size in blocks
+** @param sectors   returned allocated sectors of projections
+**
+** @retval 0 on success. -1 on error (errno is set)
+**_____________________________________________________________________________
+*/
+int storage_locate_file(storage_t * st, fid_t fid, 
+                       uint32_t * nb_hdr_files,   void ** hdrsVoid,
+                       uint32_t * nb_chunk_files, void ** chunksVoid) {
+  mp_file_t                ** hdrs = (mp_file_t **)hdrsVoid;
+  mp_file_t                ** chunks = (mp_file_t **)chunksVoid ; 
+  int                         chunk;
+  int32_t                     slice;
+  char                        path[FILENAME_MAX];
+  mp_file_t                 * pFile;
+  int                         dev;
+  struct stat                 buf; 
+  int                         spare;
+   
+  * nb_hdr_files   = 0;
+  * nb_chunk_files = 0;
+  * hdrs           = NULL;
+  * chunks         = NULL;
+  
+  /*
+  ** Compute the storage slice from the FID
+  */
+  slice = rozofs_storage_fid_slice(fid);    
+
+  /*
+  ** Find out every existing header files
+  */
+  *hdrs = xmalloc(st->device_number*sizeof(mp_file_t));
+  pFile = *hdrs;
+  for (spare=0; spare<2; spare++) {
+    for (dev=0; dev < st->device_number; dev++) {
+
+      storage_build_hdr_file_path(path, st->root, dev, spare, slice, fid);    	  
+      if (stat(path,&buf) == 0) {
+        *nb_hdr_files += 1;
+        pFile->sizeBytes = buf.st_size;
+        pFile->sectors   = buf.st_blocks;
+        pFile->modDate   = buf.st_mtim.tv_sec;
+        pFile->file_name = strdup(path);
+        pFile++;
+      }
+    }
+  }  
+  if (*nb_hdr_files == 0) {
+    xfree(*hdrs);
+    * hdrs = NULL;
+  }
+
+  /*
+  ** Find out every existing chunk files
+  */  
+  *chunks = xmalloc(ROZOFS_STORAGE_MAX_CHUNK_PER_FILE*sizeof(mp_file_t));
+  pFile   = *chunks;
+  for (spare=0; spare<2; spare++) {
+    for (dev=0; dev < st->device_number; dev++) {
+      for (chunk=0; chunk < ROZOFS_STORAGE_MAX_CHUNK_PER_FILE; chunk++) {
+        /*
+        ** stat this chunk
+        */
+        storage_build_chunk_full_path(path, st->root, dev, spare, slice, fid, chunk);
+        if (stat(path,&buf) == 0) {
+          *nb_chunk_files += 1;
+          pFile->sizeBytes = buf.st_size;
+          pFile->sectors   = buf.st_blocks;
+          pFile->modDate   = buf.st_mtim.tv_sec;
+          pFile->file_name = strdup(path);
+          pFile++;
+        }
+      }
+    }  
+  }  
+  if (*nb_chunk_files == 0) {
+    xfree(*chunks);
+    * chunks = NULL;
+  }
+  
+  return 0;               
+} 
 /*_____________________________________________________________________________
 ** Compute the size of a file as well as the number of allocated sectors
 ** from  stat() on every projection file.

@@ -313,6 +313,58 @@ out:
 /*__________________________________________________________________________
 */
 /**
+*  Compute file size and allocated sectors
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
+static inline void storaged_sub_thread_locate(storaged_sub_thread_ctx_t *thread_ctx_p,storaged_sub_thread_msg_t * msg) {
+  struct timeval                 timeDay;
+  unsigned long long             timeBefore, timeAfter;
+  rozorpc_srv_ctx_t            * rpcCtx;
+  mp_locate_arg_t              * args;  
+  mp_locate_ret_t                ret;
+ int                             status=-1;
+      
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeBefore = MICROLONG(timeDay);  
+
+  memset(&ret,0,sizeof(ret));
+  ret.status = MP_FAILURE;          
+ 
+   /*
+  ** update statistics
+  */
+  thread_ctx_p->stat.remove_count++; 
+  
+  rpcCtx = msg->rpcCtx;
+  args   = (mp_locate_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+
+  if (storage_locate_file(msg->st, (unsigned char *) args->fid, 
+                        &ret.mp_locate_ret_t_u.rsp.hdrs.mp_files_t_len, 
+                        (void **)&ret.mp_locate_ret_t_u.rsp.hdrs.mp_files_t_val, 
+                        &ret.mp_locate_ret_t_u.rsp.chunks.mp_files_t_len, 
+                        (void **)&ret.mp_locate_ret_t_u.rsp.chunks.mp_files_t_val) != 0) {
+    ret.mp_locate_ret_t_u.error = errno;
+    thread_ctx_p->stat.locate_errors++ ;   
+    goto out;   
+  } 
+  ret.status = MP_SUCCESS;
+  
+out:  
+  storaged_sub_thread_encode_rpc_response(rpcCtx,(char*)&ret);  
+  xdr_free((xdrproc_t)rpcCtx->xdr_result, (char *) &ret); 
+  
+  gettimeofday(&timeDay,(struct timezone *)0);  
+  timeAfter = MICROLONG(timeDay);
+  thread_ctx_p->stat.locate_time +=(timeAfter-timeBefore);  
+  storaged_sub_thread_intf_send_response(thread_ctx_p,msg,status);
+} 
+/*__________________________________________________________________________
+*/
+/**
 *  Perform a file remove
 
   @param thread_ctx_p: pointer to the thread context
@@ -458,6 +510,9 @@ void *storaged_sub_thread(void *arg) {
         break;		
       case MP_SIZE:
         storaged_sub_thread_size(ctx_p,&msg);
+        break;
+      case MP_LOCATE:
+        storaged_sub_thread_locate(ctx_p,&msg);
         break;
        	
       default:

@@ -37,6 +37,7 @@ struct spp_profiler_t {
 	uint64_t ports[2];
 	uint64_t remove[2];
 	uint64_t size[2];
+	uint64_t locate[2];
 	uint64_t list_bins_files[2];
 	uint16_t nb_io_processes;
 	uint64_t read[3];

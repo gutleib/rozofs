@@ -326,6 +326,41 @@ error:
     
     STOP_PROFILING(size);
 }
+void mp_subthread_locate(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    mp_locate_arg_t           * args = (mp_locate_arg_t*) pt;
+    storage_t                 * st = 0;
+    static    mp_locate_ret_t   ret;
+    
+    START_PROFILING(locate);
+    
+    /*
+    ** Use received buffer for the response
+    */
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+    req_ctx_p->recv_buf = NULL;
+
+
+    if ((st = get_storage(args->cid, args->sid, req_ctx_p->socketRef)) == 0) {
+      goto error;
+    }
+
+    if (storaged_sub_thread_intf_send_req(MP_LOCATE,req_ctx_p,st,tic)==0) { 
+      return;
+    }
+    
+
+error:    
+    ret.status                  = MP_FAILURE;            
+    ret.mp_locate_ret_t_u.error = errno;
+    
+    rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+    /*
+    ** release the context
+    */
+    rozorpc_srv_release_context(req_ctx_p);
+    
+    STOP_PROFILING(locate);
+}
 void mp_ports_1_svc_nb(void * pt_req, 
                        rozorpc_srv_ctx_t *rozorpc_srv_ctx_p,
                        void * pt_resp, 

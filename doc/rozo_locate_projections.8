@@ -1,0 +1,169 @@
+.\" Process this file with
+.\" groff -man -Tascii rozo_locate_projections.8
+.\"
+.TH rozo_locate_projections 8 "OCT 2018" RozoFS "User Manuals"
+.SH NAME
+rozo_locate_projections \- RozoFS projections location debug utility
+.SH SYNOPSIS
+.B rozo_locate_projections [OPTIONS] <MANDATORY>
+.SH DESCRIPTION
+This debug utility locates the existing projection chunk and header files of a given inode exiting on the storage nodes. 
+The inode is defined either by the file name or by the FID.
+.SH MANDATORY PARAMETERS
+.B MANDATORY = { --cid <cid> --fid <fid> | --name <name> }
+.P
+.B -n, --name <name>
+.RS
+Defines the target inode by its name
+.RE
+.P  
+.B --cid <cid> --fid <fid>
+.RS
+Defines the target inode by its cid/fid 
+.RE
+.RS
+.B -c, --cid <cid>
+.RE
+.RS
+Gives the cluster id of the inode. Set it to zero when the cluster id is not known.
+.RE
+.RS
+.B -f, --fid <fid>
+.RE
+.RS
+Gives the FID of the inode.
+.RE
+.RE
+.SH OPTIONAL PARAMETERS
+.B OPTIONS = {-h,  -k <config>}
+.P
+.B -h, --help
+.RS
+Print help.
+.RE
+.B -k, --config <config>"
+.RS
+Use 
+.I <config>
+as exportd configuration file. default is
+.I /etc/rozofs/export.conf
+(or
+.I /usr/local/etc/rozofs/export.conf
+according to install options)
+.SH FILES
+.I /etc/rozofs/export.conf (/usr/local/etc/rozofs/export.conf)
+.RS
+The exportd configuration file. See
+.BR export.conf (5)
+for further details.
+.SH EXAMPLES
+.P
+.B rozo_locate_projections -n /mnt/rfs/example
+
+{ "fid" : "00000000-0000-4000-1806-000000002011",
+  "files" : [
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_1/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_1/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":     1023896, "sectors":    368, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_1/1/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_2/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_2/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":     1055160, "sectors":    336, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_2/1/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.2", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_4/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.2", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_4/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.2", "size":     1023896, "sectors":    368, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_4/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_5/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_5/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":     1039528, "sectors":    344, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_5/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_6/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_6/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":     1023896, "sectors":    368, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_6/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.4", "size":          52, "sectors":      8, "date": "2018-10-30-23:37:57",
+      "name": "/srv/rozofs/storages/storage_2_8/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.4", "size":          52, "sectors":      8, "date": "2018-10-30-23:37:57",
+      "name": "/srv/rozofs/storages/storage_2_8/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.4", "size":     1055160, "sectors":    336, "date": "2018-10-30-23:37:59",
+      "name": "/srv/rozofs/storages/storage_2_8/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"}  ],
+  "total sectors" : 2216
+}
+
+.B rozo_locate_projections -c 0 -f 00000000-0000-4000-1806-000000002011
+
+{ "fid" : "00000000-0000-4000-1806-000000002011",
+  "files" : [
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_1/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_1/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":     1023896, "sectors":    368, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_1/1/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_2/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_2/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.1", "size":     1055160, "sectors":    336, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_2/1/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.2", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_4/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.2", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_4/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.2", "size":     1023896, "sectors":    368, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_4/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_5/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_5/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":     1039528, "sectors":    344, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_5/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_6/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":          52, "sectors":      8, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_6/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.3", "size":     1023896, "sectors":    368, "date": "2018-10-30-23:00:33",
+      "name": "/srv/rozofs/storages/storage_2_6/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"},
+    { "host": "192.168.10.4", "size":          52, "sectors":      8, "date": "2018-10-30-23:37:57",
+      "name": "/srv/rozofs/storages/storage_2_8/0/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.4", "size":          52, "sectors":      8, "date": "2018-10-30-23:37:57",
+      "name": "/srv/rozofs/storages/storage_2_8/1/hdr_0/0/00000000-0000-4000-1806-000000002011"},
+    { "host": "192.168.10.4", "size":     1055160, "sectors":    336, "date": "2018-10-30-23:37:59",
+      "name": "/srv/rozofs/storages/storage_2_8/0/bins_0/0/00000000-0000-4000-1806-000000002011-000"}  ],
+  "total sectors" : 2216
+}
+
+.\".SH ENVIRONMENT
+.\".SH DIAGNOSTICS
+.SH "REPORTING BUGS"
+Report bugs to <bugs@fizians.org>.
+.SH COPYRIGHT
+Copyright (c) 2013 Fizians SAS. <http://www.fizians.com>
+
+Rozofs is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published
+by the Free Software Foundation, version 2.
+
+Rozofs is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+.SH AUTHOR
+Fizians <http://www.fizians.org>
+.SH "SEE ALSO"
+.BR rozofs (7),
+.BR export.conf (5)

@@ -67,4 +67,6 @@ void mp_subthread_list_bins_files(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 
 void mp_subthread_size(void * pt, rozorpc_srv_ctx_t *req_ctx_p);			      
 
+void mp_subthread_locate(void * pt, rozorpc_srv_ctx_t *req_ctx_p);			      
+
 #endif

@@ -71,6 +71,35 @@ struct mp_size_arg_t {
     mp_uuid_t   fid;
 };
 
+
+typedef string          mp_path_t<ROZOFS_PATH_MAX>;
+
+struct  mp_file_t {
+  uint64_t     sizeBytes;
+  uint64_t     modDate;
+  uint64_t     sectors;
+  mp_path_t    file_name;
+};
+
+typedef mp_file_t mp_files_t<128>;
+
+struct mp_locate_rsp_t {
+  mp_files_t   hdrs;
+  mp_files_t   chunks;
+};
+
+union mp_locate_ret_t switch (mp_status_t status) {
+    case MP_FAILURE:    int            error;
+    default:            mp_locate_rsp_t  rsp;
+};
+
+struct mp_locate_arg_t {
+    uint16_t    cid;
+    uint8_t     sid;
+    uint8_t     spare;
+    mp_uuid_t   fid;
+};
+
 union mp_stat_ret_t switch (mp_status_t status) {
     case MP_SUCCESS:    mp_sstat_t  sstat;
     case MP_FAILURE:    int         error;
@@ -156,6 +185,10 @@ program MONITOR_PROGRAM {
 
 	mp_size_ret_t
         MP_SIZE(mp_size_arg_t)                          = 6;
+        
+	mp_locate_ret_t
+        MP_LOCATE(mp_locate_arg_t)                      = 7;
+
 
     }=1;
 } = 0x20000003;

@@ -146,6 +146,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
     sp_display_probe(gprofiler, remove);
     sp_display_probe(gprofiler, list_bins_files);
     sp_display_probe(gprofiler, size);
+    sp_display_probe(gprofiler, locate);
     if (argv[1] != NULL) {
 
         if (strcmp(argv[1], "reset") == 0) {
@@ -155,6 +156,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
             sp_clear_probe(gprofiler, remove);
             sp_clear_probe(gprofiler, list_bins_files);
             sp_clear_probe(gprofiler, size);
+            sp_clear_probe(gprofiler, locate);
 	    pChar += sprintf(pChar,"Reset Done\n");  
 	    gprofiler->uptime = this_time;  	      
         }

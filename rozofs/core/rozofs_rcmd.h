@@ -79,6 +79,9 @@ typedef enum _rozofs_rcmd_ope_e {
   rozofs_rcmd_ope_fid2path, 
   // Get a remote file content and remove it
   rozofs_rcmd_ope_getrmfile, 
+
+  // Get all header and chunk location of a file
+  rozofs_rcmd_ope_locate_file, 
   
   rozofs_rcmd_ope_max
 } rozofs_rcmd_ope_e;
@@ -556,6 +559,49 @@ int rozofs_rcmd_fid2path(int socketId, char * param) {
   ** Wait for the response
   */
   res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_fid2path, &command, &data, 30);
+  if (res != rozofs_rcmd_status_success) {
+    goto out;
+  }
+
+
+out:
+  if (data) {
+    xfree(data);
+    data = NULL;
+  }
+
+  return res;
+}
+/*__________________________________________________________________________
+** Run rozo_locate_fid utility on remote command server
+**
+** @param   socketId   TCP socket
+** @param   param      rozo_locate_fid parameters
+**
+**==========================================================================*/
+int rozofs_rcmd_locate_projections(int socketId, char * param) {
+  rozofs_rcmd_hdr_t   command;
+  int                 res;
+  char              * data = NULL;
+     
+  /*
+  ** Initialize the command header
+  */ 
+  rozofs_rcmd_init_command(&command,rozofs_rcmd_ope_locate_file);
+  command.size = strlen(param)+1;
+  
+  /*
+  ** Send the command as well as the parameters
+  */
+  res = rozofs_rcmd_send_command(socketId, &command, param);
+  if (res != rozofs_rcmd_status_success) {
+    goto out;
+  }
+  
+  /*
+  ** Wait for the response
+  */
+  res = rozofs_rcmd_read_response(socketId, rozofs_rcmd_ope_locate_file, &command, &data, 30);
   if (res != rozofs_rcmd_status_success) {
     goto out;
   }
