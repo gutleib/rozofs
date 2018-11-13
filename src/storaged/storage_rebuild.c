@@ -165,6 +165,62 @@ int sigusr_received=0;
 int nolog = 0;
 int verbose=0;
 
+/* Empty and remove a directory
+*
+* @param dirname: Name of the directory to cleanup
+*/
+void clean_dir(char * name) {
+  DIR           *dir;
+  struct dirent *file;
+  char           fname[256];
+  struct stat    st;
+
+#if 0
+  #warning NO CLEAN DIR
+  return;
+#endif
+  
+  if (name==NULL) return;
+    
+  if (stat(name,&st)<0) {
+    return;
+  }
+  
+  if (!S_ISDIR(st.st_mode)) {
+    if (unlink(name)<0) {
+      severe("unlink(%s) %s",name,strerror(errno));
+    }  
+    return;
+  }
+      
+    
+  /*
+  ** Open this directory
+  */
+  dir = opendir(name);
+  if (dir == NULL) {
+    severe("opendir(%s) %s", name, strerror(errno));
+    return;
+  } 	  
+  /*
+  ** Loop on distibution sub directories
+  */
+  while ((file = readdir(dir)) != NULL) {
+  
+    if (strcmp(file->d_name,".")==0)  continue;
+    if (strcmp(file->d_name,"..")==0) continue;
+    
+    char * pChar = fname;
+    pChar += rozofs_string_append(pChar,name);
+    *pChar++ = '/';
+    pChar += rozofs_string_append(pChar,file->d_name);
+    
+    clean_dir(fname);
+  }
+  closedir(dir); 
+  rmdir(name);
+  return;
+}
 /*________________________________________________
 *
 * Parameter structure
@@ -1141,7 +1197,44 @@ void rbs_monitor_purge(void) {
   }
   closedir(dir);  
 }
+/*
+**____________________________________________________
+** Purge excedent /tmp/rbs.xxx directories
+*/
+void rbs_tmp_purge(void) {
+  struct dirent * dirItem;
+  struct stat     statBuf;
+  DIR           * dir;
+  char            file_path[FILENAME_MAX];
+  time_t          lastWeeks;
+  
+  /* Open /tmp file directory */ 
+  dir=opendir("/tmp");
+  if (dir==NULL) return;
+  
+  lastWeeks = time(NULL) - (14 * 24 * 3600);
+  
+  while ((dirItem=readdir(dir))!= NULL) {
+    
+    /* Skip . and .. */ 
+    if (dirItem->d_name[0] == '.') continue;
+    if (strncmp(dirItem->d_name,"rbs.",4)!= 0) continue;
 
+    sprintf(file_path, "/tmp/%s", dirItem->d_name);
+    
+    /* Get file date */ 
+    if (stat(file_path,&statBuf) < 0) {   
+      severe("rbs_tmp_purge : stat(%s) %s",file_path,strerror(errno));
+      clean_dir(file_path);
+      continue;	           
+    }
+
+    if (statBuf.st_mtime < lastWeeks) { 
+      clean_dir(file_path);
+    }
+  }
+  closedir(dir);  
+}
 
 char * get_rebuild_status_file_name_to_use() {
   return rbs_monitor_file_path;
@@ -2650,63 +2743,6 @@ out:
     rbs_release_cluster_list(&cluster_entries);
     return status;
 }
-
-/* Empty and remove a directory
-*
-* @param dirname: Name of the directory to cleanup
-*/
-void clean_dir(char * name) {
-  DIR           *dir;
-  struct dirent *file;
-  char           fname[256];
-  struct stat    st;
-
-#if 0
-  #warning NO CLEAN DIR
-  return;
-#endif
-  
-  if (name==NULL) return;
-    
-  if (stat(name,&st)<0) {
-    return;
-  }
-  
-  if (!S_ISDIR(st.st_mode)) {
-    if (unlink(name)<0) {
-      severe("unlink(%s) %s",name,strerror(errno));
-    }  
-    return;
-  }
-      
-    
-  /*
-  ** Open this directory
-  */
-  dir = opendir(name);
-  if (dir == NULL) {
-    severe("opendir(%s) %s", name, strerror(errno));
-    return;
-  } 	  
-  /*
-  ** Loop on distibution sub directories
-  */
-  while ((file = readdir(dir)) != NULL) {
-  
-    if (strcmp(file->d_name,".")==0)  continue;
-    if (strcmp(file->d_name,"..")==0) continue;
-    
-    char * pChar = fname;
-    pChar += rozofs_string_append(pChar,name);
-    *pChar++ = '/';
-    pChar += rozofs_string_append(pChar,file->d_name);
-    
-    clean_dir(fname);
-  }
-  closedir(dir); 
-  rmdir(name);
-  return;
-}
 /*
 ** Display the list of remaining FID in a given rebuild job list
 ** given by its file name
@@ -3499,6 +3535,7 @@ out:
     ** Purge excedent old rebuild result files
     */
     rbs_monitor_purge();
+    rbs_tmp_purge();
     return status;
 }
 /** Start one rebuild process for each storage to rebuild
