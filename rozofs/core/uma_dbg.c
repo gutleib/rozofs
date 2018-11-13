@@ -504,8 +504,11 @@ void uma_dbg_system_ps_man(char * pChar) {
   pChar += rozofs_string_append           (pChar,"Display the list of threads of this process.\n");
   pChar += rozofs_string_append           (pChar,"For each thread is displayed\n");
   pChar += rozofs_string_append           (pChar,"- its name when one has been given,\n");
+  pChar += rozofs_string_append           (pChar,"- its process id,\n");
   pChar += rozofs_string_append           (pChar,"- its core number,\n");
   pChar += rozofs_string_append           (pChar,"- its \% of CPU usage,\n");
+  pChar += rozofs_string_append           (pChar,"- its state,\n");
+  pChar += rozofs_string_append           (pChar,"- its priority.,\n");
   pChar += rozofs_string_append           (pChar,"- its total CPU consumption.\n");
 
 }
@@ -520,7 +523,7 @@ void uma_dbg_system_ps(char * argv[], uint32_t tcpRef, void *bufRef) {
   p = uma_dbg_get_buffer();
   p += rozofs_string_append(p,"ps -p ");
   p += rozofs_u32_append(p, pid);
-  p += rozofs_string_append(p," -m -olwp:20,psr,pcpu,cputime,pmem,vsz,args");
+  p += rozofs_string_append(p," -m -olwp:20,psr,pcpu,state,priority,cputime,pmem,vsz,args");//priority, 
 
   len = uma_dbg_run_system_cmd(uma_dbg_get_buffer(), uma_dbg_get_buffer(), uma_dbg_get_buffer_len());
   
