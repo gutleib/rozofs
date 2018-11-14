@@ -454,6 +454,12 @@ install(TARGETS rozo_du
     ARCHIVE DESTINATION lib
     COMPONENT rozo_du
 )
+install(TARGETS rozo_locate_fid
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_locate_fid
+)
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)
