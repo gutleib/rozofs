@@ -91,6 +91,11 @@ void rozofs_ll_open_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
     file_t *file = NULL;
     errno = 0;
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
     int trc_idx = rozofs_trc_req_flags(srv_rozofs_ll_open,ino,NULL,fi->flags);
     /*
     ** allocate a context for saving the fuse parameters

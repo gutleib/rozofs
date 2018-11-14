@@ -381,6 +381,11 @@ void rozofs_ll_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup) {
     ientry_t *ie;
     int trc_idx;
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
     START_PROFILING(rozofs_ll_forget);
     errno = 0;
     trc_idx = rozofs_trc_req_io(srv_rozofs_ll_forget,ino,NULL,nlookup,0);    
@@ -1239,7 +1244,7 @@ char *trc_fuse_display_srv(int srv)
 {
   switch (srv) {
 	case srv_rozofs_ll_lookup:return "lookup";
-	case srv_rozofs_ll_forget:return "forget";
+        case srv_rozofs_ll_forget:return "forget";
 
 	case srv_rozofs_ll_getattr:return "getattr";
 

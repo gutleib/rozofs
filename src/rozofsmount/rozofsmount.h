@@ -820,8 +820,21 @@ void rozofs_ll_clear_client_file_lock(int eid, uint64_t client_hash);
 /**
 * Read/write bandwidth counters
 */
-#define ROZOFS_READ_THR_E 0
-#define ROZOFS_WRITE_THR_E 1
+typedef enum _rozofs_mount_counter_e {
+   ROZOFSMOUNT_COUNTER_READ_THR,
+   ROZOFSMOUNT_COUNTER_WRITE_THR,
+   ROZOFSMOUNT_COUNTER_READ_IO,
+   ROZOFSMOUNT_COUNTER_WRITE_IO,
+   ROZOFSMOUNT_COUNTER_FCR8,
+   ROZOFSMOUNT_COUNTER_FDEL,
+   ROZOFSMOUNT_COUNTER_DCR8,
+   ROZOFSMOUNT_COUNTER_DDEL,
+   ROZOFSMOUNT_COUNTER_LOOKUP,
+   ROZOFSMOUNT_COUNTER_GETATTR,
+   ROZOFSMOUNT_COUNTER_OTHER,
+   ROZOFSMOUNT_COUNTER_MAX
+} rozofs_mount_counter_e;
+
 extern rozofs_thr_cnts_t *rozofs_thr_counter[];
 
 /*

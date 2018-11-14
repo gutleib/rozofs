@@ -853,6 +853,12 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     errno = 0;
     file_t *file = (file_t *) (unsigned long) fi->fh;
     int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_read,(fuse_ino_t)file,file->fid,size,off);
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1, rozofs_get_ticker_us());
+
     /*
     ** allocate a context for saving the fuse parameters
     */
@@ -1137,7 +1143,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
     /*
     ** Update the bandwidth statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFS_READ_THR_E],
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],
                                       (uint64_t)received_len,
 				      rozofs_get_ticker_us());
     /*
