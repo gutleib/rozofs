@@ -526,6 +526,22 @@ static inline void rozofs_uuid_unparse_no_recycle(uuid_t fid, char * pChar) {
   *pChar = 0;  
 }
 /*
+** Build a device path
+**
+** @param path       where to write the path
+** @param root_path  The cid/sid root path
+** @param device     The device to access
+*/
+static inline char * storage_build_device_path(char * path, 
+                               char * root_path, 
+			       uint32_t device) {	          
+   path += rozofs_string_append(path,root_path);
+   *path++ = '/';
+   path += rozofs_u32_append(path,device);
+   *path = 0;
+   return path;
+} 
+/*
 ** Build a hdr path on storage disk
 **
 ** @param path       where to write the path
@@ -1624,5 +1640,21 @@ int storage_enumerate_devices(char * workDir, int unmount);
  *
  */
 int storage_mount_all_enumerated_devices();
+/*_____________________________________________________________________________
+** Find out any header or bins file for this FID
+**
+** @param st                  The logical storage context
+** @param fid                 The FID of the target file
+** @param spare               Whether this storage is spare for this file
+** @param nb_chunk            returned number of created chunk
+** @param file_size_in_blocks returned nfile size in blocks
+** @param allocated_sectors   returned allocated sectors of projections
+**
+** @retval 0 on success. -1 on error (errno is set)
+**_____________________________________________________________________________
+*/
+int storage_locate_file(storage_t * st, fid_t fid, 
+                       uint32_t * nb_hdr_files,   void ** hdrsVoid,
+                       uint32_t * nb_chunk_files, void ** chunksVoid);
 #endif
 

@@ -82,6 +82,44 @@ struct mp_size_arg_t {
 };
 typedef struct mp_size_arg_t mp_size_arg_t;
 
+typedef char *mp_path_t;
+
+struct mp_file_t {
+	uint64_t sizeBytes;
+	uint64_t modDate;
+	uint64_t sectors;
+	mp_path_t file_name;
+};
+typedef struct mp_file_t mp_file_t;
+
+typedef struct {
+	u_int mp_files_t_len;
+	mp_file_t *mp_files_t_val;
+} mp_files_t;
+
+struct mp_locate_rsp_t {
+	mp_files_t hdrs;
+	mp_files_t chunks;
+};
+typedef struct mp_locate_rsp_t mp_locate_rsp_t;
+
+struct mp_locate_ret_t {
+	mp_status_t status;
+	union {
+		int error;
+		mp_locate_rsp_t rsp;
+	} mp_locate_ret_t_u;
+};
+typedef struct mp_locate_ret_t mp_locate_ret_t;
+
+struct mp_locate_arg_t {
+	uint16_t cid;
+	uint8_t sid;
+	uint8_t spare;
+	mp_uuid_t fid;
+};
+typedef struct mp_locate_arg_t mp_locate_arg_t;
+
 struct mp_stat_ret_t {
 	mp_status_t status;
 	union {
@@ -184,6 +222,9 @@ extern  mp_status_ret_t * mp_remove2_1_svc(mp_remove2_arg_t *, struct svc_req *)
 #define MP_SIZE 6
 extern  mp_size_ret_t * mp_size_1(mp_size_arg_t *, CLIENT *);
 extern  mp_size_ret_t * mp_size_1_svc(mp_size_arg_t *, struct svc_req *);
+#define MP_LOCATE 7
+extern  mp_locate_ret_t * mp_locate_1(mp_locate_arg_t *, CLIENT *);
+extern  mp_locate_ret_t * mp_locate_1_svc(mp_locate_arg_t *, struct svc_req *);
 extern int monitor_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -208,6 +249,9 @@ extern  mp_status_ret_t * mp_remove2_1_svc();
 #define MP_SIZE 6
 extern  mp_size_ret_t * mp_size_1();
 extern  mp_size_ret_t * mp_size_1_svc();
+#define MP_LOCATE 7
+extern  mp_locate_ret_t * mp_locate_1();
+extern  mp_locate_ret_t * mp_locate_1_svc();
 extern int monitor_program_1_freeresult ();
 #endif /* K&R C */
 
@@ -224,6 +268,12 @@ extern  bool_t xdr_mp_sstat_t (XDR *, mp_sstat_t*);
 extern  bool_t xdr_mp_size_rsp_t (XDR *, mp_size_rsp_t*);
 extern  bool_t xdr_mp_size_ret_t (XDR *, mp_size_ret_t*);
 extern  bool_t xdr_mp_size_arg_t (XDR *, mp_size_arg_t*);
+extern  bool_t xdr_mp_path_t (XDR *, mp_path_t*);
+extern  bool_t xdr_mp_file_t (XDR *, mp_file_t*);
+extern  bool_t xdr_mp_files_t (XDR *, mp_files_t*);
+extern  bool_t xdr_mp_locate_rsp_t (XDR *, mp_locate_rsp_t*);
+extern  bool_t xdr_mp_locate_ret_t (XDR *, mp_locate_ret_t*);
+extern  bool_t xdr_mp_locate_arg_t (XDR *, mp_locate_arg_t*);
 extern  bool_t xdr_mp_stat_ret_t (XDR *, mp_stat_ret_t*);
 extern  bool_t xdr_mp_io_address_t (XDR *, mp_io_address_t*);
 extern  bool_t xdr_mp_storio_mode_t (XDR *, mp_storio_mode_t*);
@@ -246,6 +296,12 @@ extern bool_t xdr_mp_sstat_t ();
 extern bool_t xdr_mp_size_rsp_t ();
 extern bool_t xdr_mp_size_ret_t ();
 extern bool_t xdr_mp_size_arg_t ();
+extern bool_t xdr_mp_path_t ();
+extern bool_t xdr_mp_file_t ();
+extern bool_t xdr_mp_files_t ();
+extern bool_t xdr_mp_locate_rsp_t ();
+extern bool_t xdr_mp_locate_ret_t ();
+extern bool_t xdr_mp_locate_arg_t ();
 extern bool_t xdr_mp_stat_ret_t ();
 extern bool_t xdr_mp_io_address_t ();
 extern bool_t xdr_mp_storio_mode_t ();

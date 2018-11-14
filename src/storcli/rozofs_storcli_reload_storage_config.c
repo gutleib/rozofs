@@ -131,7 +131,7 @@ int exportclt_reload_check_mstorage(epgw_conf_ret_t *ret,exportclt_t *exportclt_
       else 
       {
         /* Send request to get storage TCP ports */
-        if (mclient_ports(&mclt, &mstor->single_storio, io_address) != 0) 
+        if (mclient_ports(&mclt, io_address) != 0) 
         {
             fprintf(stderr,
                     "Warning: failed to get ports for storage (host: %s).\n"
@@ -518,7 +518,7 @@ int exportclt_reload_check_mstorage_msite(epgw_mount_msite_ret_t *ret,exportclt_
       else 
       {
         /* Send request to get storage TCP ports */
-        if (mclient_ports(&mclt, &mstor->single_storio, io_address) != 0) 
+        if (mclient_ports(&mclt, io_address) != 0) 
         {
             fprintf(stderr,
                     "Warning: failed to get ports for storage (host: %s).\n"

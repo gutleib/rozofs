@@ -252,6 +252,7 @@ void storio_throughput_counter_init(void) {
   - 
   RETURN: none
   ==========================================================================*/
+  
 #define new_line(title,empty) { \
   if (lineEmpty) { pChar = pLine;}\
   lineEmpty = empty;\
@@ -274,30 +275,49 @@ void storio_throughput_counter_init(void) {
   *pChar++ = '|';\
 }
 
-#define display_line_topic(title) \
+#define display_line_topic(title,display_short) \
   new_line(title,0);\
-  for (i=startIdx; i<(stopIdx+last); i++) {\
+  if (display_short) { \
     pChar += rozofs_string_append(pChar,"__________________|");\
-  }
+  }\
+  else {\
+    for (i=startIdx; i<(stopIdx+last); i++) {\
+      pChar += rozofs_string_append(pChar,"__________________|");\
+    }\
+  }  
     
-#define display_line_val(title,val) \
+#define display_line_val(title,val,display_short) \
   new_line(title,1);\
   for (i=startIdx; i<stopIdx; i++) {\
     sum.val += p[i].stat.val;\
-    display_val(p[i].stat.val);\
+    if (display_short==0) display_val(p[i].stat.val);\
   }\
   if (sum.val!=0) { lineEmpty=0; }\
   if (last) { display_val(sum.val);}
     
 
-#define display_line_div(title,val1,val2) \
+#define display_line_div(title,val1,val2,display_short) \
   new_line(title,1);\
   for (i=startIdx; i<stopIdx; i++) {\
-    display_div(p[i].stat.val1,p[i].stat.val2);\
+    if (display_short==0) {display_div(p[i].stat.val1,p[i].stat.val2); }\
   }\
   if (sum.val1!=0) { lineEmpty=0; }\
   if (last) { display_div(sum.val1,sum.val2); }
 
+#define display_head(title,display_short) \
+    if (display_short) { \
+       new_line(title,0);\
+       display_val(stopIdx-startIdx);\
+    }\
+    else {\
+      new_line(title,0);\
+      for (i=startIdx; i<stopIdx; i++) {\
+        display_val(i);\
+      } \
+      if (last) {\
+        display_txt("Total");\
+      }   \
+    }   
  
 static char * disk_thread_debug_help(char * pChar) {
   pChar += rozofs_string_append(pChar,"usage:\ndiskThreads reset       : reset statistics\ndiskThreads             : display statistics\n");  
@@ -314,14 +334,21 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   rozofs_disk_thread_stat_t sum;
   int                       last=0;
   int doreset=0;
-  
+  int display_short = 1;
+    
   if (argv[1] != NULL) {
-    if (strcmp(argv[1],"reset")!=0) {    
+    if (strcmp(argv[1],"long")==0) {  
+      display_short = 0;        
+    }    
+    
+    else if (strcmp(argv[1],"reset")==0) {    
+      doreset = 1;
+    }
+    else { 
       pChar = disk_thread_debug_help(pChar);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
       return;      
     }  
-    doreset = 1;
   }
   
   pChar += rozofs_string_append(pChar,"current pending requests = ");
@@ -361,7 +388,11 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   while (last == 0) {
   
     startIdx = stopIdx;
-    if ((af_unix_disk_thread_count - startIdx) > THREAD_PER_LINE) {
+    if (display_short) {
+      stopIdx = af_unix_disk_thread_count;
+      last = 1;
+    }
+    else if ((af_unix_disk_thread_count - startIdx) > THREAD_PER_LINE) {
       stopIdx = startIdx + THREAD_PER_LINE;
     }  
     else {
@@ -369,83 +400,77 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
       last = 1;
     }  
     
-    new_line("Thread number",0);
-    for (i=startIdx; i<stopIdx; i++) {
-      display_val(p[i].thread_idx);
-    } 
-    if (last) {
-      display_txt("Total");
-    }   
+    display_head("Thread number",display_short);
 
-    display_line_topic("Read Requests");  
-    display_line_val("   number", read_count);
-    display_line_val("   No such file",read_nosuchfile);
-    display_line_val("!! Unknown cid/sid",read_badCidSid);  
-    display_line_val("!! error spare",read_error_spare);  
-    display_line_val("!! error",read_error);  
-    display_line_val("   Bytes",read_Byte_count);      
-    display_line_val("   Cumulative Time (us)",read_time);
-    display_line_div("   Average Bytes",read_Byte_count,read_count);  
-    display_line_div("   Average Time (us)",read_time,read_count);
-    display_line_div("   Throughput (MBytes/s)",read_Byte_count,read_time);  
+    display_line_topic("Read Requests", display_short);  
+    display_line_val("   number", read_count, display_short);
+    display_line_val("   No such file",read_nosuchfile, display_short);
+    display_line_val("!! Unknown cid/sid",read_badCidSid, display_short);  
+    display_line_val("!! error spare",read_error_spare, display_short);  
+    display_line_val("!! error",read_error, display_short);  
+    display_line_val("   Bytes",read_Byte_count, display_short);      
+    display_line_val("   Cumulative Time (us)",read_time, display_short);
+    display_line_div("   Average Bytes",read_Byte_count,read_count, display_short);  
+    display_line_div("   Average Time (us)",read_time,read_count, display_short);
+    display_line_div("   Throughput (MBytes/s)",read_Byte_count,read_time, display_short);  
 
-    display_line_topic("Write Requests");  
-    display_line_val("   number", write_count);
-    display_line_val("!! Unknown cid/sid",write_badCidSid);  
-    display_line_val("!! error",write_error);  
-    display_line_val("!! no space left",write_nospace);  
-    display_line_val("   Bytes",write_Byte_count);      
-    display_line_val("   Cumulative Time (us)",write_time);
-    display_line_div("   Average Bytes",write_Byte_count,write_count); 
-    display_line_div("   Average Time (us)",write_time,write_count);
-    display_line_div("   Throughput (MBytes/s)",write_Byte_count,write_time);  
+    display_line_topic("Write Requests", display_short);  
+    display_line_val("   number", write_count, display_short);
+    display_line_val("!! Unknown cid/sid",write_badCidSid, display_short);  
+    display_line_val("!! error",write_error, display_short);  
+    display_line_val("!! no space left",write_nospace, display_short);  
+    display_line_val("   Bytes",write_Byte_count, display_short);      
+    display_line_val("   Cumulative Time (us)",write_time, display_short);
+    display_line_div("   Average Bytes",write_Byte_count,write_count, display_short); 
+    display_line_div("   Average Time (us)",write_time,write_count, display_short);
+    display_line_div("   Throughput (MBytes/s)",write_Byte_count,write_time, display_short);  
 
-    display_line_topic("Truncate Requests");  
-    display_line_val("   number", truncate_count);
-    display_line_val("!! Unknown cid/sid",truncate_badCidSid);  
-    display_line_val("!! error",truncate_error);  
-    display_line_val("   Cumulative Time (us)",truncate_time);
-    display_line_div("   Average Time (us)",truncate_time,truncate_count);
+    display_line_topic("Truncate Requests", display_short);  
+    display_line_val("   number", truncate_count, display_short);
+    display_line_val("!! Unknown cid/sid",truncate_badCidSid, display_short);  
+    display_line_val("!! error",truncate_error, display_short);  
+    display_line_val("   Cumulative Time (us)",truncate_time, display_short);
+    display_line_div("   Average Time (us)",truncate_time,truncate_count, display_short);
 
-    display_line_topic("Repair Requests");  
-    display_line_val("   number", diskRepair_count);
-    display_line_val("!! Unknown cid/sid",diskRepair_badCidSid);  
-    display_line_val("!! error",diskRepair_error);  
-    display_line_val("   Bytes",diskRepair_Byte_count);      
-    display_line_val("   Cumulative Time (us)",diskRepair_time);
-    display_line_div("   Average Bytes",diskRepair_Byte_count,diskRepair_count); 
-    display_line_div("   Average Time (us)",diskRepair_time,diskRepair_count);
-    display_line_div("   Throughput (MBytes/s)",diskRepair_Byte_count,diskRepair_time);  
+    display_line_topic("Repair Requests", display_short);  
+    display_line_val("   number", diskRepair_count, display_short);
+    display_line_val("!! Unknown cid/sid",diskRepair_badCidSid, display_short);  
+    display_line_val("!! error",diskRepair_error, display_short);  
+    display_line_val("   Bytes",diskRepair_Byte_count, display_short);      
+    display_line_val("   Cumulative Time (us)",diskRepair_time, display_short);
+    display_line_div("   Average Bytes",diskRepair_Byte_count,diskRepair_count, display_short); 
+    display_line_div("   Average Time (us)",diskRepair_time,diskRepair_count, display_short);
+    display_line_div("   Throughput (MBytes/s)",diskRepair_Byte_count,diskRepair_time, display_short);  
 
-    display_line_topic("Remove Requests");  
-    display_line_val("   number", remove_count);
-    display_line_val("!! Unknown cid/sid",remove_badCidSid);  
-    display_line_val("!! error",remove_error);  
-    display_line_val("   Cumulative Time (us)",remove_time);
-    display_line_div("   Average Time (us)",remove_time,remove_count);  
+    display_line_topic("Remove Requests", display_short);  
+    display_line_val("   number", remove_count, display_short);
+    display_line_val("!! Unknown cid/sid",remove_badCidSid, display_short);  
+    display_line_val("!! error",remove_error, display_short);  
+    display_line_val("   Cumulative Time (us)",remove_time, display_short);
+    display_line_div("   Average Time (us)",remove_time,remove_count, display_short);  
   
-    display_line_topic("Remove chunk Requests");  
-    display_line_val("   number", remove_chunk_count);
-    display_line_val("!! Unknown cid/sid",remove_chunk_badCidSid);  
-    display_line_val("!! error",remove_chunk_error);  
-    display_line_val("   Cumulative Time (us)",remove_chunk_time);
-    display_line_div("   Average Time (us)",remove_chunk_time,remove_chunk_count);  
+    display_line_topic("Remove chunk Requests", display_short);  
+    display_line_val("   number", remove_chunk_count, display_short);
+    display_line_val("!! Unknown cid/sid",remove_chunk_badCidSid, display_short);  
+    display_line_val("!! error",remove_chunk_error, display_short);  
+    display_line_val("   Cumulative Time (us)",remove_chunk_time, display_short);
+    display_line_div("   Average Time (us)",remove_chunk_time,remove_chunk_count, display_short);  
 
-    display_line_topic("Start rebuild Requests");  
-    display_line_val("   number", rebStart_count);
-    display_line_val("!! Unknown cid/sid",rebStart_badCidSid);  
-    display_line_val("!! error",rebStart_error);  
-    display_line_val("   Cumulative Time (us)",rebStart_time);
-    display_line_div("   Average Time (us)",rebStart_time,rebStart_count);  
+    display_line_topic("Start rebuild Requests", display_short);  
+    display_line_val("   number", rebStart_count, display_short);
+    display_line_val("!! Unknown cid/sid",rebStart_badCidSid, display_short);  
+    display_line_val("!! error",rebStart_error, display_short);  
+    display_line_val("   Cumulative Time (us)",rebStart_time, display_short);
+    display_line_div("   Average Time (us)",rebStart_time,rebStart_count, display_short);  
 
-    display_line_topic("Stop rebuild Requests");  
-    display_line_val("   number", rebStop_count);
-    display_line_val("!! Unknown cid/sid",rebStop_badCidSid);  
-    display_line_val("!! error",rebStop_error);  
-    display_line_val("   Cumulative Time (us)",rebStop_time);
-    display_line_div("   Average Time (us)",rebStop_time,rebStop_count);  
+    display_line_topic("Stop rebuild Requests", display_short);  
+    display_line_val("   number", rebStop_count, display_short);
+    display_line_val("!! Unknown cid/sid",rebStop_badCidSid, display_short);  
+    display_line_val("!! error",rebStop_error, display_short);  
+    display_line_val("   Cumulative Time (us)",rebStop_time, display_short);
+    display_line_div("   Average Time (us)",rebStop_time,rebStop_count, display_short);  
  
-    display_line_topic("");  
+    display_line_topic("", display_short);  
     *pChar++= '\n';
     *pChar = 0;
   }

@@ -30,6 +30,8 @@ add_executable(storaged
     mprotosvc.h
     sconfig.h
     sconfig.c
+    storage_enumeration.h
+    storage_enumeration.c
     storage.h
     storage.c
     storage_device_kpi.c
@@ -51,6 +53,8 @@ target_link_libraries(storaged rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFI
 
 add_executable(rozo_storage_mount
     storage_mount.c
+    storage_enumeration.h
+    storage_enumeration.c
     storage.c
     sconfig.h
     sconfig.c
@@ -131,6 +135,8 @@ target_link_libraries(storage_list_rebuilder rozofs ${PTHREAD_LIBRARY} ${UUID_LI
 add_executable(storio
     sconfig.h
     sconfig.c
+    storage_enumeration.h
+    storage_enumeration.c
     storage.h
     storage.c
     storage_device_kpi.c

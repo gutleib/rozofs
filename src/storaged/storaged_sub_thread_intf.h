@@ -49,6 +49,10 @@ typedef struct _storaged_sub_thread_stat_t {
   uint64_t            size_errors;
   uint64_t            size_time;
   
+  uint64_t            locate_count;
+  uint64_t            locate_errors;
+  uint64_t            locate_time;
+  
 } storaged_sub_thread_stat_t;
 /*
 ** Disk thread context

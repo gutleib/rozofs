@@ -1101,7 +1101,7 @@ static int get_storage_ports(mstorage_t *s) {
     
     
     /* Send request to get storage TCP ports */
-    if (mclient_ports(&mclt, &s->single_storio, io_address) != 0) {
+    if (mclient_ports(&mclt, io_address) != 0) {
         s->error = errno;
         DEBUG("Warning: failed to get ports for storage (host: %s).\n",
                 s->host);
@@ -1260,42 +1260,6 @@ int rozofs_storcli_setup_all_lbg_of_storage(mstorage_t *s) {
   int hostlen;
 
   if (s->sclients_nb == 0) return 0;
-
-  /*
-  ** In single storio mode, there is only one LBG for all cids of this storage
-  */
-  if (s->single_storio) {
-
-    /*
-    ** allocate the load balancing group for the mstorage
-    */
-    if (s->lbg_id[0] == -1) {
-    
-      s->lbg_id[0] = north_lbg_create_no_conf();
-      if (s->lbg_id[0] < 0) {
-	severe(" out of lbg contexts");
-	return -1;
-      }	
-
-      /*
-      ** proceed with storage configuration if the number of port is different from 0
-      */
-      ret = storaged_lbg_initialize(s,0);
-      if (ret < 0) {
-	severe("storaged_lbg_initialize");
-        return -1;
-      }
-    }
-    
-    /*
-    ** init of the cid/sid<-->lbg_id association table
-    */
-    for (i = 0; i < s->sids_nb; i++) {
-      rozofs_storcli_cid_table_insert(s->cids[i], s->sids[i], s->lbg_id[0]);
-    }
-    
-    return 0;
-  }
 
   /*
   ** In multiple storio, there is one LBG per cluster on the storage node.
@@ -1472,7 +1436,7 @@ int rozofs_storcli_get_export_config(storcli_conf *conf) {
         }
 
         /* Send request to get storage TCP ports */
-        if (mclient_ports(&mclt, &s->single_storio, io_address) != 0) {
+        if (mclient_ports(&mclt, io_address) != 0) {
             fprintf(stderr,
                     "Warning: failed to get ports for storage (host: %s).\n"
                     , s->host);

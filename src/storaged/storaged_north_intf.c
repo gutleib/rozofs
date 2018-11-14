@@ -117,8 +117,14 @@ void mproto_sub_thread(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p, rozofs_rpc_call_hdr
       local = mp_subthread_size;
       size = sizeof(mp_size_arg_t);
       break;
-    
-
+      
+    case MP_LOCATE:
+      rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_mp_locate_arg_t;
+      rozorpc_srv_ctx_p->xdr_result  = (xdrproc_t) xdr_mp_locate_ret_t;
+      local = mp_subthread_locate;
+      size = sizeof(mp_locate_arg_t);
+      break;
+      
     default:
       rozorpc_srv_ctx_p->xmitBuf = rozorpc_srv_ctx_p->recv_buf;
       rozorpc_srv_ctx_p->recv_buf = NULL;
@@ -182,7 +188,8 @@ static void mproto_svc(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p, rozofs_rpc_call_hdr
       mp_remove_arg_t           remove;
       mp_list_bins_files_arg_t  list_bins_file;
       mp_remove2_arg_t          remove2;      
-      mp_size_arg_t             size;      
+      mp_size_arg_t             size;  
+      mp_locate_arg_t           locate;    
     } mproto_request;
 
     union {
@@ -191,6 +198,7 @@ static void mproto_svc(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p, rozofs_rpc_call_hdr
       mp_ports_ret_t            ports;
       mp_list_bins_files_ret_t  list_bins_file;
       mp_size_ret_t             size;
+      mp_locate_ret_t           locate;      
     } mproto_response;
     
     
@@ -330,6 +338,7 @@ void storaged_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf
 	  case MP_REMOVE:
 	  case MP_LIST_BINS_FILES:
 	  case MP_SIZE:
+	  case MP_LOCATE:
 	    mproto_sub_thread(rozorpc_srv_ctx_p, &hdr);
 	    break;
 	    

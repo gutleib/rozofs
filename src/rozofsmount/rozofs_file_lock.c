@@ -46,6 +46,8 @@ extern struct fuse_chan *rozofsmount_fuse_chanel;
 int rozofs_ll_setlk_internal(file_t * file);
 void rozofs_ll_setlk_internal_cbk(void *this,void * param);
 
+static int is_old_export = 1;
+
 DECLARE_PROFILING(mpp_profiler_t);
 
 typedef struct _LOCK_STATISTICS_T {
@@ -341,6 +343,9 @@ char * display_lock_stat(char * p) {
   int                               firstowner=1;
 
   p += rozofs_string_append(p,"{ \"file locks\" : {\n");
+  if (is_old_export) {
+    p += rozofs_string_append(p,"    \"exportd\" : \"older than 2.13.2 / 3.0.~alpha55\",\n"); 
+  }
   p += rozofs_string_append(p,"    \"statistics\" : {\n"); 
   DISPLAY_LOCK_STAT(bsd_set_passing_lock);
   DISPLAY_LOCK_STAT(bsd_set_blocking_lock);  
@@ -671,6 +676,58 @@ error:
   if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);        
   return;
 }
+/**
+**____________________________________________________
+** Old poll mode call back used when export is old
+**
+** @param this : pointer to the transaction context
+** @param param: pointer to the associated rozofs_fuse_context
+** 
+** @return none
+*/
+void rozofs_poll_cbk(void *this,void *param)  {
+  void     *recv_buf = NULL;   
+  int       status;
+
+  /*
+  ** get the pointer to the transaction context:
+  ** it is required to get the information related to the receive buffer
+  */
+  rozofs_tx_ctx_t      *rozofs_tx_ctx_p = (rozofs_tx_ctx_t*)this;  
+
+  /*    
+  ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
+  */
+  status = rozofs_tx_get_status(this);
+  if (status < 0) {
+     /*
+     ** something wrong happened
+     */
+     errno = rozofs_tx_get_errno(this);  
+     goto error; 
+  }
+  /*
+  ** get the pointer to the receive buffer payload
+  */
+  recv_buf = rozofs_tx_get_recvBuf(this);
+  if (recv_buf == NULL) {
+     /*
+     ** something wrong happened
+     */
+     errno = EFAULT;  
+     goto error;         
+  }
+
+
+error:
+
+  /*
+  ** release the transaction context and the fuse context
+  */
+  if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
+  if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);        
+  return;
+}
 /*
 **____________________________________________________
 **
@@ -696,6 +753,28 @@ static inline void rozofs_flock_periodic_poll_granted_locks(time_t now) {
   if (now < next_poll) return;
   next_poll = now + 5;
 
+  /*
+  ** Old export case. Send a global old poll message for all granted locks
+  */
+  if (is_old_export) {
+    fid_t fake_fid;
+    memset(fake_fid,0,sizeof(fid_t));
+
+    next_poll += 8;
+    
+    arg.arg_gw.eid = exportclt.eid;
+    strncpy(arg.arg_gw.client_info.vers,VERSION,ROZOFS_VERSION_STRING_LENGTH);    
+    arg.arg_gw.client_info.diag_port = rozofsmount_diag_port;    
+    arg.arg_gw.lock.client_ref = rozofs_client_hash;
+    rozofs_expgateway_send_no_fuse_ctx(arg.arg_gw.eid,(unsigned char*)fake_fid,
+                                       EXPORT_PROGRAM, EXPORT_VERSION, EP_POLL_FILE_LOCK,
+                                       (xdrproc_t) xdr_epgw_lock_arg_t,(void *)&arg,
+                                       rozofs_poll_cbk,NULL);
+    return;                             
+  }
+
+
+    
   /*
   ** When no lock is set, just send a clear client lock
   */
@@ -1810,9 +1889,30 @@ void rozofs_ll_setlk_internal_cbk(void *this,void * param)
       rozofs_trc_rsp(srv_rozofs_ll_setlk,0/*ino*/,file->fid,0,file->lock_trc_idx);
       
       /*
+      ** New export set's ret.gw_status.ep_lock_ret_t_u.lock.client_ref to 0
+      ** when some lock is left for this owner on this FID. 
+      ** Old client always return the input client ref
+      */
+      if (is_old_export) {
+        if (ret.gw_status.ep_lock_ret_t_u.lock.client_ref == 0) {
+          is_old_export = 0;
+        }
+      }
+      
+      /*
       ** Check whether some locks still exit for this owner on this fid 
       */
-      rozofsmount_validate_owner(ret.gw_status.ep_lock_ret_t_u.lock.client_ref,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, (ientry_t*)file->ie);
+      if (is_old_export) {
+        if (ret.gw_status.ep_lock_ret_t_u.lock.mode == EP_LOCK_FREE) {
+          rozofsmount_validate_owner(0,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, (ientry_t*)file->ie);
+        }
+        else {
+          rozofsmount_validate_owner(1,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, (ientry_t*)file->ie);        
+        }
+      }
+      else {
+        rozofsmount_validate_owner(ret.gw_status.ep_lock_ret_t_u.lock.client_ref,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, (ientry_t*)file->ie);
+      }
       
       file->fuse_req = NULL;      
       xdr_free((xdrproc_t) decode_proc, (char *) &ret);   

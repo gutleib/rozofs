@@ -122,6 +122,7 @@ class host_class:
     if self.admin == False: return
     self.add_if() 
     os.system("rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s&"%(self.number,self.get_config_name()))
+#    os.system("valgrind storaged -c %s&"%(self.get_config_name()))
 
   def stop(self):
     os.system("rozolauncher stop /var/run/launcher_storaged_%s.pid storaged"%(self.number))
@@ -1291,26 +1292,30 @@ class rozofs_class:
     if val == 2: return "16K"
     if val == 3: return "32K"
 
-  def findout_loopback_device(self,path,size):
-    # Find out a free loop back device to map on it
-    string="losetup -f "
-    parsed = shlex.split(string)
-    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output = cmd.communicate()
-    if len(output) < 1:
-      log( "Can not find /dev/loop for %s %s"%(path,mark))
-      sys.exit(-1)
-    loop=output[0].split('\n')[0]
-      
+  def findout_loopback_device(self,path,size, nbDev=1):
+
     # Create the file with the given path
     os.system("rm -f %s > /dev/null 2>&1"%(path))
     os.system("dd if=/dev/zero of=%s bs=1M count=%s  > /dev/null 2>&1"%(path, size))
     
-    # Bind the loop back device to the file    
-    string="losetup %s %s "%(loop,path)
-    os.system(string)
-    
-    report("%sMB %-12s %s"%(size,loop,path))
+    for i in range(nbDev):
+      #
+      # Find out a free loop device
+      #
+      string="losetup -f "
+      parsed = shlex.split(string)
+      cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      output = cmd.communicate()
+      if len(output) < 1:
+        log( "Can not find /dev/loop %s for %s %s"%(i+1,path,mark))
+        sys.exit(-1)
+      loop=output[0].split('\n')[0]
+      
+      # Bind the loop back device to the file    
+      string="losetup %s %s "%(loop,path)
+      os.system(string)
+
+      report("%sMB %-12s %s"%(size,loop,path))
     return loop
     
         
@@ -1330,8 +1335,10 @@ class rozofs_class:
     if size == None: 
       console("Missing device size for %s:%s:%s"%(cid,sid,dev))
       return   
-
-    loop = self.findout_loopback_device(path,size)    
+    nbDev = 1  
+    if int(dev) == int(0): nbDev = 2
+      
+    loop = self.findout_loopback_device(path,size,nbDev)    
     os.system("./setup.py cmd rozo_device --format %s/%s/%s %s"%(cid,sid,dev,loop))
     syslog.syslog("Created %s -> %s (%s,%s,%s)"%(path,loop,cid,sid,dev))	  
     return  	
@@ -1359,25 +1366,29 @@ class rozofs_class:
     string="losetup %s"%(path)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output, error = cmd.communicate()
-    if output != "":
-      parts=output.split()
-      if len(parts) > 2:
-        devFile=parts[2]
-    if devFile== "": return
-    try:
-      string="losetup -d %s"%(path)
-      parsed = shlex.split(string)
-      for i in range (10):
-        cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        output, error = cmd.communicate()
-	if error == "": break
-	time.sleep(1)
+    for line in cmd.stdout:  
+      parts=line.split()
+      if len(parts) < 3: continue
+      devFile = parts[2]
       devFile = devFile.replace('(','')
-      devFile = devFile.replace(')','')   
-      os.remove(devFile)
-      log("%s Deleted -> %s"%(path,devFile))	
-    except: pass 
+      devFile = devFile.replace(')','')  
+       
+    if devFile== "": 
+      string="losetup -d %s"%(path)
+      return
+
+    string="losetup -j %s"%(devFile)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:  
+      loop = line.split(":")[0]
+      string="losetup -d %s"%(loop)
+      parsed = shlex.split(string)
+      cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      log("%s Deleted"%(loop))	
+    os.remove(devFile)
+    log("%s Deleted"%(devFile))	
+
   
   def newspare(self,size,mark=None):
     # Find a free spare number
@@ -1406,6 +1417,7 @@ class rozofs_class:
     display_config_bool("device_automount",self.device_automount)
     #display_config_int("device_self_healing_process",2)
     display_config_int("device_selfhealing_delay",rozofs.device_selfhealing_delay)
+    display_config_int("default_rebuild_reloop",3)
     display_config_string("device_selfhealing_mode",rozofs.device_selfhealing_mode)
     display_config_string("export_hosts",exportd.export_host)
     display_config_bool("client_xattr_cache",True)
@@ -1550,7 +1562,7 @@ class rozofs_class:
         sys.exit(-1)
       split = line.split()  
       if split[0] == '-' and split[1] == '-':
-        prog = split[6]
+        prog = split[8]
         continue
       if prog == None: continue
       try:

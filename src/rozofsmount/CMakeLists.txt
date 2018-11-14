@@ -96,8 +96,20 @@ add_executable(rozofsmount
 #pthread need by fuse
 target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
+add_executable(rozo_locate_projections
+       rozo_locate_projections.c    
+)
+target_link_libraries(rozo_locate_projections rozofs ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+    
 # Install
 install(TARGETS rozofsmount
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT mount
+)
+# Install
+install(TARGETS rozo_locate_projections
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

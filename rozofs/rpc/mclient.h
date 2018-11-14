@@ -120,7 +120,7 @@ static inline void mclient_release(mclient_t * clt) {
   if (clt && clt->rpcclt.client) rpcclt_release(&clt->rpcclt);
 }
 
-int mclient_ports(mclient_t * mclt, int * single, mp_io_address_t * io_address_p);
+int mclient_ports(mclient_t * mclt,  mp_io_address_t * io_address_p);
 
 /*
 ** New structure to have only one TCP connection toward each storage

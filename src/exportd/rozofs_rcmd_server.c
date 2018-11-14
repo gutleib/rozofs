@@ -733,6 +733,63 @@ out:
 **
 ** @retval status of the request (rozofs_rcmd_status_e)
 **==========================================================================*/
+rozofs_rcmd_status_e rozofs_rcmd_process_locate_file(
+                                     rozofs_rcmd_thread_ctx_t * p, 
+                                     rozofs_rcmd_hdr_t        * hdr, 
+                                     char                     * param) {
+  rozofs_rcmd_hdr_t   rsp;
+  char                cmd[512];
+  int                 res;
+  
+  /*
+  ** Initialize a response structure for the received command
+  */
+  rozofs_rcmd_init_response(&rsp, hdr->ope);
+  
+  /*
+  ** A file name must be present in the extra data
+  */
+  if (hdr->size<=1) {
+    rsp.status = rozofs_rcmd_status_missing_param;
+    rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));    
+    goto out;
+  } 
+   
+  
+  /*
+  ** Build the command line using space left at the beginning of the buffer
+  */
+  sprintf(cmd,"rozo_locate_fid %s", param);
+
+  /*
+  ** Execute the command
+  */
+  res = system(cmd);
+  if (res==0) { 
+    rsp.status = rozofs_rcmd_status_success;  
+  }
+  else {
+    rsp.status = rozofs_rcmd_status_failed;  
+  }
+    
+  /*
+  ** Send response
+  */
+  rozofs_rcmd_blocking_send(p,(char *)&rsp,sizeof(rozofs_rcmd_hdr_t));
+
+out: 
+
+  return rsp.status;
+}
+/*__________________________________________________________________________
+** Resolve a list of file to a list of file names
+**
+** @param p       the thread context
+** @param hdr     header structure of the request
+** @param param   command parameters
+**
+** @retval status of the request (rozofs_rcmd_status_e)
+**==========================================================================*/
 rozofs_rcmd_status_e rozofs_rcmd_process_fid2path(
                                      rozofs_rcmd_thread_ctx_t * p, 
                                      rozofs_rcmd_hdr_t        * hdr, 
@@ -1058,6 +1115,13 @@ void * run_rcmd_sub_process(rozofs_rcmd_thread_ctx_t * p) {
         res = rozofs_rcmd_process_fid2path(p, &hdr, &data[ROZOFS_RCMD_RESERVE]);      
         break;
 
+      /*
+      ** Het all header and chunk locations of a file
+      */
+      case rozofs_rcmd_ope_locate_file:
+        rozofs_rcmd_profiler[ope].count++;      
+        res = rozofs_rcmd_process_locate_file(p, &hdr, &data[ROZOFS_RCMD_RESERVE]);      
+        break;
 
       /*
       ** Unexpected command
