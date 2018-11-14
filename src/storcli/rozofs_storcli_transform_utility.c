@@ -179,7 +179,6 @@ static inline int rozofs_storcli_transform_inverse_check_timestamp_tb(rozofs_sto
     *timestamp_p = 0;
     uint8_t rozofs_inverse = rozofs_get_rozofs_inverse(layout);
     uint8_t rozofs_safe = rozofs_get_rozofs_safe(layout);
-    uint8_t rozofs_forward = rozofs_get_rozofs_forward(layout);
     rozofs_storcli_timestamp_ctx_t *p;
     int eof = 1;
     rozofs_storcli_timestamp_ctx_t rozofs_storcli_timestamp_tb[ROZOFS_SAFE_MAX_STORCLI];
