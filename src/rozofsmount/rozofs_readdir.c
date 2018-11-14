@@ -796,7 +796,12 @@ void rozofs_ll_readdir_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off
     int               ret; 
     ientry_t          *ie = NULL;
     errno = 0;     
-     dir_t *dir_p = NULL;  
+     dir_t *dir_p = NULL; 
+      
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
      
      if (old_rozofs_readdir_flag!=0)
      {

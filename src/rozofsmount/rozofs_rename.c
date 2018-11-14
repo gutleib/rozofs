@@ -50,6 +50,12 @@ void rozofs_ll_rename_nb(fuse_req_t req, fuse_ino_t parent, const char *name,
     ientry_t *npie = 0;
     int    ret;        
     void *buffer_p = NULL;
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
     /*
     ** allocate a context for saving the fuse parameters
     */

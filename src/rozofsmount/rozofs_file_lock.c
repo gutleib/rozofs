@@ -974,6 +974,11 @@ void rozofs_ll_getlk_nb(fuse_req_t req,
     int64_t start,stop;
     file_t      * file;
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
     int lock_trc_idx = 0;
     
     lock_stat.posix_get_lock++;
@@ -1273,6 +1278,11 @@ void rozofs_ll_flock_nb(fuse_req_t req,
     struct flock flock;
     int          op = input_op;
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
 
     /*
     ** Just keep significant bits
@@ -1371,6 +1381,10 @@ void rozofs_ll_setlk_nb(fuse_req_t req,
     file_t      * f = NULL;
     int      lock_trc_idx=0;
     
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
     
 //    severe("FDL lock : type %s whence %s start %llu len %llu",print_lock_type(flock->l_type),print_whence(flock->l_whence),
 //           (unsigned long long int)flock->l_start,flock->l_len);

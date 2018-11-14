@@ -102,6 +102,10 @@ void rozofs_ll_setxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, con
     void             *buffer_p = NULL;
     epgw_setxattr_arg_t arg;
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
 
     DEBUG("setxattr (inode: %lu, name: %s, value: %s, size: %llu)\n",
             (unsigned long int) ino, name, value,
@@ -381,6 +385,11 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
     int value_size;
     char *buffer;
     int  rozofs_ea_value;
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
 
     uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));
     /*
@@ -945,6 +954,13 @@ void rozofs_ll_removexattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name)
     int               ret;        
     void             *buffer_p = NULL;
     epgw_removexattr_arg_t arg;
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
+
     /*
     ** allocate a context for saving the fuse parameters
     */
@@ -1146,6 +1162,11 @@ void rozofs_ll_listxattr_nb(fuse_req_t req, fuse_ino_t ino, size_t size)
     void             *buffer_p = NULL;
     epgw_listxattr_arg_t arg;
     int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_listxattr,ino,NULL,size,0);
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
     /*
     ** allocate a context for saving the fuse parameters
     */

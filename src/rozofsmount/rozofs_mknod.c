@@ -54,6 +54,11 @@ void rozofs_ll_mknod_nb(fuse_req_t req, fuse_ino_t parent, const char *name,
     ctx = fuse_req_ctx(req);
     epgw_mknod_arg_t arg;
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FCR8], 1, rozofs_get_ticker_us());
+
     int    ret;
     int trc_idx = rozofs_trc_req_name(srv_rozofs_ll_mknod,parent,(char*)name);
     void *buffer_p = NULL;

@@ -310,6 +310,11 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     int extra_length = 0;
     fuse_ino_t ino = 0;
     int trace_flag = 0;
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_LOOKUP], 1, rozofs_get_ticker_us());
     
     extra_length = rozofs_check_extra_inode_in_lookup((char*)name, &len_name);
     if (extra_length !=0)

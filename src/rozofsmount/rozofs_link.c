@@ -48,6 +48,12 @@ void rozofs_ll_link_nb(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 
     int    ret;        
     void *buffer_p = NULL;
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+
     /*
     ** allocate a context for saving the fuse parameters
     */
@@ -339,6 +345,11 @@ void rozofs_ll_readlink_nb(fuse_req_t req, fuse_ino_t ino) {
     void *buffer_p = NULL;
 
     int trc_idx = rozofs_trc_req(srv_rozofs_ll_readlink,ino,NULL);
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
     
     /*
     ** allocate a context for saving the fuse parameters
@@ -579,6 +590,10 @@ void rozofs_ll_symlink_nb(fuse_req_t req, const char *link, fuse_ino_t parent,
     int    ret;        
     void *buffer_p = NULL;
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
 
     int trc_idx = rozofs_trc_req_name(srv_rozofs_ll_symlink,parent,(char*)name);
 
@@ -880,6 +895,11 @@ void rozofs_ll_unlink_nb(fuse_req_t req, fuse_ino_t parent, const char *name) {
     epgw_unlink_arg_t arg;    
     void *buffer_p = NULL;
     int    ret;        
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FDEL], 1, rozofs_get_ticker_us());
     
     int trc_idx = rozofs_trc_req_name(srv_rozofs_ll_unlink,parent,(char*)name);
     /*
