@@ -53,6 +53,10 @@ void rozofs_ll_create_nb(fuse_req_t req, fuse_ino_t parent, const char *name,
     const struct fuse_ctx *ctx;
     ctx = fuse_req_ctx(req);
     epgw_mknod_arg_t arg;
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FCR8], 1, rozofs_get_ticker_us());
 
     int    ret;
     void *buffer_p = NULL;

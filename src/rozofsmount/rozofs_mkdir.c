@@ -44,6 +44,12 @@ void rozofs_ll_mkdir_nb(fuse_req_t req, fuse_ino_t parent, const char *name,
     int    ret;        
     void *buffer_p = NULL;
     errno = 0;
+    
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DCR8], 1, rozofs_get_ticker_us());
+    
     /*
     ** allocate a context for saving the fuse parameters
     */

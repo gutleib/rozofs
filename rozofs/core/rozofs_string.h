@@ -1315,7 +1315,152 @@ out:
   return size;  
   
 }
+static inline int rozofs_count_padded_append(char * value_string, int size, uint64_t value) {
+  uint64_t   modulo=0;
+  char     * pt = value_string;
+  int        sz;  
+  
+  if (value<KILO) {
+    pt += rozofs_u64_padded_append(pt,4, rozofs_right_alignment, value);
+    pt += rozofs_string_append(pt,"  ");
+    goto out;  		    
+  }
+  
+  if (value<MEGA) {
+  
+    if (value>=(CENT*KILO)) {
+      pt += rozofs_u64_padded_append(pt,4,rozofs_right_alignment,value/KILO);
+      pt += rozofs_string_append(pt," K");
+      goto out;    		    
+    }
+    
+    if (value>=(DIX*KILO)) {    
+      modulo = (value % KILO) / CENT;
+      pt += rozofs_u64_padded_append(pt,2,rozofs_right_alignment,value/KILO);
+      *pt++ = '.';
+      pt += rozofs_u32_padded_append(pt,1,rozofs_zero,modulo);
+      pt += rozofs_string_append(pt," K");
+      goto out;
+    }  
+    
+    modulo = (value % KILO) / DIX;
+    pt += rozofs_u64_padded_append(pt,1,rozofs_right_alignment,value/KILO);
+    *pt++ = '.';
+    pt += rozofs_u32_padded_append(pt,2,rozofs_zero,modulo);
+    pt += rozofs_string_append(pt," K");
+    goto out;    
+     
+  }
+  
+  if (value<GIGA) {
+  
+    if (value>=(CENT*MEGA)) {
+      pt += rozofs_u64_padded_append(pt,4,rozofs_right_alignment,value/MEGA);
+      pt += rozofs_string_append(pt," M");
+      goto out;    		    
+    }
+    
+    if (value>=(DIX*MEGA)) {    
+      modulo = (value % MEGA) / (CENT*KILO);
+      pt += rozofs_u64_padded_append(pt,2,rozofs_right_alignment,value/MEGA);
+      *pt++ = '.';
+      pt += rozofs_u32_padded_append(pt,1,rozofs_zero,modulo);
+      pt += rozofs_string_append(pt," M");
+      goto out;
+    }  
+    
+    modulo = (value % MEGA) / (DIX*KILO);
+    pt += rozofs_u64_padded_append(pt,1,rozofs_right_alignment,value/MEGA);
+    *pt++ = '.';
+    pt += rozofs_u32_padded_append(pt,2,rozofs_zero,modulo);
+    pt += rozofs_string_append(pt," M");
+    goto out;    
+     
+  } 
+   
+  if (value<TERA) {
+  
+    if (value>=(CENT*GIGA)) {
+      pt += rozofs_u64_padded_append(pt,4,rozofs_right_alignment,value/GIGA);
+      pt += rozofs_string_append(pt," G");
+      goto out;    		    
+    }
+    
+    if (value>=(DIX*GIGA)) {    
+      modulo = (value % GIGA) / (CENT*MEGA);
+      pt += rozofs_u64_padded_append(pt,2,rozofs_right_alignment,value/GIGA);
+      *pt++ = '.';
+      pt += rozofs_u32_padded_append(pt,1,rozofs_zero,modulo);
+      pt += rozofs_string_append(pt," G");
+      goto out;
+    }  
+    
+    modulo = (value % GIGA) / (DIX*MEGA);
+    pt += rozofs_u64_padded_append(pt,1,rozofs_right_alignment,value/GIGA);
+    *pt++ = '.';
+    pt += rozofs_u32_padded_append(pt,2,rozofs_zero,modulo);
+    pt += rozofs_string_append(pt," G");
+    goto out;    
+     
+  }   
+  
+  if (value<PETA) {
+  
+    if (value>=(CENT*TERA)) {
+      pt += rozofs_u64_padded_append(pt,4,rozofs_right_alignment,value/TERA);
+      pt += rozofs_string_append(pt," T");
+      goto out;    		    
+    }
+    
+    if (value>=(DIX*TERA)) {    
+      modulo = (value % TERA) / (CENT*GIGA);
+      pt += rozofs_u64_padded_append(pt,2,rozofs_right_alignment,value/TERA);
+      *pt++ = '.';
+      pt += rozofs_u32_padded_append(pt,1,rozofs_zero,modulo);
+      pt += rozofs_string_append(pt," T");
+      goto out;
+    }  
+    
+    modulo = (value % TERA) / (DIX*GIGA);
+    pt += rozofs_u64_padded_append(pt,1,rozofs_right_alignment,value/TERA);
+    *pt++ = '.';
+    pt += rozofs_u32_padded_append(pt,2,rozofs_zero,modulo);
+    pt += rozofs_string_append(pt," T");
+    goto out;    
+     
+  }  
+    
+  if (value>=(CENT*PETA)) {
+    pt += rozofs_u64_padded_append(pt,4,rozofs_right_alignment,value/PETA);
+    pt += rozofs_string_append(pt," P");
+    goto out; 		    
+  }
+  if (value>=(DIX*PETA)) {    
+    modulo = (value % PETA) / (CENT*TERA);
+    pt += rozofs_u64_padded_append(pt,2,rozofs_right_alignment,value/PETA);
+    *pt++ = '.';
+    pt += rozofs_u32_padded_append(pt,1,rozofs_zero,modulo);
+    pt += rozofs_string_append(pt," P");
+    goto out;
+  }     
 
+  modulo = (value % PETA) / (DIX*TERA);
+  pt += rozofs_u64_padded_append(pt,1,rozofs_right_alignment,value/PETA);
+  *pt++ = '.';
+  pt += rozofs_u32_padded_append(pt,2,rozofs_zero,modulo);
+  pt += rozofs_string_append(pt," P");
+  goto out; 	  
+  
+  
+out:
+  sz = pt-value_string; 
+  while(sz < size) {
+    *pt++ = ' ';
+    sz++;
+  }
+  return size;  
+  
+}
 
 
 /*

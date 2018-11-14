@@ -56,6 +56,10 @@ uint64_t rozofs_max_getattr_duplicate = 0;
     errno = 0;
     uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));
 
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_GETATTR], 1, rozofs_get_ticker_us());
 
     trc_idx = rozofs_trc_req(srv_rozofs_ll_getattr,ino,NULL);
     DEBUG("getattr for inode: %lu\n", (unsigned long int) ino);
@@ -486,6 +490,11 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     int lkup_cpt = 0;
     struct stat o_stbuf;
     uint32_t readahead = 0;
+
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
 
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);    
     /*

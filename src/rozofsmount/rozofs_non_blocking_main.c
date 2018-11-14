@@ -37,7 +37,7 @@ static rozofs_fuse_conf_t *args_p;
 
 
 pthread_t heartbeat_thrdId;
-rozofs_thr_cnts_t *rozofs_thr_counter[2];
+rozofs_thr_cnts_t *rozofs_thr_counter[ROZOFSMOUNT_COUNTER_MAX];
 
 int module_test_id = 0;
 
@@ -298,6 +298,8 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
   int ret,val,what=0;
   rozofs_thr_unit_e unit = rozofs_thr_unit_second;
 
+  rozofs_thr_set_column(6);
+  
   int i=1;
   while (argv[i] != NULL) {
   
@@ -377,11 +379,11 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
        
   switch (what) {
     case 1:
-      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFS_READ_THR_E],1, unit);
+      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     case 2:
-      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFS_WRITE_THR_E],1, unit);
+      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     default:
@@ -390,6 +392,163 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
       return; 
   }       
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());              
+}
+/*_______________________________________________________________________
+* Display throughput counters
+*
+* @param pChar    Where to format the ouput
+*/
+static inline void man_io (char * pChar) {
+  PCHAR_STRING    ("Display rozofsmount IO history.\n");
+  PCHAR_STRING_BLD(" io [what] [col <#col>] [avg] [s|m|h|a] [persec]\n");
+  PCHAR_STRING_BLD("    what = [r|w|l|c|d|a|o]\n");
+  PCHAR_STRING    ("      . r to display read IO count\n");
+  PCHAR_STRING    ("      . w to display write IO count\n");
+  PCHAR_STRING    ("      . l to display lookup count\n");
+  PCHAR_STRING    ("      . c to display creation count\n");
+  PCHAR_STRING    ("      . d to display deletion count\n");
+  PCHAR_STRING    ("      . a to display get attribute count\n");
+  PCHAR_STRING    ("      . o to display other metadate IO count\n"); 
+  PCHAR_STRING    ("    Default is to display all available counters\n");
+  PCHAR_STRING_BLD("    [col <#col>] ");
+  PCHAR_STRING    (" request the display history on ");
+  PCHAR_STRING_BLD("<#col>");
+  PCHAR_STRING    (" columns [1..15].\n");
+  PCHAR_STRING_BLD("    [avg]        ");
+  PCHAR_STRING    (" display an average at the end of each column.\n");    
+  PCHAR_STRING_BLD("    s            ");
+  PCHAR_STRING    (" display last 60 seconds history (default)\n");    
+  PCHAR_STRING_BLD("    m            ");
+  PCHAR_STRING    (" display last 60 minutes history\n");  
+  PCHAR_STRING_BLD("    h            ");
+  PCHAR_STRING    (" display last 60 hours   history\n");  
+  PCHAR_STRING_BLD("    a            ");
+  PCHAR_STRING    (" display hour, minute and second history\n");  
+  PCHAR_STRING_BLD("    persec       ");
+  PCHAR_STRING    (" display throughput per second. Default is to have throughput per display step.\n");  
+}
+/*_______________________________________________________________________
+* Display throughput counters
+*
+* @param pChar    Where to format the ouput
+*/
+void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
+  char * pChar = uma_dbg_get_buffer();
+  int ret,val,what=0;
+  rozofs_thr_unit_e unit = rozofs_thr_unit_second;
+
+  rozofs_thr_set_column(2);
+
+  int i=1;
+  while (argv[i] != NULL) {
+  
+    if (strcasecmp(argv[i],"c")==0) {
+      what |= ((1<<ROZOFSMOUNT_COUNTER_DCR8)+(1<<ROZOFSMOUNT_COUNTER_FCR8));
+      i++;
+      continue;
+    }
+    if (strcasecmp(argv[i],"d")==0) {
+      what |= ((1<<ROZOFSMOUNT_COUNTER_DDEL)+(1<<ROZOFSMOUNT_COUNTER_FDEL));
+      i++;
+      continue;  
+    }
+    if (strcasecmp(argv[i],"l")==0) {
+      what |= (1<<ROZOFSMOUNT_COUNTER_LOOKUP);
+      i++;
+      continue;
+    }        
+    if (strcasecmp(argv[i],"a")==0) {
+      what |= (1<<ROZOFSMOUNT_COUNTER_GETATTR);
+      i++;
+      continue;
+    }  
+    if (strcasecmp(argv[i],"o")==0) {
+      what |= (1<<ROZOFSMOUNT_COUNTER_OTHER);
+      i++;
+      continue;
+    }      
+    if (strcasecmp(argv[i],"r")==0) {
+      what |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR));
+      i++;
+      continue;
+    } 
+    if (strcasecmp(argv[i],"w")==0) {
+      what |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR));
+      i++;
+      continue;
+    }     
+    if (strcasecmp(argv[i],"col")==0) {
+      i++;
+      if (argv[i] == NULL) {
+	pChar += rozofs_string_append(pChar,"\nthroughput col <#col>\n");   
+	uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+	return;      
+      } 
+      ret = sscanf(argv[i],"%d",&val);
+      if (ret != 1) {
+	pChar += rozofs_string_append(pChar,"\nthroughput col <#col>\n");   
+	uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+	return;      
+      } 
+      i++;
+      rozofs_thr_set_column(val);
+      continue;
+    }  
+    
+    if (strcasecmp(argv[i],"avg")==0) {
+      i++;
+      rozofs_thr_set_average();
+      continue;
+    }  
+    
+    
+    if (strcasecmp(argv[i],"persec")==0) {      
+      i++;
+      rozofs_thr_display_throughput_per_sec();
+      continue;
+    }
+
+    if (strcasecmp(argv[i],"s")==0) {       
+      i++;
+      unit = rozofs_thr_unit_second;
+      continue;
+    }  
+
+    if (strcasecmp(argv[i],"m")==0) {       
+      i++;
+      unit = rozofs_thr_unit_minute;
+      continue;
+    }      
+    
+    if (strcasecmp(argv[i],"h")==0) {       
+      i++;
+      unit = rozofs_thr_unit_hour;
+      continue;
+    }  
+
+    if (strcasecmp(argv[i],"a")==0) {       
+      i++;
+      unit = rozofs_thr_unit_all;
+      continue;
+    }  
+        
+    pChar += rozofs_string_append(pChar,"\nunexpected parameter ");
+    pChar += rozofs_string_append(pChar,argv[i]); 
+    pChar += rozofs_eol(pChar); 
+    man_io(pChar);   
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+    return;    
+  } 
+       
+  if (what==0) {
+    for (i=0; i< ROZOFSMOUNT_COUNTER_MAX; i++) {
+      what |= (1<<i);
+    }  
+  }     
+  
+  pChar = rozofs_thr_display_bitmask(pChar, rozofs_thr_counter, what, unit);
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+             
 }
 /*_______________________________________________________________________
 * Initialize the thoughput measurement service
@@ -401,14 +560,24 @@ void rozofs_throughput_counter_init(void) {
   /*
   ** allocate memory for bandwidth computation
   */
-  rozofs_thr_counter[ROZOFS_READ_THR_E]= rozofs_thr_cnts_allocate(NULL, "Read");
-  rozofs_thr_counter[ROZOFS_WRITE_THR_E]= rozofs_thr_cnts_allocate(NULL, "Write");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR]= rozofs_thr_cnts_allocate(NULL, "Read B");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR]= rozofs_thr_cnts_allocate(NULL, "Write B");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO]= rozofs_thr_cnts_allocate(NULL, "Rd I/O");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_IO]= rozofs_thr_cnts_allocate(NULL, "Wr I/O");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FCR8]= rozofs_thr_cnts_allocate(NULL, "F.CR8");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FDEL]= rozofs_thr_cnts_allocate(NULL, "F.DEL");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DCR8]= rozofs_thr_cnts_allocate(NULL, "D.CR8");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DDEL]= rozofs_thr_cnts_allocate(NULL, "D.DEL");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_LOOKUP]= rozofs_thr_cnts_allocate(NULL, "LOOKUP");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_GETATTR]= rozofs_thr_cnts_allocate(NULL, "GETATTR");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER]= rozofs_thr_cnts_allocate(NULL, "OTHER");
 
   
   /*
   ** Register the diagnostic function
   */
   uma_dbg_addTopicAndMan("throughput", display_throughput,man_throughput,0); 
+  uma_dbg_addTopicAndMan("io", display_io,man_io,0); 
 
 }
 

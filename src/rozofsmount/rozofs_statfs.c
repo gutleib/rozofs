@@ -49,6 +49,10 @@ void rozofs_ll_statfs_nb(fuse_req_t req, fuse_ino_t ino) {
     int trc_idx = rozofs_trc_req(srv_rozofs_ll_statfs,ino,NULL);
     uint64_t attr_us = common_config.statfs_period;
     struct statvfs st={0};
+    /*
+    ** Update the IO statistics
+    */
+    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
 
    attr_us = attr_us*0x100000;
     /*
