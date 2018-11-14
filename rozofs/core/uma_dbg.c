@@ -504,8 +504,11 @@ void uma_dbg_system_ps_man(char * pChar) {
   pChar += rozofs_string_append           (pChar,"Display the list of threads of this process.\n");
   pChar += rozofs_string_append           (pChar,"For each thread is displayed\n");
   pChar += rozofs_string_append           (pChar,"- its name when one has been given,\n");
+  pChar += rozofs_string_append           (pChar,"- its process id,\n");
   pChar += rozofs_string_append           (pChar,"- its core number,\n");
   pChar += rozofs_string_append           (pChar,"- its \% of CPU usage,\n");
+  pChar += rozofs_string_append           (pChar,"- its state,\n");
+  pChar += rozofs_string_append           (pChar,"- its priority.,\n");
   pChar += rozofs_string_append           (pChar,"- its total CPU consumption.\n");
 
 }
@@ -520,7 +523,7 @@ void uma_dbg_system_ps(char * argv[], uint32_t tcpRef, void *bufRef) {
   p = uma_dbg_get_buffer();
   p += rozofs_string_append(p,"ps -p ");
   p += rozofs_u32_append(p, pid);
-  p += rozofs_string_append(p," -m -olwp:20,psr,pcpu,cputime,pmem,vsz,args");
+  p += rozofs_string_append(p," -m -olwp:20,psr,pcpu,state,priority,cputime,pmem,vsz,args");//priority, 
 
   len = uma_dbg_run_system_cmd(uma_dbg_get_buffer(), uma_dbg_get_buffer(), uma_dbg_get_buffer_len());
   
@@ -567,12 +570,14 @@ out:
 *  Display the system name if any has been set thanks to uma_dbg_set_name()
 */
 void uma_dbg_show_uptime_man(char * pChar) {
-  pChar += rozofs_string_append           (pChar,"Display the elapsed time since this module start up.\n");
+  pChar += rozofs_string_append           (pChar,"uptime        : displays the elapsed time since this module start up.\n");
+  pChar += rozofs_string_append           (pChar,"uptime date   : displays the start up date.\n");
 }
 void uma_dbg_show_uptime(char * argv[], uint32_t tcpRef, void *bufRef) {
     time_t elapse;
     int days, hours, mins, secs;
-    char   * pChar;
+    char   * pChar = uma_dbg_get_buffer();
+
 
     // Compute uptime for storaged process
     elapse = (int) (time(0) - uptime);
@@ -581,7 +586,6 @@ void uma_dbg_show_uptime(char * argv[], uint32_t tcpRef, void *bufRef) {
     mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
     secs = (int) (elapse % 60);
     
-    pChar = uma_dbg_get_buffer();
     pChar += rozofs_string_append(pChar,"uptime = ");
     pChar += rozofs_u32_append(pChar,days);
     pChar += rozofs_string_append(pChar," days, ");
@@ -591,7 +595,15 @@ void uma_dbg_show_uptime(char * argv[], uint32_t tcpRef, void *bufRef) {
     *pChar++ = ':';
     pChar += rozofs_u32_padded_append(pChar,2,rozofs_zero,secs);
     pChar += rozofs_eol(pChar);
-        
+
+    if ((argv[1] != NULL) && (strcmp(argv[1], "date")==0)) {
+      pChar += rozofs_string_append(pChar,"date   = ");
+      pChar += rozofs_time2string(pChar,uptime);
+      pChar += rozofs_eol(pChar);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    } 
+            
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
 /*__________________________________________________________________________

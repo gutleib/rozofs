@@ -114,3 +114,18 @@ mp_size_1(mp_size_arg_t *argp, CLIENT *clnt)
 	}
 	return (&clnt_res);
 }
+
+mp_locate_ret_t *
+mp_locate_1(mp_locate_arg_t *argp, CLIENT *clnt)
+{
+	static mp_locate_ret_t clnt_res;
+
+	memset((char *)&clnt_res, 0, sizeof(clnt_res));
+	if (clnt_call (clnt, MP_LOCATE,
+		(xdrproc_t) xdr_mp_locate_arg_t, (caddr_t) argp,
+		(xdrproc_t) xdr_mp_locate_ret_t, (caddr_t) &clnt_res,
+		TIMEOUT) != RPC_SUCCESS) {
+		return (NULL);
+	}
+	return (&clnt_res);
+}

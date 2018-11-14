@@ -161,6 +161,9 @@ INT     export deletion_delay 	30
 BOOL    storage spare_restore_enable                True	
 // Spare file restoring : how often the process runs  
 INT     storage spare_restore_loop_delay            240  
+// Default rebuild reloop value 
+// Mainly used to help simulation
+INT     storage default_rebuild_reloop            4  
 // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s
 // 0 means no limit
 INT     storage spare_restore_read_throughput       2

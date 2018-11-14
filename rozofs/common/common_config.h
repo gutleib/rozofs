@@ -248,6 +248,9 @@ typedef struct _common_config_t {
   int32_t     spare_restore_enable;
   // Spare file restoring : how often the process runs  
   int32_t     spare_restore_loop_delay;
+  // Default rebuild reloop value 
+  // Mainly used to help simulation
+  int32_t     default_rebuild_reloop;
   // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s
   // 0 means no limit
   int32_t     spare_restore_read_throughput;

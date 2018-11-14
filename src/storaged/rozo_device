@@ -210,7 +210,7 @@ class display_line:
 	  start = 0
 	  end = l
           
-      if eff != None: line+=eff+bold+reverse
+      if eff != None: line+=eff
       for i in range(start): line+=" "
       line+=val
       for i in range(end): line+=" " 
@@ -294,6 +294,7 @@ def rozo_list_all_block_devices(blockDev=None) :
   global partitioned
   
   tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
+  previous_uuid="AAA"
   
   # Create a display array
   d = adaptative_tbl(2,"Block devices") 
@@ -303,16 +304,17 @@ def rozo_list_all_block_devices(blockDev=None) :
   d.set_column(3,"FS")      
   d.set_column(4,"Mount")
   d.set_column(5,"Label")
-  d.set_column(6,"Intf")
-  d.set_column(7,"Model[Vendor]")
-  d.set_column(8,"HCTL")
-  d.set_column(9,"Sched.")
-  d.set_column(10,"Rota")
-  d.set_column(11,"R.A")
+  d.set_column(6,"UUID")
+  d.set_column(7,"If")
+  d.set_column(8,"Model[Vendor]")
+  d.set_column(9,"HCTL")
+  d.set_column(10,"Sch")
+  d.set_column(11,"Rota")
+  d.set_column(12,"R.A")
   d.end_separator()   
   
   # List every block device and find out a specific one
-  string="lsblk -Pndo NAME,SIZE,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA,LABEL -x MOUNTPOINT"
+  string="lsblk -Pndo NAME,SIZE,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA,LABEL,UUID -x LABEL"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -340,19 +342,26 @@ def rozo_list_all_block_devices(blockDev=None) :
     else:           rota = "No"
     ra        = line.split('"')[21].strip()
     label     = line.split('"')[23].strip()
+    uuid      = line.split('"')[25].strip()
+    if uuid == previous_uuid: 
+      color = yellow 
+    else:
+      color = None
+    previous_uuid = uuid        
          
     d.new_line()
-    d.set_column(1,device)  
-    d.set_column(2,size)   
-    d.set_column(3,fs)
-    d.set_column(4,mountpoint)   
-    d.set_column(5,label)   
-    d.set_column(6,interface)   
-    d.set_column(7,"%s[%s]"%(model,vendor))   
-    d.set_column(8,hctl)   
-    d.set_column(9,scheduler)   
-    d.set_column(10,rota)   
-    d.set_column(11,ra)   
+    d.set_column(1,device,color)  
+    d.set_column(2,size,color)   
+    d.set_column(3,fs,color)
+    d.set_column(4,mountpoint,color)   
+    d.set_column(5,label,color)   
+    d.set_column(6,uuid,color)   
+    d.set_column(7,interface,color)   
+    d.set_column(8,"%s[%s]"%(model,vendor),color)   
+    d.set_column(9,hctl,color)   
+    d.set_column(10,scheduler,color)   
+    d.set_column(11,rota,color)   
+    d.set_column(12,ra,color)   
     
   d.display() 
   os.system("rmdir %s 2>/dev/null"%(tmp))

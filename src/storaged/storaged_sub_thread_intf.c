@@ -98,6 +98,7 @@ int storaged_sub_thread_create(char * sockName, char * hostname,int nb_threads) 
 #define display_line_div_and_sum(title,val1,val2) \
   display_line_div(title,val1,val2);\
   display_div(sum1,sum2)
+  
 static char * storaged_sub_thread_debug_help(char * pChar) {
   pChar += sprintf(pChar,"usage:\n");
   pChar += sprintf(pChar,"subThread reset                : reset statistics\n");
@@ -286,6 +287,9 @@ void storaged_sub_thread_read_response(storaged_sub_thread_msg_t *msg)
        break; 
     case MP_SIZE:
        STOP_PROFILING(size);
+       break; 
+    case MP_LOCATE:
+       STOP_PROFILING(locate);
        break; 
     default:
       severe("Unexpected opcode %d", opcode);

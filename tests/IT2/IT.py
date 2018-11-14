@@ -61,11 +61,11 @@ def console(string):
 
   # Add carriage return to the message
   string=string+"\n"
-
-  if options.debug == False:    
-    # Reset current line
-    clearline()  
-    string="\r"+string
+  log(string)
+   
+  # Reset current line
+  clearline()  
+  string="\r"+string
     
   # write the message in the buffer
   sys.stdout.write(string)
@@ -76,7 +76,6 @@ def console(string):
 def report(string): 
 #___________________________________________________
   console(string)
-  log(string)  
 #___________________________________________________
 # Add temporary text to the current line 
 def addline(string):
@@ -121,6 +120,7 @@ def clearline():
 def backline(string):
 #___________________________________________________
   clearline()
+  log(string)
   addline("\r%s"%(string))   
     
     
@@ -240,7 +240,7 @@ def check_storcli_crc(expect):
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c profiler"%(instance,instance,instance,instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1-4 -c profiler"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -295,6 +295,7 @@ def export_all_sid_available (total):
     if "UP" in line:
       match=match+1
       
+  log("export:1 %s sid up"%(match))    
   if match != total: return False
   return True
 #___________________________________________________
@@ -344,10 +345,11 @@ def storcli_all_sid_available (total):
     for line in cmd.stdout:
       words=line.split('|')
       if len(words) >= 11:
-        if 'YES' in words[6] and 'UP' in words[4]: match=match+1               
+        if 'YES' in words[6] and 'UP' in words[4]: match=match+1         
+    log("mount:%s:%s : %s sid up"%(instance, storcli, match))       
     if match != total: return False
-    
   time.sleep(1)  
+  log("mount:%s all sid up"%(instance))        
   return True
 #___________________________________________________
 def wait_until_storcli_all_sid_available (total,retries):
@@ -448,6 +450,7 @@ def wait_until_all_sid_up (retries=DEFAULT_RETRIES) :
   time.sleep(3)
   wait_until_storcli_all_sid_available(STORCLI_SID_NB,retries)
   wait_until_export_all_sid_available(EXPORT_SID_NB,retries)
+  time.sleep(2)  
   return True  
   
     
@@ -909,6 +912,8 @@ def reread():
 def crc32():
 #___________________________________________________
 
+  wait_until_all_sid_up()
+
   backline("Create file %s/crc32"%(exepath))
 
 
@@ -948,57 +953,73 @@ def crc32():
   if bins == None:
     report("Fail to find bins file name in /tmp/crc32loc")
     return -1    
-    
-  backline("Truncate mapper/header file %s"%(mapper))
-    
-  # Truncate mapper file  
-  with open(mapper,"w") as f: f.truncate(0)
-  # Check file has been truncated
-  statinfo = os.stat(mapper)
-  if statinfo.st_size != 0:
-    report("%s has not been truncated"%(mapper))
-    return -1
 
-  # Reset storages
-  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-  wait_until_all_sid_up()
-      
-  # Reread the file
-  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
-           
-  # Check mapper file has been repaired
-  statinfo = os.stat(mapper)
-  if statinfo.st_size == 0:
-    report("%s has not been repaired"%(mapper))
-    return -1             
-  backline("mapper/header has been repaired ")
+  # Find the cid
+  cid = 0
+  sid = 0
+  with open("/tmp/crc32loc","r") as f: 
+    for line in f.readlines():
+      if "CLUSTER" in line:
+        cid = line.split()[2]
+        continue;
+      if "STORAGE" in line:
+        sid =  int(line.split()[2].split('-')[0])   
+        break;
+ 
+  hid = get_hid(cid,sid)
+  device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
+  
+  if int(mapper_redundancy) > 1: 
+      backline("Truncate mapper/header file %s"%(mapper))
 
-  # Corrupt mapper file 
-  f = open(mapper, "w+")     
-  f.truncate(0)        
-  size = statinfo.st_size     
-  while size != 0:
-    f.write('a')
-    size=size-1
-  f.close()
+      # Truncate mapper file  
+      with open(mapper,"w") as f: f.truncate(0)
+      # Check file has been truncated
+      statinfo = os.stat(mapper)
+      if statinfo.st_size != 0:
+        report("%s has not been truncated"%(mapper))
+        return -1
 
-  backline("Corrupt mapper/header file %s"%(mapper))
-      
-  # Reset storage
-  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-  wait_until_all_sid_up()
-     
-  # Reread the file
-  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
-  #if filecmp.cmp(crcfile,"./ref") == False: report("%s and %s differ"%(crcfile,"./ref"))
+      # Reset storages
+      os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
+      wait_until_all_sid_up()
 
-  # Check file has been re written
-  f = open(mapper, "rb")      
-  char = f.read(1)     
-  if char == 'a':
-    report("%s has not been rewritten"%(mapper))
-    return -1      
-  backline("mapper/header has been repaired ")
+      # Reread the file
+      os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+
+      # Check mapper file has been repaired
+      statinfo = os.stat(mapper)
+      if statinfo.st_size == 0:
+        report("%s has not been repaired"%(mapper))
+        return -1             
+      backline("mapper/header has been repaired ")
+
+      # Corrupt mapper file 
+      f = open(mapper, "w+")     
+      f.truncate(0)        
+      size = statinfo.st_size     
+      while size != 0:
+        f.write('a')
+        size=size-1
+      f.close()
+
+      backline("Corrupt mapper/header file %s"%(mapper))
+
+      # Reset storage
+      os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
+      wait_until_all_sid_up()
+
+      # Reread the file
+      os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+      #if filecmp.cmp(crcfile,"./ref") == False: report("%s and %s differ"%(crcfile,"./ref"))
+
+      # Check file has been re written
+      f = open(mapper, "rb")      
+      char = f.read(1)     
+      if char == 'a':
+        report("%s has not been rewritten"%(mapper))
+        return -1      
+      backline("mapper/header has been repaired ")
 
   # Corrupt the bins file
   f = open(bins, 'r+b')     
@@ -1030,16 +1051,28 @@ def crc32():
  
   # Clear error counter
   reset_storcli_counter()
-  
+    
   # Reread the file
-  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
- 
-  # Checl for CRC32 errors
+  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
+    report("1 !!! %s and %s differ"%(crcfile,"./ref"))
+    return 1 
+  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
+    report("2 !!! %s and %s differ"%(crcfile,"./ref"))
+    return 1
+  time.sleep(1)     
+  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
+    report("3 !!! %s and %s differ"%(crcfile,"./ref"))
+    return 1   
+  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
+    report("4 !!! %s and %s differ"%(crcfile,"./ref"))
+    return 1 
+  
   if check_storcli_crc(True) == True:
     backline("Repair procedure has been run ")
   else:     
     report("No CRC errors after file reread")
     return 1 
+      
 
   # Reset storages
   os.system("./setup.py storage all reset")
@@ -1049,7 +1082,9 @@ def crc32():
   reset_storcli_counter()
   
   # Reread the file
-  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
+    report("5 !!! %s and %s differ"%(crcfile,"./ref"))
+    return 1  
  
   # Checl for CRC32 errors
   if check_storcli_crc(False) == True:
@@ -1057,10 +1092,6 @@ def crc32():
     return 1     
   backline("Bins file %s is repaired"%(bins))
   
-  if filecmp.cmp(crcfile,"./ref") == False: 
-    report("%s and %s differ"%(crcfile,"./ref"))
-    return 1
-    
   return 0 
  
 #___________________________________________________
@@ -1514,6 +1545,78 @@ def read_size(filename):
 	    return int(-1);  
 	  
   return int(-1) 
+#___________________________________________________  
+def mmap(): 
+
+  os.system("mkdir -p %s/mmap"%(exepath));
+
+  #
+  # Write files
+  #
+  backline("Write files") 
+  size = int(0)
+  for i in range(64):
+    size += int(111)
+    filename="%s/mmap/file.%s"%(exepath,i)
+    string="%s/IT2/test_mmap.exe %s write %s"%(os.getcwd(),filename,size)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cmd.wait()
+    if cmd.returncode != 0:
+      report("Error writing %s %s"%(filename,cmd.returncode))
+      return 1
+
+  #
+  # Read whole files
+  #
+  backline("Read whole files") 
+  size = int(0)      
+  for i in range(64):
+    size += int(111)
+    filename="%s/mmap/file.%s"%(exepath,i)
+    string="%s/IT2/test_mmap.exe %s read %s"%(os.getcwd(),filename,size)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cmd.wait()
+    if cmd.returncode != 0:
+      report("Error reading %s %s"%(filename,cmd.returncode))
+      return 1
+
+  #
+  # Read less
+  #
+  backline("Read part of files")   
+  size = int(0)      
+  for i in range(64):
+    size += int(32)
+    filename="%s/mmap/file.%s"%(exepath,i)
+    string="%s/IT2/test_mmap.exe %s read %s"%(os.getcwd(),filename,size)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cmd.wait()
+    if cmd.returncode != 0:
+      report("Error reading %s %s"%(filename,cmd.returncode))
+      return 1
+
+  #
+  # Read too much
+  #            
+  backline("Read too much")   
+  size = int(0)      
+  for i in range(64):
+    size += int(236)
+    filename="%s/mmap/file.%s"%(exepath,i)    
+    string="%s/IT2/test_mmap.exe %s read %s"%(os.getcwd(),filename,size)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cmd.wait()
+    if cmd.returncode == 0:
+      report("No error re-reading %s %s"%(filename,cmd.returncode))    
+      return 1
+      
+  return 0
+          
+#__________________________________________________
   
 #___________________________________________________  
 def resize(): 
@@ -1727,152 +1830,206 @@ def rebuild_1dev() :
     ret = gruyere_reread()          
     return ret
   return 0
+
 #___________________________________________________
-def relocate_1dev() :
+def get_device_state(hid, cid, sid, dev) :
+
+  # Check The status of the device
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  curcid=0
+  cursid=0
+  for line in cmd.stdout:
+    # Read cid sid
+    if "cid =" in line and "sid =" in line:
+      words=line.split()
+      curcid=int(words[2])
+      cursid=int(words[5])
+      continue
+
+    if int(curcid) != int(cid) or int(cursid) != int(sid): continue 
+
+    words=line.split('|')
+    try:
+      if int(words[0]) != int(dev): continue
+      status=words[1].split()[0]
+      return status
+    except:
+      pass    
+  return "???"
+#___________________________________________________
+def loop_on_waiting_device_status(hid, cid, sid, dev, expected_status) :
+
+  #
+  # Loop waiting for device to become 
+  #
+  init=int(150)
+  count = init	
+  status    = "??"
+  newstatus = get_device_state(hid,cid,sid,dev)
+
+  log("%s/%s/%s wait %s loops from %s to %s"%(cid, sid, dev, count, newstatus, expected_status))  
+
+  while count > int(0):
+
+    newstatus = get_device_state(hid,cid,sid,dev)
+    
+    if expected_status == newstatus: 
+      log("%s/%s/%s count %3d/%d -> %s SUCCESS"%(cid, sid, dev, count,init,newstatus))
+      return 0       
+
+    if newstatus != status: log("%s/%s/%s count %3d/%d -> %s"%(cid, sid, dev, count,init,newstatus))
+    status = newstatus 
+
+    # Sleep for 10 seconds
+    count=count-1
+    time.sleep(3)
+
+  report("%s/%s/%s count %3d/%d -> %s FAILED !!!"%(cid, sid, dev, count,init,expected_status))
+  return 1
+    
+#___________________________________________________
+def selfhealing_spare(hid, cid, sid, dev) :
+
+  # Check wether automount is configured
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode spareOnly"%(hid,cid)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  log("Wait rebuild on spare %s:%s:%s"%(cid,sid,dev))	          
+
+  #
+  # Loop waiting for device to become 
+  #
+  ret = loop_on_waiting_device_status(hid,cid,sid,dev,"IS")
+  if ret != 0: return ret
+  return 0
+#___________________________________________________
+def selfhealing_resecure(hid, cid, sid, dev) :
+  log("Wait resecure %s:%s:%s"%(cid,sid,dev))	          
+  
+  # Check wether automount is configured
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode resecure"%(hid,cid)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  # Delete a device from a SID
+  ret = os.system("./setup.py sid %s %s device-delete %s"%(cid,sid,dev))
+
+  #
+  # Loop waiting for device to become 
+  #
+  ret = loop_on_waiting_device_status(hid,cid,sid,dev,"OOS")
+  if ret != 0: return ret
+  return 0
+  
+#___________________________________________________
+def get_hid(cid,sid) :
+  for s in sids:
+    hid=s.split('-')[0]
+    
+    zcid=s.split('-')[1]
+    if int(zcid) != int(cid): continue
+    
+    zsid=s.split('-')[2] 
+    if int(zsid) != int(sid): continue
+   
+    return hid
+  return -1  
+     
+#___________________________________________________
+def selfhealing() :
 # test rebuilding device per device
 #___________________________________________________
 
-  if rebuildCheck == True: 
-    gruyere()        
+  clean_rebuild_dir()
 
-  ret=1 
-  modulo=1
-  selfHealing="No"
-  for s in sids:
-    
-    if modulo == 3:
-      modulo=1
-    else:
-      modulo = modulo + 1
-      continue
-        
-    hid=s.split('-')[0]
-    cid=s.split('-')[1]
-    sid=s.split('-')[2]
+  # Create reference file
+  dir="%s/selHealing"%(mnt)
+  os.system("rm -rf %s; mkdir -p %s"%(dir,dir))
+  for i in range(60):
+    zefile="%s/ref%s"%(dir,i)
+    os.system("cp ./ref %s"%(zefile))  
 
+  # Get file distribution
+  reffile="%s/ref1"%(dir)
+  string = "./setup.py cou %s"%(reffile)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
 
-    # Check wether automount is configured
-    string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc | grep 'device_automount ' "%(hid,cid)
-    parsed = shlex.split(string)
-    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    automount = False
-    for line in cmd.stdout:
-      # No automount 
-      if "False" in line:
-  	automount = False
-	break
-      if "True" in line:
-        automount = True
-        break
-        
-    # Check wether self healing is configured
-    string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc | grep device_selfhealing_mode"%(hid,cid)
-    parsed = shlex.split(string)
-    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    delay       = 1
-    selfHealing ="spareOnly"
-    for line in cmd.stdout:
-      if "spareOnly" in line:
-  	selfHealing="spareOnly"
+    if "CLUSTER" in line:
+        cid=int(line.split()[2])
 	continue
-      if "relocate" in line:
-  	selfHealing="relocate"  
-	continue          
-        
-    clean_rebuild_dir()
-    
-    
-    # Create a spare device in automount mode
-    if automount == True:
-      log("automount %s and selHealing %s : Wait rebuild on spare"%(automount,selfHealing))	          
-      os.system("./setup.py spare")
-      waitRebuild = True
-      	      
-    else :
 
-      # No automount and spare only          
-      if selfHealing == "spareOnly":
-        log("automount %s and selHealing %s : call relocate"%(automount,selfHealing))	          
-        ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -d 0 -R -o reloc_cid%s_sid%s_dev0 "%(cid,sid,cid,sid))
-        if ret != 0: return ret
-        waitRebuild = False
-        status="IS"
-        
-      # No automount but relocate enabled	      
-      if selfHealing == "relocate":
-        log("automount %s and selHealing %s : Wait relocate"%(automount,selfHealing))	          
-        waitRebuild = True
-	
-    # Wait for selhealing	
-    if waitRebuild == True:
-    
-      ret = os.system("./setup.py sid %s %s device-delete 0"%(cid,sid))
-      if ret != 0:
-	return ret
-	      	
-      count=int(50)	
-      status="INIT"
+    if "STORAGE" in line:
+        storages=line.split()[2].split('-')   
+        sid0 = int(storages[0])             
+        sid1 = int(storages[1])             
+        sid2 = int(storages[2])             
+        sid3 = int(storages[3])             
+	continue	
+          	  	
+    if "bins_0" not in line: continue
+
+    if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid0) in line:
+      dev0 = line.split()[3].split('/')[5]
+      continue
+          	  	  
+    if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid1) in line:
+      dev1 = line.split()[3].split('/')[5]
+      continue
+          	  	  
+    if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid2) in line:
+      dev2 = line.split()[3].split('/')[5]
+      continue
       
-      while count != int(0):
+    if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid3) in line:
+      dev3 = line.split()[3].split('/')[5]
+      break
 
-	if "OOS" == status:
-	  log("count %d device is %s"%(count,status))
-	  break    
-	      
-	if "IS" == status:
-	  log("count %d device is %s"%(count,status))
-	  break        
+  hid0 = get_hid(cid,sid0)
+  ret = selfhealing_resecure(hid0,cid,sid0,dev0)
+  if ret != 0: return 1
+     
+  hid1 = get_hid(cid,sid1)
+  ret = selfhealing_resecure(hid1,cid,sid1,dev1)
+  if ret != 0: return 1
+     
+  hid2 = get_hid(cid,sid2)
+  ret = selfhealing_resecure(hid2,cid,sid2,dev2)
+  if ret != 0: return 1
+     
+  hid3 = get_hid(cid,sid3)
+  ret = selfhealing_resecure(hid3,cid,sid3,dev3)
+  if ret != 0: return 1
+     
+  if filecmp.cmp(reffile,"./ref") == False: 
+    report("%s and %s differ"%(reffile,"./ref"))
+    return 1 
 
-        count=count-1
-        time.sleep(10)
-	
-        # Check The status of the device
-        string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
-	parsed = shlex.split(string)
-	cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-	curcid=0
-	cursid=0
-	for line in cmd.stdout:
-	
-          # Read cid sid
-	  if "cid =" in line and "sid =" in line:
-	    words=line.split()
-	    curcid=int(words[2])
-	    cursid=int(words[5])
-	    continue
-	      
-          if int(curcid) != int(cid) or int(cursid) != int(sid): continue 
-          words=line.split('|')
-	  try:
-	    if int(words[0]) != int(0):
-	      continue
-	    status=words[1].split()[0]
-	    break
-	  except:
-	    pass    
-	    
-      if count == int(0):
-        report("Relocate failed host %s cluster %s sid %s device 0 status %s"%(hid,cid,sid,status))
-	return 1
-	
-    if rebuildCheck == True:		      
-      ret = gruyere_one_reread()  
-      if ret != 0:
-	return ret 
-      
-    if status == "OOS":
-      # Re create the device
-      ret = os.system("./setup.py sid %s %s device-create 0"%(cid,sid))
-      # re initialize it
-      ret = os.system("./setup.py sid %s %s rebuild -fg -d 0 -K"%(cid,sid))
-      time.sleep(11)
-      ret = os.system("./setup.py sid %s %s rebuild -fg -d 0"%(cid,sid))
-            
-  if rebuildCheck == True:      
-    ret = gruyere_reread()          
-    return ret         
+  # Create 2 spare device
+  os.system("./setup.py spare; ./setup.py spare; ./setup.py spare; ./setup.py spare")
+
+  ret = selfhealing_spare(hid0,cid,sid0,dev0)
+  if ret != 0: return 1
+  
+  ret = selfhealing_spare(hid1,cid,sid1,dev1)
+  if ret != 0: return 1
+
+  ret = selfhealing_spare(hid2,cid,sid2,dev2)
+  if ret != 0: return 1
+
+  ret = selfhealing_spare(hid3,cid,sid3,dev3)
+  if ret != 0: return 1
+
+  for i in range(60):
+    zefile="%s/ref%s"%(dir,i)
+    if filecmp.cmp(reffile,"./ref") == False: 
+      report("%s and %s differ"%(reffile,"./ref"))
+      return 1            
   return 0
-
 #___________________________________________________
 def rebuild_all_dev() :
 # test re-building all devices of a sid
@@ -2106,6 +2263,7 @@ def do_run_list(list):
 # run a list of test
 #___________________________________________________
   global tst_file
+  global stopOnFailure
   
   tst_num=int(0)
   failed=int(0)
@@ -2424,12 +2582,12 @@ parser.add_option("-d","--debug", action="store_true",dest="debug", default=Fals
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
 # Basic test list
-TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread']
-TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread']
+TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread','mmap']
+TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread','mmap']
 # Rebuild test list
 # In case of strong rebuild checks, gruyere is processed before eand gruyere_reread aftter each test
-TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
-TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts']
+TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','selfhealing','gruyere_reread']
+TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','selfhealing']
 
 # File locking
 TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race']

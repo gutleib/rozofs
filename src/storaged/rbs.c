@@ -99,7 +99,6 @@ int rbs_stor_cnt_initialize(rb_stor_t * rb_stor, int cid) {
     int status = -1;
     int i = 0;
     mp_io_address_t io_address[STORAGE_NODE_PORTS_MAX];
-    int single_storio;
     DEBUG_FUNCTION;
 
     // Copy hostname for this storage
@@ -118,7 +117,7 @@ int rbs_stor_cnt_initialize(rb_stor_t * rb_stor, int cid) {
         goto out;
     } else {
         // Send request to get TCP ports for this storage
-        if (mclient_ports(&rb_stor->mclient, &single_storio, io_address) != 0) {
+        if (mclient_ports(&rb_stor->mclient, io_address) != 0) {
             severe("Warning: failed to get ports for storage (host: %s)."
                     , rb_stor->host);
             goto out;
@@ -143,13 +142,8 @@ int rbs_stor_cnt_initialize(rb_stor_t * rb_stor, int cid) {
 	        rozofs_ipv4_append(rb_stor->sclients[i].host, ip);
             }
 
-            rb_stor->sclients[i].ipv4 = ip;
-	    if (single_storio) {
-              rb_stor->sclients[i].port = io_address[i].port;
-	    }
-	    else {
-              rb_stor->sclients[i].port = io_address[i].port+cid;	    
-	    } 
+            rb_stor->sclients[i].ipv4 = ip;	    
+            rb_stor->sclients[i].port = io_address[i].port+cid;	     
             rb_stor->sclients[i].status = 0;
             rb_stor->sclients[i].rpcclt.sock = -1;
 

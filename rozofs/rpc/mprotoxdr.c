@@ -150,6 +150,91 @@ xdr_mp_size_arg_t (XDR *xdrs, mp_size_arg_t *objp)
 }
 
 bool_t
+xdr_mp_path_t (XDR *xdrs, mp_path_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_string (xdrs, objp, ROZOFS_PATH_MAX))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_mp_file_t (XDR *xdrs, mp_file_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_uint64_t (xdrs, &objp->sizeBytes))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->modDate))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->sectors))
+		 return FALSE;
+	 if (!xdr_mp_path_t (xdrs, &objp->file_name))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_mp_files_t (XDR *xdrs, mp_files_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_array (xdrs, (char **)&objp->mp_files_t_val, (u_int *) &objp->mp_files_t_len, 128,
+		sizeof (mp_file_t), (xdrproc_t) xdr_mp_file_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_mp_locate_rsp_t (XDR *xdrs, mp_locate_rsp_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_mp_files_t (xdrs, &objp->hdrs))
+		 return FALSE;
+	 if (!xdr_mp_files_t (xdrs, &objp->chunks))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_mp_locate_ret_t (XDR *xdrs, mp_locate_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_mp_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case MP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->mp_locate_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		 if (!xdr_mp_locate_rsp_t (xdrs, &objp->mp_locate_ret_t_u.rsp))
+			 return FALSE;
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_mp_locate_arg_t (XDR *xdrs, mp_locate_arg_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_uint16_t (xdrs, &objp->cid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->spare))
+		 return FALSE;
+	 if (!xdr_mp_uuid_t (xdrs, objp->fid))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_mp_stat_ret_t (XDR *xdrs, mp_stat_ret_t *objp)
 {
 	//register int32_t *buf;

@@ -233,6 +233,16 @@ set_target_properties(rozofs_inode PROPERTIES COMPILE_FLAGS "-fPIC -DLIBROZO_FLA
 #)
 #target_link_libraries(rzsave rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
+add_executable(rozo_locate_fid
+    rozo_locate_fid.c  
+    econfig.c      
+    econfig.h
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h 
+)
+target_link_libraries(rozo_locate_fid rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+
+
 
 #________________________________________________________
 # Translate a FID or a list of FIDs from a file into a 
