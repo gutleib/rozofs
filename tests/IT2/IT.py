@@ -1746,6 +1746,153 @@ def cores():
   os.system("./setup.py core remove all")  
 
   return 0
+
+
+#___________________________________________________
+def del_check_file(dir1,dir2):
+#  print(" del_check_file(%s,%s)"%(dir1,dir2))
+  nb = int(0)
+  for f in os.listdir(dir1):
+    if '@' in f:
+      f2=f.split('@')[3]
+    else:
+      f2=f
+    f1="%s/%s"%(dir1,f)
+    f2="%s/%s"%(dir2,f2)
+#    print("%s %s"%(f1,f2))
+
+    if filecmp.cmp(f1,f2) == False: 
+      report("%s and %s differ"%(f1,f2))
+      return 0
+    nb = nb + int(1)  
+  return nb
+
+#___________________________________________________
+def trash_allocate(trash_dir, nb):
+# Create every thing in trash test directory
+#___________________________________________________ 
+  backline("Trash create test directory %s"%(trash_dir))    
+  os.system("mkdir -p %s"%(trash_dir))
+  os.system("rozo_trash recursive %s > /dev/null"%(trash_dir))
+  os.system("rozo_trash root enable %s > /dev/null"%(trash_dir))
+  os.system("mkdir -p %s/ref"%(trash_dir))
+  
+  for idx in range(int(nb)):
+    os.system("cp ref %s/ref/f%s"%(trash_dir,idx))
+  for idx in range(int(nb)):
+    os.system("truncate -s %d %s/ref/empty%s"%(int(4096)*int(idx)+4096,trash_dir,idx))
+
+  os.system("cp -rf %s/ref %s/del"%(trash_dir,trash_dir))
+
+  res = del_check_file("%s/ref"%(trash_dir), "%s/del"%(trash_dir))
+  if int(res) != int(nb)*2:
+    report("create check file failed %s"%(res))
+    return 1
+  return 0  
+
+#___________________________________________________
+def trash_release(trash_dir):
+# Definitively delete every thing in trash test directory
+#___________________________________________________ 
+  backline("Trash remove test directory %s"%(trash_dir))    
+  os.system("rozo_trash root disable %s > /dev/null"%(trash_dir))
+  os.system("rozo_trash disable %s > /dev/null"%(trash_dir))
+  os.system("rm -rf %s"%(trash_dir))
+#___________________________________________________
+def trash_get_delete_dir(trash_dir):
+# Get the name of the del dir in trash
+#___________________________________________________ 
+
+  # Get trashed named
+  trash_del_dir = None
+  for f in os.listdir("%s/@rozofs-trash@"%(trash_dir)):
+    if "del" in f: 
+      return f
+
+  report("Can not find del dir in %s/@rozofs-trash@"%(trash_dir))
+  return 1
+#___________________________________________________
+def trash_delete(trash_dir,nb):
+# Delete the del directory and its content. i.e put to trash
+#___________________________________________________ 
+  backline("Trash delete %s/del"%(trash_dir))    
+
+  # Delete files
+  os.system("rm -rf %s/del"%(trash_dir))
+
+  # Get trashed directory named
+  trash_del_dir = trash_get_delete_dir(trash_dir)
+  if trash_del_dir == None: 
+    return 1
+
+  # Check restored files againt reference files
+  res = del_check_file("%s/@rozofs-trash@/%s"%(trash_dir,trash_del_dir), "%s/ref"%(trash_dir))
+  if int(res) != int(nb)*2:
+    report("Delete check file failed %s"%(res))
+    return 1
+  return 0     
+#___________________________________________________
+def trash_restore(trash_dir,nb):
+# Restore the del directory and its content. 
+#___________________________________________________ 
+
+  backline("Trash restore %s/del"%(trash_dir))    
+
+  # Get trashed directory named
+  trash_del_dir = trash_get_delete_dir(trash_dir)
+  if trash_del_dir == None: 
+    return 1
+
+  # Restore files
+  os.system("cd %s/@rozofs-trash@/; mv %s .."%(trash_dir,trash_del_dir))
+  for f in os.listdir("%s/@rozofs-trash@/@rozofs-trash@del"%(trash_dir)):
+    length=len(f.split('@'))
+    name = f.split('@')[length-1]
+    os.system("mv %s/@rozofs-trash@/@rozofs-trash@del/%s %s/del/%s"%(trash_dir,f,trash_dir,name))
+
+  # Check restored files againt reference files
+  res = del_check_file("%s/ref"%(trash_dir), "%s/del"%(trash_dir))
+  if int(res) != int(nb)*2:
+    report("restored del_check_file %s"%(res))
+    return 1
+
+  return 0  
+#___________________________________________________
+def trashNrestore():
+# Create files and the delete them and then restore 
+# them 2 times
+#___________________________________________________ 
+
+  nb=int(nbGruyere)
+  trash_dir="%s/trash.%s"%(exepath,nb)
+  
+  # Create trash test directory when it does not exist
+  if not os.path.exists(trash_dir): trash_allocate(trash_dir,nb)
+  
+  # Loop on delete then restore   
+  for loop in range(3):
+    if trash_delete(trash_dir,nb) != 0:  return 1
+    if trash_restore(trash_dir,nb) != 0: return 1
+              
+  return 0  
+#___________________________________________________
+def trashNrebuild():
+# reread files create by test_rebuild utility to check
+# their content
+#___________________________________________________ 
+  nb=int(nbGruyere)
+  trash_dir="%s/trash.%s"%(exepath,nb)
+  
+  # Create trash test directory when it does not exist
+  if not os.path.exists(trash_dir): trash_allocate(trash_dir,nb)
+
+  # Put del dir to trash
+  if trash_delete(trash_dir,nb) != 0:  return 1
+  # Rebuild every node
+  if rebuild_1node() != 0:  return 1
+  # Restore files
+  if trash_restore(trash_dir,nb) != 0: return 1
+  return 0
  
 #___________________________________________________
 def gruyere_one_reread():
@@ -2380,6 +2527,14 @@ def do_list():
     dis.set_column(3,'basic') 
      
   dis.end_separator()  
+  for tst in TST_TRASH:
+    num=num+1
+    dis.new_line()  
+    dis.set_column(1,"%s"%num)
+    dis.set_column(2,tst)
+    dis.set_column(3,'trash') 
+     
+  dis.end_separator()  
   for tst in TST_FLOCK:
     num=num+1
     dis.new_line()  
@@ -2551,7 +2706,8 @@ def usage():
   console("       - storageFailed    designate the read/write test list run when a storage is failed.")
   console("       - storageReset     designate the read/write test list run while a storage is reset.")
   console("       - storcliReset     designate the read/write test list run while the storcli is reset.")
-  console("       - basic            designate the non read/write test list.")
+  console("       - basic            designate the basic test list.")
+  console("       - trash            designate the trash feature test list.")
   console("       - rebuild          designate the rebuild test list.")
   exit(0)
 
@@ -2592,6 +2748,7 @@ TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node'
 # File locking
 TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race']
 TST_COMPIL=['compil_rozofs','compil_openmpi']
+TST_TRASH=['trashNrestore','trashNrebuild']
 
 ifnumber=get_if_nb()
 
@@ -2669,6 +2826,7 @@ list=[]
 for arg in args:  
   if arg == "all":
     list.extend(TST_BASIC)
+    list.extend(TST_TRASH)
     list.extend(TST_FLOCK)
     if rebuildCheck == True:
       list.extend(TST_REBUILDCHECK)
@@ -2694,6 +2852,8 @@ for arg in args:
     append_circumstance_test_list(list,TST_RW,arg)   
   elif arg == "basic":
     list.extend(TST_BASIC)
+  elif arg == "trash":
+    list.extend(TST_TRASH)
   elif arg == "rebuild":
     if rebuildCheck == True:
       list.extend(TST_REBUILDCHECK)

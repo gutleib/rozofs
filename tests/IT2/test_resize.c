@@ -21,6 +21,6 @@ int resize(char * fname) {
   }
   return 0;
 }
-main(int argc, char **argv) {
+void main(int argc, char **argv) {
   resize(argv[1]);
 }  

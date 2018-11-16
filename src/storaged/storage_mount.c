@@ -142,13 +142,6 @@ uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
 static void mount_devices() {
     int      count;
 
-
-    // Initialization of the storage configuration
-    if (storaged_initialize() != 0) {
-        severe("can't initialize storaged: %s.", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
     /*
     ** Enumerate the available RozoFS devices.
     ** Storaged will umount every device, while storio will let
@@ -161,6 +154,13 @@ static void mount_devices() {
     */
     count = storage_mount_all_enumerated_devices();  
 
+
+    // Initialization of the storage configuration
+    if (storaged_initialize() != 0) {
+        severe("can't initialize storaged: %s.", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    
     /*
     ** Unmount the working directory 
     */

@@ -12,8 +12,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <dirent.h>
-
-
+#include <ctype.h>
 
 
 #define DEFAULT_NB_PROCESS    20

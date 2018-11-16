@@ -294,23 +294,23 @@ def rozo_list_all_block_devices(blockDev=None) :
   global partitioned
   
   tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
-  previous_uuid="AAA"
+  previous_uuid="UNKNOWN"
   
   # Create a display array
-  d = adaptative_tbl(2,"Block devices") 
+  d = adaptative_tbl(2,"RozoFS block devices",cyan+bold) 
   d.new_center_line()
-  d.set_column(1,"Dev")
-  d.set_column(2,"size")
-  d.set_column(3,"FS")      
-  d.set_column(4,"Mount")
-  d.set_column(5,"Label")
-  d.set_column(6,"UUID")
-  d.set_column(7,"If")
-  d.set_column(8,"Model[Vendor]")
-  d.set_column(9,"HCTL")
-  d.set_column(10,"Sch")
-  d.set_column(11,"Rota")
-  d.set_column(12,"R.A")
+  d.set_column(1,"Dev",blue+reverse)
+  d.set_column(2,"size",blue+reverse)
+  d.set_column(3,"FS",blue+reverse)      
+  d.set_column(4,"Mount",blue+reverse)
+  d.set_column(5,"Label",blue+reverse)
+  d.set_column(6,"UUID",blue+reverse)
+  d.set_column(7,"If",blue+reverse)
+  d.set_column(8,"Model[Vendor]",blue+reverse)
+  d.set_column(9,"HCTL",blue+reverse)
+  d.set_column(10,"Sch",blue+reverse)
+  d.set_column(11,"Rota",blue+reverse)
+  d.set_column(12,"R.A",blue+reverse)
   d.end_separator()   
   
   # List every block device and find out a specific one
@@ -347,7 +347,11 @@ def rozo_list_all_block_devices(blockDev=None) :
       color = yellow 
     else:
       color = None
-    previous_uuid = uuid        
+      
+    if uuid == "":
+       previous_uuid="UNKNOWN"
+    else:      
+      previous_uuid = uuid        
          
     d.new_line()
     d.set_column(1,device,color)  

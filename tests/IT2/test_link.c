@@ -171,13 +171,13 @@ int check_symlink_file(char * base, int nb, int line) {
   }
   return 0;
 }
-remove_file(char * base, int nb) {
+void remove_file(char * base, int nb) {
   char file[128];
 
   sprintf(file, "%s%d", base, nb);
   unlink(file); 
 }
-create_file(char * base, int nb) {
+void create_file(char * base, int nb) {
   char file[128];
 
   sprintf(file, "%s%d", base, nb);
@@ -185,7 +185,7 @@ create_file(char * base, int nb) {
   sprintf(cmd, "echo HJKNKJNKNKhuezfqr > %s", file);
   system(cmd);  
 }
-hard_link(char * base, int nb1,int nb2) {
+void hard_link(char * base, int nb1,int nb2) {
   char f1[128];
   char f2[128];
   
@@ -194,7 +194,7 @@ hard_link(char * base, int nb1,int nb2) {
   sprintf(cmd, "ln %s %s", f1, f2);
   system(cmd);  
 }
-sym_link(char * base, int nb1,int nb2) {
+void sym_link(char * base, int nb1,int nb2) {
   char f1[128];
   char f2[128];
   
