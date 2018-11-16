@@ -101,13 +101,13 @@ char *argv[];
     }
 }
 
-remove_file(int nb) {
+void remove_file(int nb) {
   char file[1024];
 
   sprintf(file, "./%s%d", FILE_BASE_NAME, nb);
   unlink(file); 
 }
-create_file(int nb) {
+void create_file(int nb) {
   char file[1024];
 
   sprintf(file, "./%s%d", FILE_BASE_NAME, nb);
