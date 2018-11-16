@@ -171,13 +171,13 @@ int check_symlink_file(char * base, int target, int link, int line) {
   }
   return 0;
 }
-remove_file(char * base, int nb) {
+void remove_file(char * base, int nb) {
   char file[128];
 
   sprintf(file, "%s/%s%d", mount, base, nb);
   unlink(file); 
 }
-create_file(char * base, int nb) {
+void create_file(char * base, int nb) {
   char file[128];
 
   sprintf(file, "%s/%s%d", mount, base, nb);
@@ -185,7 +185,7 @@ create_file(char * base, int nb) {
   sprintf(cmd, "echo %d > %s", nb, file);
   system(cmd);  
 }
-sym_link(char * base, int target,int link) {
+void sym_link(char * base, int target,int link) {
   char ftarget[128];
   char flink[128];
   
@@ -194,7 +194,7 @@ sym_link(char * base, int target,int link) {
   symlink(ftarget,flink);
 }
 #define ROZOFS_RESYMLINK_XATTR "trusted.rozofs.symlink"
-sym_resymlink(char * base, int target,int link) {
+void sym_resymlink(char * base, int target,int link) {
   char ftarget[128];
   char flink[128];
   
@@ -207,7 +207,7 @@ sym_resymlink(char * base, int target,int link) {
   } 
 }
 #define ROZOFS_REDIRSYMLINK_XATTR "user.rozofs.dirsymlink"
-sym_redirsymlink(char * base, int target,int link) {
+void sym_redirsymlink(char * base, int target,int link) {
   char ftarget[128];
 
   sprintf(ftarget, "%s%d %s/%s%d", base, link, mount, base, target); 

@@ -438,31 +438,31 @@ int do_one_test(char * file, int count) {
   ret += list_xattr(file,XATTR_CREATE, 0, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += set_attr (file,XATTR_CREATE, 0, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_CREATE, 1, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
     
   ret += set_attr (file,XATTR_CREATE, 1, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_CREATE, 1, 0 /* not on symlink */);  
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += set_attr (file,XATTR_REPLACE, 1, 0 /* not on symlink */);
@@ -474,31 +474,31 @@ int do_one_test(char * file, int count) {
   ret += list_xattr(file,XATTR_REPLACE, 1, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += remove_attr (file, 1, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_REPLACE, 0, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += remove_attr (file, 0, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_REPLACE, 0, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   return ret;
 }
@@ -509,67 +509,67 @@ int do_one_test_symlink(char * file, int count) {
   ret += list_xattr(file,XATTR_CREATE, 0, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += set_attr (file,XATTR_CREATE, 0, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_CREATE, 1, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
     
   ret += set_attr (file,XATTR_CREATE, 1, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_CREATE, 1, 1 /* apply on symlink */);  
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += set_attr (file,XATTR_REPLACE, 1, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_REPLACE, 1, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += remove_attr (file, 1, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_REPLACE, 0, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += remove_attr (file, 0, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   
   ret += list_xattr(file,XATTR_REPLACE, 0, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
-    return;
+    return -1;
   }
   return ret;
 }
