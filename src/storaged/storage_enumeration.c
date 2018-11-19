@@ -781,14 +781,14 @@ int storage_enumerate_devices(char * workDir, int unmount) {
 
       pDevName->mounted = 1;
 
-      if (pDev->spare) {
+      if (pExist->spare) {
         CONT;
       }
         
       /*
       ** Check CID/SID
       */
-      st = storaged_lookup(pDev->cid, pDev->sid);
+      st = storaged_lookup(pExist->cid, pExist->sid);
       if (st == NULL) {
         // Not mine
         CONT;
@@ -800,7 +800,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       pt = cmd;
       pt += rozofs_string_append(pt,st->root);
       *pt++ = '/';
-      pt += rozofs_u32_append(pt,pDev->dev);
+      pt += rozofs_u32_append(pt,pExist->dev);
       if (strcmp(cmd,pMount)!=0) {
         if (storage_umount(pMount)==0) {
 	  pDevName->mounted = 0;
