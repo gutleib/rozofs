@@ -2653,7 +2653,7 @@ int main(int argc, char *argv[]) {
       char bufall[128];
       
       fuse_profile_p = &fuse_kern_profile[conf.idx_fuse_profile];      
-      sprintf(bufall,"-omax_readahead=%u ",(unsigned int)fuse_profile_p->ra_pages);
+      sprintf(bufall,"-omax_readahead=%u ",(unsigned int)fuse_profile_p->ra_pages*4096);
       if (fuse_opt_add_arg(&args,bufall) == -1) {
           fprintf(stderr, "fuse_opt_add_arg failed\n");
           return 1;
