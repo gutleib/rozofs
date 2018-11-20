@@ -34,7 +34,7 @@
 #include "rpcclt.h"
 #include <rozofs/core/af_unix_socket_generic.h>
  
-#define STORCLI_PER_FSMOUNT_POWER2 2
+#define STORCLI_PER_FSMOUNT_POWER2 5
 #define STORCLI_PER_FSMOUNT (1<<STORCLI_PER_FSMOUNT_POWER2) 
   
  /*
