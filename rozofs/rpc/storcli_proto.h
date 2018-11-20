@@ -75,7 +75,7 @@ struct storcli_read_arg_t {
 	uint8_t bsize;
 	uint8_t dist_set[ROZOFS_SAFE_MAX];
 	storcli_uuid_t fid;
-	uint8_t proj_id;
+	uint32_t proj_id;
 	uint64_t bid;
 	uint32_t nb_proj;
 };
