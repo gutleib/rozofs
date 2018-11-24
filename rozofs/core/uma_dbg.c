@@ -691,14 +691,14 @@ void uma_dbg_manual(char * argv[], uint32_t tcpRef, void *bufRef) {
   int    idx;
 
   if (argv[1] == NULL) {
-    pt += rozofs_string_append(pt, "Missing topic name\n");
+    pt += rozofs_string_append_error(pt, "Missing topic name\n");
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;    
   }
 
   idx = uma_dbg_retrieve_topic(argv[1]);
   if (idx == -1) {
-    pt += rozofs_string_append(pt, "Unknown topic\n");
+    pt += rozofs_string_append_error(pt, "Unknown topic\n");
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;    
 
@@ -710,8 +710,8 @@ void uma_dbg_manual(char * argv[], uint32_t tcpRef, void *bufRef) {
   }  
   
   if (uma_dbg_topic[idx].man == NULL) {   
-    pt += rozofs_string_append(pt, "No manual for ");
-    pt += rozofs_string_append(pt, uma_dbg_topic[idx].name);
+    pt += rozofs_string_append_error(pt, "No manual for ");
+    pt += rozofs_string_append_error(pt, uma_dbg_topic[idx].name);
     pt += rozofs_string_append(pt, "\n");
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 	return;
@@ -1169,9 +1169,9 @@ void uma_dbg_listTopic(uint32_t tcpCnxRef, void *bufRef, char * topic) {
   idx = 0;
   /* Format the string */
   if (topic) {
-    idx += rozofs_string_append(&p[idx], "No such topic \"");
-    idx += rozofs_string_append(&p[idx],topic);
-    idx += rozofs_string_append(&p[idx],"\" !!!\n\n");
+    idx += rozofs_string_append_error(&p[idx], "No such topic \"");
+    idx += rozofs_string_append_error(&p[idx],topic);
+    idx += rozofs_string_append_error(&p[idx],"\" !!!\n\n");
     len = strlen(topic);                
   }
 
