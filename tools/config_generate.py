@@ -751,9 +751,9 @@ def build_show_module(module,struct_name):
   print "*/"
   print "char * show_%s_module_%s(char * pChar) {"%(struct_name,module)  
   print ""
-  print "  pChar += rozofs_string_append_effect(pChar,\"#                                                            \\n#   \", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
-  print "  pChar += rozofs_string_append_effect(pChar,\"%-54s\", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"%("  %s scope parameter"%(module.upper()))
-  print "  pChar += rozofs_string_append_effect(pChar,\"   \\n#                                                            \\n\\n\", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
+  print "  pChar += rozofs_string_append_effect(pChar,\"#                                                            \\n#     \", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
+  print "  pChar += rozofs_string_append_effect(pChar,\"%-50s\", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"%("    %s SCOPE CONFIGURATION PARAMETERS"%(module.upper()))
+  print "  pChar += rozofs_string_append_effect(pChar,\"     \\n#                                                            \\n\\n\", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
   for obj in objects:
     if obj.module == module:     
       obj.write_in_show(struct_name) 
