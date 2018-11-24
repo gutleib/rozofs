@@ -60,7 +60,7 @@ void rozofs_ll_opendir_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
 
     int trc_idx = rozofs_trc_req_flags(srv_rozofs_ll_opendir,ino,NULL,fi->flags);
     /*
@@ -424,7 +424,7 @@ void rozofs_ll_releasedir_nb(fuse_req_t req, fuse_ino_t ino,
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
     
     gprofiler->rozofs_ll_releasedir[P_COUNT]++;
     

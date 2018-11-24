@@ -401,13 +401,14 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
 static inline void man_io (char * pChar) {
   PCHAR_STRING    ("Display rozofsmount IO history.\n");
   PCHAR_STRING_BLD(" io [what] [col <#col>] [avg] [s|m|h|a] [persec]\n");
-  PCHAR_STRING_BLD("    what = [r|w|l|c|d|a|o]\n");
+  PCHAR_STRING_BLD("    what = [r|w|l|c|d|a|x|o]\n");
   PCHAR_STRING    ("      . r to display read IO count\n");
   PCHAR_STRING    ("      . w to display write IO count\n");
   PCHAR_STRING    ("      . l to display lookup count\n");
   PCHAR_STRING    ("      . c to display creation count\n");
   PCHAR_STRING    ("      . d to display deletion count\n");
   PCHAR_STRING    ("      . a to display get attribute count\n");
+  PCHAR_STRING    ("      . x to display extended attribute operation count\n");
   PCHAR_STRING    ("      . o to display other metadate IO count\n"); 
   PCHAR_STRING    ("    Default is to display all available counters\n");
   PCHAR_STRING_BLD("    [col <#col>] ");
@@ -462,6 +463,11 @@ void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
       i++;
       continue;
     }  
+    if (strcasecmp(argv[i],"x")==0) {
+      what |= (1<<ROZOFSMOUNT_COUNTER_XATTR);
+      i++;
+      continue;
+    }      
     if (strcasecmp(argv[i],"o")==0) {
       what |= (1<<ROZOFSMOUNT_COUNTER_OTHER);
       i++;
@@ -570,6 +576,7 @@ void rozofs_throughput_counter_init(void) {
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DDEL]= rozofs_thr_cnts_allocate(NULL, "D.DEL");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_LOOKUP]= rozofs_thr_cnts_allocate(NULL, "LOOKUP");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_GETATTR]= rozofs_thr_cnts_allocate(NULL, "GETATTR");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_XATTR]= rozofs_thr_cnts_allocate(NULL, "XATTR");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER]= rozofs_thr_cnts_allocate(NULL, "OTHER");
 
   
