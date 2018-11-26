@@ -862,7 +862,7 @@ void export_fstat_thread_update(export_fstat_ctx_t *tab_p)
    */
    if ((tab_p->memory.blocks!= tab_p->last_written.blocks) || (tab_p->memory.files!= tab_p->last_written.files) 
        || (tab_p->memory.blocks_thin!= tab_p->last_written.blocks_thin)
-       || (tab_p->memory.blocks!= tab_p->last_written.blocks_fast) || (tab_p->memory.files!= tab_p->last_written.files_fast))
+       || (tab_p->memory.blocks_fast!= tab_p->last_written.blocks_fast) || (tab_p->memory.files_fast!= tab_p->last_written.files_fast))
    {
       if ((fd = open(tab_p->pathname, O_RDWR /*| NO_ATIME*/ | O_CREAT, S_IRWXU)) < 1) {
           export_fstat_stats.open_err++;
