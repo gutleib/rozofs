@@ -56,18 +56,7 @@ static __inline__ unsigned long long rdtsc(void)
 }
 
 
-#define ROZOFS_COLOR_CYAN    "\033[96m\033[40m"
-#define ROZOFS_COLOR_YELLOW  "\033[93m\033[40m"
-#define ROZOFS_COLOR_BLUE    "\033[94m\033[40m"
-#define ROZOFS_COLOR_GREEN   "\033[92m\033[40m"
-#define ROZOFS_COLOR_PURPLE  "\033[95m\033[40m"
-#define ROZOFS_COLOR_RED     "\033[91m\033[40m"
-#define ROZOFS_COLOR_WHITE   "\033[97m\033[40m"
 
-#define ROZOFS_COLOR_BOLD    "\033[1m"
-#define ROZOFS_COLOR_REVERSE "\033[7m"
-
-#define ROZOFS_COLOR_NONE    "\033[0m"
 
 /*
 **_____________________________________________________________________________

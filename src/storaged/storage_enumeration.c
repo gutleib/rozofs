@@ -549,11 +549,12 @@ void storage_reset_enumerated_device_tbl() {
  * Allocate a new device name structure for a RozoFS device descriptor
  *
  * @pDev      RozoFS device descriptor
+ * @mpath     Whether this is a multipath device name
  *
  * @retval The allocated structure or NULL
 
  */
-storage_device_name_t * storage_allocate_new_device_name(storage_enumerated_device_t * pDev) {
+storage_device_name_t * storage_allocate_new_device_name(storage_enumerated_device_t * pDev, int mpath) {
   storage_device_name_t * pDevName;
   storage_device_name_t * pNextName;
 
@@ -572,11 +573,20 @@ storage_device_name_t * storage_allocate_new_device_name(storage_enumerated_devi
   }
 
   /*
-  ** Go to last name
+  ** Multipath device is put at the head of the list
   */
-  pNextName = pDev->pName;
-  while(pNextName->next != NULL) pNextName = pNextName->next;
-  pNextName->next = pDevName;
+  if (mpath) {
+    pDevName->next = pDev->pName;
+    pDev->pName    = pDevName;
+  }  
+  /*
+  ** Other devices are put at the end of the list
+  */
+  else {
+    pNextName = pDev->pName;
+    while(pNextName->next != NULL) pNextName = pNextName->next;
+    pNextName->next = pDevName;
+  }  
   return pDevName;   
 } 
 /*
@@ -592,6 +602,7 @@ storage_device_name_t * storage_allocate_new_device_name(storage_enumerated_devi
  * @param pModel    Parsed disk model
  * @param pModel    Parsed disk HCTL
  * @param uuid      Parsed file system UUID when device is fomated
+ * @param mpath     Whether it is a multipath device
  *
  * @retval 0 when pasing is sccessfull, -1 else    
  */
@@ -602,9 +613,12 @@ int storage_parse_lsblk_line(char * line,
                              char ** pLabel,
                              char ** pModel,
                              char ** pHCTL,
-                             uuid_t  uuid) {
+                             uuid_t  uuid,
+                             int   * mpath) {
   char * pt  = line;
   char * pUUID;
+  
+  *mpath = 0;
   
   /*
   ** 1rst comes the device name
@@ -670,6 +684,14 @@ int storage_parse_lsblk_line(char * line,
   if (rozofs_uuid_parse(pUUID, uuid) < 0) {
      memset(uuid,0,sizeof(uuid_t));
   }  
+  /*
+  ** Get the TYPE
+  */    
+  pt++;
+  if (*pt == 0) return -1;
+  if (strncmp(pt, "mpath",strlen("mpath")) == 0) {
+    *mpath = 1;
+  }    
   return 0;
 }                             
 /*
@@ -700,6 +722,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   char          * pMount;
   char          * pHCTL;
   uuid_t          uuid;
+  int             mpath; // Whether this is a multipath device or not
   storage_device_name_t * pDevName;
   
   storage_enumerated_device_t * pDev = NULL;  
@@ -735,7 +758,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   pt += rozofs_string_append(pt,".dev");
   
   pt = cmd;
-  pt += rozofs_string_append(pt,"lsblk -Pndo KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID -x LABEL | awk -F '\"' '{print $2\":\"$4\":\"$6\":\"$8\":\"$10\":\"$12\":\"$14\":\";}' > ");
+  pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\":\"$4\":\"$6\":\"$8\":\"$10\":\"$12\":\"$14\":\"$15\":\";}' > ");
   pt += rozofs_string_append(pt,fdevice);
   if (system(cmd)==0) {}
   
@@ -755,7 +778,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   line = NULL;
   while (getline(&line, &len, fp) != -1) {
 
-    if (storage_parse_lsblk_line(line, &pName, &pFS, &pMount, &pLabel, &pModel, &pHCTL, uuid) < 0) {
+    if (storage_parse_lsblk_line(line, &pName, &pFS, &pMount, &pLabel, &pModel, &pHCTL, uuid, &mpath) < 0) {
       CONT;
     }  
     
@@ -768,7 +791,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       /*
       ** Allocate new name structure
       */
-      pDevName = storage_allocate_new_device_name(pExist);      
+      pDevName = storage_allocate_new_device_name(pExist,mpath);      
       /*
       ** Recopy the device name
       */
@@ -853,7 +876,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     /*
     ** Allocate a new name sub structure
     */
-    pDevName = storage_allocate_new_device_name(pDev);      
+    pDevName = storage_allocate_new_device_name(pDev,mpath);      
     
     /* 
     ** Recopy device name 
@@ -1562,16 +1585,11 @@ int storage_mount_all_enumerated_devices() {
     last_cid = pDev->cid;
     last_sid = pDev->sid;
     last_dev = pDev->dev;
-    
-    /*
-    ** Mount one and only one name of this RozoFS device
-    */
-    
-    pName = pDev->pName;
 
     /* 
     ** Look for the 1rst mounted device name 
     */
+    pName = pDev->pName;
     while (pName) {
       if (pName->mounted) break;
       pName = pName->next;
@@ -1584,7 +1602,7 @@ int storage_mount_all_enumerated_devices() {
       count++;  
       continue;
     } 
-       
+           
     /*
     ** This RozoFS device is not yet mounted. Mount the 1rst path
     */

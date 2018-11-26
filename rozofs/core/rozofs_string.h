@@ -37,7 +37,18 @@ typedef enum _rozofs_alignment_e {
 
 
 
+#define ROZOFS_COLOR_CYAN       "\033[96m"
+#define ROZOFS_COLOR_YELLOW     "\033[93m"
+#define ROZOFS_COLOR_BLUE       "\033[94m"
+#define ROZOFS_COLOR_GREEN      "\033[92m"
+#define ROZOFS_COLOR_PURPLE     "\033[95m"
+#define ROZOFS_COLOR_RED        "\033[91m"
+#define ROZOFS_COLOR_WHITE      "\033[97m"
 
+#define ROZOFS_COLOR_BOLD       "\033[1m"
+#define ROZOFS_COLOR_REVERSE    "\033[7m"
+#define ROZOFS_COLOR_UNDERSCORE "\033[4m"
+#define ROZOFS_COLOR_NONE       "\033[0m"
 
 /*
  *_______________________________________________________________________
@@ -61,7 +72,18 @@ static inline int rozofs_time2string(char * pChar, time_t loc_time) {
                  date.tm_min,
                  date.tm_sec);
 }      
-
+/*
+ *_______________________________________________________________________
+ *  Add current time to string
+ *
+ *  @param pChar : where to store the formated date
+ *  
+ *  @retval the formated size
+ *_______________________________________________________________________
+ */
+static inline int rozofs_add_timestring(char * pChar) {
+  return rozofs_time2string(pChar,time(NULL));
+} 
 
 
 
@@ -310,6 +332,51 @@ static inline int rozofs_string_append(char * pChar, char * new_string) {
 }
 /*
 **___________________________________________________________
+** Set display with default effects
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_default(char * pChar) {
+  return rozofs_string_append(pChar,ROZOFS_COLOR_NONE);
+}
+/*
+**___________________________________________________________
+** Append an inversed string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_effect(char * pChar, char * new_string, char * effect) {
+  int len = 0;
+  len += rozofs_string_append(pChar,effect);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
+** Append an inversed string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_error(char * pChar, char * new_string) {
+  int len = 0;
+  len += rozofs_string_append(pChar,ROZOFS_COLOR_BOLD ROZOFS_COLOR_RED);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
 ** Set display in underscore
 **
 ** @param pChar       The string that is being built
@@ -317,7 +384,7 @@ static inline int rozofs_string_append(char * pChar, char * new_string) {
 ** @retval the size added to the built string
 */
 static inline int rozofs_string_set_underscore(char * pChar) {
-  return rozofs_string_append(pChar,"\033[4m");
+  return rozofs_string_append(pChar,ROZOFS_COLOR_UNDERSCORE);
 }
 /*
 **___________________________________________________________
@@ -328,7 +395,7 @@ static inline int rozofs_string_set_underscore(char * pChar) {
 ** @retval the size added to the built string
 */
 static inline int rozofs_string_set_bold(char * pChar) {
-  return rozofs_string_append(pChar,"\033[1m");
+  return rozofs_string_append(pChar,ROZOFS_COLOR_BOLD);
 }
 /*
 **___________________________________________________________
@@ -339,18 +406,7 @@ static inline int rozofs_string_set_bold(char * pChar) {
 ** @retval the size added to the built string
 */
 static inline int rozofs_string_set_inverse(char * pChar) {
-  return rozofs_string_append(pChar,"\033[7m");
-}
-/*
-**___________________________________________________________
-** Set display with default effects
-**
-** @param pChar       The string that is being built
-**
-** @retval the size added to the built string
-*/
-static inline int rozofs_string_set_default(char * pChar) {
-  return rozofs_string_append(pChar,"\033[0m");
+  return rozofs_string_append(pChar,ROZOFS_COLOR_REVERSE);
 }
 /*
 **___________________________________________________________

@@ -857,7 +857,7 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
 
     /*
     ** allocate a context for saving the fuse parameters
@@ -1143,9 +1143,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
     /*
     ** Update the bandwidth statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],
-                                      (uint64_t)received_len,
-				      rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)received_len);
     /*
     ** check the length: caution, the received length can
     ** be zero by it might be possible that the information 

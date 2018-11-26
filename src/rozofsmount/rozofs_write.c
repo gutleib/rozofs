@@ -970,9 +970,7 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
     /*
     ** Update the bandwidth statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR],
-                                      (uint64_t)len,
-				      rozofs_get_ticker_us());    
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR],(uint64_t)len);    
     /**
     * write alignement stats
     */
@@ -1128,7 +1126,7 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_IO], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_IO], 1);
 
    /*
    ** stats
@@ -1531,7 +1529,7 @@ void rozofs_ll_flush_nb(fuse_req_t req, fuse_ino_t ino,
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
 
     DEBUG_FUNCTION;
     if (!(f = (file_t *) (unsigned long) fi->fh)) {
@@ -2095,7 +2093,7 @@ void rozofs_ll_release_nb(fuse_req_t req, fuse_ino_t ino,
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
     
     int trc_idx = rozofs_trc_req(srv_rozofs_ll_release,(fuse_ino_t)fi->fh,NULL);
 
