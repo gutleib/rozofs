@@ -384,7 +384,7 @@ void rozofs_ll_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup) {
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
 
     START_PROFILING(rozofs_ll_forget);
     errno = 0;

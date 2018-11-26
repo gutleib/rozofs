@@ -317,8 +317,8 @@ static inline void COMMON_CONFIG_DEVICE_SELFHEALING_MODE_READ_ENUM(config_t * cf
 #define COMMON_CONFIG_DEVICE_SELFHEALING_MODE_SET_ENUM(VAL)  {\
   int myval = string2common_config_device_selfhealing_mode(VAL);\
   if (myval == -1) {\
-    pChar += rozofs_string_append(pChar," Unexpected enum value for device_selfhealing_mode : ");\
-    pChar += rozofs_string_append(pChar,VAL);\
+    pChar += rozofs_string_append_error(pChar," Unexpected enum value for device_selfhealing_mode : ");\
+    pChar += rozofs_string_append_error(pChar,VAL);\
   }\
   else {\
     common_config.device_selfhealing_mode = myval;\

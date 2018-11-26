@@ -48,7 +48,7 @@ void rozofs_ll_rmdir_nb(fuse_req_t req, fuse_ino_t parent, const char *name) {
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update_with_time_us(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DDEL], 1, rozofs_get_ticker_us());
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DDEL], 1);
     
     int trc_idx = rozofs_trc_req_name(srv_rozofs_ll_rmdir,parent,(char*)name);
     DEBUG("rmdir (%lu,%s)\n", (unsigned long int) parent, name);

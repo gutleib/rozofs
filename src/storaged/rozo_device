@@ -273,6 +273,7 @@ def rozo_get_partitionned_devices() :
   global partitioned
   
   partitioned[:] = []
+  return
   
   # Get the name of the partitionned devices
   string="lsblk -Po PKNAME"
@@ -299,25 +300,37 @@ def rozo_list_all_block_devices(blockDev=None) :
   # Create a display array
   d = adaptative_tbl(2,"RozoFS block devices",cyan+bold) 
   d.new_center_line()
-  d.set_column(1,"Dev",blue+reverse)
-  d.set_column(2,"size",blue+reverse)
-  d.set_column(3,"FS",blue+reverse)      
-  d.set_column(4,"Mount",blue+reverse)
-  d.set_column(5,"Label",blue+reverse)
-  d.set_column(6,"UUID",blue+reverse)
-  d.set_column(7,"If",blue+reverse)
-  d.set_column(8,"Model[Vendor]",blue+reverse)
-  d.set_column(9,"HCTL",blue+reverse)
-  d.set_column(10,"Sch",blue+reverse)
-  d.set_column(11,"Rota",blue+reverse)
-  d.set_column(12,"R.A",blue+reverse)
+  color = blue+reverse+bold
+  d.set_column(1,"Dev",color)
+  d.set_column(2,"size",color)
+  d.set_column(3,"FS",color)      
+  d.set_column(4,"Mount",color)
+  d.set_column(5,"Label",color)
+  d.set_column(6,"UUID",color)
+  d.set_column(7,"If",color)
+  d.set_column(8,"Model[Vendor]",color)
+  d.set_column(9,"HCTL",color)
+  d.set_column(10,"Sch",color)
+  d.set_column(11,"Rota",color)
+  d.set_column(12,"R.A",color)
   d.end_separator()   
   
   # List every block device and find out a specific one
-  string="lsblk -Pndo NAME,SIZE,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA,LABEL,UUID -x LABEL"
-  parsed = shlex.split(string)
-  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-  for line in cmd.stdout:
+  string1="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA,SIZE,UUID -x LABEL"
+  parsed1 = shlex.split(string1)
+  cmd1 = subprocess.Popen(parsed1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  string2="sort -u"
+  parsed2 = shlex.split(string2)
+  cmd2 = subprocess.Popen(parsed2, stdin=cmd1.stdout,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  string3="sort -k 2,2"
+  parsed3 = shlex.split(string3)
+  cmd3 = subprocess.Popen(parsed3, stdin=cmd2.stdout,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  cmd1.stdout.close()
+  cmd2.stdout.close()
+  for line in cmd3.stdout:
 
     device = line.split('"')[1].strip()
     
@@ -327,7 +340,7 @@ def rozo_list_all_block_devices(blockDev=None) :
       if blockDev != device:
         continue
       
-    size       = line.split('"')[3].strip()  
+    label     = line.split('"')[3].strip()
     fs         = line.split('"')[5].strip()
     mountpoint = line.split('"')[7].strip()  
     scheduler  = line.split('"')[9].strip()
@@ -341,7 +354,7 @@ def rozo_list_all_block_devices(blockDev=None) :
     if rota == "1": rota = "Yes"
     else:           rota = "No"
     ra        = line.split('"')[21].strip()
-    label     = line.split('"')[23].strip()
+    size       = line.split('"')[23].strip()      
     uuid      = line.split('"')[25].strip()
     if uuid == previous_uuid: 
       color = yellow 
@@ -432,7 +445,7 @@ def rozo_get_block_devices(dev) :
   global partitioned
   
   # List every block device and find out a specific one
-  string="lsblk -Pndo NAME,FSTYPE,MOUNTPOINT"
+  string="lsblk -Pno KNAME,FSTYPE,MOUNTPOINT"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -633,7 +646,7 @@ def rozo_format_device(blockdev,lazzy,spare,cid,sid,dev,noUnicLabel) :
     #
     # Check whether some other device has already the label
     #
-    string="lsblk -Pndo NAME,LABEL"
+    string="lsblk -Pno KNAME,LABEL"
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:

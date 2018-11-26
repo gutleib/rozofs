@@ -408,7 +408,7 @@ def go_build_macros(struct_name):
   print "    pChar += rozofs_eol(pChar);\\"
   print "    return 0;\\"
   print "  }\\"
-  print "  pChar += rozofs_string_append(pChar,\"True or False value expected.\\n\");\\"
+  print "  pChar += rozofs_string_append_error(pChar,\"True or False value expected.\\n\" );\\"
   print "  return -1;\\"
   print "}"
   print ""  
@@ -437,15 +437,15 @@ def go_build_macros(struct_name):
   print "#define %s_SET_INT_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
   print "  int valint;\\"
   print "  if (sscanf(def,\"%d\",&valint) != 1) {\\"
-  print "    pChar += rozofs_string_append(pChar,\"integer value expected.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"integer value expected.\\n\");\\"  
   print "    return -1;\\"
   print "  }\\"  
   print "  if (valint<mini) {\\"
-  print "    pChar += rozofs_string_append(pChar,\"value lower than minimum.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"value lower than minimum.\\n\");\\"  
   print "    return -1;\\"
   print "  }\\"
   print "  if (valint>maxi) { \\"
-  print "    pChar += rozofs_string_append(pChar,\"value bigger than maximum.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"value bigger than maximum.\\n\");\\"  
   print "    return -1;\\"
   print "  }\\"
   print "  pChar += rozofs_string_append(pChar,#val);\\"
@@ -467,7 +467,7 @@ def go_build_macros(struct_name):
   print "#define %s_SET_INT(val,def)  {\\"%(struct_name.upper())
   print "  int valint;\\"
   print "  if (sscanf(def,\"%d\",&valint) != 1) {\\"
-  print "    pChar += rozofs_string_append(pChar,\"integer value expected.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"integer value expected.\\n\");\\"  
   print "    return -1;\\"
   print "  }\\"  
   print "  pChar += rozofs_string_append(pChar, #val);\\"
@@ -490,7 +490,7 @@ def go_build_macros(struct_name):
   print "#define %s_SET_LONG(val,def) {\\"%(struct_name.upper())
   print "  long long         longval;\\"
   print "  if (sscanf(def,\"%lld\",&longval) != 1) {\\"
-  print "    pChar += rozofs_string_append(pChar,\"long long integer value expected.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"long long integer value expected.\\n\"));\\"  
   print "    return -1;\\"
   print "  }\\"  
   print "  pChar += rozofs_string_append(pChar,#val);\\"
@@ -523,15 +523,15 @@ def go_build_macros(struct_name):
   print "#define %s_SET_LONG_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
   print "  long long         longval;\\"
   print "  if (sscanf(def,\"%lld\",&longval) != 1) {\\"
-  print "    pChar += rozofs_string_append(pChar,\"long long integer value expected.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"long long integer value expected.\\n\"));\\"  
   print "    return -1;\\"
   print "  }\\"  
   print "  if (longval<mini) {\\"
-  print "    pChar += rozofs_string_append(pChar,\"value lower than minimum.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"value lower than minimum.\\n\"));\\"  
   print "    return -1;\\"
   print "  }\\"
   print "  if (longval>maxi) { \\"
-  print "    pChar += rozofs_string_append(pChar,\"value bigger than maximum.\\n\");\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"value bigger than maximum.\\n\"));\\"  
   print "    return -1;\\"
   print "  }\\"
   print "  pChar += rozofs_string_append(pChar,#val);\\"
@@ -702,8 +702,8 @@ def go_build_struct(struct_name):
       print "#define %s_%s_SET_ENUM(VAL)  {\\"%(struct_name.upper(),obj.name.upper())
       print "  int myval = string2%s_%s(VAL);\\"%(struct_name,obj.name)  
       print "  if (myval == -1) {\\"
-      print "    pChar += rozofs_string_append(pChar,\" Unexpected enum value for %s : \");\\"%(obj.name)
-      print "    pChar += rozofs_string_append(pChar,VAL);\\"
+      print "    pChar += rozofs_string_append_error(pChar,\" Unexpected enum value for %s : \");\\"%(obj.name)
+      print "    pChar += rozofs_string_append_error(pChar,VAL);\\"
       print "  }\\"
       print "  else {\\"
       print "    %s.%s = myval;\\"%(struct_name,obj.name)
@@ -749,13 +749,11 @@ def build_show_module(module,struct_name):
   print "** %s scope configuration parameters"%(module)
   print "**"
   print "*/"
-  print "char * show_%s_module_%s(char * pChar) {"%(struct_name,module)
+  print "char * show_%s_module_%s(char * pChar) {"%(struct_name,module)  
   print ""
-  print "  pChar += rozofs_string_append_bold(pChar,\"#____________________________________________________________\\n\");"    
-  print "  pChar += rozofs_string_append_bold(pChar,\"# \");"
-  print "  pChar += rozofs_string_append_bold(pChar,\"%s\");"%(module)
-  print "  pChar += rozofs_string_append_bold(pChar,\" scope configuration parameters\\n\");"   
-  print "  pChar += rozofs_string_append_bold(pChar,\"#____________________________________________________________\\n\\n\");"    
+  print "  pChar += rozofs_string_append_effect(pChar,\"#                                                            \\n#     \", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
+  print "  pChar += rozofs_string_append_effect(pChar,\"%-50s\", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"%("    %s SCOPE CONFIGURATION PARAMETERS"%(module.upper()))
+  print "  pChar += rozofs_string_append_effect(pChar,\"     \\n#                                                            \\n\\n\", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
   for obj in objects:
     if obj.module == module:     
       obj.write_in_show(struct_name) 
@@ -802,7 +800,7 @@ def go_build_show_files(struct_name):
   print "  char            cmd[256];"
   print ""
   print "  if (common_config_file_is_read==0) {"
-  print "    pChar += rozofs_string_append(pChar,\"Can not read configuration file \");"
+  print "    pChar += rozofs_string_append_error(pChar,\"Can not read configuration file \");"
   print "    return pChar;"
   print "  }"
   print "  sprintf(cmd,\"ls -lisa %s*\",common_config_file_name);"
@@ -832,7 +830,7 @@ def go_build_show(struct_name):
   print ""
   print "    if (strcmp(argv[1],\"set\")==0) {"
   print "      if ((argv[2] == NULL)||(argv[3] == NULL)) {"
-  print "        pChar += rozofs_string_append(pChar, \"Missing <parameter> and/or <value>\\n\");"
+  print "        pChar += rozofs_string_append_error(pChar, \"Missing <parameter> and/or <value>\\n\");"
   print "        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
   print "        return;"   
   print "      }"  
@@ -873,7 +871,7 @@ def go_build_show(struct_name):
     print "      return;"           
     print "    }"
   print "    else {"
-  print "      pChar += rozofs_string_append(pChar, \"Unexpected configuration scope\\n\");"
+  print "      pChar += rozofs_string_append_error(pChar, \"Unexpected configuration scope\\n\");"
   print "      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
   print "      return;"           
   print "    }"
@@ -888,7 +886,7 @@ def go_build_show(struct_name):
   print "  */"
   print "  pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);"     
   print "  if (%s_file_is_read==0) {"%(struct_name)
-  print "    pChar += rozofs_string_append(pChar,\"Can not read configuration file \");"    
+  print "    pChar += rozofs_string_append_error(pChar,\"Can not read configuration file \");"    
   print "  }"
   print "  "    
   for module in modules:
@@ -930,8 +928,8 @@ def go_build_set(file_name,struct_name):
 
   for obj in objects:
     obj.set(struct_name) 
-  print "  pChar += rozofs_string_append(pChar,\"No such parameter \");"
-  print "  pChar += rozofs_string_append(pChar,parameter);"
+  print "  pChar += rozofs_string_append_error(pChar,\"No such parameter \");"
+  print "  pChar += rozofs_string_append_error(pChar,parameter);"
   print "  pChar += rozofs_eol(pChar);\\"
   print "  return -1;"  
   print "}"  
@@ -964,15 +962,15 @@ def go_build_save(file_name,struct_name):
   print "  */"
   print "  fd = open(%s_file_name,O_CREAT|O_TRUNC|O_APPEND|O_WRONLY,0777);"%(struct_name)
   print "  if (fd < 0) {"
-  print "    pChar += rozofs_string_append(pChar,\"Can not open \");"
-  print "    pChar += rozofs_string_append(pChar,%s_file_name);"%(struct_name)
+  print "    pChar += rozofs_string_append_error(pChar,\"Can not open \");"
+  print "    pChar += rozofs_string_append_error(pChar,%s_file_name);"%(struct_name)
   print "    return -1;"  
   print "  }"
   for module in modules:
     print "  pBuff = save_%s_module_%s(myBigBuffer);"%(struct_name,module)
     print "  if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {"
-    print "    pChar += rozofs_string_append(pChar,\"Can not write \");"
-    print "    pChar += rozofs_string_append(pChar,%s_file_name);"%(struct_name)
+    print "    pChar += rozofs_string_append_error(pChar,\"Can not write \");"
+    print "    pChar += rozofs_string_append_error(pChar,%s_file_name);"%(struct_name)
     print "    close(fd);"
     print "    return -1;"
     print "  }" 

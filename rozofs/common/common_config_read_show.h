@@ -283,8 +283,8 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"storcli_read_parallel")==0) {
     COMMON_CONFIG_SET_BOOL(storcli_read_parallel,value);
   }
-  pChar += rozofs_string_append(pChar,"No such parameter ");
-  pChar += rozofs_string_append(pChar,parameter);
+  pChar += rozofs_string_append_error(pChar,"No such parameter ");
+  pChar += rozofs_string_append_error(pChar,parameter);
   pChar += rozofs_eol(pChar);\
   return -1;
 }
@@ -315,11 +315,9 @@ void man_common_config(char * pChar) {
 */
 char * show_common_config_module_global(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"global");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    GLOBAL SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   COMMON_CONFIG_IS_DEFAULT_INT(nb_core_file,1);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -387,11 +385,9 @@ char * show_common_config_module_global(char * pChar) {
 */
 char * show_common_config_module_export(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"export");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    EXPORT SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   COMMON_CONFIG_IS_DEFAULT_INT(trashed_file_per_run,1000);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -562,11 +558,9 @@ char * show_common_config_module_export(char * pChar) {
 */
 char * show_common_config_module_client(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"client");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    CLIENT SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(wr_ack_on_inverse,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -648,11 +642,9 @@ char * show_common_config_module_client(char * pChar) {
 */
 char * show_common_config_module_storage(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"storage");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    STORAGE SCOPE CONFIGURATION PARAMETERS        ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   COMMON_CONFIG_IS_DEFAULT_INT(nb_storaged_subthread,8);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -844,11 +836,11 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,True);
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether RozoFS devices must mandatorily be identified by a valid label.\n");
   pChar += rozofs_string_append(pChar,"// Storages will not mount any device not having a valid RozoFS label.\n");
-  COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,True);
+  COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -859,11 +851,9 @@ char * show_common_config_module_storage(char * pChar) {
 */
 char * show_common_config_module_storcli(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"storcli");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    STORCLI SCOPE CONFIGURATION PARAMETERS        ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_enable,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -897,11 +887,9 @@ char * show_common_config_module_storcli(char * pChar) {
 */
 char * show_common_config_module_storio(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"storio");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#____________________________________________________________\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    STORIO SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -1452,11 +1440,11 @@ char * save_common_config_module_storage(char * pChar) {
     COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
   }
 
-  COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,True);
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,False);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Whether RozoFS devices must mandatorily be identified by a valid label.\n");
     pChar += rozofs_string_append(pChar,"// Storages will not mount any device not having a valid RozoFS label.\n");
-    COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,True);
+    COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,False);
   }
   return pChar;
 }
@@ -1551,49 +1539,49 @@ static inline int common_config_generated_save(char * pChar) {
   */
   fd = open(common_config_file_name,O_CREAT|O_TRUNC|O_APPEND|O_WRONLY,0777);
   if (fd < 0) {
-    pChar += rozofs_string_append(pChar,"Can not open ");
-    pChar += rozofs_string_append(pChar,common_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not open ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
     return -1;
   }
   pBuff = save_common_config_module_global(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append(pChar,"Can not write ");
-    pChar += rozofs_string_append(pChar,common_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
     close(fd);
     return -1;
   }
   pBuff = save_common_config_module_export(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append(pChar,"Can not write ");
-    pChar += rozofs_string_append(pChar,common_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
     close(fd);
     return -1;
   }
   pBuff = save_common_config_module_client(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append(pChar,"Can not write ");
-    pChar += rozofs_string_append(pChar,common_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
     close(fd);
     return -1;
   }
   pBuff = save_common_config_module_storage(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append(pChar,"Can not write ");
-    pChar += rozofs_string_append(pChar,common_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
     close(fd);
     return -1;
   }
   pBuff = save_common_config_module_storcli(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append(pChar,"Can not write ");
-    pChar += rozofs_string_append(pChar,common_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
     close(fd);
     return -1;
   }
   pBuff = save_common_config_module_storio(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append(pChar,"Can not write ");
-    pChar += rozofs_string_append(pChar,common_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
     close(fd);
     return -1;
   }
@@ -1612,7 +1600,7 @@ char * common_config_generated_show_all_files(char * pChar) {
   char            cmd[256];
 
   if (common_config_file_is_read==0) {
-    pChar += rozofs_string_append(pChar,"Can not read configuration file ");
+    pChar += rozofs_string_append_error(pChar,"Can not read configuration file ");
     return pChar;
   }
   sprintf(cmd,"ls -lisa %s*",common_config_file_name);
@@ -1639,7 +1627,7 @@ char *pHead;
 
     if (strcmp(argv[1],"set")==0) {
       if ((argv[2] == NULL)||(argv[3] == NULL)) {
-        pChar += rozofs_string_append(pChar, "Missing <parameter> and/or <value>\n");
+        pChar += rozofs_string_append_error(pChar, "Missing <parameter> and/or <value>\n");
         uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
         return;
       }
@@ -1739,7 +1727,7 @@ char *pHead;
       return;
     }
     else {
-      pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
+      pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
       return;
     }
@@ -1754,7 +1742,7 @@ char *pHead;
   */
   pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
   if (common_config_file_is_read==0) {
-    pChar += rozofs_string_append(pChar,"Can not read configuration file ");
+    pChar += rozofs_string_append_error(pChar,"Can not read configuration file ");
   }
   
   
@@ -2087,7 +2075,7 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(spare_restore_spare_ctx,16);
   // Whether RozoFS devices must mandatorily be identified by a valid label. 
   // Storages will not mount any device not having a valid RozoFS label. 
-  COMMON_CONFIG_READ_BOOL(mandatory_device_label,True);
+  COMMON_CONFIG_READ_BOOL(mandatory_device_label,False);
   /*
   ** storcli scope configuration parameters
   */

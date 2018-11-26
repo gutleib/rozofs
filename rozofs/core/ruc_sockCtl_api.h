@@ -117,7 +117,7 @@ static inline uint64_t rozofs_get_ticker_us()
 extern uint64_t rozofs_ticker_seconds;
 static inline uint64_t rozofs_get_ticker_s()
 {
-  return rozofs_ticker_microseconds;
+  return rozofs_ticker_seconds;
 }
 
 /**

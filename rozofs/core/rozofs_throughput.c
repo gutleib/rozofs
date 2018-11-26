@@ -198,8 +198,9 @@ char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int
       pChar += rozofs_string_append(pChar," !!!\n");
       return pChar;         
   } 
-
-  pChar += rozofs_string_append(pChar,"___ THROUGHPUT PER ");
+  pChar += rozofs_string_append(pChar,"___ ");
+  pChar += rozofs_time2string(pChar,t);
+  pChar += rozofs_string_append(pChar," ___ THROUGHPUT PER ");
   /*
   ** Pers step or per second unit display
   */
@@ -380,8 +381,9 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
       pChar += rozofs_string_append(pChar," !!!\n");
       return pChar;         
   } 
-
-  pChar += rozofs_string_append(pChar,"___ COUNTER PER ");
+  pChar += rozofs_string_append(pChar,"___ ");
+  pChar += rozofs_time2string(pChar,t);
+  pChar += rozofs_string_append(pChar," ___ COUNTER PER ");
   /*
   ** Pers step or per second unit display
   */
@@ -401,7 +403,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
     pChar += rozofs_string_append(pChar," _____ ");
     for (value=0; value< ROZOFS_MAX_DISPLAY_COUNTER; value++) { 
       if ((bitmask & (1<<value)) == 0) continue; 
-      pChar += rozofs_string_append(pChar,"_________ ");
+      pChar += rozofs_string_append(pChar,"________ ");
     }  
   }  
   pChar += rozofs_eol(pChar);
@@ -411,7 +413,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
     for (value=0; value< ROZOFS_MAX_DISPLAY_COUNTER; value++) { 
       if ((bitmask & (1<<value)) == 0) continue; 
       pChar += rozofs_string_append(pChar," ");    
-      pChar += rozofs_string_padded_append(pChar, 8, rozofs_left_alignment, counters[value]->name);
+      pChar += rozofs_string_padded_append(pChar, 7, rozofs_left_alignment, counters[value]->name);
       pChar += rozofs_string_append(pChar,"|");    
     }  
   }  
@@ -421,7 +423,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
     pChar += rozofs_string_append(pChar,"|_____|");
     for (value=0; value< ROZOFS_MAX_DISPLAY_COUNTER; value++) { 
       if ((bitmask & (1<<value)) == 0) continue; 
-      pChar += rozofs_string_append(pChar,"_________|");  
+      pChar += rozofs_string_append(pChar,"________|");  
     }  
   }  
   pChar += rozofs_eol(pChar);
@@ -466,7 +468,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
             return pChar;               
         }  
 	pChar += rozofs_string_append(pChar," ");	
-	pChar += rozofs_count_padded_append(pChar,7, count);
+	pChar += rozofs_count_padded_append(pChar,6, count);
 	if (AVERAGE) elementaverage[value][col] += count;
 	pChar += rozofs_string_append(pChar," |");
       }    
@@ -478,7 +480,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
     pChar += rozofs_string_append(pChar,"|_____|");
     for (value=0; value< ROZOFS_MAX_DISPLAY_COUNTER; value++) {  
       if ((bitmask & (1<<value)) == 0) continue; 
-      pChar += rozofs_string_append(pChar,"_________|");
+      pChar += rozofs_string_append(pChar,"________|");
     }  
   }  
   pChar += rozofs_eol(pChar);
@@ -489,7 +491,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
       for (value=0; value<ROZOFS_MAX_DISPLAY_COUNTER; value++) {    
         if ((bitmask & (1<<value)) == 0) continue; 	
 	pChar += rozofs_string_append(pChar," ");	
-	pChar += rozofs_count_padded_append(pChar,7, elementaverage[value][col]/LINES);
+	pChar += rozofs_count_padded_append(pChar,6, elementaverage[value][col]/LINES);
 	pChar += rozofs_string_append(pChar," |");
       }
     }
@@ -498,7 +500,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
       pChar += rozofs_string_append(pChar,"|_____|");
       for (value=0; value< ROZOFS_MAX_DISPLAY_COUNTER; value++) {  
         if ((bitmask & (1<<value)) == 0) continue; 
-	pChar += rozofs_string_append(pChar,"_________|");
+	pChar += rozofs_string_append(pChar,"________|");
       }  
     }           
   }
