@@ -624,7 +624,7 @@ int storage_parse_lsblk_line(char * line,
   ** 1rst comes the device name
   */
   *pName = pt;
-  while ((*pt!=0)&&(*pt!=':')) pt++;
+  while ((*pt!=0)&&(*pt!='#')) pt++;
   if (*pt == 0) return -1;
   *pt = 0;
   
@@ -633,7 +633,7 @@ int storage_parse_lsblk_line(char * line,
   */
   pt++;
   *pFS = pt; 
-  while ((*pt!=0)&&(*pt!=':')) pt++;
+  while ((*pt!=0)&&(*pt!='#')) pt++;
   if (*pt == 0) return -1;
   *pt = 0;
 
@@ -642,7 +642,7 @@ int storage_parse_lsblk_line(char * line,
   */
   pt++;
   *pMount = pt;
-  while ((*pt!=0)&&(*pt!='\n')&&(*pt!=':')) pt++;    
+  while ((*pt!=0)&&(*pt!='\n')&&(*pt!='#')) pt++;    
   if (*pt == 0) return -1;
   *pt = 0;
 
@@ -651,7 +651,7 @@ int storage_parse_lsblk_line(char * line,
   */    
   pt++;
   *pLabel = pt;   
-  while ((*pt!=0)&&(*pt!=':')) pt++;
+  while ((*pt!=0)&&(*pt!='#')) pt++;
   if (*pt == 0) return -1;
   *pt = 0;
 
@@ -660,7 +660,7 @@ int storage_parse_lsblk_line(char * line,
   */    
   pt++;
   *pModel = pt;   
-  while ((*pt!=0)&&(*pt!=':')) pt++;
+  while ((*pt!=0)&&(*pt!='#')) pt++;
   if (*pt == 0) return -1;
   *pt = 0;
 
@@ -669,7 +669,7 @@ int storage_parse_lsblk_line(char * line,
   */    
   pt++;
   *pHCTL = pt;   
-  while ((*pt!=0)&&(*pt!=':')) pt++;
+  while ((*pt!=0)&&(*pt!='#')) pt++;
   if (*pt == 0) return -1;
   *pt = 0;
 
@@ -678,7 +678,7 @@ int storage_parse_lsblk_line(char * line,
   */    
   pt++;
   pUUID = pt;   
-  while ((*pt!=0)&&(*pt!=':')) pt++;
+  while ((*pt!=0)&&(*pt!='#')) pt++;
   if (*pt == 0) return -1;
   *pt = 0;
   if (rozofs_uuid_parse(pUUID, uuid) < 0) {
@@ -758,7 +758,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   pt += rozofs_string_append(pt,".dev");
   
   pt = cmd;
-  pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\":\"$4\":\"$6\":\"$8\":\"$10\":\"$12\":\"$14\":\"$15\":\";}' > ");
+  pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"#\"$12\"#\"$14\"#\"$16\"#\";}' > ");
   pt += rozofs_string_append(pt,fdevice);
   if (system(cmd)==0) {}
   
