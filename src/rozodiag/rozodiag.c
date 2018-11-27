@@ -246,15 +246,26 @@ int debug_receive(int socketId, int silent) {
       recvLen += ret;
     }
     if (silent == NOT_SILENT) {
+    
       char * pMsg = msg.buffer;
-      if (nbCmd == 0) {
-        while ((*pMsg != 0) && (*pMsg != '\n')) pMsg++;
-        if (*pMsg == '\n') pMsg++;
-      }
-      else if (firstMsg) {
-        firstMsg = 0;
-        printf("%s", prompt);
+      if (firstMsg) {
+        /*
+        ** Interactive mode
+        ** Remove system identifier and command recall of 1Rst message
+        */
+        if (nbCmd == 0) {
+          while ((*pMsg != 0) && (*pMsg != '\n')) pMsg++;
+          if (*pMsg == '\n') pMsg++;
+        }
+        /*
+        ** Command line mode
+        ** Add prompt to 1rst message
+        */
+        else {
+          printf("%s", prompt);
+        } 
       }  
+      firstMsg = 0;
       printf("%s", pMsg);
     }  
     if (msg.header.end) return 1;
