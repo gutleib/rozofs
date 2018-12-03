@@ -400,16 +400,17 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
 */
 static inline void man_io (char * pChar) {
   PCHAR_STRING    ("Display rozofsmount IO history.\n");
-  PCHAR_STRING_BLD(" io [what] [col <#col>] [avg] [s|m|h|a] [persec]\n");
-  PCHAR_STRING_BLD("    what = [r|w|l|c|d|a|x|o]\n");
-  PCHAR_STRING    ("      . r to display read IO count\n");
-  PCHAR_STRING    ("      . w to display write IO count\n");
-  PCHAR_STRING    ("      . l to display lookup count\n");
-  PCHAR_STRING    ("      . c to display creation count\n");
-  PCHAR_STRING    ("      . d to display deletion count\n");
-  PCHAR_STRING    ("      . a to display get attribute count\n");
-  PCHAR_STRING    ("      . x to display extended attribute operation count\n");
-  PCHAR_STRING    ("      . o to display other metadate IO count\n"); 
+  PCHAR_STRING_BLD(" io [with|exclude] [col <#col>] [avg] [s|m|h|a] [persec]\n");
+  PCHAR_STRING_BLD("    with    = [r|w|l|c|d|a|x|o]\n");
+  PCHAR_STRING_BLD("    exclude = [nr|nw|nl|nc|nd|na|nx|no]\n");
+  PCHAR_STRING    ("      . r(nr) to (not to) display read IO count\n");
+  PCHAR_STRING    ("      . w(nw) to (not to) display write IO count\n");
+  PCHAR_STRING    ("      . l(nl) to (not to) display lookup count\n");
+  PCHAR_STRING    ("      . c(nc) to (not to) display creation count\n");
+  PCHAR_STRING    ("      . d(nd) to (not to) display deletion count\n");
+  PCHAR_STRING    ("      . a(na) to (not to) display get attribute count\n");
+  PCHAR_STRING    ("      . x(nx) to (not to) display extended attribute operation count\n");
+  PCHAR_STRING    ("      . o(no) to (not to) display other metadate IO count\n"); 
   PCHAR_STRING    ("    Default is to display all available counters\n");
   PCHAR_STRING_BLD("    [col <#col>] ");
   PCHAR_STRING    (" request the display history on ");
@@ -435,54 +436,99 @@ static inline void man_io (char * pChar) {
 */
 void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
   char * pChar = uma_dbg_get_buffer();
-  int ret,val,what=0;
+  int ret,val;
+  int requested, excluded;
   rozofs_thr_unit_e unit = rozofs_thr_unit_second;
 
   rozofs_thr_set_column(2);
 
   int i=1;
+  
+  requested = 0;
+  excluded  = 0;
+  
   while (argv[i] != NULL) {
   
     if (strcasecmp(argv[i],"c")==0) {
-      what |= ((1<<ROZOFSMOUNT_COUNTER_DCR8)+(1<<ROZOFSMOUNT_COUNTER_FCR8));
+      requested |= ((1<<ROZOFSMOUNT_COUNTER_DCR8)+(1<<ROZOFSMOUNT_COUNTER_FCR8));
       i++;
       continue;
     }
+    if (strcasecmp(argv[i],"nc")==0) {
+      excluded |= ((1<<ROZOFSMOUNT_COUNTER_DCR8)+(1<<ROZOFSMOUNT_COUNTER_FCR8));
+      i++;
+      continue;
+    }    
     if (strcasecmp(argv[i],"d")==0) {
-      what |= ((1<<ROZOFSMOUNT_COUNTER_DDEL)+(1<<ROZOFSMOUNT_COUNTER_FDEL));
+      requested |= ((1<<ROZOFSMOUNT_COUNTER_DDEL)+(1<<ROZOFSMOUNT_COUNTER_FDEL));
       i++;
       continue;  
     }
-    if (strcasecmp(argv[i],"l")==0) {
-      what |= (1<<ROZOFSMOUNT_COUNTER_LOOKUP);
+    if (strcasecmp(argv[i],"nd")==0) {
+      excluded |= ((1<<ROZOFSMOUNT_COUNTER_DDEL)+(1<<ROZOFSMOUNT_COUNTER_FDEL));
       i++;
-      continue;
-    }        
-    if (strcasecmp(argv[i],"a")==0) {
-      what |= (1<<ROZOFSMOUNT_COUNTER_GETATTR);
+      continue;  
+    }    
+    if (strcasecmp(argv[i],"l")==0) {
+      requested |= (1<<ROZOFSMOUNT_COUNTER_LOOKUP);
       i++;
       continue;
     }  
+    if (strcasecmp(argv[i],"nl")==0) {
+      excluded |= (1<<ROZOFSMOUNT_COUNTER_LOOKUP);
+      i++;
+      continue;
+    }            
+    if (strcasecmp(argv[i],"a")==0) {
+      requested |= (1<<ROZOFSMOUNT_COUNTER_GETATTR);
+      i++;
+      continue;
+    }  
+    if (strcasecmp(argv[i],"na")==0) {
+      excluded |= (1<<ROZOFSMOUNT_COUNTER_GETATTR);
+      i++;
+      continue;
+    }      
     if (strcasecmp(argv[i],"x")==0) {
-      what |= (1<<ROZOFSMOUNT_COUNTER_XATTR);
+      requested |= (1<<ROZOFSMOUNT_COUNTER_XATTR);
       i++;
       continue;
-    }      
+    }    
+    if (strcasecmp(argv[i],"nx")==0) {
+      excluded |= (1<<ROZOFSMOUNT_COUNTER_XATTR);
+      i++;
+      continue;
+    }          
     if (strcasecmp(argv[i],"o")==0) {
-      what |= (1<<ROZOFSMOUNT_COUNTER_OTHER);
+      requested |= (1<<ROZOFSMOUNT_COUNTER_OTHER);
       i++;
       continue;
     }      
+    if (strcasecmp(argv[i],"no")==0) {
+      excluded |= (1<<ROZOFSMOUNT_COUNTER_OTHER);
+      i++;
+      continue;
+    }   
     if (strcasecmp(argv[i],"r")==0) {
-      what |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR));
+      requested |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR));
       i++;
       continue;
     } 
-    if (strcasecmp(argv[i],"w")==0) {
-      what |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR));
+    if (strcasecmp(argv[i],"nr")==0) {
+      excluded |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR));
       i++;
       continue;
     }     
+    if (strcasecmp(argv[i],"w")==0) {
+      requested |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR));
+      i++;
+      continue;
+    }     
+    if (strcasecmp(argv[i],"nw")==0) {
+      excluded |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR));
+      i++;
+      continue;
+    }      
     if (strcasecmp(argv[i],"col")==0) {
       i++;
       if (argv[i] == NULL) {
@@ -546,13 +592,14 @@ void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
     return;    
   } 
        
-  if (what==0) {
+  if (requested==0) {
     for (i=0; i< ROZOFSMOUNT_COUNTER_MAX; i++) {
-      what |= (1<<i);
+      requested |= (1<<i);
     }  
-  }     
+    requested ^= excluded;
+  }
   
-  pChar = rozofs_thr_display_bitmask(pChar, rozofs_thr_counter, what, unit);
+  pChar = rozofs_thr_display_bitmask(pChar, rozofs_thr_counter, requested, unit);
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
              
 }
