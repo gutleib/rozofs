@@ -12,6 +12,9 @@ import shutil
 from optparse import OptionParser
 
 devices = []
+
+active_export = None
+
 #___________________________
 # converts string <inBytes> to integer 
 # in the unit given by <to>.
@@ -62,58 +65,85 @@ def common_bytes_with_unit(inBytes):
   string="%s"%(inBytes)
   value = common_convert_Bytes(string,"B")
 
-  if value < 1000: return "%s%4d  B"%(sign,value)
+  if value < 1000: return "%s%4d  "%(sign,value)
   
   if value < 1000000:
-    if value >= (100*1000): return "%s%4d KB"%(sign,value/1000)
-    if value >=  (10*1000): return "%s%2d.%1d KB"%(sign,value/1000,(value % 1000) / 100)
-    return "%s%1d.%2.2d KB"%(sign,value/1000,(value % 1000) / 10)   
+    if value >= (100*1000): return "%s%4d K"%(sign,value/1000)
+    if value >=  (10*1000): return "%s%2d.%1d K"%(sign,value/1000,(value % 1000) / 100)
+    return "%s%1d.%2.2d K"%(sign,value/1000,(value % 1000) / 10)   
   
   if value < 1000000000:  
-    if value >= (100*1000000): return "%s%4d MB"%(sign,value/1000000)
-    if value >=  (10*1000000): return "%s%2d.%1d MB"%(sign,value/1000000,(value % 1000000) / 100000)
-    return "%s%1d.%2.2d MB"%(sign,value/1000000,(value % 1000000) / 10000)   
+    if value >= (100*1000000): return "%s%4d M"%(sign,value/1000000)
+    if value >=  (10*1000000): return "%s%2d.%1d M"%(sign,value/1000000,(value % 1000000) / 100000)
+    return "%s%1d.%2.2d M"%(sign,value/1000000,(value % 1000000) / 10000)   
   
   if value < 1000000000000:  
-    if value >= (100*1000000000): return "%s%4d GB"%(sign,value/1000000000)
-    if value >=  (10*1000000000): return "%s%2d.%1d GB"%(sign,value/1000000000,(value % 1000000000) / 100000000)
-    return "%s%1d.%2.2d GB"%(sign,value/1000000000,(value % 1000000000) / 10000000)   
+    if value >= (100*1000000000): return "%s%4d G"%(sign,value/1000000000)
+    if value >=  (10*1000000000): return "%s%2d.%1d G"%(sign,value/1000000000,(value % 1000000000) / 100000000)
+    return "%s%1d.%2.2d G"%(sign,value/1000000000,(value % 1000000000) / 10000000)   
   
   if value < 1000000000000000:  
-    if value >= (100*1000000000000): return "%s%4d TB"%(sign,value/1000000000000)
-    if value >=  (10*1000000000000): return "%s%2d.%1d TB"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000)
-    return "%s%1d.%2.2d TB"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)   
+    if value >= (100*1000000000000): return "%s%4d T"%(sign,value/1000000000000)
+    if value >=  (10*1000000000000): return "%s%2d.%1d T"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000)
+    return "%s%1d.%2.2d T"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)   
   
   if value < 1000000000000000000:  
-    if value >= (100*1000000000000000): return "%s%4d PB"%(sign,value/1000000000000000)
-    if value >=  (10*1000000000000000): return "%s%2d.%1d PB"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
+    if value >= (100*1000000000000000): return "%s%4d P"%(sign,value/1000000000000000)
+    if value >=  (10*1000000000000000): return "%s%2d.%1d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
   
-  return "%s%1s.%2.2d PB"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
+  return "%s%1s.%2.2d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
 
 #______________________________
-def get_active_export(local,path):
+def is_this_export_active(export):
+
+  string="rozodiag -i %s -T export:1 -c up"%(export)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+      if "uptime" in line:
+        return True
+  return False
+#______________________________
+def get_active_export(exports):
+
+  global active_export
+  #
+  # Last active export is given
+  # Check it 1rst
+  #
+  if active_export != None:
+    if is_this_export_active(active_export) == True: return active_export
+  
+  #
+  # No last active given
+  # or last active no more active (switchover
+  #  
+  for export in exports.split('/'):
+
+    #
+    # The last active is no more active
+    #
+    if export == active_export: continue
+    
+    if is_this_export_active(export) == True: 
+      active_export = export
+      return export
+      
+  active_export = None
+  return None
+#______________________________
+def get_eid_and_exports_from_path(path):
   eid=None
   string="attr -qg rozofs.export %s"%(path)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
-    hosts=line.split()[0]
+    exports=line.split()[0]
     eid=line.split()[1]
-    export_path=line.split()[2]
-  if eid == None:
-    print "Current path \"%s\" is not a RozoFS mountpoint."%(path)
-    sys.exit(-1)
-
-  if local == True : 
-    return "localhost",eid,export_path
-
-  for export in hosts.split('/'):
-    crm_cmd="crm_resource --resource p-fs-exportd --locate -Q"
-    string="ssh %s \"%s\""%(export,crm_cmd)
-    parsed = shlex.split(string)
-    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    for line in cmd.stdout:
-      return line,eid,export_path
+    return eid,exports
+  print "%s is not a RozoFS mountpoint"%(path)
+  sys.exit(1)    
+            
 #______________________________
 def check_netmwork_filters(address):
 
@@ -147,16 +177,18 @@ def check_netmwork_filters(address):
   return False
   
 #______________________________
-def get_client_list(active,eid):
+def get_client_list(exports,eid):
   global total_watched_clients
   global total_nb_clients
   
   total_watched_clients = 0 
   total_nb_clients = 0
-  
+
+  active_export = get_active_export(exports)
+    
   idx = int(eid) % 8
   clients=""
-  string="rozodiag -i %s -T export:%s -c client"%(active,idx)
+  string="rozodiag -i %s -T export:%s -c client"%(active_export,idx)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -224,7 +256,6 @@ time_unit_list=["s","m","h"]
 parser = OptionParser()
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
 parser.add_option("-d","--detail", action="store_true",default=False, dest="detail", help="Detailed per client throughput display.")
-parser.add_option("-l","--local", action="store_true",default=False, dest="local", help="Exportd is local.")
 parser.add_option("-o","--output", action="store",type="string", dest="output", help="Output file")
 parser.add_option("-r","--readcolor", type = "choice", action="store",dest ="rcol", choices = color_list, default = "cyan", help = "Read color within %s."% (color_list))
 parser.add_option("-w","--writecolor", type = "choice", action="store",dest ="wcol", choices = color_list, default = "yellow", help = "Write color within %s."% (color_list))
@@ -309,8 +340,8 @@ if options.Niprange != None:
 # Find the eid this path is connected to and then get the list of RozoFS
 # clients on this eid from the export
 #    
-active,eid,export_path = get_active_export(options.local,path)
-clients = get_client_list(active,eid)
+eid,exports = get_eid_and_exports_from_path(path)
+clients = get_client_list(exports,eid)
 if clients == "":
   print "No client found"
   sys.exit(-1)
@@ -339,8 +370,7 @@ while True :
   #
   loop = loop + int(1)
   if loop == 11: 
-    active,eid,export_path = get_active_export(options.local,path)
-    clients = get_client_list(active,eid)
+    clients =  get_client_list(exports,eid)
     loop = 0
     
 
@@ -454,7 +484,7 @@ while True :
     LINE = "Last " + REVERSE + "60 minutes" + NORMAL + " throughput history.\n"  
   else: 
     LINE = "\n"      
-  LINE += zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid " + eid + " (" +export_path + ")  - max " 
+  LINE += zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid " + eid + " - max " 
   #
   # Max 
   #
@@ -465,38 +495,38 @@ while True :
   LINE += common_bytes_with_unit(max_write) + NORMAL
   print LINE  
   
-  print " __Read___ __Write__  __Read___ __Write__  __Read___ __Write__  __Read___ __Write__  __Read___ __Write__  __Read___ __Write__ "
+  print " __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_ "
 
   for idx in range(10):
     LINE=""
     for cols in range(6):
       IDX = idx + cols*10
       LINE += "|"
-      val = READCOLOR + " %7s "%(common_bytes_with_unit(read[IDX]))  
+      val = READCOLOR + " %6s "%(common_bytes_with_unit(read[IDX]))  
       if read[IDX] == 0:                     LINE += val  
       elif read[IDX] == local_max_read:      LINE += REVERSE + val  
       elif read[IDX] >= local_max_read_avg:  LINE += BOLD + val  
       else:                                  LINE += val  
       LINE += NORMAL + "|"
-      val = WRITECOLOR + " %7s "%(common_bytes_with_unit (write[IDX]))      
+      val = WRITECOLOR + " %6s "%(common_bytes_with_unit (write[IDX]))      
       if write[IDX] == 0:                     LINE += val  
       elif write[IDX] == local_max_write:     LINE += REVERSE + val 
       elif write[IDX] >= local_max_write_avg: LINE += BOLD + val 
       else:                                   LINE += val 
       LINE += NORMAL + "|"
     print LINE    
-  print "|_________|_________||_________|_________||_________|_________||_________|_________||_________|_________||_________|_________|"
+  print "|________|________||________|________||________|________||________|________||________|________||________|________|"
 
   LINE=""
   
   for IDX in range(6):
     LINE += "|"
-    val = READCOLOR + " %7s "%(common_bytes_with_unit(read_avg[IDX])) 
+    val = READCOLOR + " %6s "%(common_bytes_with_unit(read_avg[IDX])) 
     if read_avg[IDX] == 0:                    LINE += val    
     elif read_avg[IDX] == local_max_read_avg: LINE += REVERSE + val  
     else:                                     LINE += val   
     LINE += NORMAL + "|"
-    val = WRITECOLOR + " %7s "%(common_bytes_with_unit(write_avg[IDX]))     
+    val = WRITECOLOR + " %6s "%(common_bytes_with_unit(write_avg[IDX]))     
     if write_avg[IDX] == 0:                     LINE += val    
     elif write_avg[IDX] == local_max_write_avg: LINE += REVERSE + val  
     else:                                       LINE += val    
