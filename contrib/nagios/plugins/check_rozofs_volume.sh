@@ -89,11 +89,14 @@ print_help() {
 
 display_output() {
   case $1 in
-   "$STATE_OK")         echo "OK <> FREE $free $percent%";;
-   "$STATE_WARNING")    echo "WARNING <$2> FREE $free $percent%";;
-   "$STATE_CRITICAL")   echo "CRITICAL <$2> FREE $free $percent%";; 
-   "$STATE_UNKNOWN")    echo "UNKNOWN <$2> FREE $free $percent%";;    
+   "$STATE_OK")         msg="OK <> ";;
+   "$STATE_WARNING")    msg="WARNING <$2> ";;
+   "$STATE_CRITICAL")   msg="CRITICAL <$2> ";;
+   "$STATE_UNKNOWN")    msg="UNKNOWN <$2> ";;
   esac
+
+  msg=`echo "$msg | free_kbytes=$free""KB;;;; used_kbytes=$used""KB;;;; free_percent=$percent""%;;;;"`
+  echo $msg
   rm -f $VFSTAT
   rm -f ${SYNCHRO}
   exit $1
@@ -107,6 +110,8 @@ set_default() {
   host=""
   time="" 
   free=0
+  used=0
+  total=0
   percent=0
   volume=1
   DBGTARGET="export"
@@ -455,12 +460,15 @@ fi
 
 # Extract volume usage from the debug output
 
-res=`awk '{if (($1=="Volume:") && ($2==volume)) printf("%s %s\n",$8,$12);}' volume=$volume $VFSTAT`
+res=`awk '{if (($1=="Volume:") && ($2==volume)) printf("%s %s %s\n",$8,$10,$12);}' volume=$volume $VFSTAT`
 case $res in 
   "") display_output $STATE_CRITICAL "$host do not host volume $volume"
 esac
-free=`echo $res | awk '{print $1}'`
-percent=`echo $res | awk '{print $2}'`
+# echo $res
+total=`echo $res | awk '{print $1}'`
+free=`echo $res | awk '{print $2}'`
+used=$(( $total - $free))
+percent=`echo $res | awk '{print $3}'`
 
 
 
