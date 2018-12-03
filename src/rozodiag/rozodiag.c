@@ -598,7 +598,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   char    * str = hostStr;
   int       idx;  
 
-  sprintf(hostStr,inputString);
+  sprintf(hostStr,"%s",inputString);
    
   while ((*str != 0)&&(*str != ':')) str++;
   
