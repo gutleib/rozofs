@@ -1,0 +1,541 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+import datetime
+import shutil
+
+from optparse import OptionParser
+
+devices = []
+
+active_export = None
+UPLINE = ""
+BOTTOM = ""
+#___________________________
+# converts string <inBytes> to integer 
+# in the unit given by <to>.
+# <inBytes>  is 
+# [<spaces>]<numeric>[{.|,}<numeric>][<spaces>]<unit>
+# <unit> is {B|K|KB|M|MB|G|GB|T|TB|P|PB}
+# <to> is <unit>
+def common_convert_Bytes(inBytes,to="B"):
+  inBytes = inBytes.replace(" ", "")
+
+  if "." in inBytes:
+    before = int(inBytes.split('.')[0])
+    after  = inBytes.split('.')[1]
+    unit   = re.split('(\d+)',after)[2]
+    after  = re.split('(\d+)',after)[1]
+  elif "," in inBytes:
+    before = int(inBytes.split(',')[0])
+    after  = inBytes.split(',')[1]
+    unit   = re.split('(\d+)',after)[2]
+    after  = re.split('(\d+)',after)[1]
+  else:
+    unit   = re.split('(\d+)',inBytes)[2]
+    before = re.split('(\d+)',inBytes)[1]
+    after = "0"
+
+  if   len(after) == 1: after=int(after)*100
+  elif len(after) == 2: after=int(after)*10
+  elif len(after) == 3: after=int(after)
+
+  if   unit == "KB" or unit == "K": val = (int(before)*1000 + after)
+  elif unit == "MB" or unit == "M": val = (int(before)*1000 + after) * 1000
+  elif unit == "GB" or unit == "G": val = (int(before)*1000 + after) * 1000000
+  elif unit == "TB" or unit == "T": val = (int(before)*1000 + after) * 1000000000
+  elif unit == "PB" or unit == "P": val = (int(before)*1000 + after) * 1000000000000
+  else: val = int(before)
+  
+  if to == "B":              return val
+  if to == "K" or to =="KB": return val/1000
+  if to == "M" or to =="MB": return val/1000000  
+  if to == "G" or to =="GB": return val/1000000000
+  if to == "T" or to =="TB": return val/1000000000000
+  if to == "P" or to =="PB": return val/1000000000000000
+  return val
+#______________________  
+def common_bytes_with_unit(inBytes):
+  if inBytes < 0: sign = "-"
+  else:           sign = ""
+  
+  string="%s"%(inBytes)
+  value = common_convert_Bytes(string,"B")
+
+  if value < 1000: return "%s%4d  "%(sign,value)
+  
+  if value < 1000000:
+    if value >= (100*1000): return "%s%4d K"%(sign,value/1000)
+    if value >=  (10*1000): return "%s%2d.%1d K"%(sign,value/1000,(value % 1000) / 100)
+    return "%s%1d.%2.2d K"%(sign,value/1000,(value % 1000) / 10)   
+  
+  if value < 1000000000:  
+    if value >= (100*1000000): return "%s%4d M"%(sign,value/1000000)
+    if value >=  (10*1000000): return "%s%2d.%1d M"%(sign,value/1000000,(value % 1000000) / 100000)
+    return "%s%1d.%2.2d M"%(sign,value/1000000,(value % 1000000) / 10000)   
+  
+  if value < 1000000000000:  
+    if value >= (100*1000000000): return "%s%4d G"%(sign,value/1000000000)
+    if value >=  (10*1000000000): return "%s%2d.%1d G"%(sign,value/1000000000,(value % 1000000000) / 100000000)
+    return "%s%1d.%2.2d G"%(sign,value/1000000000,(value % 1000000000) / 10000000)   
+  
+  if value < 1000000000000000:  
+    if value >= (100*1000000000000): return "%s%4d T"%(sign,value/1000000000000)
+    if value >=  (10*1000000000000): return "%s%2d.%1d T"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000)
+    return "%s%1d.%2.2d T"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)   
+  
+  if value < 1000000000000000000:  
+    if value >= (100*1000000000000000): return "%s%4d P"%(sign,value/1000000000000000)
+    if value >=  (10*1000000000000000): return "%s%2d.%1d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
+  
+  return "%s%1s.%2.2d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
+
+#______________________________
+def is_this_export_active(export):
+
+  string="rozodiag -i %s -T export:1 -c up"%(export)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+      if "uptime" in line:
+        return True
+  return False
+#______________________________
+def get_active_export(exports):
+  global active_export
+  
+  #
+  # Last active export is given
+  # Check it 1rst
+  #
+  if active_export != None:
+    if is_this_export_active(active_export) == True: return active_export
+  
+  #
+  # No last active given
+  # or last active no more active (switchover
+  #  
+  for export in exports.split('/'):
+
+    #
+    # The last active is no more active
+    #
+    if export == active_export: continue
+    
+    if is_this_export_active(export) == True: 
+      active_export = export
+      return export
+      
+  active_export = None
+  return None
+#______________________________
+def get_eid_and_exports_from_path(path):
+  eid=None
+  string="attr -qg rozofs.export %s"%(path)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    exports=line.split()[0]
+    eid=line.split()[1]
+    return eid,exports
+  print "%s is not a RozoFS mountpoint"%(path)
+  sys.exit(1)    
+            
+#______________________________
+def check_netmwork_filters(address):
+
+  try:
+    ip = get_ip(address)
+  except: 
+    return False
+
+  if len(NipLowArray) != 0:
+    idx = 0
+    for low in NipLowArray:
+      high = NipHighArray[idx]
+      if ip >= low and ip <= high: 
+        if options.detail: print RED+"%s rejected %s"%(address,NipRule[idx])+NORMAL 
+        return False
+      idx += 1
+          
+  if len(ipLowArray) != 0:
+    idx = 0
+    for low in ipLowArray:
+      high = ipHighArray[idx]
+      if ip >= low and ip <= high: 
+        if options.detail: print GREEN+"%s accepted %s"%(address,ipRule[idx])+NORMAL     
+        return True
+      idx += 1
+  else:
+    if options.detail: print GREEN+"%s accepted"%(address)+NORMAL 
+    return True
+    
+  if options.detail: print RED+"%s rejected"%(address)+NORMAL 
+  return False
+  
+#______________________________
+def get_client_list(exports,eid):
+  global total_watched_clients
+  global total_nb_clients
+  
+  total_watched_clients = 0 
+  total_nb_clients = 0
+
+  active_export = get_active_export(exports)
+    
+  idx = int(eid) % 8
+  clients=""
+  string="rozodiag -i %s -T export:%s -c client"%(active_export,idx)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    words = line.split('|')
+    try:
+      int(words[3])
+      delay = int(words[2])
+      if delay > int(300) : continue
+    except:
+      continue  
+    total_nb_clients += int(1)
+    ip = words[4].split(':')[0]
+    if check_netmwork_filters(ip) == False: continue
+    port = words[4].split(':')[1]
+    string="rozodiag -i %s -p %s -c mount"%(ip,port)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:
+      if line.split()[0] != "eid": continue
+      if line.split()[2] != eid: continue
+      clients = clients + " -i %s -p %s"%(ip,port)     
+      total_watched_clients += int(1)  
+  return clients      
+#______________________________
+def get_ip(ipString):
+ if len(ipString.split('.')) != 4: int(a)
+ ip = int(0)
+ for val in ipString.split('.'):
+   ip = ip * int(256) + int(val)
+ return ip  
+
+#______________________________________    
+def get_line_index(val):
+  if val == " Avg ": return 10
+  try:
+    return -int(val) - 1
+  except:
+    return -1  
+#______________________________________    
+def get_color_code(idx):
+  idx = int(idx) % len(color_list)
+  return color_list[idx]
+  
+#______________________________________    
+def build_upline(titles,total_column):
+  global UPLINE
+  global BOTTOM
+  UPLINE = ""
+  
+  for col in range(total_column):
+    UPLINE = UPLINE + ' ' + titles[col+2][0:8].replace(' ','_')
+  UPLINE = UPLINE + "  "
+  
+  if SIZE == int(60): 
+    for col in range(total_column):
+      UPLINE = UPLINE + ' ' + titles[col+2][0:8].replace(' ','_')
+
+  BOTTOM = ""
+  for column in range(total_column):
+    BOTTOM = BOTTOM + '|' + "________"
+  BOTTOM = BOTTOM + '| '  
+  
+  if SIZE == int(60):  
+    for colum in range(nbColumn):
+      BOTTOM = BOTTOM + '|' + "________"
+    BOTTOM = BOTTOM + '|'  
+    
+#______________________________________    
+
+RED='\033[91m\033[40m\033[1m'
+GREEN='\033[92m\033[40m'
+DARKGREEN='\033[32m\033[40m'
+YELLOW='\033[93m\033[40m'
+ORANGE='\033[33m\033[40m'
+BLUE='\033[94m\033[40m'
+LIGHTBLUE='\033[34m\033[40m\033[1m'
+PURPLE='\033[95m\033[40m'
+DEEPPURPLE='\033[95m\033[40m\033[1m'
+CYAN='\033[96m\033[40m'
+WHITE='\033[97m\033[40m'
+LIGHTCYAN='\033[36m\033[40m'
+
+BOLD='\033[1m'
+REVERSE='\033[7m'
+NORMAL='\033[0m'
+
+color_list=[CYAN,YELLOW,GREEN,PURPLE,LIGHTCYAN,RED, DARKGREEN,BLUE,ORANGE,LIGHTBLUE,DEEPPURPLE,WHITE]
+time_unit_list=["s","m","h"]
+
+parser = OptionParser()
+parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
+parser.add_option("-s","--short", action="store_true",dest="short", help="Display only 30 sec")
+parser.add_option("-d","--detail", action="store_true",default=False, dest="detail", help="Detailed per client throughput display.")
+parser.add_option("-t","--time", type = "choice", action="store",dest ="time", choices = time_unit_list, default = "s", help = "Time units within %s."% (time_unit_list))
+parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange", help="Allowed IP range (one IP address or a range like 192.168.1.21-192.168.1.28)")
+parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
+parser.add_option("-w","--what", action="append",type="string", dest="what", help="what to (not to) display \"<r|nr|w|nw|l|nl|c|nc|d|nd|a|na|x|nx|o|no>\" (default everything).")
+parser.add_option("-a","--average", action="store_true",default=False, dest="average", help="Display an average line.")
+parser.add_option("-r","--record", action="store_true",default=False, dest="record", help="Display record values.")
+
+total_watched_clients = int(0)
+total_nb_clients = int(0)
+
+(options, args) = parser.parse_args()
+period  = int(15)
+if options.period != None:
+  try:
+    period = int(options.period)
+  except:
+    print "Bad period value %s"%(options.period)
+    sys.exit(-1)
+
+what = ""    
+if options.what != None:
+  for w in options.what:
+    what = what + ' ' + w
+#
+# input RozoFS mount point is either in args or current path
+#
+if len(args) != 0: path = args[0]
+else:              path = os.getcwd()
+
+    
+ipLowArray  = []
+ipHighArray = []
+ipRule      = []
+NipLowArray  = []
+NipHighArray = []
+NipRule      = []
+
+if options.iprange != None:
+  for iprange in options.iprange:
+    if len(iprange.split('-')) < 2:
+      ipStringLow  = iprange
+      ipStingHigh  = iprange
+    else:      
+      ipStringLow  = iprange.split('-')[0]
+      ipStingHigh  = iprange.split('-')[1]
+    try:
+      ipLow  = get_ip(ipStringLow)
+      ipHigh = get_ip(ipStingHigh)
+    except:
+      print "Bad IP range %s"%(iprange)
+      sys.exit(-1)
+    if ipLow > ipHigh:
+      print "Low IP is greater than high IP in range %s"%(iprange)
+      sys.exit(-1)
+    ipLowArray.append(ipLow)
+    ipHighArray.append(ipHigh)
+    ipRule.append(iprange)
+
+if options.Niprange != None:
+  for iprange in options.Niprange:
+    if len(iprange.split('-')) < 2:
+      ipStringLow  = iprange
+      ipStingHigh  = iprange
+    else:
+      ipStringLow  = iprange.split('-')[0]
+      ipStingHigh  = iprange.split('-')[1]
+    try:
+      ipLow  = get_ip(ipStringLow)
+      ipHigh = get_ip(ipStingHigh)
+    except:
+      print "Bad IP range %s"%(iprange)
+      sys.exit(-1)
+    if ipLow > ipHigh:
+      print "Low IP is greater than high IP in range %s"%(iprange)
+      sys.exit(-1)
+    NipLowArray.append(ipLow)
+    NipHighArray.append(ipHigh)      
+    NipRule.append(iprange)
+        
+# 
+# Find the eid this path is connected to and then get the list of RozoFS
+# clients on this eid from the export
+#    
+eid,exports = get_eid_and_exports_from_path(path)
+clients = get_client_list(exports,eid)
+if clients == "":
+  print "No client found"
+  sys.exit(-1)
+
+if options.short == True:
+  SIZE = int(30)
+else:
+  SIZE = int(60)  
+  
+#
+# Change current directory 
+# Not to block the file system
+#
+os.chdir("/")  
+
+loop = int(0)
+while True : 
+
+  #
+  # Every 10 loops, rebuild the list of clients
+  #
+  loop = loop + int(1)
+  if loop == 11: 
+    clients =  get_client_list(exports,eid)
+    loop = 0
+
+  #
+  # Get current time
+  #
+  zedate = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+  
+  #
+  # Run the rozodiag command against all clients
+  #
+  string="rozodiag %s -c io col 1 %s"%(clients,what)
+  if options.time != "s": string += options.time
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  #
+  # Parse output and cumulate the throughputs
+  #
+  start = True
+  for line in cmd.stdout:
+  
+    if not "|" in line : continue
+ 
+    words = line.split("|")
+    nbColumn = len(words) - int(3)
+    
+    if start == True:
+    
+      try:
+        if total_column != nbColumn: 
+          total_column = nbColumn
+          build_upline(words,total_column)
+      except:         
+        total_column = nbColumn
+        build_upline(words,total_column)
+        if options.record == True:
+          record =  [ int(0) for j in range(total_column) ]    
+        
+      start = False
+      time_col_val = []
+      time_col_val = [[ int(0) for j in range(total_column) ] for i in range(SIZE) ]  
+      max_val = [ int(0) for j in range(total_column) ]     
+      
+      
+      #
+      # Average arrays
+      #
+      if options.average == True:
+      
+        avg1 = []
+        avg1 = [ int(0) for j in range(total_column) ]
+
+        if SIZE == int(60):
+          avg2 = []
+          avg2 = [ int(0) for j in range(total_column) ]          
+      continue
+    
+    if nbColumn > total_column: nbColumn = total_column
+      
+    #
+    # Get time value
+    #
+    try:
+      t =  -int(words[1]) -1
+      if t >= SIZE: continue 
+    except:
+      continue
+
+    for column in range(nbColumn):
+      val = common_convert_Bytes( words[column+2])
+      if int(val) == int(0): continue
+      
+      try:
+      
+        time_col_val[t][column] = time_col_val[t][column] + int(val)
+        if int(val) > max_val[column]: 
+          max_val[column] = int(val) 
+          if options.record == True:
+            if record[column] < int(val): 
+              record[column] = int(val)             
+        if options.average == True:
+          if t < int(30):         
+             avg1[column] = avg1[column] + int(val)            
+          else:
+             avg2[column] = avg2[column] + int(val)  
+             
+      except:
+        print "Error on t %s column %s val %s"%(t,column,val)  
+        sys.exit(-1)  
+#      print "t %s col %s val %s"%(t,column,time_col_val[t][column])
+
+
+  LINE = zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid %s"%(eid)
+  print LINE
+      
+  if options.record == True:
+    LINE = ""
+    for column in range(nbColumn):
+      color = get_color_code(column)
+      LINE = LINE + ' ' + color + "%7s "%(common_bytes_with_unit(record[column])) + NORMAL
+    print LINE
+            
+  print UPLINE 
+    
+  for t in range(30):
+  
+    LINE = ""
+    
+    for column in range(nbColumn):
+      color = get_color_code(column)
+      if max_val[column] != int(0):
+        if time_col_val[t][column] == max_val[column]: color = color + REVERSE
+      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[t][column])) + NORMAL
+    LINE = LINE + "| " 
+    
+    if SIZE == int(60):      
+      for column in range(nbColumn):      
+        color = get_color_code(column)
+        if max_val[column] != int(0):
+          if time_col_val[t+int(30)][column] == max_val[column]: color = color + REVERSE
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[t+int(30)][column])) + NORMAL
+      LINE = LINE + '|' 
+       
+    print LINE  
+
+  print BOTTOM      
+
+  LINE =""
+  if options.average == True:
+    for column in range(nbColumn):
+      color = get_color_code(column)
+      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg1[column]/30)) + NORMAL
+    LINE = LINE + "| " 
+    if SIZE == int(60):  
+      for column in range(nbColumn):
+        color = get_color_code(column)
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg2[column]/30)) + NORMAL
+      LINE = LINE + "| " 
+    print LINE
+    # print BOTTOM
+  sys.stdout.flush()
+
+  if period == 0: break
+  if options.time != "s": break
+  time.sleep(period)
+    
