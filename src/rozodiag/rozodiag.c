@@ -160,14 +160,17 @@ void stop_on_error(char *fmt, ... ) {
   /*
   ** Print out an error message
   */
+  printf("\033[91m\033[40m\033[1m");
+
   if (fmt != NULL) {
     /* Format the string */
     va_start(vaList,fmt);
     vprintf(fmt, vaList);
     va_end(vaList);
   }
+  printf("\033[0m");
 
-  printf("Check syntax with: %s -h\n",prgName);
+  printf("\nCheck syntax with: %s -h\n",prgName);
 
   /*
   ** Shutdown every connection
@@ -586,14 +589,16 @@ void debug_run_command_list(int socketId) {
 ** @retval         The number of IP addresses
 **_________________________________________________________________________________
 */
-static inline int scan_host(char * hostStr, uint32_t * ip) {
+static inline int scan_host(char * inputString, uint32_t * ip) {
   uint32_t  val1,val2;
   int       ret;
   char      hostname[128];
+  char      hostStr[128];
   int       nbHost = 0;   
   char    * str = hostStr;
-  int       idx;
-  
+  int       idx;  
+
+  sprintf(hostStr,inputString);
    
   while ((*str != 0)&&(*str != ':')) str++;
   
@@ -609,14 +614,25 @@ static inline int scan_host(char * hostStr, uint32_t * ip) {
   
   *str = 0;
   str++;
-  if (*str == 0) return 0;
+  
+  if (*str == 0) {
+    if (rozofs_host2ip_netw(hostStr,ip)<0) {
+      return 0;
+    }
+    return 1;
+  }
     
   ret = sscanf(str,"%u",&val1);
   if (ret != 1) return 0;
 
   while ((*str != '-')&&(*str != ',')&&(*str != 0)) str++;
-  if (*str == 0) return 0;
-  
+  if (*str == 0) {
+    sprintf(hostname,"%s%d",hostStr,val1);
+    if (rozofs_host2ip_netw(hostname,ip)<0) {
+      return 0;
+    }
+    return 1;
+  }
   /*
   ** List
   */
@@ -1217,7 +1233,7 @@ int main(int argc, const char **argv) {
   nbCmd         = 0;
   allCmd        = 0;
   read_parameters(argc, argv);
-  if (nbTarget == 0) stop_on_error("No target defined");
+  if (nbTarget == 0) stop_on_error("No target defined !!!\n");
 
   memset(socketArray, -1, sizeof(socketArray)); 
 reloop:

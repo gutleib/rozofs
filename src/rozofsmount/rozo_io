@@ -14,7 +14,8 @@ from optparse import OptionParser
 devices = []
 
 active_export = None
-
+UPLINE = ""
+BOTTOM = ""
 #___________________________
 # converts string <inBytes> to integer 
 # in the unit given by <to>.
@@ -51,6 +52,7 @@ def common_convert_Bytes(inBytes,to="B"):
   elif unit == "PB" or unit == "P": val = (int(before)*1000 + after) * 1000000000000
   else: val = int(before)
   
+  if to == "B":              return val
   if to == "K" or to =="KB": return val/1000
   if to == "M" or to =="MB": return val/1000000  
   if to == "G" or to =="GB": return val/1000000000
@@ -105,8 +107,8 @@ def is_this_export_active(export):
   return False
 #______________________________
 def get_active_export(exports):
-
   global active_export
+  
   #
   # Last active export is given
   # Check it 1rst
@@ -228,46 +230,72 @@ def get_line_index(val):
   except:
     return -1  
 #______________________________________    
-def get_color_code(val):
-  if val == "red": return RED
-  if val == "green": return GREEN
-  if val == "yellow": return YELLOW
-  if val == "blue": return BLUE
-  if val == "purple": return PURPLE
-  if val == "cyan": return CYAN
-  return WHITE    
+def get_color_code(idx):
+  idx = int(idx) % len(color_list)
+  return color_list[idx]
+  
+#______________________________________    
+def build_upline(titles,total_column):
+  global UPLINE
+  global BOTTOM
+  UPLINE = ""
+  
+  for col in range(total_column):
+    UPLINE = UPLINE + ' ' + titles[col+2][0:8].replace(' ','_')
+  UPLINE = UPLINE + "  "
+  
+  if SIZE == int(60): 
+    for col in range(total_column):
+      UPLINE = UPLINE + ' ' + titles[col+2][0:8].replace(' ','_')
+
+  BOTTOM = ""
+  for column in range(total_column):
+    BOTTOM = BOTTOM + '|' + "________"
+  BOTTOM = BOTTOM + '| '  
+  
+  if SIZE == int(60):  
+    for colum in range(nbColumn):
+      BOTTOM = BOTTOM + '|' + "________"
+    BOTTOM = BOTTOM + '|'  
+    
 #______________________________________    
 
-RED='\033[91m\033[40m'
+RED='\033[91m\033[40m\033[1m'
 GREEN='\033[92m\033[40m'
+DARKGREEN='\033[32m\033[40m'
 YELLOW='\033[93m\033[40m'
+ORANGE='\033[33m\033[40m'
 BLUE='\033[94m\033[40m'
+LIGHTBLUE='\033[34m\033[40m\033[1m'
 PURPLE='\033[95m\033[40m'
+DEEPPURPLE='\033[95m\033[40m\033[1m'
 CYAN='\033[96m\033[40m'
 WHITE='\033[97m\033[40m'
+LIGHTCYAN='\033[36m\033[40m'
 
 BOLD='\033[1m'
 REVERSE='\033[7m'
 NORMAL='\033[0m'
 
-color_list=["red","green","yellow","blue","purple","cyan","white"]
+color_list=[CYAN,YELLOW,GREEN,PURPLE,LIGHTCYAN,RED, DARKGREEN,BLUE,ORANGE,LIGHTBLUE,DEEPPURPLE,WHITE]
 time_unit_list=["s","m","h"]
 
 parser = OptionParser()
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
+parser.add_option("-s","--short", action="store_true",dest="short", help="Display only 30 sec")
 parser.add_option("-d","--detail", action="store_true",default=False, dest="detail", help="Detailed per client throughput display.")
-parser.add_option("-o","--output", action="store",type="string", dest="output", help="Output file")
-parser.add_option("-r","--readcolor", type = "choice", action="store",dest ="rcol", choices = color_list, default = "cyan", help = "Read color within %s."% (color_list))
-parser.add_option("-w","--writecolor", type = "choice", action="store",dest ="wcol", choices = color_list, default = "yellow", help = "Write color within %s."% (color_list))
 parser.add_option("-t","--time", type = "choice", action="store",dest ="time", choices = time_unit_list, default = "s", help = "Time units within %s."% (time_unit_list))
 parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange", help="Allowed IP range (one IP address or a range like 192.168.1.21-192.168.1.28)")
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
+parser.add_option("-w","--what", action="append",type="string", dest="what", help="what to (not to) display \"<r|nr|w|nw|l|nl|c|nc|d|nd|a|na|x|nx|o|no>\" (default everything).")
+parser.add_option("-a","--average", action="store_true",default=False, dest="average", help="Display an average line.")
+parser.add_option("-r","--record", action="store_true",default=False, dest="record", help="Display record values.")
 
 total_watched_clients = int(0)
 total_nb_clients = int(0)
 
 (options, args) = parser.parse_args()
-period  = int(30)
+period  = int(15)
 if options.period != None:
   try:
     period = int(options.period)
@@ -275,17 +303,16 @@ if options.period != None:
     print "Bad period value %s"%(options.period)
     sys.exit(-1)
 
+what = ""    
+if options.what != None:
+  for w in options.what:
+    what = what + ' ' + w
 #
 # input RozoFS mount point is either in args or current path
 #
 if len(args) != 0: path = args[0]
 else:              path = os.getcwd()
 
-# 
-# Choosen colors
-# 
-READCOLOR  = get_color_code(options.rcol) 
-WRITECOLOR = get_color_code(options.wcol) 
     
 ipLowArray  = []
 ipHighArray = []
@@ -346,21 +373,16 @@ if clients == "":
   print "No client found"
   sys.exit(-1)
 
-#
-# Redirect output
-#  
-if options.output != None:
-  sys.stdout = open(options.output, 'w')
-  if os.fork(): sys.exit()
+if options.short == True:
+  SIZE = int(30)
+else:
+  SIZE = int(60)  
   
 #
 # Change current directory 
 # Not to block the file system
 #
 os.chdir("/")  
-
-max_read  = 0
-max_write = 0
 
 loop = int(0)
 while True : 
@@ -372,18 +394,6 @@ while True :
   if loop == 11: 
     clients =  get_client_list(exports,eid)
     loop = 0
-    
-
-  read  = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  write = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  read_avg   = [0,0,0,0,0,0]  
-  write_avg  = [0,0,0,0,0,0]  
-  local_max_read  = 0
-  local_max_write = 0
-  local_max_read_avg  = 0
-  local_max_write_avg = 0
-  is_read_max  = False
-  is_write_max = False
 
   #
   # Get current time
@@ -391,9 +401,9 @@ while True :
   zedate = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
   
   #
-  # Run the rozodiag command against all cliets
+  # Run the rozodiag command against all clients
   #
-  string="rozodiag %s -c throughput col 6 avg "%(clients)
+  string="rozodiag %s -c io col 1 %s"%(clients,what)
   if options.time != "s": string += options.time
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -401,138 +411,128 @@ while True :
   #
   # Parse output and cumulate the throughputs
   #
+  start = True
   for line in cmd.stdout:
-    line = line.split('\n')[0]
-    if options.detail == True: print "%s"%(line)
-    line = line.split('|')
-    if len(line) < 23: continue 
-    idx = get_line_index(line[1])  
-    if idx == -1: continue
-
-    #
-    # Average line
-    #
-    if idx == 10:
+  
+    if not "|" in line : continue
+ 
+    words = line.split("|")
+    nbColumn = len(words) - int(3)
     
-      read_avg[0]   = read_avg[0]  + common_convert_Bytes(line[2])
-      write_avg[0]  = write_avg[0]  + common_convert_Bytes(line[3])
-      if read_avg[0] > local_max_read_avg: local_max_read_avg = read_avg[0] 
-      if write_avg[0] > local_max_write_avg: local_max_write_avg = write_avg[0] 
+    if start == True:
+    
+      try:
+        if total_column != nbColumn: 
+          total_column = nbColumn
+          build_upline(words,total_column)
+      except:         
+        total_column = nbColumn
+        build_upline(words,total_column)
+        if options.record == True:
+          record =  [ int(0) for j in range(total_column) ]    
+        
+      start = False
+      time_col_val = []
+      time_col_val = [[ int(0) for j in range(total_column) ] for i in range(SIZE) ]  
+      max_val = [ int(0) for j in range(total_column) ]     
+      
+      
+      #
+      # Average arrays
+      #
+      if options.average == True:
+      
+        avg1 = []
+        avg1 = [ int(0) for j in range(total_column) ]
 
-      read_avg[1]   = read_avg[1]  + common_convert_Bytes(line[6])
-      write_avg[1]  = write_avg[1]  + common_convert_Bytes(line[7])
-      if read_avg[1] > local_max_read_avg: local_max_read_avg = read_avg[1] 
-      if write_avg[1] > local_max_write_avg: local_max_write_avg = write_avg[1] 
-
-      read_avg[2]   = read_avg[2]  + common_convert_Bytes(line[10])
-      write_avg[2]  = write_avg[2] + common_convert_Bytes(line[11])
-      if read_avg[2] > local_max_read_avg: local_max_read_avg = read_avg[2] 
-      if write_avg[2] > local_max_write_avg: local_max_write_avg = write_avg[2] 
-
-      read_avg[3]   = read_avg[3]  + common_convert_Bytes(line[14])
-      write_avg[3]  = write_avg[3] + common_convert_Bytes(line[15])
-      if read_avg[3] > local_max_read_avg: local_max_read_avg = read_avg[3] 
-      if write_avg[3] > local_max_write_avg: local_max_write_avg = write_avg[3] 
-
-      read_avg[4]   = read_avg[4]   + common_convert_Bytes(line[18])
-      write_avg[4]  = write_avg[4]  + common_convert_Bytes(line[19])
-      if read_avg[4] > local_max_read_avg: local_max_read_avg = read_avg[4] 
-      if write_avg[4] > local_max_write_avg: local_max_write_avg = write_avg[4] 
-
-      read_avg[5]   = read_avg[5]  + common_convert_Bytes(line[22])
-      write_avg[5]  = write_avg[5] + common_convert_Bytes(line[23])
-      if read_avg[5] > local_max_read_avg: local_max_read_avg = read_avg[5] 
-      if write_avg[5] > local_max_write_avg: local_max_write_avg = write_avg[5] 
+        if SIZE == int(60):
+          avg2 = []
+          avg2 = [ int(0) for j in range(total_column) ]          
       continue
+    
+    if nbColumn > total_column: nbColumn = total_column
       
     #
-    # Normal line
-    #  
-    read[idx]     = read[idx]      + common_convert_Bytes(line[2])
-    write[idx]    = write[idx]     + common_convert_Bytes(line[3])
-    read[idx+10]  = read[idx+10]   + common_convert_Bytes(line[6])
-    write[idx+10] = write[idx+10]  + common_convert_Bytes(line[7])
-    read[idx+20]  = read[idx+20]   + common_convert_Bytes(line[10])
-    write[idx+20] = write[idx+20]  + common_convert_Bytes(line[11])
-    read[idx+30]  = read[idx+30]   + common_convert_Bytes(line[14])
-    write[idx+30] = write[idx+30]  + common_convert_Bytes(line[15])
-    read[idx+40]  = read[idx+40]   + common_convert_Bytes(line[18])
-    write[idx+40] = write[idx+40]  + common_convert_Bytes(line[19])
-    read[idx+50]  = read[idx+50]   + common_convert_Bytes(line[22])
-    write[idx+50] = write[idx+50]  + common_convert_Bytes(line[23])
+    # Get time value
+    #
+    try:
+      t =  -int(words[1]) -1
+      if t >= SIZE: continue 
+    except:
+      continue
 
-  #
-  # Search for the maximum values
-  #
-  for idx in range(60):
-    if read[idx] > local_max_read: local_max_read = read[idx]
-    if write[idx] > local_max_write: local_max_write = write[idx]    
-  if local_max_write > max_write:  
-    max_write = local_max_write
-    is_write_max = True
-  if local_max_read  > max_read:   
-    max_read  = local_max_read    
-    is_read_max = True
+    for column in range(nbColumn):
+      val = common_convert_Bytes( words[column+2])
+      if int(val) == int(0): continue
+      
+      try:
+      
+        time_col_val[t][column] = time_col_val[t][column] + int(val)
+        if int(val) > max_val[column]: 
+          max_val[column] = int(val) 
+          if options.record == True:
+            if record[column] < int(val): 
+              record[column] = int(val)             
+        if options.average == True:
+          if t < int(30):         
+             avg1[column] = avg1[column] + int(val)            
+          else:
+             avg2[column] = avg2[column] + int(val)  
+             
+      except:
+        print "Error on t %s column %s val %s"%(t,column,val)  
+        sys.exit(-1)  
+#      print "t %s col %s val %s"%(t,column,time_col_val[t][column])
 
-  #
-  # Prepare display header
-  #
-  LINE = ""
-  if options.time == "h":
-    LINE = "Last " + REVERSE + "60 hours" + NORMAL + " history throughput.\n"
-  elif options.time == "m":
-    LINE = "Last " + REVERSE + "60 minutes" + NORMAL + " throughput history.\n"  
-  else: 
-    LINE = "\n"      
-  LINE += zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid " + eid + " - max " 
-  #
-  # Max 
-  #
-  LINE += READCOLOR 
-  if is_read_max == True: LINE += REVERSE
-  LINE += common_bytes_with_unit(max_read) + NORMAL + '/' +  WRITECOLOR  
-  if is_write_max == True: LINE += REVERSE
-  LINE += common_bytes_with_unit(max_write) + NORMAL
-  print LINE  
+
+  LINE = zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid %s"%(eid)
+  print LINE
+      
+  if options.record == True:
+    LINE = ""
+    for column in range(nbColumn):
+      color = get_color_code(column)
+      LINE = LINE + ' ' + color + "%7s "%(common_bytes_with_unit(record[column])) + NORMAL
+    print LINE
+            
+  print UPLINE 
+    
+  for t in range(30):
   
-  print " __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_ "
+    LINE = ""
+    
+    for column in range(nbColumn):
+      color = get_color_code(column)
+      if max_val[column] != int(0):
+        if time_col_val[t][column] == max_val[column]: color = color + REVERSE
+      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[t][column])) + NORMAL
+    LINE = LINE + "| " 
+    
+    if SIZE == int(60):      
+      for column in range(nbColumn):      
+        color = get_color_code(column)
+        if max_val[column] != int(0):
+          if time_col_val[t+int(30)][column] == max_val[column]: color = color + REVERSE
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[t+int(30)][column])) + NORMAL
+      LINE = LINE + '|' 
+       
+    print LINE  
 
-  for idx in range(10):
-    LINE=""
-    for cols in range(6):
-      IDX = idx + cols*10
-      LINE += "|"
-      val = READCOLOR + " %6s "%(common_bytes_with_unit(read[IDX]))  
-      if read[IDX] == 0:                     LINE += val  
-      elif read[IDX] == local_max_read:      LINE += REVERSE + val  
-      elif read[IDX] >= local_max_read_avg:  LINE += BOLD + val  
-      else:                                  LINE += val  
-      LINE += NORMAL + "|"
-      val = WRITECOLOR + " %6s "%(common_bytes_with_unit (write[IDX]))      
-      if write[IDX] == 0:                     LINE += val  
-      elif write[IDX] == local_max_write:     LINE += REVERSE + val 
-      elif write[IDX] >= local_max_write_avg: LINE += BOLD + val 
-      else:                                   LINE += val 
-      LINE += NORMAL + "|"
-    print LINE    
-  print "|________|________||________|________||________|________||________|________||________|________||________|________|"
+  print BOTTOM      
 
-  LINE=""
-  
-  for IDX in range(6):
-    LINE += "|"
-    val = READCOLOR + " %6s "%(common_bytes_with_unit(read_avg[IDX])) 
-    if read_avg[IDX] == 0:                    LINE += val    
-    elif read_avg[IDX] == local_max_read_avg: LINE += REVERSE + val  
-    else:                                     LINE += val   
-    LINE += NORMAL + "|"
-    val = WRITECOLOR + " %6s "%(common_bytes_with_unit(write_avg[IDX]))     
-    if write_avg[IDX] == 0:                     LINE += val    
-    elif write_avg[IDX] == local_max_write_avg: LINE += REVERSE + val  
-    else:                                       LINE += val    
-    LINE += NORMAL + "|"
-  print LINE    
-
+  LINE =""
+  if options.average == True:
+    for column in range(nbColumn):
+      color = get_color_code(column)
+      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg1[column]/30)) + NORMAL
+    LINE = LINE + "| " 
+    if SIZE == int(60):  
+      for column in range(nbColumn):
+        color = get_color_code(column)
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg2[column]/30)) + NORMAL
+      LINE = LINE + "| " 
+    print LINE
+    # print BOTTOM
   sys.stdout.flush()
 
   if period == 0: break
