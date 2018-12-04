@@ -1217,9 +1217,10 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
        }
   }
   /*
-  ** Check the file size is over the minimum required
+  ** Check the file size is in range
   */
-  if (inode_p->s.attrs.size < rozo_balancing_ctx.filesize_config) {
+  if ((inode_p->s.attrs.size < rozo_balancing_ctx.min_filesize_config)
+  ||  (inode_p->s.attrs.size > rozo_balancing_ctx.max_filesize_config)) {
     return 0;
   }
   
@@ -1647,7 +1648,8 @@ void rozo_bal_read_configuration_file(void) {
   rozo_balancing_ctx.rebalance_frequency         = rebalance_config.frequency;
   rozo_balancing_ctx.max_scanned                 = rebalance_config.movecnt;
   rozo_balancing_ctx.throughput                  = rebalance_config.throughput;
-  rozo_balancing_ctx.filesize_config             = rebalance_config.minfilesz;
+  rozo_balancing_ctx.min_filesize_config         = rebalance_config.minfilesz;
+  rozo_balancing_ctx.max_filesize_config         = rebalance_config.maxfilesz;
   /*
   ** Take newer and older when valid
   */
@@ -1723,6 +1725,7 @@ static void usage() {
     printf("\t--mode <rel|abs|fid>  \t\t\t\tuse relative, full path or fid while moving file (default is relative path)\n");
 #endif
     printf("\t--minfilesz <size>[k|K|m|M|g|G] \t\tMinimum file size to move.(default:%d)\n",REBALANCE_MIN_FILE_SIZE);
+    printf("\t--maxfilesz <size>[k|K|m|M|g|G] \t\tMaximum file size to move.(default:%d)\n",REBALANCE_MAX_FILE_SIZE);
     printf("\t--verbose \t\t\tset the rebalancing in verbose mode\n");
     printf("\t--movecnt <count> \t\tfile count threshold before triggering file move (default:%d)\n",REBALANCE_MAX_SCANNED);
     printf("\t--movesz <value>[k|K|m|M|g|G] \tcumulated file size threshold before triggering file move (default:%s)\n",
@@ -1811,7 +1814,8 @@ int main(int argc, char *argv[]) {
     rozo_balancing_ctx.rebalance_threshold_trigger = 100;
     rozo_balancing_ctx.configFileName = EXPORTD_DEFAULT_CONFIG;   
     rozo_balancing_ctx.max_scanned = REBALANCE_MAX_SCANNED;
-    rozo_balancing_ctx.filesize_config = REBALANCE_MIN_FILE_SIZE;
+    rozo_balancing_ctx.min_filesize_config = REBALANCE_MIN_FILE_SIZE;
+    rozo_balancing_ctx.max_filesize_config = REBALANCE_MAX_FILE_SIZE;
     rozo_balancing_ctx.max_move_size_config = REBALANCE_MAX_MOVE_SIZE;
     rozo_balancing_ctx.newer_time_sec_config = -1;         
     rozo_balancing_ctx.older_time_sec_config   = -1;  
@@ -1839,6 +1843,7 @@ int main(int argc, char *argv[]) {
         {"mode", required_argument, &long_opt_cur, 9},
         {"cfg", required_argument, &long_opt_cur, 10},
         {"minfilesz", required_argument, &long_opt_cur, 11},
+        {"maxfilesz", required_argument, &long_opt_cur, 12},
 
         {0, 0, 0, 0}
     };
@@ -1961,7 +1966,17 @@ int main(int argc, char *argv[]) {
         	   usage();
         	   exit(EXIT_FAILURE);     
 		}                
-                rozo_balancing_ctx.filesize_config = val64;
+                rozo_balancing_ctx.min_filesize_config = val64;
+		break;                  
+                              
+	      case 12:
+		ret = get_size_value(optarg,&val64);
+		if (ret < 0) {
+ 		   severe("--maxfilesz: Bad value: %s",optarg);	  
+        	   usage();
+        	   exit(EXIT_FAILURE);     
+		}                
+                rozo_balancing_ctx.max_filesize_config = val64;
 		break;                  
                 
 	      default:

@@ -85,6 +85,18 @@ static int isDefaultValue;
   REBALANCE_CONFIG_SHOW_END\
 }
 
+#define REBALANCE_CONFIG_IS_DEFAULT_ENUM(val,def) \
+  isDefaultValue = 0; \
+  if (rebalance_config.val == string2rebalance_config_ ## val (def)) isDefaultValue = 1;
+
+#define REBALANCE_CONFIG_SHOW_ENUM(val,def,opt)  {\
+  REBALANCE_CONFIG_SHOW_NAME(val,def)\
+  *pChar++ = '\"';\
+  pChar += rozofs_string_append(pChar, rebalance_config_ ## val ## 2String(rebalance_config.val));\
+  *pChar++ = '\"';\
+  REBALANCE_CONFIG_SHOW_END_OPT(opt)\
+}
+
 #define REBALANCE_CONFIG_IS_DEFAULT_INT(val,def) \
   isDefaultValue = 0; \
   if (rebalance_config.val == def) isDefaultValue = 1;
@@ -123,7 +135,7 @@ static int isDefaultValue;
   } else {\
     rebalance_config.val = 0;\
   }\
-  if (config_lookup_bool(&cfg, #val, &boolval)) { \
+  if (config_lookup_bool(&cfg, #val, &boolval) == CONFIG_TRUE) { \
     rebalance_config.val = boolval;\
   }\
 }
@@ -144,7 +156,7 @@ static int isDefaultValue;
     pChar += rozofs_eol(pChar);\
     return 0;\
   }\
-  pChar += rozofs_string_append(pChar,"True or False value expected.\n");\
+  pChar += rozofs_string_append_error(pChar,"True or False value expected.\n" );\
   return -1;\
 }
 
@@ -157,7 +169,7 @@ static long int          intval;
 
 #define REBALANCE_CONFIG_READ_INT_MINMAX(val,def,mini,maxi)  {\
   rebalance_config.val = def;\
-  if (config_lookup_int(&cfg, #val, &intval)) { \
+  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \
     if (intval<mini) {\
       rebalance_config.val = mini;\
     }\
@@ -173,15 +185,15 @@ static long int          intval;
 #define REBALANCE_CONFIG_SET_INT_MINMAX(val,def,mini,maxi)  {\
   int valint;\
   if (sscanf(def,"%d",&valint) != 1) {\
-    pChar += rozofs_string_append(pChar,"integer value expected.\n");\
+    pChar += rozofs_string_append_error(pChar,"integer value expected.\n");\
     return -1;\
   }\
   if (valint<mini) {\
-    pChar += rozofs_string_append(pChar,"value lower than minimum.\n");\
+    pChar += rozofs_string_append_error(pChar,"value lower than minimum.\n");\
     return -1;\
   }\
   if (valint>maxi) { \
-    pChar += rozofs_string_append(pChar,"value bigger than maximum.\n");\
+    pChar += rozofs_string_append_error(pChar,"value bigger than maximum.\n");\
     return -1;\
   }\
   pChar += rozofs_string_append(pChar,#val);\
@@ -194,7 +206,7 @@ static long int          intval;
 
 #define REBALANCE_CONFIG_READ_INT(val,def) {\
   rebalance_config.val = def;\
-  if (config_lookup_int(&cfg, #val, &intval)) { \
+  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \
     rebalance_config.val = intval;\
   }\
 }
@@ -202,7 +214,7 @@ static long int          intval;
 #define REBALANCE_CONFIG_SET_INT(val,def)  {\
   int valint;\
   if (sscanf(def,"%d",&valint) != 1) {\
-    pChar += rozofs_string_append(pChar,"integer value expected.\n");\
+    pChar += rozofs_string_append_error(pChar,"integer value expected.\n");\
     return -1;\
   }\
   pChar += rozofs_string_append(pChar, #val);\
@@ -216,7 +228,7 @@ static long int          intval;
 #define REBALANCE_CONFIG_READ_LONG(val,def) {\
   long long         longval;\
   rebalance_config.val = def;\
-  if (config_lookup_int64(&cfg, #val, &longval)) { \
+  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \
     rebalance_config.val = longval;\
   }\
 }
@@ -224,7 +236,7 @@ static long int          intval;
 #define REBALANCE_CONFIG_SET_LONG(val,def) {\
   long long         longval;\
   if (sscanf(def,"%lld",&longval) != 1) {\
-    pChar += rozofs_string_append(pChar,"long long integer value expected.\n");\
+    pChar += rozofs_string_append_error(pChar,"long long integer value expected.\n");\
     return -1;\
   }\
   pChar += rozofs_string_append(pChar,#val);\
@@ -239,7 +251,7 @@ static long int          intval;
 #define REBALANCE_CONFIG_READ_LONG_MINMAX(val,def,mini,maxi)  {\
   long long         longval;\
   rebalance_config.val = def;\
-  if (config_lookup_int64(&cfg, #val, &longval)) { \
+  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \
     if (longval<mini) {\
       rebalance_config.val = mini;\
     }\
@@ -256,15 +268,15 @@ static long int          intval;
 #define REBALANCE_CONFIG_SET_LONG_MINMAX(val,def,mini,maxi)  {\
   long long         longval;\
   if (sscanf(def,"%lld",&longval) != 1) {\
-    pChar += rozofs_string_append(pChar,"long long integer value expected.\n");\
+    pChar += rozofs_string_append_error(pChar,"long long integer value expected.\n"));\
     return -1;\
   }\
   if (longval<mini) {\
-    pChar += rozofs_string_append(pChar,"value lower than minimum.\n");\
+    pChar += rozofs_string_append_error(pChar,"value lower than minimum.\n"));\
     return -1;\
   }\
   if (longval>maxi) { \
-    pChar += rozofs_string_append(pChar,"value bigger than maximum.\n");\
+    pChar += rozofs_string_append_error(pChar,"value bigger than maximum.\n"));\
     return -1;\
   }\
   pChar += rozofs_string_append(pChar,#val);\
@@ -277,7 +289,7 @@ static long int          intval;
 #define REBALANCE_CONFIG_READ_STRING(val,def)  {\
   const char * charval;\
   if (rebalance_config.val) free(rebalance_config.val);\
-  if (config_lookup_string(&cfg, #val, &charval)) {\
+  if (config_lookup_string(&cfg, #val, &charval) == CONFIG_TRUE) {\
     rebalance_config.val = strdup(charval);\
   } else {\
     rebalance_config.val = strdup(def);\

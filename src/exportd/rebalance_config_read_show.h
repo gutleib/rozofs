@@ -21,6 +21,7 @@
 #ifndef _REBALANCE_CONFIG_READ_SHOW_H
 #define _REBALANCE_CONFIG_READ_SHOW_H
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
@@ -72,8 +73,11 @@ static inline int rebalance_config_generated_set(char * pChar, char *parameter, 
   if (strcmp(parameter,"minfilesz")==0) {
     REBALANCE_CONFIG_SET_LONG(minfilesz,value);
   }
-  pChar += rozofs_string_append(pChar,"No such parameter ");
-  pChar += rozofs_string_append(pChar,parameter);
+  if (strcmp(parameter,"maxfilesz")==0) {
+    REBALANCE_CONFIG_SET_LONG(maxfilesz,value);
+  }
+  pChar += rozofs_string_append_error(pChar,"No such parameter ");
+  pChar += rozofs_string_append_error(pChar,parameter);
   pChar += rozofs_eol(pChar);\
   return -1;
 }
@@ -104,11 +108,9 @@ void man_rebalance_config(char * pChar) {
 */
 char * show_rebalance_config_module_global(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"global");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    GLOBAL SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   REBALANCE_CONFIG_IS_DEFAULT_INT(free_avg_tolerance,10);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -195,10 +197,16 @@ char * show_rebalance_config_module_global(char * pChar) {
   REBALANCE_CONFIG_SHOW_BOOL(verbose,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  REBALANCE_CONFIG_IS_DEFAULT_LONG(minfilesz,10485760);
+  REBALANCE_CONFIG_IS_DEFAULT_LONG(minfilesz,268435456);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// That option gives the minimum size(in bytes) of an eligible file to rebalancing\n");
-  REBALANCE_CONFIG_SHOW_LONG(minfilesz,10485760);
+  REBALANCE_CONFIG_SHOW_LONG(minfilesz,268435456);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  REBALANCE_CONFIG_IS_DEFAULT_LONG(maxfilesz,137438953472);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// That option gives the mximum size(in bytes) of an eligible file to rebalancing\n");
+  REBALANCE_CONFIG_SHOW_LONG(maxfilesz,137438953472);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -209,80 +217,108 @@ char * show_rebalance_config_module_global(char * pChar) {
 */
 char * save_rebalance_config_module_global(char * pChar) {
 
-  pChar += rozofs_string_append(pChar,"#\n");
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
   pChar += rozofs_string_append(pChar,"# ");
   pChar += rozofs_string_append(pChar,"global");
   pChar += rozofs_string_append(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append(pChar,"#\n\n");
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
 
   REBALANCE_CONFIG_IS_DEFAULT_INT(free_avg_tolerance,10);
-  pChar += rozofs_string_append(pChar,"// This parameter defines the threshold in percentage around the average \n");
-  pChar += rozofs_string_append(pChar,"// storage occupancy to which the balancing applies. Typically, the balancing \n");
-  pChar += rozofs_string_append(pChar,"// stops when all the storages (sid) are included in the window defined by that \n");
-  pChar += rozofs_string_append(pChar,"// threshold. \n");
-  pChar += rozofs_string_append(pChar,"// See the -t parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_INT_OPT(free_avg_tolerance,10,"0:100");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// This parameter defines the threshold in percentage around the average \n");
+    pChar += rozofs_string_append(pChar,"// storage occupancy to which the balancing applies. Typically, the balancing \n");
+    pChar += rozofs_string_append(pChar,"// stops when all the storages (sid) are included in the window defined by that \n");
+    pChar += rozofs_string_append(pChar,"// threshold. \n");
+    pChar += rozofs_string_append(pChar,"// See the -t parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_INT_OPT(free_avg_tolerance,10,"0:100");
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_INT(free_low_threshold,40);
-  pChar += rozofs_string_append(pChar,"// This parameter defines the free space threshold in percentage before \n");
-  pChar += rozofs_string_append(pChar,"// triggering a storage balancing. If the free available space on sid is higher \n");
-  pChar += rozofs_string_append(pChar,"// than that threshold, the balancing process stops. \n");
-  pChar += rozofs_string_append(pChar,"// See the -a parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_INT_OPT(free_low_threshold,40,"0:100");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// This parameter defines the free space threshold in percentage before \n");
+    pChar += rozofs_string_append(pChar,"// triggering a storage balancing. If the free available space on sid is higher \n");
+    pChar += rozofs_string_append(pChar,"// than that threshold, the balancing process stops. \n");
+    pChar += rozofs_string_append(pChar,"// See the -a parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_INT_OPT(free_low_threshold,40,"0:100");
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_INT(frequency,30);
-  pChar += rozofs_string_append(pChar,"// This option defines the scanning frequency in seconds of the storage balancing \n");
-  pChar += rozofs_string_append(pChar,"// process.\n");
-  pChar += rozofs_string_append(pChar,"// See the --frequency parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_INT(frequency,30);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// This option defines the scanning frequency in seconds of the storage balancing \n");
+    pChar += rozofs_string_append(pChar,"// process.\n");
+    pChar += rozofs_string_append(pChar,"// See the --frequency parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_INT(frequency,30);
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_LONG(older,-1);
-  pChar += rozofs_string_append(pChar,"// Exclude files that are more recent than the specified delay. \n");
-  pChar += rozofs_string_append(pChar,"// The delay is defined in minutes.\n");
-  pChar += rozofs_string_append(pChar,"// See the --olderm parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_LONG(older,-1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Exclude files that are more recent than the specified delay. \n");
+    pChar += rozofs_string_append(pChar,"// The delay is defined in minutes.\n");
+    pChar += rozofs_string_append(pChar,"// See the --olderm parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_LONG(older,-1);
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_LONG(newer,-1);
-  pChar += rozofs_string_append(pChar,"// Exclude files that are older than the specified delay. \n");
-  pChar += rozofs_string_append(pChar,"// The delay is defined in minutes.\n");
-  pChar += rozofs_string_append(pChar,"// See the --newerm parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_LONG(newer,-1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Exclude files that are older than the specified delay. \n");
+    pChar += rozofs_string_append(pChar,"// The delay is defined in minutes.\n");
+    pChar += rozofs_string_append(pChar,"// See the --newerm parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_LONG(newer,-1);
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_INT(movecnt,10);
-  pChar += rozofs_string_append(pChar,"// That option defines the file count threshold before triggering\n");
-  pChar += rozofs_string_append(pChar,"// an effective file move. The move occurs when the scan has either \n");
-  pChar += rozofs_string_append(pChar,"// reached movesz or movecnt. \n");
-  pChar += rozofs_string_append(pChar,"// See the --movecnt parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_INT(movecnt,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option defines the file count threshold before triggering\n");
+    pChar += rozofs_string_append(pChar,"// an effective file move. The move occurs when the scan has either \n");
+    pChar += rozofs_string_append(pChar,"// reached movesz or movecnt. \n");
+    pChar += rozofs_string_append(pChar,"// See the --movecnt parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_INT(movecnt,10);
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_STRING(movesz,"1G");
-  pChar += rozofs_string_append(pChar,"// That option defines the file count threshold before triggering\n");
-  pChar += rozofs_string_append(pChar,"// an effective file move. The move occurs when the scan has either \n");
-  pChar += rozofs_string_append(pChar,"// reached movesz or movecnt. \n");
-  pChar += rozofs_string_append(pChar,"// See the --movesz parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_STRING(movesz,"1G");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option defines the file count threshold before triggering\n");
+    pChar += rozofs_string_append(pChar,"// an effective file move. The move occurs when the scan has either \n");
+    pChar += rozofs_string_append(pChar,"// reached movesz or movecnt. \n");
+    pChar += rozofs_string_append(pChar,"// See the --movesz parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_STRING(movesz,"1G");
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_INT(throughput,10);
-  pChar += rozofs_string_append(pChar,"// That option defines the maximun bandwidth in MB/s allocated to\n");
-  pChar += rozofs_string_append(pChar,"// the file mover.\n");
-  pChar += rozofs_string_append(pChar,"// See the --throughput parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_INT(throughput,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option defines the maximun bandwidth in MB/s allocated to\n");
+    pChar += rozofs_string_append(pChar,"// the file mover.\n");
+    pChar += rozofs_string_append(pChar,"// See the --throughput parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_INT(throughput,10);
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_STRING(mode,"fid");
-  pChar += rozofs_string_append(pChar,"// That option indicates the access mode used by the storage balancer for moving the file:\n");
-  pChar += rozofs_string_append(pChar,"// - rel: use relative mode (parent/child)\n");
-  pChar += rozofs_string_append(pChar,"// - abs: use full pathname mode\n");
-  pChar += rozofs_string_append(pChar,"// - fid: use i-node mode \n");
-  REBALANCE_CONFIG_SHOW_STRING(mode,"fid");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option indicates the access mode used by the storage balancer for moving the file:\n");
+    pChar += rozofs_string_append(pChar,"// - rel: use relative mode (parent/child)\n");
+    pChar += rozofs_string_append(pChar,"// - abs: use full pathname mode\n");
+    pChar += rozofs_string_append(pChar,"// - fid: use i-node mode \n");
+    REBALANCE_CONFIG_SHOW_STRING(mode,"fid");
+  }
 
   REBALANCE_CONFIG_IS_DEFAULT_BOOL(verbose,False);
-  pChar += rozofs_string_append(pChar,"// That option when asserted sets the process in verbose mode\n");
-  pChar += rozofs_string_append(pChar,"// See --verbose parameter of the CLI.\n");
-  REBALANCE_CONFIG_SHOW_BOOL(verbose,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option when asserted sets the process in verbose mode\n");
+    pChar += rozofs_string_append(pChar,"// See --verbose parameter of the CLI.\n");
+    REBALANCE_CONFIG_SHOW_BOOL(verbose,False);
+  }
 
-  REBALANCE_CONFIG_IS_DEFAULT_LONG(minfilesz,10485760);
-  pChar += rozofs_string_append(pChar,"// That option gives the minimum size(in bytes) of an eligible file to rebalancing\n");
-  REBALANCE_CONFIG_SHOW_LONG(minfilesz,10485760);
+  REBALANCE_CONFIG_IS_DEFAULT_LONG(minfilesz,268435456);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option gives the minimum size(in bytes) of an eligible file to rebalancing\n");
+    REBALANCE_CONFIG_SHOW_LONG(minfilesz,268435456);
+  }
+
+  REBALANCE_CONFIG_IS_DEFAULT_LONG(maxfilesz,137438953472);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option gives the mximum size(in bytes) of an eligible file to rebalancing\n");
+    REBALANCE_CONFIG_SHOW_LONG(maxfilesz,137438953472);
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -312,20 +348,20 @@ static inline int rebalance_config_generated_save(char * pChar) {
   */
   fd = open(rebalance_config_file_name,O_CREAT|O_TRUNC|O_APPEND|O_WRONLY,0777);
   if (fd < 0) {
-    pChar += rozofs_string_append(pChar,"Can not open ");
-    pChar += rozofs_string_append(pChar,rebalance_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not open ");
+    pChar += rozofs_string_append_error(pChar,rebalance_config_file_name);
     return -1;
   }
   pBuff = save_rebalance_config_module_global(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append(pChar,"Can not write ");
-    pChar += rozofs_string_append(pChar,rebalance_config_file_name);
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,rebalance_config_file_name);
     close(fd);
     return -1;
   }
   pChar += rozofs_string_append(pChar,"Saved in ");
   pChar += rozofs_string_append(pChar,rebalance_config_file_name);
-  pChar += rozofs_eol(pChar);\
+  pChar += rozofs_eol(pChar);
   close(fd);
   return 0;
 }
@@ -335,34 +371,14 @@ static inline int rebalance_config_generated_save(char * pChar) {
 **
 */
 char * rebalance_config_generated_show_all_files(char * pChar) {
-  DIR           * dp = NULL;
-  struct dirent * pep; 
-  char            dirName[256];
-  char            *pt;
+  char            cmd[256];
 
   if (rebalance_config_file_is_read==0) {
-    pChar += rozofs_string_append(pChar,"Can not read configuration file ");
+    pChar += rozofs_string_append_error(pChar,"Can not read configuration file ");
     return pChar;
   }
-
-  strcpy(dirName,rebalance_config_file_name);
-  pt = dirName;
-  pt += strlen(dirName);
-  while((pt > dirName)&&(*pt!='/')) pt--;
-  *pt = 0;
-
-  dp = opendir(dirName);
-  if (dp) {
-    while ((pep = readdir(dp)) != NULL) {
-      if (pep == NULL) break;
-      if (strncmp(pep->d_name,"rozofs.conf",11) != 0) continue;
-      pChar += rozofs_string_append(pChar, dirName);
-      pChar += rozofs_string_append(pChar, "/");
-      pChar += rozofs_string_append(pChar, pep->d_name);
-      pChar += rozofs_eol(pChar);
-    }
-  }
-  closedir(dp);
+  sprintf(cmd,"ls -lisa %s*",rebalance_config_file_name);
+  uma_dbg_run_system_cmd(cmd, pChar, uma_dbg_get_buffer_len()); 
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -372,6 +388,7 @@ char * rebalance_config_generated_show_all_files(char * pChar) {
 */
 void rebalance_config_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 char *pChar = uma_dbg_get_buffer();
+char *pHead;
 
   if (argv[1] != NULL) {
 
@@ -384,7 +401,7 @@ char *pChar = uma_dbg_get_buffer();
 
     if (strcmp(argv[1],"set")==0) {
       if ((argv[2] == NULL)||(argv[3] == NULL)) {
-        pChar += rozofs_string_append(pChar, "Missing <parameter> and/or <value>\n");
+        pChar += rozofs_string_append_error(pChar, "Missing <parameter> and/or <value>\n");
         uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
         return;
       }
@@ -406,25 +423,58 @@ char *pChar = uma_dbg_get_buffer();
     }
 
     if (strcmp("global",argv[1])==0) {
+      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+        severe( "ruc_buf_getPayload(%p)", bufRef );
+        return;
+      }
+      /*
+      ** Set the command recall string
+      */
+      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
       pChar = show_rebalance_config_module_global(pChar);
-      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
       return;
     }
     else {
-      pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
+      pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
       return;
     }
   }
 
-  if (rebalance_config_file_is_read==0) {
-    pChar += rozofs_string_append(pChar,"Can not read configuration file ");
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return;
   }
-  pChar += rozofs_string_append(pChar,rebalance_config_file_name);
-  pChar += rozofs_eol(pChar);
+  /*
+  ** Set the command recall string
+  */
+  pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+  if (rebalance_config_file_is_read==0) {
+    pChar += rozofs_string_append_error(pChar,"Can not read configuration file ");
+  }
+  
+  
   pChar = show_rebalance_config_module_global(pChar);
-
-  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
+  
+  bufRef = uma_dbg_get_new_buffer(tcpRef);
+  if (bufRef == NULL) {
+    warning( "uma_dbg_get_new_buffer() Buffer depletion");
+    return;
+  }
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return;
+  }
+  pChar = pHead+sizeof(UMA_MSGHEADER_S);
+  *pChar = 0;
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
+  pChar += rozofs_string_append(pChar,"# ");
+  pChar += rozofs_string_append(pChar," rebalance_config file is ");
+  pChar += rozofs_string_append(pChar,rebalance_config_file_name);
+  pChar += rozofs_string_append(pChar,"\n#____________________________________________________________\n\n");
+  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
   return;
 }
 /*____________________________________________________________________________________________
@@ -509,7 +559,9 @@ static inline void rebalance_config_generated_read(char * fname) {
   // See --verbose parameter of the CLI. 
   REBALANCE_CONFIG_READ_BOOL(verbose,False);
   // That option gives the minimum size(in bytes) of an eligible file to rebalancing 
-  REBALANCE_CONFIG_READ_LONG(minfilesz,10485760);
+  REBALANCE_CONFIG_READ_LONG(minfilesz,268435456);
+  // That option gives the mximum size(in bytes) of an eligible file to rebalancing 
+  REBALANCE_CONFIG_READ_LONG(maxfilesz,137438953472);
  
   config_destroy(&cfg);
 }

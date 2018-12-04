@@ -1772,6 +1772,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
   printf("\nDates must be expressed in one of the following format:\n");
   printf(" - YYYY-MM-DD\n - YYYY-MM-DD-HH\n - YYYY-MM-DD-HH:MM\n - YYYY-MM-DD-HH:MM:SS\n");
+  printf("\nFile size can be expressed in K, M, G, T or P units : 8, 9M, 10T\n");
   printf("\n\033[1mOUTPUT:\033[0m\n");              
   printf("\t\033[1m-o,--out <f1,f2...>\033[0m\tDescribes requested output fields.\n");
   printf("\t\t\t\tDefault is to have one file/directory path per line.\n");
@@ -1924,6 +1925,32 @@ static inline uint64_t rozofs_scan_u64(char * str) {
   }    
   return val;    
 }
+/*
+**__________________________________________________________________
+**
+** Read the name from the inode
+  
+  @param rootPath : export root path
+  @param buffer   : where to copy the name back
+  @param len      : name length
+*/
+static inline uint64_t rozofs_scan_size_string(char * sizeString) {
+  uint64_t   value;
+  char     * pUnits = sizeString;
+   
+  value =  rozofs_scan_u64(sizeString);
+  if (value == -1) return -1;
+  
+  while ( (*pUnits >= 0x30) && (*pUnits <= 0x39)) pUnits++;
+  if (*pUnits == 0) return value;
+  if (*pUnits == 'K') return 1024UL*value;
+  if (*pUnits == 'M') return 1024UL*1024UL*value;
+  if (*pUnits == 'G') return 1024UL*1024UL*1024UL*value;
+  if (*pUnits == 'T') return 1024UL*1024UL*1024UL*1024UL*value;
+  if (*pUnits == 'P') return 1024UL*1024UL*1024UL*1024UL*1024UL*value;
+  return value;
+}
+   
 /*
 **_______________________________________________________________________
 */
@@ -2646,7 +2673,7 @@ int main(int argc, char *argv[]) {
                   break; 
                     
                 case SCAN_CRITERIA_SIZE:
-                  size_lower = rozofs_scan_u64(optarg);
+                  size_lower = rozofs_scan_size_string(optarg);
                   if (size_lower==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }    
@@ -2760,7 +2787,7 @@ int main(int argc, char *argv[]) {
                   break;  
                   
                 case SCAN_CRITERIA_SIZE:
-                  size_lower = rozofs_scan_u64(optarg);
+                  size_lower = rozofs_scan_size_string(optarg);
                   if (size_lower==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
@@ -2881,7 +2908,7 @@ int main(int argc, char *argv[]) {
                   
                   
                 case SCAN_CRITERIA_SIZE:
-                  size_bigger = rozofs_scan_u64(optarg);
+                  size_bigger = rozofs_scan_size_string(optarg);
                   if (size_bigger==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
@@ -2998,7 +3025,7 @@ int main(int argc, char *argv[]) {
                   break;                  
 
                 case SCAN_CRITERIA_SIZE:
-                  size_bigger = rozofs_scan_u64(optarg);
+                  size_bigger = rozofs_scan_size_string(optarg);
                   if (size_bigger==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   } 
@@ -3108,7 +3135,7 @@ int main(int argc, char *argv[]) {
                   break;  
 
                 case SCAN_CRITERIA_SIZE:
-                  size_equal = rozofs_scan_u64(optarg);
+                  size_equal = rozofs_scan_size_string(optarg);
                   if (size_equal==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }
@@ -3303,7 +3330,7 @@ int main(int argc, char *argv[]) {
                   break; 
                    
                 case SCAN_CRITERIA_SIZE:
-                  size_diff = rozofs_scan_u64(optarg);
+                  size_diff = rozofs_scan_size_string(optarg);
                   if (size_diff==-1) {
                     usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
                   }

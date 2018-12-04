@@ -107,7 +107,8 @@ char *show_conf_with_buf(char * buf)
      pChar +=sprintf(pChar,"max files move             :  %d/%d\n",p->max_scanned,scanned_current_count);
      pChar +=sprintf(pChar,"max move size (cur/max)    :  %s/%s\n",display_size_not_aligned((long long unsigned int)p->max_move_size_config,buffer),
                                                                 display_size_not_aligned((long long unsigned int)p->cur_move_size,buffer2));
-     pChar +=sprintf(pChar,"min. file size             :  %s\n",display_size_not_aligned((long long unsigned int)p->filesize_config,buffer));
+     pChar +=sprintf(pChar,"min. file size             :  %s\n",display_size_not_aligned((long long unsigned int)p->min_filesize_config,buffer));
+     pChar +=sprintf(pChar,"max. file size             :  %s\n",display_size_not_aligned((long long unsigned int)p->max_filesize_config,buffer));
      pChar +=sprintf(pChar,"\n");
      pChar +=sprintf(pChar,"file read retry            :  V%d/C%d\n",p->eagain_volume,p->eagain_cluster);
      pChar +=sprintf(pChar,"newer delay                :  ");
@@ -229,7 +230,8 @@ static char * set_balancing_help(char * pChar) {
   pChar += sprintf(pChar,"set_balancing trigger <value>              : set the re-balancing trigger (free percentage on storage)\n");
   pChar += sprintf(pChar,"set_balancing move_count <value>           : set the maximum of selected files before triggering a move\n");
   pChar += sprintf(pChar,"set_balancing move_size <value>            : set the maximum bytes size to move in one polling\n");
-  pChar += sprintf(pChar,"set_balancing filesize <value>[k|K|m|M|g|G]: set the minimum selectable file size (B/KB/MB/GB)\n");
+  pChar += sprintf(pChar,"set_balancing minfilesize <value>[k|K|m|M|g|G]: set the minimum selectable file size (B/KB/MB/GB)\n");
+  pChar += sprintf(pChar,"set_balancing maxfilesize <value>[k|K|m|M|g|G]: set the maximum selectable file size (B/KB/MB/GB)\n");
   pChar += sprintf(pChar,"set_balancing throughput <value>           : set the maximum file throughput (unit in MB/s)\n");
   return pChar; 
 }
@@ -413,7 +415,7 @@ void set_balancing(char * argv[], uint32_t tcpRef, void *bufRef)
       return;   
     } 	  
     
-    if (strcmp(argv[1],"filesize")==0) 
+    if (strcmp(argv[1],"minfilesize")==0) 
     {   
       if (argv[2] == NULL) 
       {
@@ -429,8 +431,30 @@ void set_balancing(char * argv[], uint32_t tcpRef, void *bufRef)
 	uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
 	return;        
       }
-      p->filesize_config = val64;
-      pChar+=sprintf(pChar,"filesize value is now %llu Bytes\n",(long long unsigned int)p->filesize_config);
+      p->min_filesize_config = val64;
+      pChar+=sprintf(pChar,"minfilesize value is now %llu Bytes\n",(long long unsigned int)p->min_filesize_config);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;   
+    }
+    
+    if (strcmp(argv[1],"maxfilesize")==0) 
+    {   
+      if (argv[2] == NULL) 
+      {
+	set_balancing_help(pChar);	
+	uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+	return;  	  
+      }
+      ret = get_size_value(argv[2],&val64);
+      if (ret < 0)
+      {
+        pChar += sprintf(pChar,"error %s\n",strerror(errno));
+	set_balancing_help(pChar);	
+	uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+	return;        
+      }
+      p->max_filesize_config = val64;
+      pChar+=sprintf(pChar,"maxfilesize value is now %llu Bytes\n",(long long unsigned int)p->max_filesize_config);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;   
     }
