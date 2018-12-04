@@ -21,6 +21,7 @@
 #ifndef _REBALANCE_CONFIG_H
 #define _REBALANCE_CONFIG_H
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
@@ -31,6 +32,14 @@
 #include <dirent.h>
 void rebalance_config_read(char * fname);
 
+
+/*_______________________________
+** ENUM definion
+*/
+
+/*_______________________________
+** rebalance_config structure
+*/
 typedef struct _rebalance_config_t {
 
   /*
@@ -84,7 +93,13 @@ typedef struct _rebalance_config_t {
   int32_t     verbose;
   // That option gives the minimum size(in bytes) of an eligible file to rebalancing
   int64_t     minfilesz;
+  // That option gives the mximum size(in bytes) of an eligible file to rebalancing
+  int64_t     maxfilesz;
 } rebalance_config_t;
 
 extern rebalance_config_t rebalance_config;
+
+/*_______________________________
+** ENUM macro
+*/
 #endif
