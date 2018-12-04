@@ -1772,6 +1772,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
   printf("\nDates must be expressed in one of the following format:\n");
   printf(" - YYYY-MM-DD\n - YYYY-MM-DD-HH\n - YYYY-MM-DD-HH:MM\n - YYYY-MM-DD-HH:MM:SS\n");
+  printf("\nFile size can be expressed in K, M, G, T or P units : 8, 9M, 10T\n");
   printf("\n\033[1mOUTPUT:\033[0m\n");              
   printf("\t\033[1m-o,--out <f1,f2...>\033[0m\tDescribes requested output fields.\n");
   printf("\t\t\t\tDefault is to have one file/directory path per line.\n");
