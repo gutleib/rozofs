@@ -25,7 +25,8 @@
 #define REBALANCE_DEFAULT_FREQ_SEC 30
 #define ROZO_BALANCE_DBG_BUF_SIZE (1024*384)
 #define REBALANCE_MAX_SCANNED 10
-#define REBALANCE_MIN_FILE_SIZE (10*1024*1024)
+#define REBALANCE_MIN_FILE_SIZE (256UL*1024UL*1024UL)
+#define REBALANCE_MAX_FILE_SIZE (128UL*1024UL*1024UL*1024UL)
 #define REBALANCE_MAX_MOVE_SIZE (1000*1024*1024)
 #define REBALANCE_DEFAULT_THROUGPUT 10
 
@@ -55,7 +56,8 @@ typedef struct _rozo_balancing_ctx_t
   int number_of_eid_in_volume;   /**< number of eids in the volume        */
   int current_eid_idx;           /**< current export index                */
   int max_scanned;           /**< max file scanned before a move          */
-  uint64_t filesize_config;           /**< min file size in Bytes         */
+  uint64_t min_filesize_config;           /**< min file size in Bytes         */
+  uint64_t max_filesize_config;           /**< max file size in Bytes         */
   uint64_t max_move_size_config;     /**< max move size                   */
   int continue_on_balanced_state;    /**< assert to one if the process should continue while reaching balanced state */
   int verbose;                       /**< assert to one for verbose mode */

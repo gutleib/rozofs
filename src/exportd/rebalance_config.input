@@ -93,4 +93,8 @@ STRING global mode             "fid"
 BOOL   global verbose           False
 
 // That option gives the minimum size(in bytes) of an eligible file to rebalancing
-LONG global minfilesz           10485760
+LONG global minfilesz           268435456
+
+
+// That option gives the mximum size(in bytes) of an eligible file to rebalancing
+LONG global maxfilesz           137438953472
