@@ -490,7 +490,7 @@ def go_build_macros(struct_name):
   print "#define %s_SET_LONG(val,def) {\\"%(struct_name.upper())
   print "  long long         longval;\\"
   print "  if (sscanf(def,\"%lld\",&longval) != 1) {\\"
-  print "    pChar += rozofs_string_append_error(pChar,\"long long integer value expected.\\n\"));\\"  
+  print "    pChar += rozofs_string_append_error(pChar,\"long long integer value expected.\\n\");\\"  
   print "    return -1;\\"
   print "  }\\"  
   print "  pChar += rozofs_string_append(pChar,#val);\\"
@@ -799,11 +799,11 @@ def go_build_show_files(struct_name):
   print "char * %s_generated_show_all_files(char * pChar) {"%(struct_name)
   print "  char            cmd[256];"
   print ""
-  print "  if (common_config_file_is_read==0) {"
+  print "  if (%s_file_is_read==0) {"%(struct_name)
   print "    pChar += rozofs_string_append_error(pChar,\"Can not read configuration file \");"
   print "    return pChar;"
   print "  }"
-  print "  sprintf(cmd,\"ls -lisa %s*\",common_config_file_name);"
+  print "  sprintf(cmd,\"ls -lisa %%s*\",%s_file_name);"%(struct_name)
   print "  uma_dbg_run_system_cmd(cmd, pChar, uma_dbg_get_buffer_len()); " 
   print "  return pChar;"
   print "}"    
