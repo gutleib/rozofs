@@ -1724,8 +1724,8 @@ static void usage() {
     */
     printf("\t--mode <rel|abs|fid>  \t\t\t\tuse relative, full path or fid while moving file (default is relative path)\n");
 #endif
-    printf("\t--minfilesz <size>[k|K|m|M|g|G] \t\tMinimum file size to move.(default:%d)\n",REBALANCE_MIN_FILE_SIZE);
-    printf("\t--maxfilesz <size>[k|K|m|M|g|G] \t\tMaximum file size to move.(default:%d)\n",REBALANCE_MAX_FILE_SIZE);
+    printf("\t--minfilesz <size>[k|K|m|M|g|G] \t\tMinimum file size to move.(default:%llu)\n",(long long unsigned int)REBALANCE_MIN_FILE_SIZE);
+    printf("\t--maxfilesz <size>[k|K|m|M|g|G] \t\tMaximum file size to move.(default:%llu)\n",(long long unsigned int)REBALANCE_MAX_FILE_SIZE);
     printf("\t--verbose \t\t\tset the rebalancing in verbose mode\n");
     printf("\t--movecnt <count> \t\tfile count threshold before triggering file move (default:%d)\n",REBALANCE_MAX_SCANNED);
     printf("\t--movesz <value>[k|K|m|M|g|G] \tcumulated file size threshold before triggering file move (default:%s)\n",

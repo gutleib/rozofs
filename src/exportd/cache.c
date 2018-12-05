@@ -226,8 +226,6 @@ int are_file_locks_compatible(struct ep_lock_t * lock1, struct ep_lock_t * lock2
   key = p1->size << 8 | p2->size;
   switch(key) {
   
-
-      return -1;
     
     case (EP_LOCK_FROM_START<<8|EP_LOCK_TO_END): 
     case (EP_LOCK_FROM_START<<8|EP_LOCK_PARTIAL): 
@@ -266,6 +264,7 @@ int are_file_locks_compatible(struct ep_lock_t * lock1, struct ep_lock_t * lock2
     //case (EP_LOCK_PARTIAL<<8|EP_LOCK_TOTAL):    
       return 0;   
   }   
+  return 0;
 }
 /*
 *___________________________________________________________________
@@ -287,8 +286,6 @@ int are_file_locks_overlapping(struct ep_lock_t * lock1, struct ep_lock_t * lock
   
   key = p1->size << 8 | p2->size;
   switch(key) {
-
-      return 1;
     
     case (EP_LOCK_FROM_START<<8|EP_LOCK_TO_END): 
     case (EP_LOCK_FROM_START<<8|EP_LOCK_PARTIAL): 
@@ -323,7 +320,8 @@ int are_file_locks_overlapping(struct ep_lock_t * lock1, struct ep_lock_t * lock
     //case (EP_LOCK_FROM_START<<8|EP_LOCK_TOTAL):  
     //case (EP_LOCK_PARTIAL<<8|EP_LOCK_TOTAL):           
       return 1;   
-  }   
+  }
+  return 1;   
 }
 /*
 *___________________________________________________________________
