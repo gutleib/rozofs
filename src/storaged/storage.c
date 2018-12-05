@@ -36,6 +36,7 @@
 #include <sys/mount.h>
 #include <sys/resource.h>
 #include <mntent.h>
+#include <sys/uio.h>
 
 #include <rozofs/rozofs.h>
 #include <rozofs/common/log.h>

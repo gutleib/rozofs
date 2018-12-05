@@ -42,14 +42,6 @@ uint64_t  rozofs_rpc_global_object_index = 0;
 
 void rozofs_rpc_generic_reply_cbk(void *this,void *param);
 
-
-
-#define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
-#define EXPGW_DEBUG_TOPIC      "rozofsmount_res"
-static char    myBuf[UMA_DBG_MAX_SEND_SIZE];
-
-#define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
-#define EXPGW_DEBUG_TOPIC      "rozofsmount_res"
 static char    myBuf[UMA_DBG_MAX_SEND_SIZE];
 
 /*__________________________________________________________________________

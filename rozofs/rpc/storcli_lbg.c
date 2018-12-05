@@ -40,7 +40,7 @@
 #include "rpcclt.h"
 #include "storcli_lbg_prototypes.h"
 
-int storcli_lbg_id[4] = {-1,-1,-1,-1};  /**< reference of the load balancing group to join storcli processes */
+int storcli_lbg_id[STORCLI_PER_FSMOUNT];  /**< reference of the load balancing group to join storcli processes */
 
 
 /**
@@ -103,6 +103,8 @@ int storcli_lbg_initialize(exportclt_t *exportclt,char *owner,uint16_t rozofsmou
     
     DEBUG_FUNCTION;    
     char sunpath[AF_UNIX_SOCKET_NAME_SIZE];
+    
+    memset(storcli_lbg_id,-1, sizeof(storcli_lbg_id));
     
     for (lbg_idx=0; lbg_idx < STORCLI_PER_FSMOUNT; lbg_idx++) {
     

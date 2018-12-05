@@ -108,10 +108,12 @@ void north_lbg_debug_show(char * argv[],uint32_t tcpRef, void *bufRef) {
                 pChar += sprintf(pChar, "       Cnx  Attempts            : %12llu\n", (unsigned long long int) entry_p->stats.totalConnectAttempts);
                 pChar += sprintf(pChar, "       Xmit messages            : %12llu\n", (unsigned long long int) entry_p->stats.totalXmit);
                 pChar += sprintf(pChar, "       Recv messages            : %12llu\n", (unsigned long long int) entry_p->stats.totalRecv);
+#if 0
                 pChar += sprintf(pChar, "       Xmit Perf. (count/time)  : %"PRIu64" / %"PRIu64" us / cumul %"PRIu64" us\n",
                         stats_p->timestampCount,
                         stats_p->timestampCount ? stats_p->timestampElasped / stats_p->timestampCount : 0,
-                        stats_p->timestampElasped);  
+                        stats_p->timestampElasped);
+#endif                          
 		stats_p->timestampCount = 0;
 		stats_p->timestampElasped = 0;
 	 
