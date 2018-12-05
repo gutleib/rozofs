@@ -460,7 +460,7 @@ void rozofs_standalone_tcp_connection_disc_cbk(uint32_t lbg_id)
     list_t *p, *q;    
     rozofs_standalone_cli_lbg_stats_t *lbg_stats_p;
 
-    if (lbg_id >=rozofs_standalone_tmo_context_count );
+    if (lbg_id >=rozofs_standalone_tmo_context_count )
     {
        warning("Out of range lbg_id %u (max is %u)",lbg_id,rozofs_standalone_tmo_context_count);
        return;

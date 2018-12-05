@@ -803,7 +803,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 	   if (ret == 0)
 	   {
 	     pChar +=sprintf(pChar,"Device path          : /sys/fs/fuse/connections/%u\n",cnx_param.dev);
-	     pChar +=sprintf(pChar,"ra_pages             : %u\n",cnx_param.ra_pages);
+	     pChar +=sprintf(pChar,"ra_pages             : %llu\n",(long long unsigned int)cnx_param.ra_pages);
 	     pChar +=sprintf(pChar,"max_background       : %u\n",cnx_param.max_background);
 	     pChar +=sprintf(pChar,"congestion_threshold : %u\n",cnx_param.congestion_threshold);	   	   
 	   }
