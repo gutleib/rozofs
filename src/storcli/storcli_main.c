@@ -933,7 +933,7 @@ void show_vid_state(char * argv[], uint32_t tcpRef, void *bufRef)
  */
 
 void rozofs_storcli_cid_table_state_init() {
-    memset(rozofs_storcli_cid_state_table, CID_DEPENDENCY_ST, ROZOFS_CLUSTERS_MAX * sizeof (uint8_t));
+    memset(rozofs_storcli_cid_state_table, CID_DEPENDENCY_ST, sizeof (rozofs_storcli_cid_state_table));
 }
 /*
 **__________________________________________________________________________

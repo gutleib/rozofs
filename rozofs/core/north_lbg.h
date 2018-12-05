@@ -62,6 +62,7 @@ typedef enum _north_lbg_entry_state_e
 
 #define NORTH_LBG_MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
 
+#if 0
 #define NORTH_LBG_START_PROF(buffer)\
  { \
   unsigned long long time;\
@@ -71,7 +72,7 @@ typedef enum _north_lbg_entry_state_e
   time = NORTH_LBG_MICROLONG(timeDay); \
   buffer->timestamp =time;\
 }
-
+ 
 #define NORTH_LBG_STOP_PROF(buffer)\
 { \
   unsigned long long timeAfter;\
@@ -80,6 +81,10 @@ typedef enum _north_lbg_entry_state_e
     timeAfter = NORTH_LBG_MICROLONG(timeDay); \
     buffer->timestampElasped += (timeAfter- buffer->timestamp); \
 }
+#else
+#define NORTH_LBG_START_PROF(buffer) 
+#define NORTH_LBG_STOP_PROF(buffer) 
+#endif
 /**
 * That structure contains the statistics of a socket : might be common for all
 * sockets

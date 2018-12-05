@@ -63,7 +63,6 @@ void *rozorpc_srv_pool[_ROZORPC_SRV_MAX_POOL];
 uint32_t rozorpc_srv_seqnum = 1;
 
 
-#define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
 #define ROZORPC_SRV_DEBUG_TOPIC      "rpc_resources"
 static char    myBuf[UMA_DBG_MAX_SEND_SIZE];
 

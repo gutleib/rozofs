@@ -31,6 +31,7 @@
 #include <sys/wait.h>
 #include <dirent.h>
 #include <sys/mount.h>
+#include <sys/sysmacros.h>
  
 #include <rozofs/rozofs.h>
 #include <rozofs/common/log.h>
