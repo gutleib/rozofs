@@ -11,4 +11,5 @@
 /usr/bin/rozo_distribution_check
 /usr/bin/rozo_mount_cleanup
 /usr/bin/rozofsmount_wrapper
+/usr/bin/rozo_mount_send_stats
 /usr/share/man/man8/rozo_trash.8

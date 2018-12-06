@@ -352,6 +352,19 @@ add_executable(rozo_du
 )
 target_link_libraries(rozo_du rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
+#________________________________________________________
+# Send export stats to an InfluDB host
+# scratch
+#
+add_executable(rozo_export_send_stats
+    econfig.h
+    econfig.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h    
+    rozo_export_send_stats.c
+)
+target_link_libraries(rozo_export_send_stats rozofs ${CONFIG_LIBRARY})
+
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT export)
 
@@ -459,6 +472,12 @@ install(TARGETS rozo_locate_fid
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     COMPONENT rozo_locate_fid
+)
+install(TARGETS rozo_export_send_stats
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_export_send_stats
 )
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)

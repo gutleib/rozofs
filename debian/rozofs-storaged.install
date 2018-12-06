@@ -9,6 +9,7 @@
 /usr/bin/rozo_device
 /usr/bin/rozo_storage_throughput
 /usr/bin/rozo_storage_fid2pathname
+/usr/bin/rozo_storage_send_stats
 /etc/rozofs/storage.conf
 /usr/share/man/man5/storage.conf.5
 /usr/share/man/man8/storaged.8

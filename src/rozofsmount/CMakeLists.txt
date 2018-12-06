@@ -100,7 +100,12 @@ add_executable(rozo_locate_projections
        rozo_locate_projections.c    
 )
 target_link_libraries(rozo_locate_projections rozofs ${UUID_LIBRARY} ${CONFIG_LIBRARY})
-    
+
+add_executable(rozo_mount_send_stats 
+    rozo_mount_send_stats.c
+)
+target_link_libraries(rozo_mount_send_stats rozofs ${CONFIG_LIBRARY})
+
 # Install
 install(TARGETS rozofsmount
     RUNTIME DESTINATION bin
@@ -115,7 +120,13 @@ install(TARGETS rozo_locate_projections
     ARCHIVE DESTINATION lib
     COMPONENT mount
 )
-
+# Install rozo_mount_send_stats
+install(TARGETS rozo_mount_send_stats
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_mount_send_stats
+)
 # Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse (mount.rozofs command)
 install(CODE "MESSAGE(\"Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse\")")
 install(CODE "EXECUTE_PROCESS (COMMAND ln -sf /sbin/mount.fuse /sbin/mount.rozofs)" COMPONENT client)
