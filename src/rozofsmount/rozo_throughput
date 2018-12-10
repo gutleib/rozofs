@@ -11,10 +11,29 @@ import shutil
 
 from optparse import OptionParser
 
-devices = []
+eid_list       = []
+exports_list   = []
+client_list    = []
+count_list   = []
+max_read_list  = []
+max_write_list = []
+active_list    = []
 
-active_export = None
+#___________________________
+def append_target(eid,exports):
 
+  eid_list.append(eid)
+  exports_list.append(exports)
+  
+  active_export = get_active_export(exports)
+  active_list.append(active_export)
+  
+  clients,count  = get_client_list(active_export,eid)
+  client_list.append(clients)
+  count_list.append(count)
+  
+  max_read_list.append(0)
+  max_write_list.append(0)
 #___________________________
 # converts string <inBytes> to integer 
 # in the unit given by <to>.
@@ -104,9 +123,8 @@ def is_this_export_active(export):
         return True
   return False
 #______________________________
-def get_active_export(exports):
+def get_active_export(exports,active_export=None):
 
-  global active_export
   #
   # Last active export is given
   # Check it 1rst
@@ -126,11 +144,9 @@ def get_active_export(exports):
     if export == active_export: continue
     
     if is_this_export_active(export) == True: 
-      active_export = export
       return export
       
-  active_export = None
-  return None
+  return active_export
 #______________________________
 def get_eid_and_exports_from_path(path):
   eid=None
@@ -141,8 +157,7 @@ def get_eid_and_exports_from_path(path):
     exports=line.split()[0]
     eid=line.split()[1]
     return eid,exports
-  print "%s is not a RozoFS mountpoint"%(path)
-  sys.exit(1)    
+  syntax( "%s is not a RozoFS mountpoint"%(path))
             
 #______________________________
 def check_netmwork_filters(address):
@@ -177,15 +192,9 @@ def check_netmwork_filters(address):
   return False
   
 #______________________________
-def get_client_list(exports,eid):
-  global total_watched_clients
-  global total_nb_clients
+def get_client_list(active_export,eid):
   
-  total_watched_clients = 0 
-  total_nb_clients = 0
-
-  active_export = get_active_export(exports)
-    
+  count = int(0) 
   idx = int(eid) % 8
   clients=""
   string="rozodiag -i %s -T export:%s -c client"%(active_export,idx)
@@ -199,7 +208,6 @@ def get_client_list(exports,eid):
       if delay > int(300) : continue
     except:
       continue  
-    total_nb_clients += int(1)
     ip = words[4].split(':')[0]
     if check_netmwork_filters(ip) == False: continue
     port = words[4].split(':')[1]
@@ -209,9 +217,9 @@ def get_client_list(exports,eid):
     for line in cmd.stdout:
       if line.split()[0] != "eid": continue
       if line.split()[2] != eid: continue
-      clients = clients + " -i %s -p %s"%(ip,port)     
-      total_watched_clients += int(1)  
-  return clients      
+      clients = clients + " -i %s -p %s"%(ip,port)  
+      count = count + int(1)   
+  return clients,count      
 #______________________________
 def get_ip(ipString):
  if len(ipString.split('.')) != 4: int(a)
@@ -235,7 +243,34 @@ def get_color_code(val):
   if val == "blue": return BLUE
   if val == "purple": return PURPLE
   if val == "cyan": return CYAN
+  if val == "orange": return ORANGE
   return WHITE    
+#______________________________________    
+def syntax(string=None):
+  if string != None:
+    print "\n" + RED + BOLD + string + " !!!" + NORMAL + "\n"
+    
+  print "Usage: " + BOLD + "rozo_throughput "+ YELLOW +"[OPTIONS]" + CYAN + " [FILTER] " + GREEN + "[MOUNTPOINTS]"+ NORMAL
+  print
+  print YELLOW +"  OPTIONS = {--period <seconds> | --readcolor <color> | --writecolor <color> | --history}"+ NORMAL
+  print YELLOW +"    -p,--period <seconds>"+ NORMAL +"   enables to set the refresh period to <seconds> seconds."
+  print YELLOW +"    -r,--readcolor <color>"+ NORMAL +"  to change read color."
+  print YELLOW +"    -w,--writecolor <color>"+ NORMAL +" to change write color."
+  print YELLOW +"    -H,--history"+ NORMAL +"            displays a 60 minutes and a 60 hours history."
+  print
+  print CYAN + "  FILTER = {--ipRange <IP1@-IP2@> ... | --NipRange <IP1@-IP2@> ...}"+ NORMAL
+  print CYAN + "    -i,--ipRange  <IP1@-IP2@>"+ NORMAL  +"  excludes clients whose IP address is out of IP1-IP2 range." 
+  print CYAN + "    -I,--NipRange <IP1@-IP2@>"+ NORMAL  +"  excludes clients whose IP address is within IP1-IP2 range." 
+  print
+  print GREEN + "  MOUNTPOINTS = [<mnt>] ..."+ NORMAL
+  print GREEN + "    mnt = "+ NORMAL  +"RozoFS mount point"
+  print "  When no mount point is provided, current path is taken as input mount point."
+  print 
+  print "examples:"
+  print "  rozo_throughput /mnt/rfs1" 
+  print "  rozo_throughput -p 10 /mnt/rfs /mnt/private" 
+  print 
+  sys.exit(-1)
 #______________________________________    
 
 RED='\033[91m\033[40m'
@@ -245,12 +280,13 @@ BLUE='\033[94m\033[40m'
 PURPLE='\033[95m\033[40m'
 CYAN='\033[96m\033[40m'
 WHITE='\033[97m\033[40m'
+ORANGE='\033[33m\033[40m'
 
 BOLD='\033[1m'
 REVERSE='\033[7m'
 NORMAL='\033[0m'
 
-color_list=["red","green","yellow","blue","purple","cyan","white"]
+color_list=["red","green","yellow","blue","purple","cyan","white","orange"]
 time_unit_list=["s","m","h"]
 
 parser = OptionParser()
@@ -259,12 +295,9 @@ parser.add_option("-d","--detail", action="store_true",default=False, dest="deta
 parser.add_option("-o","--output", action="store",type="string", dest="output", help="Output file")
 parser.add_option("-r","--readcolor", type = "choice", action="store",dest ="rcol", choices = color_list, default = "cyan", help = "Read color within %s."% (color_list))
 parser.add_option("-w","--writecolor", type = "choice", action="store",dest ="wcol", choices = color_list, default = "yellow", help = "Write color within %s."% (color_list))
-parser.add_option("-t","--time", type = "choice", action="store",dest ="time", choices = time_unit_list, default = "s", help = "Time units within %s."% (time_unit_list))
+parser.add_option("-H","--history", action="store_true",default=False, dest="history", help="Display a 60 minutes and 60 hours history.")
 parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange", help="Allowed IP range (one IP address or a range like 192.168.1.21-192.168.1.28)")
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
-
-total_watched_clients = int(0)
-total_nb_clients = int(0)
 
 (options, args) = parser.parse_args()
 period  = int(30)
@@ -272,14 +305,8 @@ if options.period != None:
   try:
     period = int(options.period)
   except:
-    print "Bad period value %s"%(options.period)
-    sys.exit(-1)
+    syntax( "Bad period value %s"%(options.period))
 
-#
-# input RozoFS mount point is either in args or current path
-#
-if len(args) != 0: path = args[0]
-else:              path = os.getcwd()
 
 # 
 # Choosen colors
@@ -306,11 +333,9 @@ if options.iprange != None:
       ipLow  = get_ip(ipStringLow)
       ipHigh = get_ip(ipStingHigh)
     except:
-      print "Bad IP range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Bad IP range %s"%(iprange))
     if ipLow > ipHigh:
-      print "Low IP is greater than high IP in range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Low IP is greater than high IP in range %s"%(iprange))
     ipLowArray.append(ipLow)
     ipHighArray.append(ipHigh)
     ipRule.append(iprange)
@@ -327,24 +352,23 @@ if options.Niprange != None:
       ipLow  = get_ip(ipStringLow)
       ipHigh = get_ip(ipStingHigh)
     except:
-      print "Bad IP range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Bad IP range %s"%(iprange))
     if ipLow > ipHigh:
-      print "Low IP is greater than high IP in range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Low IP is greater than high IP in range %s"%(iprange))
     NipLowArray.append(ipLow)
     NipHighArray.append(ipHigh)      
     NipRule.append(iprange)
-        
-# 
-# Find the eid this path is connected to and then get the list of RozoFS
-# clients on this eid from the export
-#    
-eid,exports = get_eid_and_exports_from_path(path)
-clients = get_client_list(exports,eid)
-if clients == "":
-  print "No client found"
-  sys.exit(-1)
+
+#
+# input RozoFS mount point is either in args or current path
+#
+if len(args) == 0:
+  eid,exports = get_eid_and_exports_from_path(os.getcwd())
+  append_target(eid,exports)
+else:  
+  for arg in args:
+    eid,exports = get_eid_and_exports_from_path(arg)
+    append_target(eid,exports)
 
 #
 # Redirect output
@@ -358,184 +382,203 @@ if options.output != None:
 # Not to block the file system
 #
 os.chdir("/")  
-
-max_read  = 0
-max_write = 0
+history = ""
 
 loop = int(0)
-while True : 
+while True :   
 
   #
   # Every 10 loops, rebuild the list of clients
   #
   loop = loop + int(1)
-  if loop == 11: 
-    clients =  get_client_list(exports,eid)
-    loop = 0
-    
-
-  read  = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  write = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  read_avg   = [0,0,0,0,0,0]  
-  write_avg  = [0,0,0,0,0,0]  
-  local_max_read  = 0
-  local_max_write = 0
-  local_max_read_avg  = 0
-  local_max_write_avg = 0
-  is_read_max  = False
-  is_write_max = False
-
-  #
-  # Get current time
-  #
-  zedate = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-  
-  #
-  # Run the rozodiag command against all cliets
-  #
-  string="rozodiag %s -c throughput col 6 avg "%(clients)
-  if options.time != "s": string += options.time
-  parsed = shlex.split(string)
-  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-  #
-  # Parse output and cumulate the throughputs
-  #
-  for line in cmd.stdout:
-    line = line.split('\n')[0]
-    if options.detail == True: print "%s"%(line)
-    line = line.split('|')
-    if len(line) < 23: continue 
-    idx = get_line_index(line[1])  
-    if idx == -1: continue
-
-    #
-    # Average line
-    #
-    if idx == 10:
-    
-      read_avg[0]   = read_avg[0]  + common_convert_Bytes(line[2])
-      write_avg[0]  = write_avg[0]  + common_convert_Bytes(line[3])
-      if read_avg[0] > local_max_read_avg: local_max_read_avg = read_avg[0] 
-      if write_avg[0] > local_max_write_avg: local_max_write_avg = write_avg[0] 
-
-      read_avg[1]   = read_avg[1]  + common_convert_Bytes(line[6])
-      write_avg[1]  = write_avg[1]  + common_convert_Bytes(line[7])
-      if read_avg[1] > local_max_read_avg: local_max_read_avg = read_avg[1] 
-      if write_avg[1] > local_max_write_avg: local_max_write_avg = write_avg[1] 
-
-      read_avg[2]   = read_avg[2]  + common_convert_Bytes(line[10])
-      write_avg[2]  = write_avg[2] + common_convert_Bytes(line[11])
-      if read_avg[2] > local_max_read_avg: local_max_read_avg = read_avg[2] 
-      if write_avg[2] > local_max_write_avg: local_max_write_avg = write_avg[2] 
-
-      read_avg[3]   = read_avg[3]  + common_convert_Bytes(line[14])
-      write_avg[3]  = write_avg[3] + common_convert_Bytes(line[15])
-      if read_avg[3] > local_max_read_avg: local_max_read_avg = read_avg[3] 
-      if write_avg[3] > local_max_write_avg: local_max_write_avg = write_avg[3] 
-
-      read_avg[4]   = read_avg[4]   + common_convert_Bytes(line[18])
-      write_avg[4]  = write_avg[4]  + common_convert_Bytes(line[19])
-      if read_avg[4] > local_max_read_avg: local_max_read_avg = read_avg[4] 
-      if write_avg[4] > local_max_write_avg: local_max_write_avg = write_avg[4] 
-
-      read_avg[5]   = read_avg[5]  + common_convert_Bytes(line[22])
-      write_avg[5]  = write_avg[5] + common_convert_Bytes(line[23])
-      if read_avg[5] > local_max_read_avg: local_max_read_avg = read_avg[5] 
-      if write_avg[5] > local_max_write_avg: local_max_write_avg = write_avg[5] 
-      continue
+  if loop == 12: loop = 0
       
+  for index in range(len(eid_list)):
+
+    eid           = eid_list[index]
+    exports       = exports_list[index]
+    active_export = active_list[index]
+    clients       = client_list[index]
+    count         = count_list[index]
+    max_read      = max_read_list[index]
+    max_write     = max_write_list[index]    
+
+    if loop == 11:
+      active_export = get_active_export(exports,active_export)
+      clients,count = get_client_list(active_export,eid)
+      
+      count_list[index]   = count  
+      active_list[index]  = active_export 
+      client_list[index]  = clients
+
+
+    read  = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    write = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    read_avg   = [0,0,0,0,0,0]  
+    write_avg  = [0,0,0,0,0,0]  
+    local_max_read  = 0
+    local_max_write = 0
+    local_max_read_avg  = 0
+    local_max_write_avg = 0
+    is_read_max  = False
+    is_write_max = False
+
     #
-    # Normal line
-    #  
-    read[idx]     = read[idx]      + common_convert_Bytes(line[2])
-    write[idx]    = write[idx]     + common_convert_Bytes(line[3])
-    read[idx+10]  = read[idx+10]   + common_convert_Bytes(line[6])
-    write[idx+10] = write[idx+10]  + common_convert_Bytes(line[7])
-    read[idx+20]  = read[idx+20]   + common_convert_Bytes(line[10])
-    write[idx+20] = write[idx+20]  + common_convert_Bytes(line[11])
-    read[idx+30]  = read[idx+30]   + common_convert_Bytes(line[14])
-    write[idx+30] = write[idx+30]  + common_convert_Bytes(line[15])
-    read[idx+40]  = read[idx+40]   + common_convert_Bytes(line[18])
-    write[idx+40] = write[idx+40]  + common_convert_Bytes(line[19])
-    read[idx+50]  = read[idx+50]   + common_convert_Bytes(line[22])
-    write[idx+50] = write[idx+50]  + common_convert_Bytes(line[23])
+    # Get current time
+    #
+    zedate = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-  #
-  # Search for the maximum values
-  #
-  for idx in range(60):
-    if read[idx] > local_max_read: local_max_read = read[idx]
-    if write[idx] > local_max_write: local_max_write = write[idx]    
-  if local_max_write > max_write:  
-    max_write = local_max_write
-    is_write_max = True
-  if local_max_read  > max_read:   
-    max_read  = local_max_read    
-    is_read_max = True
+    #
+    # Run the rozodiag command against all cliets
+    #
+    string="rozodiag %s -c throughput col 6 avg "%(clients)
+    if options.history == True: 
+      if history == "": 
+        history = " m"
+      else:      
+        history = " h"
+    string += history
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-  #
-  # Prepare display header
-  #
-  LINE = ""
-  if options.time == "h":
-    LINE = "Last " + REVERSE + "60 hours" + NORMAL + " history throughput.\n"
-  elif options.time == "m":
-    LINE = "Last " + REVERSE + "60 minutes" + NORMAL + " throughput history.\n"  
-  else: 
-    LINE = "\n"      
-  LINE += zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid " + eid + " - max " 
-  #
-  # Max 
-  #
-  LINE += READCOLOR 
-  if is_read_max == True: LINE += REVERSE
-  LINE += common_bytes_with_unit(max_read) + NORMAL + '/' +  WRITECOLOR  
-  if is_write_max == True: LINE += REVERSE
-  LINE += common_bytes_with_unit(max_write) + NORMAL
-  print LINE  
-  
-  print " __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_ "
+    #
+    # Parse output and cumulate the throughputs
+    #
+    for line in cmd.stdout:
+      line = line.split('\n')[0]
+      if options.detail == True: print "%s"%(line)
+      line = line.split('|')
+      if len(line) < 23: continue 
+      idx = get_line_index(line[1])  
+      if idx == -1: continue
 
-  for idx in range(10):
+      #
+      # Average line
+      #
+      if idx == 10:
+
+        read_avg[0]   = read_avg[0]  + common_convert_Bytes(line[2])
+        write_avg[0]  = write_avg[0]  + common_convert_Bytes(line[3])
+        if read_avg[0] > local_max_read_avg: local_max_read_avg = read_avg[0] 
+        if write_avg[0] > local_max_write_avg: local_max_write_avg = write_avg[0] 
+
+        read_avg[1]   = read_avg[1]  + common_convert_Bytes(line[6])
+        write_avg[1]  = write_avg[1]  + common_convert_Bytes(line[7])
+        if read_avg[1] > local_max_read_avg: local_max_read_avg = read_avg[1] 
+        if write_avg[1] > local_max_write_avg: local_max_write_avg = write_avg[1] 
+
+        read_avg[2]   = read_avg[2]  + common_convert_Bytes(line[10])
+        write_avg[2]  = write_avg[2] + common_convert_Bytes(line[11])
+        if read_avg[2] > local_max_read_avg: local_max_read_avg = read_avg[2] 
+        if write_avg[2] > local_max_write_avg: local_max_write_avg = write_avg[2] 
+
+        read_avg[3]   = read_avg[3]  + common_convert_Bytes(line[14])
+        write_avg[3]  = write_avg[3] + common_convert_Bytes(line[15])
+        if read_avg[3] > local_max_read_avg: local_max_read_avg = read_avg[3] 
+        if write_avg[3] > local_max_write_avg: local_max_write_avg = write_avg[3] 
+
+        read_avg[4]   = read_avg[4]   + common_convert_Bytes(line[18])
+        write_avg[4]  = write_avg[4]  + common_convert_Bytes(line[19])
+        if read_avg[4] > local_max_read_avg: local_max_read_avg = read_avg[4] 
+        if write_avg[4] > local_max_write_avg: local_max_write_avg = write_avg[4] 
+
+        read_avg[5]   = read_avg[5]  + common_convert_Bytes(line[22])
+        write_avg[5]  = write_avg[5] + common_convert_Bytes(line[23])
+        if read_avg[5] > local_max_read_avg: local_max_read_avg = read_avg[5] 
+        if write_avg[5] > local_max_write_avg: local_max_write_avg = write_avg[5] 
+        continue
+
+      #
+      # Normal line
+      #  
+      read[idx]     = read[idx]      + common_convert_Bytes(line[2])
+      write[idx]    = write[idx]     + common_convert_Bytes(line[3])
+      read[idx+10]  = read[idx+10]   + common_convert_Bytes(line[6])
+      write[idx+10] = write[idx+10]  + common_convert_Bytes(line[7])
+      read[idx+20]  = read[idx+20]   + common_convert_Bytes(line[10])
+      write[idx+20] = write[idx+20]  + common_convert_Bytes(line[11])
+      read[idx+30]  = read[idx+30]   + common_convert_Bytes(line[14])
+      write[idx+30] = write[idx+30]  + common_convert_Bytes(line[15])
+      read[idx+40]  = read[idx+40]   + common_convert_Bytes(line[18])
+      write[idx+40] = write[idx+40]  + common_convert_Bytes(line[19])
+      read[idx+50]  = read[idx+50]   + common_convert_Bytes(line[22])
+      write[idx+50] = write[idx+50]  + common_convert_Bytes(line[23])
+
+    #
+    # Search for the maximum values
+    #
+    for idx in range(60):
+      if read[idx] > local_max_read: local_max_read = read[idx]
+      if write[idx] > local_max_write: local_max_write = write[idx]    
+    if local_max_write > max_write:  
+      max_write = local_max_write
+      is_write_max = True
+    if local_max_read  > max_read:   
+      max_read  = local_max_read    
+      is_read_max = True
+
+    #
+    # Prepare display header
+    #
+    LINE = zedate + " - %s RozoFS clients on "%(count) + GREEN +" eid " + eid + NORMAL  
+    if history == " m":
+      LINE = LINE + " - Last " + REVERSE + "60 minutes" + NORMAL + " history."  
+    elif history == " h": 
+      LINE = LINE + " - Last " + REVERSE + "60 hours" + NORMAL + " history."
+    else: 
+      LINE = LINE + " - max " 
+      LINE += READCOLOR 
+      if is_read_max == True: LINE += REVERSE
+      LINE += common_bytes_with_unit(max_read) + NORMAL + '/' +  WRITECOLOR  
+      if is_write_max == True: LINE += REVERSE
+      LINE += common_bytes_with_unit(max_write) + NORMAL
+    print LINE  
+
+    print " __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_ "
+
+    for idx in range(10):
+      LINE=""
+      for cols in range(6):
+        IDX = idx + cols*10
+        LINE += "|"
+        val = READCOLOR + " %6s "%(common_bytes_with_unit(read[IDX]))  
+        if read[IDX] == 0:                     LINE += val  
+        elif read[IDX] == local_max_read:      LINE += REVERSE + val  
+        elif read[IDX] >= local_max_read_avg:  LINE += BOLD + val  
+        else:                                  LINE += val  
+        LINE += NORMAL + "|"
+        val = WRITECOLOR + " %6s "%(common_bytes_with_unit (write[IDX]))      
+        if write[IDX] == 0:                     LINE += val  
+        elif write[IDX] == local_max_write:     LINE += REVERSE + val 
+        elif write[IDX] >= local_max_write_avg: LINE += BOLD + val 
+        else:                                   LINE += val 
+        LINE += NORMAL + "|"
+      print LINE    
+    print "|________|________||________|________||________|________||________|________||________|________||________|________|"
+
     LINE=""
-    for cols in range(6):
-      IDX = idx + cols*10
+
+    for IDX in range(6):
       LINE += "|"
-      val = READCOLOR + " %6s "%(common_bytes_with_unit(read[IDX]))  
-      if read[IDX] == 0:                     LINE += val  
-      elif read[IDX] == local_max_read:      LINE += REVERSE + val  
-      elif read[IDX] >= local_max_read_avg:  LINE += BOLD + val  
-      else:                                  LINE += val  
+      val = READCOLOR + " %6s "%(common_bytes_with_unit(read_avg[IDX])) 
+      if read_avg[IDX] == 0:                    LINE += val    
+      elif read_avg[IDX] == local_max_read_avg: LINE += REVERSE + val  
+      else:                                     LINE += val   
       LINE += NORMAL + "|"
-      val = WRITECOLOR + " %6s "%(common_bytes_with_unit (write[IDX]))      
-      if write[IDX] == 0:                     LINE += val  
-      elif write[IDX] == local_max_write:     LINE += REVERSE + val 
-      elif write[IDX] >= local_max_write_avg: LINE += BOLD + val 
-      else:                                   LINE += val 
+      val = WRITECOLOR + " %6s "%(common_bytes_with_unit(write_avg[IDX]))     
+      if write_avg[IDX] == 0:                     LINE += val    
+      elif write_avg[IDX] == local_max_write_avg: LINE += REVERSE + val  
+      else:                                       LINE += val    
       LINE += NORMAL + "|"
     print LINE    
-  print "|________|________||________|________||________|________||________|________||________|________||________|________|"
 
-  LINE=""
-  
-  for IDX in range(6):
-    LINE += "|"
-    val = READCOLOR + " %6s "%(common_bytes_with_unit(read_avg[IDX])) 
-    if read_avg[IDX] == 0:                    LINE += val    
-    elif read_avg[IDX] == local_max_read_avg: LINE += REVERSE + val  
-    else:                                     LINE += val   
-    LINE += NORMAL + "|"
-    val = WRITECOLOR + " %6s "%(common_bytes_with_unit(write_avg[IDX]))     
-    if write_avg[IDX] == 0:                     LINE += val    
-    elif write_avg[IDX] == local_max_write_avg: LINE += REVERSE + val  
-    else:                                       LINE += val    
-    LINE += NORMAL + "|"
-  print LINE    
-
-  sys.stdout.flush()
-
-  if period == 0: break
-  if options.time != "s": break
-  time.sleep(period)
+    sys.stdout.flush()
+    
+    max_read_list[index]  = max_read
+    max_write_list[index] = max_write  
+    
+  if history == " h": break;
+  if history != " m": 
+    if period == 0: break
+    time.sleep(period)
     
