@@ -143,8 +143,7 @@ def get_eid_and_exports_from_path(path):
     exports=line.split()[0]
     eid=line.split()[1]
     return eid,exports
-  print "%s is not a RozoFS mountpoint"%(path)
-  sys.exit(1)    
+  syntax( "%s is not a RozoFS mountpoint"%(path))
             
 #______________________________
 def check_netmwork_filters(address):
@@ -257,7 +256,34 @@ def build_upline(titles,total_column):
     for colum in range(nbColumn):
       BOTTOM = BOTTOM + '|' + "________"
     BOTTOM = BOTTOM + '|'  
+#______________________________________    
+def syntax(string=None):
+  if string != None:
+    print "\n" + RED + BOLD + string + " !!!" + NORMAL + "\n"
     
+  print "Usage: " + BOLD + "rozo_io "+ YELLOW +"[OPTIONS]" + CYAN + " [FILTER] " + GREEN + "[MOUNTPOINT]"+ NORMAL
+  print
+  print YELLOW +"  OPTIONS = {--period <seconds>|--short|--average|--history}"+ NORMAL
+  print YELLOW +"    -p,--period <seconds>"+ NORMAL +"   enables to set the refresh period to <seconds> seconds."
+  print YELLOW +"    -s,--short"+ NORMAL +"              displays only a short 30 seconds counter set."
+  print YELLOW +"    -a,--average"+ NORMAL +"            displays an average at the bottom of each column."
+  print YELLOW +"    -H,--history"+ NORMAL +"            displays a 60 minutes and a 60 hours history."
+  print
+  print CYAN + "  FILTER = {--ipRange <IP1@-IP2@> ... | --NipRange <IP1@-IP2@> ... | --what <what> ...}"+ NORMAL
+  print CYAN + "    -i,--ipRange  <IP1@-IP2@>"+ NORMAL  +"  excludes clients whose IP address is out of IP1-IP2 range." 
+  print CYAN + "    -I,--NipRange <IP1@-IP2@>"+ NORMAL  +"  excludes clients whose IP address is within IP1-IP2 range." 
+  print CYAN + "    -w,--what {r|w|l|c|d|a|x|o|nr|nw|nl|nc|nd|na|nx|no}"+ NORMAL  
+  print        "              what columns to display or not to display. (check rozodiag io CLI of rozofsmount)." 
+  print
+  print GREEN + "  MOUNTPOINT = <mnt>"+ NORMAL
+  print GREEN + "    mnt = "+ NORMAL  +"RozoFS mount point"
+  print "  When no mount point is provided, current path is taken as input mount point."
+  print 
+  print "examples:"
+  print "  rozo_io --what r -what w /mnt/rfs1" 
+  print "  rozo_io -p 10 /mnt/rfs -s" 
+  print 
+  sys.exit(-1)    
 #______________________________________    
 
 RED='\033[91m\033[40m\033[1m'
@@ -284,12 +310,11 @@ parser = OptionParser()
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
 parser.add_option("-s","--short", action="store_true",dest="short", help="Display only 30 sec")
 parser.add_option("-d","--detail", action="store_true",default=False, dest="detail", help="Detailed per client throughput display.")
-parser.add_option("-t","--time", type = "choice", action="store",dest ="time", choices = time_unit_list, default = "s", help = "Time units within %s."% (time_unit_list))
+parser.add_option("-H","--history", action="store_true",default=False, dest="history", help="Display a 60 minutes and 60 hours history.")
 parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange", help="Allowed IP range (one IP address or a range like 192.168.1.21-192.168.1.28)")
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
 parser.add_option("-w","--what", action="append",type="string", dest="what", help="what to (not to) display \"<r|nr|w|nw|l|nl|c|nc|d|nd|a|na|x|nx|o|no>\" (default everything).")
 parser.add_option("-a","--average", action="store_true",default=False, dest="average", help="Display an average line.")
-parser.add_option("-r","--record", action="store_true",default=False, dest="record", help="Display record values.")
 
 total_watched_clients = int(0)
 total_nb_clients = int(0)
@@ -300,8 +325,7 @@ if options.period != None:
   try:
     period = int(options.period)
   except:
-    print "Bad period value %s"%(options.period)
-    sys.exit(-1)
+    syntax( "Bad period value %s"%(options.period))
 
 what = ""    
 if options.what != None:
@@ -333,11 +357,9 @@ if options.iprange != None:
       ipLow  = get_ip(ipStringLow)
       ipHigh = get_ip(ipStingHigh)
     except:
-      print "Bad IP range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Bad IP range %s"%(iprange))
     if ipLow > ipHigh:
-      print "Low IP is greater than high IP in range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Low IP is greater than high IP in range %s"%(iprange))
     ipLowArray.append(ipLow)
     ipHighArray.append(ipHigh)
     ipRule.append(iprange)
@@ -354,11 +376,9 @@ if options.Niprange != None:
       ipLow  = get_ip(ipStringLow)
       ipHigh = get_ip(ipStingHigh)
     except:
-      print "Bad IP range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Bad IP range %s"%(iprange))
     if ipLow > ipHigh:
-      print "Low IP is greater than high IP in range %s"%(iprange)
-      sys.exit(-1)
+      syntax( "Low IP is greater than high IP in range %s"%(iprange))
     NipLowArray.append(ipLow)
     NipHighArray.append(ipHigh)      
     NipRule.append(iprange)
@@ -370,8 +390,7 @@ if options.Niprange != None:
 eid,exports = get_eid_and_exports_from_path(path)
 clients = get_client_list(exports,eid)
 if clients == "":
-  print "No client found"
-  sys.exit(-1)
+  syntax( "No client found")
 
 if options.short == True:
   SIZE = int(30)
@@ -383,7 +402,7 @@ else:
 # Not to block the file system
 #
 os.chdir("/")  
-
+history = ""
 loop = int(0)
 while True : 
 
@@ -404,7 +423,12 @@ while True :
   # Run the rozodiag command against all clients
   #
   string="rozodiag %s -c io col 1 %s"%(clients,what)
-  if options.time != "s": string += options.time
+  if options.history == True: 
+    if history == "": 
+      history = " m"
+    else:      
+      history = " h"
+  string += history  
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -428,8 +452,7 @@ while True :
       except:         
         total_column = nbColumn
         build_upline(words,total_column)
-        if options.record == True:
-          record =  [ int(0) for j in range(total_column) ]    
+        record =  [ int(0) for j in range(total_column) ]    
         
       start = False
       time_col_val = []
@@ -470,9 +493,8 @@ while True :
         time_col_val[t][column] = time_col_val[t][column] + int(val)
         if int(val) > max_val[column]: 
           max_val[column] = int(val) 
-          if options.record == True:
-            if record[column] < int(val): 
-              record[column] = int(val)             
+          if record[column] < int(val): 
+            record[column] = int(val)             
         if options.average == True:
           if t < int(30):         
              avg1[column] = avg1[column] + int(val)            
@@ -480,20 +502,21 @@ while True :
              avg2[column] = avg2[column] + int(val)  
              
       except:
-        print "Error on t %s column %s val %s"%(t,column,val)  
-        sys.exit(-1)  
+        syntax( "Error on t %s column %s val %s"%(t,column,val) ) 
 #      print "t %s col %s val %s"%(t,column,time_col_val[t][column])
 
-
-  LINE = zedate + " - " + "%d"%(total_watched_clients) +  "/%d"%(total_nb_clients) +" RozoFS clients on eid %s"%(eid)
+  LINE = zedate + " - %d/%d  RozoFS clients on "%(total_watched_clients,total_nb_clients)  + GREEN + "eid " + eid  + NORMAL
+  if history == " m":
+    LINE = LINE + " - Last " + REVERSE + "60 minutes" + NORMAL + " history."  
+  elif history == " h": 
+    LINE = LINE + " - Last " + REVERSE + "60 hours" + NORMAL + " history."
   print LINE
       
-  if options.record == True:
-    LINE = ""
-    for column in range(nbColumn):
-      color = get_color_code(column)
-      LINE = LINE + ' ' + color + "%7s "%(common_bytes_with_unit(record[column])) + NORMAL
-    print LINE
+  LINE = ""
+  for column in range(nbColumn):
+    color = get_color_code(column)
+    LINE = LINE + ' ' + color + "%7s "%(common_bytes_with_unit(record[column])) + NORMAL
+  print LINE
             
   print UPLINE 
     
@@ -535,7 +558,8 @@ while True :
     # print BOTTOM
   sys.stdout.flush()
 
-  if period == 0: break
-  if options.time != "s": break
-  time.sleep(period)
+  if history == " h": break;
+  if history != " m": 
+    if period == 0: break
+    time.sleep(period)
     
