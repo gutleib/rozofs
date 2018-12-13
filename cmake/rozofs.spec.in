@@ -184,6 +184,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_du
 %{_bindir}/rozo_geoRepList
 %{_bindir}/rozo_geoReplicationReinitialize
+%{_bindir}/rozo_export_send_stats
 %config(noreplace) %{_sysconfdir}/rozofs/export.conf
 %{_sysconfdir}/rozofs/export.conf.sample
 %if 0%{?rhel} >= 7
@@ -217,6 +218,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_device
 %{_bindir}/rozo_storage_throughput
 %{_bindir}/rozo_storage_fid2pathname
+%{_bindir}/rozo_storage_send_stats
 %config(noreplace) %{_sysconfdir}/rozofs/storage.conf
 %{_sysconfdir}/rozofs/storage.conf.sample
 %if 0%{?rhel} >= 7
@@ -244,6 +246,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_throughput
 %{_bindir}/rozo_io
 %{_bindir}/rozofsmount_wrapper
+%{_bindir}/rozo_mount_send_stats
 %if 0%{?rhel} >= 7
 %{_unitdir}/rozofs-rozofsmount.service
 %endif

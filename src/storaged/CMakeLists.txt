@@ -193,6 +193,13 @@ add_executable(rozodump
 )
 target_link_libraries(rozodump rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
+add_executable(rozo_storage_send_stats
+    ${CMAKE_SOURCE_DIR}/src/storaged/sconfig.h
+    ${CMAKE_SOURCE_DIR}/src/storaged/sconfig.c
+    rozo_storage_send_stats.c
+)
+target_link_libraries(rozo_storage_send_stats rozofs ${CONFIG_LIBRARY})
+
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT storage)
 install(TARGETS rozo_storage_mount
@@ -242,6 +249,13 @@ install(TARGETS rozodump
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     COMPONENT rozodump
+)
+
+install(TARGETS rozo_storage_send_stats
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_storage_send_stats
 )
 
 install(FILES storage.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)

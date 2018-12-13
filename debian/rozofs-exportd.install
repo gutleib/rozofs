@@ -15,6 +15,7 @@
 /usr/bin/rozo_rbsList
 /usr/bin/rozo_geoRepList
 /usr/bin/rozo_geoReplicationReinitialize
+/usr/bin/rozo_export_send_stats
 /etc/rozofs/export.conf
 /usr/share/man/man5/export.conf.5
 /usr/share/man/man7/rozofs.7
