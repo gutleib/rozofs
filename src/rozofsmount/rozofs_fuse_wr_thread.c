@@ -163,12 +163,11 @@ static inline void rozofs_fuse_th_fuse_write_buf(rozofs_fuse_thread_ctx_t *threa
     XDR               xdrs;    
     struct rpc_msg   call_msg;
     uint32_t         null_val = 0;
-    uint32_t *share_p;
     void *shared_buf_ref;
     void *fuse_ctx_p;
     void * kernel_fuse_write_request;
     int ret;
-    
+    rozofs_shared_buf_wr_hdr_t  *share_wr_p;    
     rozofs_tx_ctx_p = msg->rozofs_tx_ctx_p;
 
     gettimeofday(&timeDay,(struct timezone *)0);  
@@ -216,33 +215,34 @@ static inline void rozofs_fuse_th_fuse_write_buf(rozofs_fuse_thread_ctx_t *threa
     ** check the case of the READ since, we must set the value of the xid
     ** at the top of the buffer
     */
-     RESTORE_FUSE_PARAM(fuse_ctx_p,shared_buf_ref);
-     if (shared_buf_ref == NULL)
-     {
-	fatal("No shared buffer reference");
-     }
-     share_p = (uint32_t*)ruc_buf_getPayload(shared_buf_ref);
-    *share_p = (uint32_t)call_msg.rm_xid;
+    RESTORE_FUSE_PARAM(fuse_ctx_p,shared_buf_ref);
+    storcli_write_arg_t  *wr_args = (storcli_write_arg_t*)&msg->args;    
+    if (shared_buf_ref == NULL)
+    {
+       fatal("No shared buffer reference");
+    }
+    share_wr_p = (rozofs_shared_buf_wr_hdr_t*)ruc_buf_getPayload(shared_buf_ref);
+    share_wr_p->cmd[wr_args->cmd_idx].xid = (uint32_t)call_msg.rm_xid;
     /**
     * copy the buffer 
     */
-    storcli_write_arg_t  *wr_args = (storcli_write_arg_t*)&msg->args;
+
     /*
     ** get the length to copy from the sshared memory
     */
-    int len = share_p[1];
+    int len = share_wr_p->cmd[wr_args->cmd_idx].write_len;
     msg->size = (uint32_t)len;
     thread_ctx_p->stat.write_Byte_count+=msg->size;    
     /*
     ** Compute and write data offset considering 128bits alignment
     */
     int alignment = wr_args->off%16;
-    share_p[2] = alignment;
+    share_wr_p->cmd[wr_args->cmd_idx].offset_in_buffer = alignment;
     /*
     ** Set pointer to the buffer start and adjust with alignment
     */
-    uint8_t * buf_start = (uint8_t *)&share_p[4];
-    buf_start += alignment;
+    uint8_t * buf_start = (uint8_t *)share_wr_p;
+    buf_start += alignment+ROZOFS_SHMEM_WRITE_PAYLOAD_OFF;
     
     RESTORE_FUSE_PARAM(fuse_ctx_p,kernel_fuse_write_request);
     if (kernel_fuse_write_request != NULL)

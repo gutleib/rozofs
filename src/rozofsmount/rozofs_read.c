@@ -100,6 +100,11 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
    {
      severe("bad nb_prj %d max %d bid %llu off %llu len %u",nb_prj,max_prj,(long long unsigned int)bid,(long long unsigned int)off,len);   
    }
+#warning FDL force multiple file reading
+
+   return  read_buf_multitple_nb(buffer_p,f, off, buf,len);
+   
+   
    ie = f->ie; 
     if (rozofs_rotation_read_modulo == 0) {
       f->rotation_idx = 0;
@@ -135,9 +140,10 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
     ** allocate a shared buffer for reading
     */
 #if 1
-    uint32_t *p32;
+
 //    int stor_idx =storcli_get_storcli_idx_from_fid(f->fid);
     int shared_buf_idx;
+    rozofs_shared_buf_rd_hdr_t  *share_rd_p;   
     uint32_t length;
     void *shared_buf_ref = rozofs_alloc_shared_storcli_buf(SHAREMEM_IDX_READ);
     if (shared_buf_ref != NULL)
@@ -146,8 +152,11 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
       ** clear the first 4 bytes of the array that is supposed to contain
       ** the reference of the transaction
       */
-       p32 = (uint32_t *)ruc_buf_getPayload(shared_buf_ref);
-       *p32 = 0;
+       args.cmd_idx = 0;
+       share_rd_p = (rozofs_shared_buf_rd_hdr_t *)ruc_buf_getPayload(shared_buf_ref);
+       share_rd_p->cmd[args.cmd_idx].xid = 0;
+       share_rd_p->cmd[args.cmd_idx].received_len = 0;       
+       share_rd_p->cmd[args.cmd_idx].offset_in_buffer = 0;
        /*
        ** get the index of the shared payload in buffer
        */
@@ -158,13 +167,13 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
          ** save the reference of the shared buffer in the fuse context
          */
          SAVE_FUSE_PARAM(buffer_p,shared_buf_ref);
-         args.proj_id = shared_buf_idx;
          args.spare     = 'S';
+         args.shared_buf_idx = shared_buf_idx;	 
        }
     }
     else
     {
-       severe("FDL Out of a shared buffer");
+       fatal("FDL Out of a shared buffer");
     
     }
 #endif

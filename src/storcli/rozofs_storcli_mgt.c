@@ -544,7 +544,8 @@ void  rozofs_storcli_ctxInit(rozofs_storcli_ctx_t *p,uint8_t creation)
   p->rsvd_ctx_count= 0;
   
   p->opcode_key = STORCLI_NULL;
-   p->shared_mem_p = NULL;
+  p->shared_mem_p = NULL;
+  p->shared_mem_req_p = NULL;
 
    /*
    ** timer cell

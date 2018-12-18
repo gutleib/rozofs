@@ -238,6 +238,7 @@ static inline int rozofs_trc_req(int service,fuse_ino_t ino,fid_t fid)
      p->hdr.s.trc_type  = rozofs_trc_type_def;
      p->hdr.s.index = rozofs_trc_index++;
      p->ino= ino;
+     p->flags = 0;
      if (fid != NULL) 
      {
         memcpy(p->par.def.fid,fid,sizeof(fid_t)); 
@@ -284,6 +285,41 @@ static inline int rozofs_trc_req_flags(int service,fuse_ino_t ino,fid_t fid,int 
    }
    return (int) p->hdr.s.index;
 }
+
+/*
+**____________________________________________________
+*/
+
+static inline int rozofs_trc_req_io_multiple(int trc_index, int service,fuse_ino_t ino,fid_t fid,size_t size,off_t off,int file_idx)
+{
+   rozofs_trace_t *p;
+   if (rozofs_trc_enabled == 0) return 0;
+   {
+     p = &rozofs_trc_buffer[rozofs_trc_wr_idx];
+     p->hdr.u32 = 0;
+     p->ts = ruc_rdtsc();
+     p->hdr.s.service_id = service;
+     p->hdr.s.req = 1;
+     p->hdr.s.trc_type  = rozofs_trc_type_io;
+     p->hdr.s.index = trc_index;
+     p->ino= ino;
+     p->flags = file_idx;
+     if (fid != NULL) 
+     {
+        memcpy(p->par.io.fid,fid,sizeof(fid_t)); 
+	p->hdr.s.fid = 1;
+     }   
+     p->par.io.size = size;
+     p->par.io.off  = off;
+     rozofs_trc_wr_idx++;
+     if (rozofs_trc_wr_idx >= rozofs_trc_last_idx) 
+     {
+        rozofs_trc_wr_idx= 0;
+	rozofs_trc_buf_full = 1;
+     }
+   }
+   return (int) p->hdr.s.index;
+}
 /*
 **____________________________________________________
 */
@@ -301,6 +337,7 @@ static inline int rozofs_trc_req_io(int service,fuse_ino_t ino,fid_t fid,size_t 
      p->hdr.s.trc_type  = rozofs_trc_type_io;
      p->hdr.s.index = rozofs_trc_index++;
      p->ino= ino;
+     p->flags = 0;
      if (fid != NULL) 
      {
         memcpy(p->par.io.fid,fid,sizeof(fid_t)); 
@@ -316,7 +353,10 @@ static inline int rozofs_trc_req_io(int service,fuse_ino_t ino,fid_t fid,size_t 
      }
    }
    return (int) p->hdr.s.index;
+
 }
+
+
 /*
 **____________________________________________________
 */
@@ -462,6 +502,7 @@ static inline void rozofs_trc_rsp(int service,fuse_ino_t ino,fid_t fid,int statu
      p->hdr.s.index = index;
      p->ino= ino;
      p->errno_val = errno;
+     p->flags = 0;
      if (fid != NULL) 
      {
         memcpy(p->par.def.fid,fid,sizeof(fid_t)); 
@@ -479,6 +520,38 @@ static inline void rozofs_trc_rsp(int service,fuse_ino_t ino,fid_t fid,int statu
 void rozofs_trc_rsp(int service,fuse_ino_t ino,fid_t fid,int status,int index);
 
 #endif
+
+
+static inline void rozofs_trc_rsp_multiple(int service,fuse_ino_t ino,fid_t fid,int status,int index,int file_idx)
+{
+   rozofs_trace_t *p;
+   if (rozofs_trc_enabled == 0) return;
+   {
+     
+     p = &rozofs_trc_buffer[rozofs_trc_wr_idx];
+     p->hdr.u32 = 0;
+     p->ts = ruc_rdtsc();
+     p->hdr.s.service_id = service;
+     p->hdr.s.trc_type  = rozofs_trc_type_def;
+     if (status==0) p->hdr.s.status=0;
+     else p->hdr.s.status=1;
+     p->hdr.s.index = index;
+     p->ino= ino;
+     p->errno_val = errno;
+     p->flags = file_idx;
+     if (fid != NULL) 
+     {
+        memcpy(p->par.def.fid,fid,sizeof(fid_t)); 
+	p->hdr.s.fid = 1;
+     }   
+     rozofs_trc_wr_idx++;
+     if (rozofs_trc_wr_idx >= rozofs_trc_last_idx) 
+     {
+       rozofs_trc_wr_idx= 0;
+       rozofs_trc_buf_full = 1;
+     }
+   }
+}
 static inline void rozofs_trc_rsp_name(int service,fuse_ino_t ino,char *name,int status,int index)
 {
    rozofs_trace_t *p;
@@ -875,6 +948,38 @@ static inline void  *fuse_ctx_write_pending_queue_get(file_t *f)
   rozofs_fuse_save_ctx_t *fuse_save_ctx_p = (rozofs_fuse_save_ctx_t*)ruc_buf_getPayload(buffer); \
   callback = fuse_save_ctx_p->proc_end_tx_cbk; \
 }
+
+
+/*
+**__________________________________________________________________________
+*/
+/**
+* Macro to save the reception callback called upon end of transaction
+* The input arguments:
+  @param buffer : pointer to the head of the save array context
+  @param : callback-> callback function
+*/
+#define SAVE_FUSE_CALLBACK_MULTIPLE(buffer_p,callback) \
+{ \
+  rozofs_fuse_save_ctx_t *fuse_save_ctx_p = (rozofs_fuse_save_ctx_t*)ruc_buf_getPayload(buffer_p); \
+  fuse_save_ctx_p->saved_cbk_of_tx_multiple= (fuse_end_tx_recv_pf_t)callback; \
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
+* Macro to save the reception callback called upon end of transaction
+* The input arguments:
+  @param buffer : pointer to the head of the save array context
+  @param : callback-> callback function
+*/
+#define GET_FUSE_CALLBACK_MULTIPLE(buffer,callback) \
+{ \
+  rozofs_fuse_save_ctx_t *fuse_save_ctx_p = (rozofs_fuse_save_ctx_t*)ruc_buf_getPayload(buffer); \
+  callback = fuse_save_ctx_p->saved_cbk_of_tx_multiple; \
+}
+
 /*
 **__________________________________________________________________________
 */

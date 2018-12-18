@@ -949,6 +949,9 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
    int storcli_idx;
    ientry_t *ie;
    int use_write_thread = 0 ;
+
+#warning FDL all is multiple
+   return write_buf_multitple_nb(buffer_p,f,off,buf,len);
    
    if (ROZOFS_MAX_WRITE_THREADS != 0)
    {
@@ -964,6 +967,7 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
     args.cid = ie->attrs.attrs.cid;
     args.layout = f->export->layout;
     args.bsize = exportclt.bsize;
+    args.cmd_idx = 0;
     memcpy(args.dist_set, ie->attrs.attrs.sids, sizeof (sid_t) * ROZOFS_SAFE_MAX);
     memcpy(args.fid, f->fid, sizeof (fid_t));
     args.off = off;
@@ -1011,7 +1015,7 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
     ** allocate a shared buffer for writing
     */
 #if 1
-    uint32_t *p32;
+    rozofs_shared_buf_wr_hdr_t  *share_wr_p;   
     int shared_buf_idx = -1;
     uint32_t length;
     void *shared_buf_ref = rozofs_alloc_shared_storcli_buf(SHAREMEM_IDX_WRITE);
@@ -1021,12 +1025,12 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
       ** clear the first 4 bytes of the array that is supposed to contain
       ** the reference of the transaction
       */
-       p32 = (uint32_t *)ruc_buf_getPayload(shared_buf_ref);
-       *p32 = 0;
+       share_wr_p = (rozofs_shared_buf_wr_hdr_t *)ruc_buf_getPayload(shared_buf_ref);
+       share_wr_p->cmd[0].xid = 0;
        /*
        ** store the length to write 
        */
-       p32[1] = args.data.data_len;
+       share_wr_p->cmd[0].write_len = args.data.data_len;
        /*
        ** get the index of the shared payload in buffer
        */
@@ -1036,7 +1040,8 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
 	 /*
 	 ** indicate to the transmitter that shared memory request type must be used
 	 */
-	 args.data.data_len = 0x80000000 | shared_buf_idx;
+	 args.data.data_len = 0x80000000 | shared_buf_idx;  /* FDL_OBSOLETE */
+	 args.shared_buf_idx = shared_buf_idx;
          /*
          ** save the reference of the shared buffer in the fuse context
          */
@@ -1047,7 +1052,7 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
     /*
     ** now initiates the transaction towards the remote end
     */
-    if (shared_buf_ref == NULL) severe("Out of buffer");
+    if (shared_buf_ref == NULL) fatal("Out of buffer");
     GET_FUSE_CALLBACK(buffer_p,callback);
     f->buf_write_pending++;
     f->write_block_pending = 1;

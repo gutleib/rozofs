@@ -141,12 +141,15 @@ typedef struct _rozofs_fuse_save_ctx_t
    void     *kernel_fuse_write_request;   /**< pointer to the fuse kernel request context for BIG WRITE with threads */
    dirbuf_t db;
    fuse_end_tx_recv_pf_t proc_end_tx_cbk;   /**< callback that must be call at end of transaction (mainly used by write/flush and close */ 
+   fuse_end_tx_recv_pf_t saved_cbk_of_tx_multiple;   /**< re-save the initial callback when read or write multiple is used */ 
    uint64_t buf_flush_offset;               /**< offset of the first byte to flush    */
    uint32_t buf_flush_len;               /**< length of the data flush to disk    */
    uint32_t readahead;                   /**< assert to 1 for readahead case */
    void     *shared_buf_ref;             /**< reference of the shared buffer (used for STORCLI READ */
    int       trc_idx;                    /**< trace index */
    int       lkup_cpt;
+   uint32_t  multiple_pending;           /**< number of transaction that are pending: read or write multiple */
+   int       multiple_errno;             /**< multiple errno                                                 */ 
    rozofs_fuse_lookup_entry_t lookup_tb[ROZOFS_MAX_PENDING_LKUP];
    /*
    ** Parameters specific to the exportd gateway management

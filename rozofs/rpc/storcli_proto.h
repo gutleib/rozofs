@@ -47,6 +47,8 @@ struct storcli_write_arg_t {
 	uint8_t dist_set[ROZOFS_SAFE_MAX];
 	storcli_uuid_t fid;
 	uint64_t off;
+	uint32_t shared_buf_idx;
+	uint32_t cmd_idx;
 	struct {
 		u_int data_len;
 		char *data_val;
@@ -63,6 +65,8 @@ struct storcli_write_arg_no_data_t {
 	uint8_t dist_set[ROZOFS_SAFE_MAX];
 	storcli_uuid_t fid;
 	uint64_t off;
+	uint32_t shared_buf_idx;
+	uint32_t cmd_idx;
 	uint32_t len;
 };
 typedef struct storcli_write_arg_no_data_t storcli_write_arg_no_data_t;
@@ -78,6 +82,8 @@ struct storcli_read_arg_t {
 	uint32_t proj_id;
 	uint64_t bid;
 	uint32_t nb_proj;
+	uint32_t shared_buf_idx;
+	uint32_t cmd_idx;
 };
 typedef struct storcli_read_arg_t storcli_read_arg_t;
 

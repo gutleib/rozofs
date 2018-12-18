@@ -629,26 +629,8 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 
 	SAVE_FUSE_PARAM(buffer_p,to_set);
 	SAVE_FUSE_STRUCT(buffer_p,stbuf,sizeof(struct stat ));      
-	/*
-	**  Fill the truncate request:
-	**  we take the file information in terms of cid, distribution from the attributes
-	**  saved in the ientry
-	*/
-	args.cid = ie->attrs.attrs.cid;
-	args.layout = exportclt.layout;
-	args.bsize = exportclt.bsize;
-	memcpy(args.dist_set, ie->attrs.attrs.sids, sizeof (sid_t) * ROZOFS_SAFE_MAX);
-	memcpy(args.fid, ie->fid, sizeof (fid_t));
-	ret = rozofs_fill_storage_info(ie,&args.cid,args.dist_set,args.fid);
-	if (ret < 0)
-	{
-	  severe("bad storage information encoding");
-	  goto error;
-	}
-	args.bid      = bid;
-	args.last_seg = last_seg;
-  //      lbg_id = storcli_lbg_get_lbg_from_fid(ie->fid);
-        /*
+
+       /*
 	** indicates that there is a pending truncate: so the settattr that will come later on, will have
 	** the readahead flag asserted
 	*/
@@ -659,15 +641,49 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	*/
 	ie->pending_setattr_with_size_update++;
 	/*
-	** get the storcli to use for the transaction
-	*/      
-	storcli_idx = stclbg_storcli_idx_from_fid(ie->fid);
-	/*
-	** now initiates the transaction towards the remote end
+	** Check if the ientry designates a file with multiple inodes
 	*/
-	ret = rozofs_storcli_send_common(NULL,ROZOFS_TMR_GET(TMR_STORCLI_PROGRAM),STORCLI_PROGRAM, STORCLI_VERSION,
-                                  STORCLI_TRUNCATE,(xdrproc_t) xdr_storcli_truncate_arg_t,(void *)&args,
-                                  rozofs_ll_truncate_cbk,buffer_p,storcli_idx,ie->fid); 
+#warning FDL check the presence of a master inode with slave inode	
+        if(1) 
+	{
+	   /*
+	   ** multiple inode case: multiple inodes per user's file
+	   */
+	   ret = truncate_buf_multitple_nb(buffer_p, ie,attr.size);
+	}
+	else
+	{
+           /*
+	   **  Default mode: one inde per user file
+	   **
+	   **  Fill the truncate request:
+	   **  we take the file information in terms of cid, distribution from the attributes
+	   **  saved in the ientry
+	   */
+	   args.cid = ie->attrs.attrs.cid;
+	   args.layout = exportclt.layout;
+	   args.bsize = exportclt.bsize;
+	   memcpy(args.dist_set, ie->attrs.attrs.sids, sizeof (sid_t) * ROZOFS_SAFE_MAX);
+	   memcpy(args.fid, ie->fid, sizeof (fid_t));
+	   ret = rozofs_fill_storage_info(ie,&args.cid,args.dist_set,args.fid);
+	   if (ret < 0)
+	   {
+	     severe("bad storage information encoding");
+	     goto error;
+	   }
+	   args.bid      = bid;
+	   args.last_seg = last_seg;
+	   /*
+	   ** get the storcli to use for the transaction
+	   */      
+	   storcli_idx = stclbg_storcli_idx_from_fid(ie->fid);
+	   /*
+	   ** now initiates the transaction towards the remote end
+	   */
+	   ret = rozofs_storcli_send_common(NULL,ROZOFS_TMR_GET(TMR_STORCLI_PROGRAM),STORCLI_PROGRAM, STORCLI_VERSION,
+                                     STORCLI_TRUNCATE,(xdrproc_t) xdr_storcli_truncate_arg_t,(void *)&args,
+                                     rozofs_ll_truncate_cbk,buffer_p,storcli_idx,ie->fid); 
+	}
 	if (ret < 0) goto error;
 
         if (lkup_cpt) goto async_setattr;

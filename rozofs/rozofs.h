@@ -55,6 +55,44 @@ static __inline__ unsigned long long rdtsc(void)
 
 }
 
+/*
+** To associate with STORCLI_READ for read multiple
+*/
+#define ROZOFS_SHMEM_READ_PAYLOAD_OFF 4096 /**< need to be aligned on page boundary for performance purpose */
+#define ROZOFS_SHMEM_READ_MAX_CMD 4
+typedef struct _rozofs_shmem_cmd_read_t
+{
+    uint32_t xid;                /**< XID of the transaction (IN)   */
+    uint32_t received_len;       /**< number of bytes read (OUT) */
+    uint32_t offset_in_buffer;   /**< offset of the data in the shared buffer (IN) */
+} rozofs_shmem_cmd_read_t;
+    
+
+typedef struct _rozofs_shared_buf_rd_hdr_t
+{
+   rozofs_shmem_cmd_read_t cmd[ROZOFS_SHMEM_READ_MAX_CMD]; 
+} rozofs_shared_buf_rd_hdr_t;
+
+/*
+** To associate with STORCLI_WRITE for write multiple
+*/
+
+#define ROZOFS_SHMEM_WRITE_PAYLOAD_OFF 128 /**< need to start on a 128 bits boundady */
+#define ROZOFS_SHMEM_WRITE_MAX_CMD 4
+typedef struct _rozofs_shmem_cmd_write_t
+{
+    uint32_t xid;                /**< XID of the transaction (IN)   */
+    uint32_t write_len;       /**< number of bytes to write (IN) */
+    uint32_t offset_in_buffer;   /**< offset of the data in the shared buffer (IN) */
+} rozofs_shmem_cmd_write_t;
+    
+
+typedef struct _rozofs_shared_buf_wr_hdr_t
+{
+   rozofs_shmem_cmd_write_t cmd[ROZOFS_SHMEM_WRITE_MAX_CMD]; 
+} rozofs_shared_buf_wr_hdr_t;
+
+
 
 
 

@@ -619,10 +619,10 @@ void rozofs_storcli_read_reply_success(rozofs_storcli_ctx_t *p)
     /*
     ** check the case of the shared memory
     */
-    if (p->shared_mem_p != NULL)
+    if (p->shared_mem_req_p != NULL)
     {
-       uint32_t *sharedmem_p = (uint32_t*)p->shared_mem_p;
-       sharedmem_p[1] = data_len;
+       rozofs_shmem_cmd_read_t *share_rd_p = (rozofs_shmem_cmd_read_t*)p->shared_mem_req_p;
+       share_rd_p->received_len = data_len;
 
        alignment = 0x53535353;
        data_len   = 0;

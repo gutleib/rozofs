@@ -648,8 +648,9 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
 	  pChar += sprintf(pChar,"hash2          =%u\n",    (unsigned int)((void*) &fake_inode.s.hash2 - (void*) &fake_inode));
 	  pChar += sprintf(pChar,"i_extra_isize  =%u\n",    (unsigned int)((void*) &fake_inode.s.i_extra_isize - (void*) &fake_inode));
 	  pChar += sprintf(pChar,"bitfield1      =%u\n",    (unsigned int)((void*) &fake_inode.s.bitfield1 - (void*) &fake_inode));
-	  pChar += sprintf(pChar,"filler2        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler2 - (void*) &fake_inode)); 
+	  pChar += sprintf(pChar,"multiple_desc  =%u\n",    (unsigned int)((void*) &fake_inode.s.multi_desc.byte - (void*) &fake_inode)); 
 	  pChar += sprintf(pChar,"filler3        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler3 - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"i_state        =%u\n",    (unsigned int)((void*) &fake_inode.s.i_state - (void*) &fake_inode));
 	  pChar += sprintf(pChar,"filler4        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler4 - (void*) &fake_inode)); 
 	  pChar += sprintf(pChar,"filler5        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler5 - (void*) &fake_inode)); 
 	  pChar += sprintf(pChar,"filler6        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler6 - (void*) &fake_inode)); 
@@ -1414,7 +1415,7 @@ void show_trc_fuse_buffer(uint32_t tcpRef, void *bufRef)
 	  rozofs_uuid_unparse(fake_fid, str); 
         if (p->hdr.s.req)
         {
-          pChar+=sprintf(pChar,"[%12llu ]--> %-8s %4d %12.12llx ",
+          pChar+=sprintf(pChar,"[%12llu ]--> %-8s %4d %16llx ",
 	           (unsigned long long int)(p->ts - cur_ts),trc_fuse_display_srv(p->hdr.s.service_id),p->hdr.s.index,
 		   (unsigned long long int)p->ino);
           switch (p->hdr.s.trc_type)
@@ -1428,7 +1429,10 @@ void show_trc_fuse_buffer(uint32_t tcpRef, void *bufRef)
               pChar+=sprintf(pChar,"%s (0%o)\n",str,p->flags);
 	      break;
 	    case rozofs_trc_type_io:
-              pChar+=sprintf(pChar,"%s %8llu/%d\n",str,(unsigned long long int)p->par.io.off,(int)p->par.io.size);
+	      if (p->flags != 0)
+                pChar+=sprintf(pChar,"%s/%d %8llu/%d \n",str,p->flags,(unsigned long long int)p->par.io.off,(int)p->par.io.size);
+	      else
+                pChar+=sprintf(pChar,"%s   %8llu/%d\n",str,(unsigned long long int)p->par.io.off,(int)p->par.io.size);
 	      break;	
 	    case rozofs_trc_type_name:
               pChar+=sprintf(pChar,"%s\n",p->par.name.name);
@@ -1483,16 +1487,26 @@ void show_trc_fuse_buffer(uint32_t tcpRef, void *bufRef)
 	    case rozofs_trc_type_io:
 	    case rozofs_trc_type_def:
 	    case rozofs_trc_type_setattr:
-              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s %d:%s\n",
-	                 (unsigned long long int)(p->ts - cur_ts),
-		         trc_fuse_display_srv(p->hdr.s.service_id),
-		         p->hdr.s.index,
-		         (unsigned long long int)p->ino,
-		         str,
-		         p->errno_val,strerror(p->errno_val));  	  
+	      if (p->flags)
+        	pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %16llx %s/%d %d:%s\n",
+	                   (unsigned long long int)(p->ts - cur_ts),
+		           trc_fuse_display_srv(p->hdr.s.service_id),
+		           p->hdr.s.index,
+		           (unsigned long long int)p->ino,
+		           str,p->flags,
+		           p->errno_val,strerror(p->errno_val)); 
+	      else
+        	pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %16llx %s   %d:%s\n",
+	                   (unsigned long long int)(p->ts - cur_ts),
+		           trc_fuse_display_srv(p->hdr.s.service_id),
+		           p->hdr.s.index,
+		           (unsigned long long int)p->ino,
+		           str,
+		           p->errno_val,strerror(p->errno_val)); 
+	       	  
 	      break;
 	    case rozofs_trc_type_name:
-              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s\n",
+              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %16llx %s\n",
 	                 (unsigned long long int)(p->ts - cur_ts),
 		         trc_fuse_display_srv(p->hdr.s.service_id),
 		         p->hdr.s.index,
@@ -1500,7 +1514,7 @@ void show_trc_fuse_buffer(uint32_t tcpRef, void *bufRef)
 		         (p->par.name.name[0] == 0)?strerror(p->errno_val):p->par.name.name); 
               break;		       
 	    case rozofs_trc_type_attr:
-              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %12.12llx %s %d:%s %8llu\n",
+              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %16llx %s %d:%s %8llu\n",
 	                 (unsigned long long int)(p->ts - cur_ts),
 		         trc_fuse_display_srv(p->hdr.s.service_id),
 		         p->hdr.s.index,

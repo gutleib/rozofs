@@ -78,6 +78,10 @@ xdr_storcli_write_arg_t (XDR *xdrs, storcli_write_arg_t *objp)
 		 return FALSE;
 	 if (!xdr_uint64_t (xdrs, &objp->off))
 		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->shared_buf_idx))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->cmd_idx))
+		 return FALSE;
 	 if (!xdr_bytes (xdrs, (char **)&objp->data.data_val, (u_int *) &objp->data.data_len, ~0))
 		 return FALSE;
 	return TRUE;
@@ -105,6 +109,10 @@ xdr_storcli_write_arg_no_data_t (XDR *xdrs, storcli_write_arg_no_data_t *objp)
 	 if (!xdr_storcli_uuid_t (xdrs, objp->fid))
 		 return FALSE;
 	 if (!xdr_uint64_t (xdrs, &objp->off))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->shared_buf_idx))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->cmd_idx))
 		 return FALSE;
 	 if (!xdr_uint32_t (xdrs, &objp->len))
 		 return FALSE;
@@ -137,6 +145,10 @@ xdr_storcli_read_arg_t (XDR *xdrs, storcli_read_arg_t *objp)
 	 if (!xdr_uint64_t (xdrs, &objp->bid))
 		 return FALSE;
 	 if (!xdr_uint32_t (xdrs, &objp->nb_proj))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->shared_buf_idx))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->cmd_idx))
 		 return FALSE;
 	return TRUE;
 }

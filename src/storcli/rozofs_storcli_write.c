@@ -107,9 +107,8 @@ void rozofs_storcli_write_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
   
 */
 static inline int rozofs_storcli_check_rozofsmount_tmo(rozofs_storcli_ctx_t *working_ctx_p) {
-  uint32_t *xid_p;
 
-  if (working_ctx_p->shared_mem_p == NULL) {
+  if (working_ctx_p->shared_mem_req_p == NULL) {
     /* 
     ** No share memory pointer ?
     */
@@ -119,8 +118,8 @@ static inline int rozofs_storcli_check_rozofsmount_tmo(rozofs_storcli_ctx_t *wor
   /*
   ** Retrieve transaction identifier from the shared buffer
   */
-  xid_p = (uint32_t*)working_ctx_p->shared_mem_p;
-  if (*xid_p !=  working_ctx_p->src_transaction_id)
+  rozofs_shmem_cmd_write_t *share_wr_p = (rozofs_shmem_cmd_write_t*)working_ctx_p->shared_mem_req_p;
+  if (share_wr_p->xid !=  working_ctx_p->src_transaction_id)
   {
      return 1;   
   } 
@@ -777,7 +776,7 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    ** the length to write is asserted, the lower part of the length indicates the reference
    ** of the buffer in the shared memory
    */
-   if (storcli_write_rq_p->len & 0x80000000)
+   if(storcli_write_rq_p->shared_buf_idx != 0xffffffff)
    {
      if (storcli_rozofsmount_shared_mem[SHAREMEM_IDX_WRITE].active == 0)
      {
@@ -791,24 +790,28 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
        ** set data_write_p to point to the shared memory
        */
        uint8_t *pbase = (uint8_t*)storcli_rozofsmount_shared_mem[SHAREMEM_IDX_WRITE].data_p;
-       int shared_mem_idx = (storcli_write_rq_p->len & 0xffff);
+       int shared_mem_idx = storcli_write_rq_p->shared_buf_idx;
        uint32_t buf_offset = shared_mem_idx*storcli_rozofsmount_shared_mem[SHAREMEM_IDX_WRITE].buf_sz;
-       uint32_t *pbuffer = (uint32_t*) (pbase + buf_offset);
+       rozofs_shared_buf_wr_hdr_t *share_wr_p = (rozofs_shared_buf_wr_hdr_t*) (pbase + buf_offset);
        /*
        ** restore the length of the data to write in the write interface
        */
-       storcli_write_rq_p->len = pbuffer[1];
-       working_ctx_p->data_write_p  = (char*)&pbuffer[2+2]; 
+       storcli_write_rq_p->len = share_wr_p->cmd[storcli_write_rq_p->cmd_idx].write_len;
+       working_ctx_p->data_write_p  = (char*)share_wr_p; 
        /*
        ** Add alignment (stored in pbuffer[2] by rozofsmount)
        */
-       working_ctx_p->data_write_p += pbuffer[2];
+       working_ctx_p->data_write_p += share_wr_p->cmd[storcli_write_rq_p->cmd_idx].offset_in_buffer + ROZOFS_SHMEM_WRITE_PAYLOAD_OFF;
        /*
        ** store the pointer to the beginning of the shared memory
        **  needed to control the timestamp just before sending the 
        ** data after the Mojette transform took place
        */
-       working_ctx_p->shared_mem_p = pbuffer;
+       working_ctx_p->shared_mem_p = share_wr_p;
+       /*
+       ** pointer to the xid, length and offset in shared buffer
+       */
+       working_ctx_p->shared_mem_req_p = &share_wr_p->cmd[storcli_write_rq_p->cmd_idx];
        /*
        ** Check that the rozofsmount transaction is not aborted 
        */
@@ -1026,10 +1029,10 @@ void rozofs_storcli_write_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
   ** transaction (either read or write:
   ** the control must take place only where here is the presence of a shared memory for the write
   */
-  if (working_ctx_p->shared_mem_p!= NULL)
+  if (working_ctx_p->shared_mem_req_p!= NULL)
   {
-      uint32_t *xid_p = (uint32_t*)working_ctx_p->shared_mem_p;
-      if (*xid_p !=  working_ctx_p->src_transaction_id)
+      rozofs_shmem_cmd_write_t *share_wr_p = (rozofs_shmem_cmd_write_t*)working_ctx_p->shared_mem_req_p;
+      if (share_wr_p->xid !=  working_ctx_p->src_transaction_id)
       {
         /*
         ** the source has aborted the request
@@ -2206,6 +2209,7 @@ int rozofs_storcli_internal_read_req(rozofs_storcli_ctx_t *working_ctx_p,rozofs_
    request->bsize   = storcli_write_rq_p->bsize;
    request->bid     = wr_proj_buf_p->off/ROZOFS_BSIZE_BYTES(storcli_write_rq_p->bsize);  
    request->nb_proj = wr_proj_buf_p->number_of_blocks;  
+   request->shared_buf_idx = 0xffffffff;
    /*
    ** save the tranaction sequence number, it will be needed to correlate with the context upon
    ** receiving the read response : it is maily used to find out either FIRST or LAST index

@@ -264,6 +264,7 @@ typedef struct _rozofs_storcli_ctx_t
   storcli_read_arg_t  storcli_read_arg;           /**< parameter of the read request received from the client (north)         */
 
   void       *shared_mem_p;  /**< pointer to the shared memory used for reading */
+  void       *shared_mem_req_p;  /**< pointer to the relative header in the shared buffer where data relative to the request can be found (case of the rozofs multiple file */
   uint8_t storage_idx_tb[ROZOFS_SAFE_MAX_STORCLI];
 
   /*

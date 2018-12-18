@@ -49,6 +49,8 @@ struct storcli_write_arg_t {
     uint8_t     dist_set[ROZOFS_SAFE_MAX];
     storcli_uuid_t   fid;        
     uint64_t    off;
+    uint32_t    shared_buf_idx;
+    uint32_t    cmd_idx;
     opaque      data<>;
 };
 
@@ -61,6 +63,8 @@ struct storcli_write_arg_no_data_t {
     uint8_t     dist_set[ROZOFS_SAFE_MAX];
     storcli_uuid_t   fid;        
     uint64_t    off;
+    uint32_t    shared_buf_idx;
+    uint32_t    cmd_idx;
     uint32_t    len;
 };
 
@@ -68,15 +72,17 @@ struct storcli_write_arg_no_data_t {
 
 struct storcli_read_arg_t {
     uint16_t    cid;
-    uint8_t     sid;
+    uint8_t     sid;  /* Obsolete */
     uint8_t     layout;
-    uint8_t     spare;
+    uint8_t     spare; /* assert to 'S' to indicate that shared buffer is used (except for storcli read internal) */
     uint8_t     bsize; /* Block size as define in enum ROZOFS_BSIZE_E */       
     uint8_t     dist_set[ROZOFS_SAFE_MAX];
     storcli_uuid_t   fid; 
-    uint32_t    proj_id; 
+    uint32_t    proj_id;  /* Obsolete: used to contain the reference of the shared buffer */
     uint64_t    bid;
     uint32_t    nb_proj;
+    uint32_t    shared_buf_idx;
+    uint32_t    cmd_idx;
 };
 
 struct storcli_truncate_arg_t {

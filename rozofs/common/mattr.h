@@ -249,7 +249,36 @@ typedef struct _inode_fname_t
 /* Wether locks on this file must be kept on export switchover */
 #define ROZOFS_BITFIELD1_PERSISTENT_FLOCK    1
 
+/*___________________________________
+** Case of the multiple files
+*/
 
+#define ROZOFS_STRIPING_UNIT_BASE (1024*256)
+#define ROZOFS_MAX_STRIPING_FACTOR_POWEROF2 4
+#define ROZOFS_MAX_STRIPING_UNIT_POWEROF2 3
+typedef union
+{
+  uint8_t byte;
+  struct  {
+  uint8_t master:1; /**< assert to one for the master inode, 0 for the slaves */
+  uint8_t filler:7; 
+  } common;
+  struct  {
+  uint8_t master:1; /**< assert to one for the master inode, 0 for the slaves */
+  uint8_t striping_unit:3; /**<0: 512KB, 1:1024KB, 2: 2038KB, 3:4096KB  */
+  uint8_t striping_factor:3; /**< striping factor is given in power of 2: 0:1; 1:2; 2:4.... */
+  uint8_t hybrid:1;  /**< when asserted it indicates that the first file index is used on the striping_unit size only one time */
+
+  } master;
+  struct {
+  uint8_t master:1; /**< assert to one for the master inode, 0 for the slaves */
+  uint8_t file_idx:7; /**<index of the inode in the multiple file  */
+  } slave;
+} rozofs_multiple_desc_t;
+
+/*___________________________________
+**   RozoFS inode structure
+*/
 typedef union
 {
    char inode_buf[512];
@@ -261,7 +290,7 @@ typedef union
      uint32_t hash2;   /**< parent/name hash2  */
      uint8_t i_extra_isize;  /**< array reserved for extended attributes */
      uint8_t bitfield1;  /**< reserve fot future use */
-     uint8_t filler2;  /**< reserved for future use */
+     rozofs_multiple_desc_t multi_desc;  /**< used for rozofs multiple file see rozofs_multiple_desc_t */
      uint8_t filler3;  /**<reserve for future use */
      uint8_t i_state;     /**< inode state               */
      uint8_t filler4;  /**< reserve fot future use */
@@ -272,6 +301,7 @@ typedef union
      rozofs_hpc_reserved_t hpc_reserved;  /**< reserved for hpc */
      rozofs_inode_fname_t fname;  /**< reference of the name within the dentry file */
    } s;
+
 } ext_mattr_t;
 
 #define ROZOFS_I_EXTRA_ISIZE (sizeof(struct inode_internal_t))
@@ -451,4 +481,61 @@ static inline int rozofs_fill_storage_info_from_mattr(mattr_t *attrs_p,cid_t *ci
   return 0;
 }
 
+/*
+**__________________________________________________________________
+
+    M U L T I P L E   F I L E  S E R V I C E S
+**__________________________________________________________________
+*/    
+typedef struct _rozofs_slave_inode_t 
+{
+    uint64_t size;                  /**< see stat(2) */
+    sid_t sids[ROZOFS_SAFE_MAX];    /**< sid of storage nodes target (regular file only)*/
+    uint32_t children;              /**< number of children (excluding . and ..) */
+    cid_t cid;
+
+} rozofs_slave_inode_t;
+
+
+
+/*
+**__________________________________________________________________
+*/
+/** That function returns the striping size of the file
+    That information is found in one attributes of the main inode
+    
+    @param ie: pointer to the inode information
+    
+    @retval > 0: value of the striping size in byte
+    @retval < 0 : error (see errno for details)
+ */
+static inline int rozofs_get_striping_size(rozofs_multiple_desc_t *p)
+{
+  if (p->common.master == 0) return -1;
+  return ROZOFS_STRIPING_UNIT_BASE << (p->master.striping_unit);
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+  Get the striping factor: that value indicates the number of secondary inode that
+  are associated with the primary inode
+  
+  The FID of the secondary inodes are in the same file index as the primary inode*
+  the first secondary inode is found has the next index in sequence in the file index
+  that contains the primary inode
+
+    @param ie: pointer to the inode information
+    
+    @retval > 0: value of the striping size in byte
+    @retval < 0 : error (see errno for details)
+*/
+
+static inline int rozofs_get_striping_factor(rozofs_multiple_desc_t *p)
+{
+  if (p->common.master == 0) return -1;
+  return 1 << (p->master.striping_factor);;
+
+}
 #endif

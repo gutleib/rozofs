@@ -177,6 +177,7 @@ typedef struct ientry {
     int         pending_getattr_cnt;   /**< pending get attr count  */
     int         pending_setattr_with_size_update; /**< number of pending setattr triggered by a truncate callback */
 //    uint32_t    io_write_error_counter;   /**< incremented each time there is an I/O write error for that i-node  */
+    rozofs_slave_inode_t   *slave_inode_p;      /**< case of the multiple file */
     struct inode_internal_t attrs;   /**< attributes caching for fs_mode = block mode   */
     /* !!!WARNING !!! DO NOT ADD ANY FIELD BELOW attrs since that array can be extended for storing extended attributes */
 } ientry_t;
@@ -368,6 +369,14 @@ static inline void del_ientry(ientry_t * ie) {
        if (fake_lv2_p->extended_attr_p != NULL) xfree(fake_lv2_p->extended_attr_p);    
        fake_lv2_p->extended_attr_p = NULL;
     }
+    /*
+    ** Check if there are some slave inode associated with the ientry (case of the rozofs multiple file
+    */
+    if (ie->slave_inode_p != NULL)
+    {
+       xfree(ie->slave_inode_p);
+       ie->slave_inode_p = NULL;    
+    }
     xfree(ie);    
 }
 
@@ -464,6 +473,7 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
 	memcpy(ie->fid, fid, sizeof(fid_t));
         memset(ie->pfid, 0, sizeof(fid_t));
 	ie->inode = inode_p->fid[1]; //fid_hash(fid);
+	ie->slave_inode_p = NULL;
 	list_init(&ie->list);
 	list_init(&ie->list_wr_block);
 	ie->db.size = 0;
@@ -931,4 +941,277 @@ static inline void rozofs_export_queue_ie_in_wr_block_list(ientry_t *ie)
 }
 
 void rozofs_export_write_block_list_process(void);
+
+
+/*
+**__________________________________________________________________
+
+    M U L T I P L E   F I L E  S E R V I C E S
+**__________________________________________________________________
+*/    
+
+
+/*
+**__________________________________________________________________
+*/
+/** That function returns the striping size of the file
+    That information is found in one attributes of the main inode
+    
+    @param ie: pointer to the inode information
+    
+    @retval > 0: value of the striping size in byte
+    @retval < 0 : error (see errno for details)
+ */
+static inline int rozofs_get_striping_size_from_ie(ientry_t *ie)
+{
+  rozofs_multiple_desc_t *p;  
+  struct inode_internal_t *inode_p = &ie->attrs;  
+  
+  p = &inode_p->multi_desc;
+
+  return rozofs_get_striping_size(p);
+}
+/*
+**__________________________________________________________________
+*/
+/**
+  Get the striping factor: that value indicates the number of secondary inode that
+  are associated with the primary inode
+  
+  The FID of the secondary inodes are in the same file index as the primary inode*
+  the first secondary inode is found has the next index in sequence in the file index
+  that contains the primary inode
+
+    @param ie: pointer to the inode information
+    
+    @retval > 0: value of the striping size in byte
+    @retval < 0 : error (see errno for details)
+*/
+
+static inline int rozofs_get_striping_factor_from_ie(ientry_t *ie)
+{
+  rozofs_multiple_desc_t *p;
+  struct inode_internal_t *inode_p = &ie->attrs;  
+  p = &inode_p->multi_desc;
+  return rozofs_get_striping_factor(p);
+
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+  Write slave inode context
+  
+  That service allocates memory to save the information related to the slave i-node.
+  The size of the arry depends on the striping factor of the master inode.
+  
+
+    @param ie: pointer to the inode information
+    @param slave_inode_p: pointer to the slave inodes descriptors
+    
+    @retval  0 on success
+    @retval < 0 : error (see errno for details)
+*/
+
+static inline int rozofs_write_slave_inode(ientry_t *ie,rozofs_slave_inode_t *slave_inode_p)
+{
+  rozofs_multiple_desc_t *p;
+  int striping_factor;
+  struct inode_internal_t *inode_p = &ie->attrs;  
+  p = &inode_p->multi_desc;
+  /*
+  ** Get the number of files
+  */
+  striping_factor = rozofs_get_striping_factor(p);
+  if (striping_factor < 0) return -1;
+  
+  if (ie->slave_inode_p != NULL) 
+  {
+     xfree(ie->slave_inode_p);
+     ie->slave_inode_p = NULL;
+  }
+  if (striping_factor == 1) 
+  {
+    /*
+    ** Nothing to do since it the default case: single file
+    */
+    return 0;
+  }
+  ie->slave_inode_p = xmalloc(sizeof(rozofs_slave_inode_t)*striping_factor);
+  if (ie->slave_inode_p == NULL)
+  {
+    errno = ENOMEM;
+    return -1;
+  }
+  memcpy(ie->slave_inode_p,slave_inode_p,sizeof(rozofs_slave_inode_t)*striping_factor);
+  return 0;
+}
+
+
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+  get slave inode contexts
+  
+  That service allocates memory to save the information related to the slave i-node.
+  The size of the arry depends on the striping factor of the master inode.
+  
+
+    @param ie: pointer to the inode information
+    
+    @retval <>NULL :: pointer to the inode slave contexts
+    @retval NULL : not slave inode contexts
+*/
+
+static inline rozofs_slave_inode_t *rozofs_get_slave_inode_from_ie(ientry_t *ie)
+{
+
+  return ie->slave_inode_p;
+}
+
+
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+*   Fill up the information needed by storio in order to read/write a file
+
+    @param ie: pointer to the inode entry that contains file information
+    @param cid: pointer to the array where the cluster_id is returned
+    @param sids_p: pointer to the array where storage id are returned
+    @param fid_storage: pointer to the array where the fid of the file on storage is returned
+    @param file_index
+    
+    @retval 0 on success
+    @retval < 0 error (see errno for details)
+*/
+static inline int rozofs_fill_storage_info_multiple(ientry_t *ie,cid_t *cid,uint8_t *sids_p,fid_t fid_storage,uint16_t file_idx)
+{
+  mattr_t *attrs_p;
+  rozofs_mover_children_t mover_idx;   
+  rozofs_slave_inode_t *slave_inode_p = NULL; 
+   
+  if (file_idx == 0) return rozofs_fill_storage_info(ie,cid,sids_p,fid_storage);
+  
+  /*
+  ** case of a slave file
+  */
+  file_idx -=1;
+  /*
+  ** Get the pointer to the slave inodes
+  */
+  slave_inode_p = rozofs_get_slave_inode_from_ie(ie);
+  if (slave_inode_p == NULL)
+  {  
+     errno = EINVAL;
+     return -1;
+  }
+  slave_inode_p +=file_idx;
+  mover_idx.u32 = slave_inode_p->children;
+  
+  attrs_p = &ie->attrs.attrs;  
+  /*
+  ** get the cluster and the list of the sid
+  */
+  /*
+  ** !!!!!! WARNING !!!!!!!!
+  **   need to append file_idx+1 to the index part of the master FID
+  */
+  
+  memcpy(fid_storage,attrs_p->fid,sizeof(fid_t));
+
+  rozofs_build_storage_fid(fid_storage,mover_idx.fid_st_idx.primary_idx);   
+  
+  *cid = slave_inode_p->cid;
+  memcpy(sids_p,slave_inode_p->sids,ROZOFS_SAFE_MAX_STORCLI);  
+  return 0;
+}
+
+
+
+static inline int rozofs_build_fake_slave_inode(ientry_t *ie,int striping_factor,int striping_unit)
+{
+
+  int nb_files;
+  rozofs_slave_inode_t *slave_inode_p, *q;
+  rozofs_mover_children_t mover_idx; 
+  int ret;
+  rozofs_multiple_desc_t * p;
+  int i;
+   
+  
+  struct inode_internal_t *inode_p = &ie->attrs;  
+  p = &inode_p->multi_desc;
+  p->byte = 0;
+  
+  if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR_POWEROF2)
+  {
+     errno = EINVAL;
+     return -1;
+  }
+  if (striping_unit > ROZOFS_MAX_STRIPING_UNIT_POWEROF2) 
+  {
+     errno = EINVAL;
+     return -1;
+  }  
+  p->common.master = 1;
+  p->master.striping_unit = striping_unit;
+  p->master.striping_factor = striping_factor;
+  
+  nb_files = rozofs_get_striping_factor(p);
+  
+  slave_inode_p = malloc(sizeof(rozofs_slave_inode_t)*nb_files);
+  q = slave_inode_p;
+  mover_idx.u32 = 0;
+  for (i=0; i < nb_files;i++,q++)
+  {
+      q->size = 0;
+      q->cid = inode_p->attrs.cid;
+      memcpy(q->sids,inode_p->attrs.sids,ROZOFS_SAFE_MAX);
+      mover_idx.fid_st_idx.primary_idx = i+1;
+      q->children = mover_idx.u32;      
+  
+  }
+  /*
+  ** move it in the ientry
+  */
+  ret = rozofs_write_slave_inode(ie,slave_inode_p);
+  free(slave_inode_p);
+  return ret;
+  
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+* Truncate  Call back function call upon a success rpc, timeout or any other rpc failure
+*
+ @param this : pointer to the transaction context
+ @param param: pointer to the associated rozofs_fuse_context
+ 
+ @return none
+ */
+void rozofs_ll_truncate_cbk(void *this,void *param);
+/*
+**__________________________________________________________________
+*/
+/** Truncate of file has been created as a multiple file
+ 
+    The opaque fields of the transaction context are used as follows:
+    
+     - opaque[1]: index of the file
+ *
+ * @param fuse_ctx_p: pointer to the rozofs fuse context
+ * @param size: new size of the file
+ * @param ie: pointer to the i-node context of the client
+ 
+*/ 
+int truncate_buf_multitple_nb(void *fuse_ctx_p,ientry_t *ie, uint64_t size);
 #endif

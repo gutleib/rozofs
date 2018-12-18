@@ -233,6 +233,24 @@ static inline int rozofs_tx_get_errno(rozofs_tx_ctx_t *this)
 /*
 **____________________________________________________
 */
+/**
+  Assert a transaction error status
+  
+   @param this : pointer to the transaction context
+   @param error: error code to assert 
+   
+   @retval status of the transaction
+*/   
+static inline void rozofs_tx_set_errno(rozofs_tx_ctx_t *this,int error)
+{
+  this->tx_errno = error;
+  if (error != 0) this->status = -1;
+  else this->status = 0;
+}
+
+/*
+**____________________________________________________
+*/
 /*
   stop the guard timer associated with the transaction
 

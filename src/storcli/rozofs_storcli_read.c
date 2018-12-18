@@ -357,11 +357,14 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
        ** set data_read_p to point to the array where data will be returned
        */
        uint8_t *pbase = (uint8_t*)storcli_rozofsmount_shared_mem[SHAREMEM_IDX_READ].data_p;
-       uint32_t buf_offset = storcli_read_rq_p->proj_id*storcli_rozofsmount_shared_mem[SHAREMEM_IDX_READ].buf_sz;
-       uint32_t *pbuffer = (uint32_t*) (pbase + buf_offset);
-       pbuffer[1] = 0; /** bin_len */
-       working_ctx_p->data_read_p  = (char*)&pbuffer[4096/4];
-       working_ctx_p->shared_mem_p = pbuffer;  
+       uint32_t buf_offset = storcli_read_rq_p->shared_buf_idx*storcli_rozofsmount_shared_mem[SHAREMEM_IDX_READ].buf_sz;
+       rozofs_shared_buf_rd_hdr_t *share_rd_p = (rozofs_shared_buf_rd_hdr_t*)(pbase + buf_offset);
+       working_ctx_p->shared_mem_p = share_rd_p;
+       working_ctx_p->shared_mem_req_p = &share_rd_p->cmd[storcli_read_rq_p->cmd_idx];
+#warning it is better to clear received_len from rozofsmount
+       share_rd_p->cmd[storcli_read_rq_p->cmd_idx].received_len = 0;
+       working_ctx_p->data_read_p  = (char*)working_ctx_p->shared_mem_p;     
+       working_ctx_p->data_read_p  += ROZOFS_SHMEM_READ_PAYLOAD_OFF+share_rd_p->cmd[storcli_read_rq_p->cmd_idx].offset_in_buffer;
      }   
    }
    /*
@@ -1455,10 +1458,10 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     ** That's fine, all the projections have been received start rebuild the initial message
     ** for the case of the shared memory, we must check if the rozofsmount has not aborted the request
     */
-    if (working_ctx_p->shared_mem_p != NULL)
+    if (working_ctx_p->shared_mem_req_p != NULL)
     {
-      uint32_t *xid_p = (uint32_t*)working_ctx_p->shared_mem_p;
-      if (*xid_p !=  working_ctx_p->src_transaction_id)
+      rozofs_shmem_cmd_read_t *share_rd_p = (rozofs_shmem_cmd_read_t*)working_ctx_p->shared_mem_req_p;
+      if (share_rd_p->xid !=  working_ctx_p->src_transaction_id)
       {
         /*
         ** the source has aborted the request
