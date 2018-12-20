@@ -69,6 +69,11 @@
 #define ENODEID     "nodeid"
 #define EFLOCKP     "flockp"
 
+#define ESTRIPPING     "stripping" // Multi file stripping configuration
+#define ESTRIPUNIT     "unit"      // Multi file stripping size in bytes = 256M * (1<<unit)
+#define ESTRIPFACTOR   "factor"    // Multi file number of sub file = 1<<factor 
+
+
 /*
 ** constant for exportd gateways
 */
@@ -217,13 +222,14 @@ void expgw_config_release(expgw_config_t *c) {
 int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t layout, uint32_t bsize,
         const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, 
 	const char *filter_name, int thin,vid_t vid_fast, uint64_t hquota_fast,int suffix_file, 
-        int flockp) {
+        int flockp, estripping_t * stripping) {
     DEBUG_FUNCTION;
 
     e->eid = eid;
     e->vid = vid;
     e->vid_fast = vid_fast;
     e->layout = layout;
+    memcpy(&e->stripping,stripping,sizeof(estripping_t));
     e->bsize = bsize;
     strncpy(e->root, root, FILENAME_MAX);
     strncpy(e->name, name, FILENAME_MAX);
@@ -363,13 +369,53 @@ void econfig_release(econfig_t *config) {
         xfree(entry);
     }    
 }
+static int read_stripping_config(struct config_setting_t * stripping_set, estripping_t *stripping) {
+    int                       status = -1;
+#if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
+               || (LIBCONFIG_VER_MAJOR > 1))
+        int unit; 
+        int factor; 
 
+#else
+        long int unit;
+        long int factor; 
+#endif
+    
+    
+    if (stripping_set == NULL) return 0;
+
+    /*
+    ** Get the stripping unit
+    */
+    if (config_setting_lookup_int(stripping_set, ESTRIPUNIT, &unit) != CONFIG_FALSE) {
+        if ((unit<0) || (unit>ROZOFS_MAX_STRIPING_UNIT_POWEROF2)) {
+          severe("Bad stripping unit %d", unit);
+          goto out;
+        }
+        stripping->unit = unit;  
+    }
+
+    /*
+    ** Get the stripping factor
+    */
+    if (config_setting_lookup_int(stripping_set, ESTRIPFACTOR, &factor) != CONFIG_FALSE) {
+        if ((factor<0) || (factor>ROZOFS_MAX_STRIPING_FACTOR_POWEROF2)) {
+          severe("Bad stripping factor %d", factor);
+          goto out;
+        }
+        stripping->factor = factor;  
+    }
+    
+    status = 0;
+out:
+    return status;
+}
 static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout) {
     int status = -1, v, c, s;
     struct config_setting_t *volumes_set = NULL;
     int    multi_site = -1;
     const char *rebalance_cfg;
-    
+        
     DEBUG_FUNCTION;
 
     // Get settings for volumes (list of volumes)
@@ -408,7 +454,8 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
             errno = ENOKEY;
             severe("can't lookup vid setting for volume idx: %d.", v);
             goto out;
-        }
+        } 
+        
         /*
         ** Looking for a rebalane configuration file 
         ** for automatic rebalance launching
@@ -453,6 +500,20 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
             goto out;
         }
 
+        {
+          struct config_setting_t * stripping_set;
+
+          vconfig->stripping.unit   = ec->stripping.unit;
+          vconfig->stripping.factor = ec->stripping.factor;    
+
+          stripping_set = config_setting_get_member(vol_set, ESTRIPPING);  
+          if (read_stripping_config(stripping_set, &vconfig->stripping) != 0) {
+            errno = ENOKEY;
+            severe("Invalid stripping settings in volume %d", vid);
+            goto out;
+          } 
+        }     
+        
         vconfig->multi_site = 0;
         multi_site = -1; // To determine whether multi site or not
         
@@ -980,6 +1041,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
     int status = -1, i;
     struct config_setting_t *export_set = NULL;
     char   dafault_root_path[FILENAME_MAX];
+    estripping_t       stripping;
 
     /*
     ** Prior to read the export configuration, we need
@@ -1187,7 +1249,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         if (config_setting_lookup_int(mfs_setting, ELAYOUT, &layout) == CONFIG_FALSE) {
 	  layout = -1;           
         }
-        
+                
         /*
         IPv4 filtering
         */
@@ -1203,11 +1265,30 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
             fatal("No such IPv4 filter \"%s\" defined for export %d.",filter_name, (int)eid);
           }  
         }
+        
+        
+        /*
+        ** Multile file strippong
+        */
+        {
+          struct config_setting_t * stripping_set;
+
+          stripping.unit   = 255;
+          stripping.factor = 255;    
+
+          stripping_set = config_setting_get_member(mfs_setting, ESTRIPPING);  
+          if (read_stripping_config(stripping_set, &stripping) != 0) {
+            errno = ENOKEY;
+            severe("Invalid stripping settings in eid %d", eid);
+            goto out;
+          } 
+        } 
+        
 	
         econfig = xmalloc(sizeof (export_config_t));
         if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
                 md5, squota, hquota, filter_name, thin, (vid_t) vid_fast,hquota_fast,suffix_file,
-                flockp) != 0) {
+                flockp, &stripping) != 0) {
             severe("can't initialize export config.");
         }
 
@@ -1260,6 +1341,24 @@ int econfig_read(econfig_t *config, const char *fname) {
         goto out;
     }
     config->layout = (uint8_t) layout;
+    
+
+    /*
+    ** Read default stripping settings
+    */
+    {
+      struct config_setting_t * stripping_set;
+
+      config->stripping.unit   = 0;
+      config->stripping.factor = 0;    
+      
+      stripping_set = config_lookup(&cfg, ESTRIPPING);  
+      if (read_stripping_config(stripping_set, &config->stripping) != 0) {
+        errno = ENOKEY;
+        severe("Invalid stripping settings");
+        goto out;
+      } 
+    }     
 
     /*
     ** Is there a defined numa node id to pin the export on

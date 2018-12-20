@@ -24,6 +24,7 @@
 
 #include <rozofs/rozofs.h>
 #include <rozofs/common/list.h>
+#include "econfig.h"
 
 /** status of a volume */
 typedef struct volume_stat {
@@ -112,7 +113,8 @@ typedef struct volume {
     uint8_t balanced:1; // Whether volume balance has already been called
     uint8_t layout:6;
     uint8_t georep:1; /**< asserted to 1 when geo-replication is enabled */
-    uint8_t multi_site:1; /**< asserted to 1 when geo-replication is enabled */ 
+    uint8_t multi_site:1; /**< asserted to 1 when geo-replication is enabled */
+    estripping_t stripping;
     void *  cluster_distibutor; /**< Table giving order of distribution of clusters */ 
     char *  rebalanceCfg; /**< rebalancer configuration file for this volume */
     list_t clusters; ///< cluster(s) list
@@ -134,7 +136,8 @@ typedef struct volume {
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site, char * rebalanceCfg);
+int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site, char * rebalanceCfg,
+                      estripping_t * stripping);
 
 /** release a volume
  *

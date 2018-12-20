@@ -30,6 +30,18 @@
 
 #define MD5_LEN  22
 
+/*
+** Multiple file stripping configuration
+** Multi file stripping size in bytes = 256M * (1<<unit)
+** Multi file number of sub file      = 1<<factor 
+*/
+typedef struct estripping {
+  uint8_t   unit;
+  uint8_t   factor;
+} estripping_t;
+
+
+
 typedef struct storage_node_config {
     sid_t sid;
     char host[ROZOFS_HOSTNAME_MAX];
@@ -50,7 +62,8 @@ typedef struct volume_config {
     vid_t vid;
     uint8_t layout;    
     uint8_t georep; 
-    uint8_t multi_site;   
+    uint8_t multi_site;  
+    estripping_t stripping; //< multi file stripping configuration     
     list_t clusters;
     char  * rebalance_cfg; // Rebalance configuation file if any
     list_t list;
@@ -64,6 +77,7 @@ typedef struct export_config {
     ROZOFS_BSIZE_E  bsize;
     uint8_t         thin:1;    /* Thin provisionning */
     uint8_t         flockp:1;  /* persistent file locks */
+    estripping_t stripping; //< multi file stripping configuration    
     char root[FILENAME_MAX];
     char name[FILENAME_MAX];
     char md5[MD5_LEN];
@@ -95,6 +109,7 @@ typedef struct expgw_config {
 
 typedef struct econfig {
     uint8_t layout; ///< layout used for this exportd
+    estripping_t stripping; //< multi file stripping configuration
     int    nodeid; // Node identifier to be used when numa aware is set in rozofs.conf
     char   exportd_vip[ROZOFS_HOSTNAME_MAX]; ///< virtual IP address of the exportd
     list_t volumes;

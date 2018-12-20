@@ -232,6 +232,7 @@ typedef struct export {
     uint32_t bsize; ///< the block size from enum ROZOFS_BSIZE_E
     char root[PATH_MAX]; ///< absolute path of the storage root
     char name[PATH_MAX]; ///< Export name
+    estripping_t stripping;
     uint8_t layout; ///< layout
     
     /*  Some options */
@@ -367,13 +368,14 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin,volume_t *volume_fast,uint64_t hquota_fast,int suffix_file_idx, uint8_t flockp);
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin,volume_t *volume_fast,uint64_t hquota_fast,int suffix_file_idx, uint8_t flockp,
+        export_config_t * ec);
 
 /** initialize an export.
  *
  * close file descriptors.
  *
- * @param export: pointer to the export
+ * @param export: pointer to the e,xport
  */
 void export_release(export_t * e);
 

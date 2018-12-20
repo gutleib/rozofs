@@ -30,7 +30,25 @@ grammar.
                - is optional.
                - must be an integer.
 
-.SS volumes
+.SS stripping
+    This describe the system file stripping parameters when user files are splitted on 
+    several internal RozoFS files. 
+    The stripping parameters can be set per export, per volume or for the whole system. 
+    When no stripping is defined for an export, it takes the volume stripping parameters.
+    When no stripping is defined for a volume, it takes the system stripping parameters.
+    When no stripping is defined at system level, the stripping is set to no stripping.
+    
+       unit:   defines the size of the strip.
+               The size in bytes of a strip is : 256K * (1 << unit)
+               - is optional.
+               - must be an integer.
+             
+       factor: defines the number of RozoFS files under a user file.
+               The number of RozoFS files is : (1 << factor)        
+               - is optional.
+               - must be an integer.
+
+.SS volumes:  
    It is a list of volumes. Each volume is identified by its vid and may contain
    a list of one or more clusters (cids). Each clusters is identified by its
    unique cid number within the configuration, and may contain at least a list of 
@@ -45,6 +63,10 @@ grammar.
                - Optional field (if no layout is specified for this volume, the
                  default layout is used instead).
 
+       stripping: specify the volume stripping. 
+               - must be a valid stripping set (see system stripping above).
+               - is optional. Default is to use the system stripping.      
+       
        cid: (cluster identifier)
                - must be an integer.
                - must be unique for each cluster managed by this exportd.
@@ -58,26 +80,13 @@ grammar.
                - file must exist.
                - file format is described in rozo_rebalance.conf manual.
                
-       georep: (whether geo-replication must occur on this volume / optional)
-               - must be a boolean.
-               - Optional field (default value is False).
  
        host: (IP or hostname of the physical node that contains the storage)
                - must be a valid IPv4 address or a valid hostname.
-               - must only be set in case of a volume without geo-replication.
 
        site: (site number where the host resides in a multi site configuration)
                - must be a strictly positive integer.
-               - must only be set in case of a volume without geo-replication. 
                - Optional field. 
-
-       site0: (IP or hostname of the physical node that contains the storage on the main site)
-               - must be a valid IPv4 address or a valid hostname.
-               - must only be set in case of a volume with geo-replication. 	       
-
-       site1: (IP or hostname of the physical node that contains the storage on the secondary site)
-               - must be a valid IPv4 address or a valid hostname.
-               - must only be set in case of a volume with geo-replication. 	       
 
 
 .B  WARNING:
@@ -138,6 +147,10 @@ rule. Incoming IP addresses for a given export are checked against the
                - must be unique for each filesystem managed by this exportd.
                - default name is the root field.
 
+       stripping: specify the export stripping. 
+               - must be a valid stripping set (see system stripping above).
+               - is optional. Default is to use the volume stripping.
+
        filter: (IPv4 filter to apply to this export)
                - is optional (every IP is allowed when omitted).
                - must be a string defined in the filter section.
@@ -171,7 +184,8 @@ rule. Incoming IP addresses for a given export are checked against the
                - should exist in volume list.
                - several filesystem can use the same volume.
 
-       vid_fast: (volume identifier used to store file data for this filesystem whose files match some particular suffixes)
+       vid_fast: (volume identifier used to store file data for this filesystem whose 
+                 files match some particular suffixes)
                - must be an integer.
                - should exist in volume list.
                - several filesystem can use the same volume.
@@ -191,7 +205,12 @@ rule. Incoming IP addresses for a given export are checked against the
 .nf
 .ta +3i
 
-# sample /etc/rozofs/export.conf file
+# sample /etc/rozofs/export.conf file};
+
+# Strip size of 1MB 
+# 4 RozoFS files per user file 
+stripping = { unit = 2; factor = 2;}; 
+
 layout = 0; # Default layout 
 volumes =   # List of volumes
 (
@@ -246,30 +265,6 @@ volumes =   # List of volumes
                 );
             }
         );
-    },    
-    {
-        # 3rd volume with georeplication
-        vid = 3;       # Volume identifier
-        georep = True; # Volume is geo-replicated 
-        layout = 1;    # Specific layout for this volume
-        cids =         # List of clusters for the volume
-        (
-            {
-                # First cluster of this volume
-                cid = 4; # Cluster identifier
-                sids =   # List of storages of the cluster
-                (
-                    {sid = 01; site0 = "storage-node-3-1-0"; site1 = "storage-node-3-1-1";},
-                    {sid = 02; site0 = "storage-node-3-2-0"; site1 = "storage-node-3-2-1";},
-                    {sid = 03; site0 = "storage-node-3-3-0"; site1 = "storage-node-3-3-1";},
-                    {sid = 04; site0 = "storage-node-3-4-0"; site1 = "storage-node-3-4-1";},
-                    {sid = 05; site0 = "storage-node-3-5-0"; site1 = "storage-node-3-5-1";},
-                    {sid = 06; site0 = "storage-node-3-6-0"; site1 = "storage-node-3-6-1";},
-                    {sid = 07; site0 = "storage-node-3-7-0"; site1 = "storage-node-3-7-1";},
-                    {sid = 08; site0 = "storage-node-3-8-0"; site1 = "storage-node-3-8-1";}
-                );
-            }
-        );
     }
 );
 
@@ -304,10 +299,7 @@ exports = ( # List of exported filesystem
 
     # exported file systems on volume 2
     {eid = 4; name = "bar1"; vid=2;}
-    {eid = 5; name = "bar2"; vid=2;}
-    
-    # exported file systems on volume 3
-    {eid = 6; name = "geo"; filter="vol3", vid=3;}
+    {eid = 5; name = "noStripping"; vid=2; stripping = { unit = 0; factor = 0;}; }
 
     # ...
 );

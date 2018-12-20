@@ -166,7 +166,7 @@ int monitor_volume(volume_t *volume, uint32_t volume_idx) {
     }
 
 
-    volume_initialize(&clone, 0, 0, 0, 0, NULL);
+    volume_initialize(&clone, 0, 0, 0, 0, NULL, NULL);
     if (volume_safe_copy(&clone, volume) != 0) {
         severe("can't clone volume: %d", volume->vid);
         goto out;
@@ -372,7 +372,7 @@ int monitor_volume_slave(volume_t *volume, uint32_t volume_idx) {
     uint32_t nb_storages = 0;
     int local_site = export_get_local_site_number();
 
-    volume_initialize(&clone, 0, 0,0,0,NULL);
+    volume_initialize(&clone, 0, 0,0,0,NULL,NULL);
     if (volume_safe_copy(&clone, volume) != 0) {
         severe("can't clone volume: %d", volume->vid);
         goto out;
@@ -467,6 +467,8 @@ int monitor_export(export_t *export) {
     dprintf(fd, "volume: %u\n", export->volume->vid);
     dprintf(fd, "root: %s\n", export->root);
     dprintf(fd, "name: %s\n", export->name);
+    dprintf(fd, "stripping unit: %d\n", export->stripping.unit);
+    dprintf(fd, "stripping factor: %d\n", export->stripping.factor);
     dprintf(fd, "squota: %"PRIu64"\n", export->squota);
     dprintf(fd, "hquota: %"PRIu64"\n", export->hquota);
     dprintf(fd, "bsize: %u\n", estat.bsize);

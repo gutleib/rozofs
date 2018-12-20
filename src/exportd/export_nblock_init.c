@@ -838,7 +838,7 @@ void show_vfstat_json_eid(char * argv[], uint32_t tcpRef, void *bufRef) {
                      gprofiler->estats[j].blocks, gprofiler->estats[j].bfree,
                      gprofiler->estats[j].files,  gprofiler->estats[j].ffree);
     pChar += sprintf(pChar, "      \"name\" : \"%s\", \"path\" : \"%s\"\n",
-                     gprofiler->estats[j].name, gprofiler->estats[j].path);
+                     gprofiler->estats[j].name, gprofiler->estats[j].path);                     
     pChar += sprintf(pChar, "    },\n");
   }
   pChar -= 2,

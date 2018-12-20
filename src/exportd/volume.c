@@ -125,7 +125,8 @@ void cluster_release(cluster_t *cluster) {
     }
 }
 
-int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site, char * rebalanceCfg) {
+int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep,uint8_t multi_site, char * rebalanceCfg,
+                      estripping_t * stripping) {
     int status = -1;
     DEBUG_FUNCTION;
     volume->vid = vid;
@@ -134,6 +135,12 @@ int volume_initialize(volume_t *volume, vid_t vid, uint8_t layout,uint8_t georep
     volume->balanced = 0; // volume balance not yet called
     volume->full = 0;     // volume has enough free space
     volume->layout = layout;
+    if (stripping) {
+      memcpy(&volume->stripping,stripping,sizeof(*stripping));
+    }  
+    else {
+      memset(&volume->stripping,0,sizeof(*stripping));
+    }  
     if (rebalanceCfg) {
       volume->rebalanceCfg = xstrdup(rebalanceCfg);
     }
@@ -219,6 +226,7 @@ int volume_safe_copy(volume_t *to, volume_t *from) {
     to->layout = from->layout;
     to->georep = from->georep;
     to->multi_site = from->multi_site;
+    memcpy(&to->stripping,&from->stripping, sizeof(from->stripping)); 
     
     if (to->rebalanceCfg) {
       xfree(to->rebalanceCfg);

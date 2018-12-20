@@ -59,6 +59,7 @@
 #include "export_thin_prov_api.h"
 #include "exportd.h"
 #include "rozofs_suffix.h"
+#include "econfig.h"
 
 #define ROZOFS_DIR_STATS 1
 #ifdef ROZOFS_DIR_STATS
@@ -1641,7 +1642,8 @@ static void *load_trash_dir_thread(void *v) {
 */
 int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *name, const char *md5,
-        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin, volume_t *volume_fast,uint64_t hquota_fast,int suffix_file, uint8_t flockp) {
+        uint64_t squota, uint64_t hquota, char * filter_name, uint8_t thin, volume_t *volume_fast,uint64_t hquota_fast,int suffix_file, uint8_t flockp,
+        export_config_t * ec) {
 
     char fstat_path[PATH_MAX];
     char const_path[PATH_MAX];
@@ -1695,7 +1697,22 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     }
     else {
       e->layout = volume->layout; // Layout used for this volume
-    }  
+    } 
+    /*
+    ** Initilize multiple file stripping
+    */
+    if (ec->stripping.unit != 255) {
+      e->stripping.unit = ec->stripping.unit;
+    } 
+    else {
+      e->stripping.unit = volume->stripping.unit;
+    }
+    if (ec->stripping.factor != 255) {
+      e->stripping.factor = ec->stripping.factor;
+    } 
+    else {
+      e->stripping.factor = volume->stripping.factor;
+    }    
     /*
     ** Retrieve filter tree to use for this export from its name
     ** when name does not exist tree is NULL and IP is allowed.
