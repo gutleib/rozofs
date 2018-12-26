@@ -59,6 +59,7 @@ time_t   storio_last_enumeration_date;
 storage_enumerated_device_t * storage_enumerated_device_tbl[STORAGE_MAX_DEV_PER_NODE]={0};
 int                           storage_enumerated_device_nb=0;
 
+int oldlsblk = 1;
 /*
  *_______________________________________________________________________
  *
@@ -758,7 +759,12 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   pt += rozofs_string_append(pt,".dev");
   
   pt = cmd;
-  pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"#\"$12\"#\"$14\"#\"$16\"#\";}' > ");
+  if (oldlsblk) {
+    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,UUID,TYPE  | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"# #\"$12\"#\"$14\"#\";}' > ");
+  }
+  else {
+    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"#\"$12\"#\"$14\"#\"$16\"#\";}' > ");
+  }  
   pt += rozofs_string_append(pt,fdevice);
   if (system(cmd)==0) {}
   
@@ -1615,6 +1621,17 @@ int storage_mount_all_enumerated_devices() {
 /*
  *_______________________________________________________________________
  *
+ * Check whether lsblk is old and do not support HCTL
+ *
+ * @retval 1 when old lsblk, 0 else 
+ */
+int rozofs_check_old_lsblk(void) {
+  if (system("lsblk -o HCTL > /dev/null 2>&1 ")==0) return 0;
+  return 1;
+}   
+/*
+ *_______________________________________________________________________
+ *
  * Try to mount the devices on the convenient path
  *
  * @param workDir   A directory to use to temporary mount the available 
@@ -1633,8 +1650,11 @@ int storage_process_automount_devices(char * workDir, int storaged) {
   ** Register feature to debug if not yet done
   */
   if (storage_enumerated_devices_registered==0) {
+     
     storage_enumerated_devices_registered = 1;
     uma_dbg_addTopicAndMan("enumeration", storage_show_enumerated_devices, storage_show_enumerated_devices_man, 0);
+     
+    oldlsblk = rozofs_check_old_lsblk(); 
   }
   
   /*
