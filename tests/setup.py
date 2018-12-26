@@ -425,7 +425,6 @@ class cid_class:
     self.dev_mapper = dev_mapper
     self.dev_red    = dev_red 
     self.volume     = volume
-    self.georep     = None 
     self.dev_size   = dev_size;
     cids.append(self) 
     
@@ -440,24 +439,12 @@ class cid_class:
     for s in self.sid:
       if s.sid == val: return s
     return None  
-    
-  def set_georep(self,georep):
-    if self.georep == None:  self.georep = georep
-    else:
-      if self.georep != georep:
-        report( "gereplication inconsistency on cid %s"%(self.cid))
-	sys.exit(1)
-	    
+    	    
   def add_sid_on_host(self, host0, site0=0, host1=None, site1=1):
     sid=len(self.sid)
     sid+=1  
     s = sid_class(self, sid, site0, host0)
-    # For geo repliction
-    if host1 != None:
-      s.add_host(site1,host1) 
     self.sid.append(s)
-    if host1 == None: self.set_georep(False)
-    else            : self.set_georep(True)    	
     return s   
   
   def create_path(self):
@@ -521,26 +508,16 @@ class mount_point_class:
     for h in hosts:
       for s in h.sid:
         if s.cid.volume.vid == self.eid.volume.vid:
-	  if self.eid.volume.georep() == True:
-	    if h.site == self.site:
-	      if not h in list:
-		list.append(h)
-		string += " %s"%(h.number)
-	  else:
-              if not h in list:
-		list.append(h)
-		string += " %s"%(h.number)	    	
+          if not h in list:
+	    list.append(h)
+	    string += " %s"%(h.number)	    	
     print "hosts = %s"%(string)	        
     list=[]
     string=""
     for h in hosts:
       for s in h.sid:
         if s.cid.volume.vid == self.eid.volume.vid:
-	  if self.eid.volume.georep() == True:	
-	    if h.site == self.site:
-	      string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)
-	  else:
-	      string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
+	  string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
     print "sids = %s"%(string)	    
 
     string="ps -o pid=,cmd= -C rozofsmount"
@@ -808,15 +785,6 @@ class volume_class:
     c = cid_class(self,dev_total, dev_mapper, dev_red, dev_size)
     self.cid.append(c)
     return c
-    
-  def georep(self,):
-    georep = None
-    for c in self.cid:
-      if georep == None: georep = c.georep
-      elif c.georep != georep:
-	  report("inconsistent georeplication on volume %s"%(v.vid))
-	  exit(1)
-    return georep
      
   def add_export(self, bsize,layout=None,eid=None):
     e = export_class(bsize,self,layout,eid)
@@ -964,7 +932,6 @@ class exportd_class:
       nextv=","
       print "    vid = %s;"%(v.vid)
       print "    layout = %s;"%(v.layout)
-      print "    georep = %s;"%(v.georep())
 #      print "    rebalance = \"%s\";"%(v.get_rebalance_config_name())
       print "    cids = "
       print "    ("
@@ -1032,95 +999,7 @@ class exportd_class:
     console("EXPORTD:")
     console("  . %-12s : %s"%("Hosts",self.export_host))    
 
-#____________________________________
-# Class geomgr_class
-#____________________________________
-class geomgr_class:
 
-  def display(self):
-    console("- %s"%(self.number))
-    for s in self.sid: console("    cid %s sid %s"%(s.cid.cid,s.sid))
-
-  def get_config_name(self): return "%s/geomgr.conf"%(rozofs.get_config_path())
-  def get_saved_config_name(self): return "%s/geomgr.conf"%(os.getcwd())
-
-  def create_config (self):
-    save_stdout = sys.stdout
-    sys.stdout = open(self.get_config_name(),"w")
-    self.initial_config()
-    sys.stdout.close()
-    sys.stdout = save_stdout
-
-  def delete_config (self):
-    try: os.remove(self.get_config_name())
-    except: pass    
-
-  def modify(self):
-    os.system("nedit %s"%(self.get_config_name()))
-      
-  def reinit(self): 
-    self.delete_config()
-    self.create_config()
-    
-  def  display_config(self):
-    os.system("cat %s"%(self.get_config_name()))
-    return
-  
-  def  initial_config(self):
-    print "active = True ;"
-    print "export-daemons = (" 
-    print "   {" 
-    print "	active = True;" 
-    print "	host   = \"%s\";"%(exportd.export_host)
-    print "	exports="   
-    print "	("  
-    nexte=" " 
-    for v in volumes:
-      if v.georep() != True: continue
-      for e in v.eid:
-	print "         %s{"%(nexte)
-	nexte="," 
-	print "               active = True;"  
-	print "               path   = \"%s\";"%(e.get_root_path()) 
-	print "               site   = 1;" 
-	print "               nb     = 1;" 
-	print "          }," 
-	print "          {" 
-	print "               active = True;"  
-	print "               path   = \"%s\";"%(e.get_root_path())  
-	print "               site   = 0;" 
-	print "               nb     = 1;" 
-	print "               calendar =" 
-	print "		   (" 
-	print "		     { start=\"8:00\"; stop=\"12:15\";  },"
-	print "		     { start=\"14:15\"; stop=\"17:30\"; }"
-	print "		   );"
-	print "          }" 
-    print "	);"   
-    print "   }" 
-    print ');' 
-
-          
-  def start(self):
-    os.system("rozolauncher start /var/run/launcher_geomgr.pid geomgr -c %s -t 5 &"%(self.get_config_name()))
-
-  def stop(self):
-    os.system("rozolauncher stop /var/run/launcher_geomgr.pid geomgr")
-     
-  def reset(self): 
-    self.stop()
-    self.start()
-       
-  def process(self,opt):
-    string="ps -fC rozolauncher"
-    parsed = shlex.split(string)
-    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    for line in cmd.stdout:
-      if not "geomgr" in line: continue
-      pid=line.split()[1]
-      console("\n_______________GEOMGR")
-      os.system("pstree %s %s"%(opt,pid))
-    return
   
 def display_config_string(name,val):
   if val != None: print "%-27s = \"%s\";"%(name,val)
@@ -1335,8 +1214,8 @@ class rozofs_class:
     if size == None: 
       console("Missing device size for %s:%s:%s"%(cid,sid,dev))
       return   
-    nbDev = 1  
-    if int(dev) == int(0): nbDev = 2
+    nbDev = 2  
+    #if int(dev) == int(0): nbDev = 2
       
     loop = self.findout_loopback_device(path,size,nbDev)    
     os.system("./setup.py cmd rozo_device --format %s/%s/%s %s"%(cid,sid,dev,loop))
@@ -1386,8 +1265,9 @@ class rozofs_class:
       parsed = shlex.split(string)
       cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       log("%s Deleted"%(loop))	
-    os.remove(devFile)
-    log("%s Deleted"%(devFile))	
+    if os.path.exists(devFile): 
+      os.remove(devFile)
+      log("%s Deleted"%(devFile))	
 
   
   def newspare(self,size,mark=None):
@@ -1456,7 +1336,6 @@ class rozofs_class:
     self.create_common_config()
     exportd.create_config()
     for h in hosts: h.create_config()
-    geomgr.create_config()
     
   def delete_config(self):
     global hosts
@@ -1464,7 +1343,6 @@ class rozofs_class:
     mount="%s/export"%(rozofs.get_config_path())    
     os.system("umount -f %s > /dev/null 2>&1"%(mount))  
     for h in hosts: h.delete_config()
-    geomgr.delete_config()
       
 
   def display(self):
@@ -1515,11 +1393,10 @@ class rozofs_class:
   def resume(self):
     self.pause();
     check_build()  
-    os.system("rm -rf /root/tmp/export; mkdir -p /root/tmp/export; rm -rf /root/tmp/storage; mkdir -p /root/tmp/storage;")
+    os.system("rm -rf /root/tmp/export; mkdir -p /root/tmp/export; rm -rf /root/tmp/storage; mkdir -p /root/tmp/storage; swapoff -a;")
     for h in hosts: h.start()
     exportd.start()
     for m in mount_points: m.start() 
-    geomgr.start()
 
   def configure(self):
     # Case of a loop device for metadata
@@ -1536,7 +1413,6 @@ class rozofs_class:
     self.resume()
     
   def pause(self):
-    geomgr.stop()
     for m in mount_points: m.stop()
     for h in hosts: h.stop()
     exportd.stop() 
@@ -1576,7 +1452,6 @@ class rozofs_class:
 
                   
   def process(self,opt): 
-    geomgr.process(opt)
     exportd.process(opt)
     for h in hosts: h.process(opt)
     for m in mount_points: m.process(opt)
@@ -1653,7 +1528,6 @@ class rozofs_class:
     if dir == "storage_rebuild" : return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)    
     if dir == "storage_list_rebuilder" : return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)    
     if dir == "export_slave": return "%s/build/src/%s/%s"%(os.getcwd(),"exportd","exportd")
-    if dir == "geomgr" : return "%s/build/src/%s/%s"%(os.getcwd(),"geocli",dir)    
     if dir == "rozo_rebalance" : return "%s/build/src/%s/%s"%(os.getcwd(),"exportd",dir)    
     return "%s/build/src/%s/%s"%(os.getcwd(),dir,dir)
 
@@ -1750,23 +1624,13 @@ def check_build ():
   if not os.path.exists("./build/src/rozodiag/rozodiag"):
     report("rozodiag is not built")
     sucess=False
-  if not os.path.exists("./build/src/geocli/geocli"):
-    report("geocli is not built")
-    sucess=False
-  if not os.path.exists("./build/src/geocli/geomgr"):
-    report("geomgr is not built")
-    sucess=False
   if not os.path.exists("./build/src/launcher/rozolauncher"):
-    report("geomgr is not built")
+    report("rozolauncher is not built")
     sucess=False
   if sucess==False: sys.exit(-1)
 #_____________________________________________  
 def syntax_export() :
   console("./setup.py \texportd  \t{start|stop|reset|pid|reload}") 
-
-#_____________________________________________  
-def syntax_geomgr() :
-  console("./setup.py \tgeomgr \t{start|stop|reset|pid|modify|reinit}")
          
 #_____________________________________________  
 def syntax_mount() :
@@ -1911,7 +1775,6 @@ def diag(argv) :
 def test_parse(command, argv):	
   global rozofs
   global exportd
-  global geomgr
    
 
   # Add path for rozofs executables
@@ -2028,16 +1891,6 @@ def test_parse(command, argv):
        if argv[2] == "reset"       : exportd.reset() 
        if argv[2] == "pid"         : exportd.process('-ap') 
        if argv[2] == "reload"      : exportd.reload() 
-
-  elif command == "geomgr"             :
-       if len(argv) <= 2: syntax("geomgr requires an action","geomgr")  
-       if argv[2] == "stop"        : geomgr.stop()
-       if argv[2] == "start"       : geomgr.start()     
-       if argv[2] == "reset"       : geomgr.reset() 
-       if argv[2] == "pid"         : geomgr.process('-ap') 
-
-       if argv[2] == "modify"      : geomgr.modify()
-       if argv[2] == "reinit"      : geomgr.reinit()     
 
   elif command == "mount"             :
        if len(argv) <= 3: syntax("mount requires instance + action","mount")
@@ -2182,11 +2035,9 @@ def test_parse(command, argv):
 def test_init():
   global rozofs
   global exportd
-  global geomgr
   
   rozofs  = rozofs_class()
   exportd = exportd_class()
-  geomgr  = geomgr_class()
   
 
 # Add path for rozofs executables

@@ -472,4 +472,41 @@ void exp_release_attributes_tracking_context(export_tracking_table_t *tab_p);
    @retval -1 on error (see errno for details
 */
 int exp_meta_get_object_attributes(export_tracking_table_t *trk_tb_p,fid_t fid,lv2_entry_t *entry_p);
+
+/*
+**__________________________________________________________________________________
+**
+** Set write error on lv2 entry
+**
+** @param lv2   entry to raise error on
+**__________________________________________________________________________________
+*/
+static inline void rozofs_set_werror(lv2_entry_t *lv2) {    
+  lv2->attributes.s.bitfield1 |=  ROZOFS_BITFIELD1_WRITE_ERROR;
+}
+/*
+**__________________________________________________________________________________
+**
+** Clear write error on lv2 entry
+**
+** @param lv2   entry to clear error from
+**__________________________________________________________________________________
+*/
+static inline void rozofs_clear_werror(lv2_entry_t *lv2) {    
+  lv2->attributes.s.bitfield1 &= ~ROZOFS_BITFIELD1_WRITE_ERROR;
+}
+/*
+**__________________________________________________________________________________
+**
+** Get write error of lv2 entry
+**
+** @param lv2   entry to get write error status from
+**
+** @retval    1 when an error is set. 0 else.
+**__________________________________________________________________________________
+*/
+static inline int rozofs_is_wrerror(lv2_entry_t *lv2) {    
+  if (lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_WRITE_ERROR) return 1;
+  return 0;
+}
 #endif

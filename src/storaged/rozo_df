@@ -62,33 +62,33 @@ def common_bytes_with_unit(inBytes):
   string="%s"%(inBytes)
   value = common_convert_Bytes(string,"B")
 
-  if value < 1000: return "%s%4d  B"%(sign,value)
+  if value < 1000: return "%s%4d  "%(sign,value)
   
   if value < 1000000:
-    if value >= (100*1000): return "%s%4d KB"%(sign,value/1000)
-    if value >=  (10*1000): return "%s%2d.%1d KB"%(sign,value/1000,(value % 1000) / 100)
-    return "%s%1d.%2.2d KB"%(sign,value/1000,(value % 1000) / 10)   
+    if value >= (100*1000): return "%s%4d K"%(sign,value/1000)
+    if value >=  (10*1000): return "%s%2d.%1d K"%(sign,value/1000,(value % 1000) / 100)
+    return "%s%1d.%2.2d K"%(sign,value/1000,(value % 1000) / 10)   
   
   if value < 1000000000:  
-    if value >= (100*1000000): return "%s%4d MB"%(sign,value/1000000)
-    if value >=  (10*1000000): return "%s%2d.%1d MB"%(sign,value/1000000,(value % 1000000) / 100000)
-    return "%s%1d.%2.2d MB"%(sign,value/1000000,(value % 1000000) / 10000)   
+    if value >= (100*1000000): return "%s%4d M"%(sign,value/1000000)
+    if value >=  (10*1000000): return "%s%2d.%1d M"%(sign,value/1000000,(value % 1000000) / 100000)
+    return "%s%1d.%2.2d M"%(sign,value/1000000,(value % 1000000) / 10000)   
   
   if value < 1000000000000:  
-    if value >= (100*1000000000): return "%s%4d GB"%(sign,value/1000000000)
-    if value >=  (10*1000000000): return "%s%2d.%1d GB"%(sign,value/1000000000,(value % 1000000000) / 100000000)
-    return "%s%1d.%2.2d GB"%(sign,value/1000000000,(value % 1000000000) / 10000000)   
+    if value >= (100*1000000000): return "%s%4d G"%(sign,value/1000000000)
+    if value >=  (10*1000000000): return "%s%2d.%1d G"%(sign,value/1000000000,(value % 1000000000) / 100000000)
+    return "%s%1d.%2.2d G"%(sign,value/1000000000,(value % 1000000000) / 10000000)   
   
   if value < 1000000000000000:  
-    if value >= (100*1000000000000): return "%s%4d TB"%(sign,value/1000000000000)
-    if value >=  (10*1000000000000): return "%s%2d.%1d TB"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000)
-    return "%s%1d.%2.2d TB"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)   
+    if value >= (100*1000000000000): return "%s%4d T"%(sign,value/1000000000000)
+    if value >=  (10*1000000000000): return "%s%2d.%1d T"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000)
+    return "%s%1d.%2.2d T"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)   
   
   if value < 1000000000000000000:  
-    if value >= (100*1000000000000000): return "%s%4d PB"%(sign,value/1000000000000000)
-    if value >=  (10*1000000000000000): return "%s%2d.%1d PB"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
+    if value >= (100*1000000000000000): return "%s%4d P"%(sign,value/1000000000000000)
+    if value >=  (10*1000000000000000): return "%s%2d.%1d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
   
-  return "%s%1s.%2.2d PB"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
+  return "%s%1s.%2.2d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
 
 
 #___________________________________
@@ -135,7 +135,7 @@ class rozofs_device:
    global threshold
    global mini
    global maxi   
-   percent = int(self.free)*int(100)/int(self.total)
+   percent = float(self.free)*float(100)/float(self.total)
 
    delta = int(self.total) * int(threshold)
    delta /= 100
@@ -143,6 +143,12 @@ class rozofs_device:
    maxi = int(average_free) + int(delta)
 #   print "delta %s  mini %s maxi %s"%(delta,mini,maxi)
    
+   
+   if options.freeSpace == False:
+     try:
+       int(average)
+     except:  
+       options.freeSpace = True
    
    if int(self.free) == int(self.old_free):
      display_free = "%6s        "%(common_bytes_with_unit(self.free+"K"))
@@ -156,15 +162,22 @@ class rozofs_device:
    # Compare % of free space
    #
    if options.freeSpace == False:
-     if int(percent) < int(5):
+     if int(percent) == int(0):
        color = RED+BOLD+REVERSE
+     elif float(percent) < int(5):
+       color = RED+BOLD         
      elif (int(percent) < (int(average)-int(threshold))):
-       color = RED
+       color = YELLOW
      elif (int(percent) > (int(average)+int(threshold))):
-       color = NORMAL
+       color = CYAN
      else:
-       color = CYAN          
-     LINE += color + "%3s%% "%(percent) + NORMAL + " %-17s"%(display_free) 
+       color = NORMAL          
+     if int(percent) < int(10):
+       pc = "%3.1f%%"%(percent)
+     else:
+       pc = "%3d%%"%(percent) 
+             
+     LINE += color + pc + NORMAL + " %-17s"%(display_free) 
 
    #
    # Compare free space

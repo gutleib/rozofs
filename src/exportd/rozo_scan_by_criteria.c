@@ -88,6 +88,7 @@ int display_xattr = 0;
 int display_trash_cfg = 0;
 int display_all = 0;
 int display_json = 0;
+int display_error = 0;
 int first_entry = 1;
 #define DO_DISPLAY           1
 #define DO_HUMAN_DISPLAY     2
@@ -247,6 +248,10 @@ int         only_trash=0;
 ** Scan junk files
 */
 int         only_junk=0;
+/*
+** Scan files with write errors
+*/
+int         only_wrerror=0;
 /*
 ** Whether to scan all tracking files or only those whose
 ** creation and modification time match the research date
@@ -612,7 +617,14 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       return 0;
     }       
   }
-
+  
+  /*
+  ** Only files with write errors
+  */
+  if ((only_wrerror)&&(!rozofs_is_wrerror((lv2_entry_t*)inode_p))) {
+    return 0;
+  }
+  
   /*
   ** Only trash
   */
@@ -1428,6 +1440,15 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     IF_DISPLAY(display_project) {
       NEW_FIELD(project);       
       printf("%d", inode_p->s.hpc_reserved.reg.share_id);
+    }
+    IF_DISPLAY(display_error) {
+      NEW_FIELD(wrerror);       
+      if (rozofs_is_wrerror((lv2_entry_t*)inode_p)) {
+        printf("YES");
+      }
+      else {
+        printf("NO");
+      }
     }
     IF_DISPLAY(display_distrib) {
       NEW_FIELD(cid); 
@@ -2270,6 +2291,11 @@ int rozofs_parse_output_format(char * fmt) {
       NEXT(p);
     }       
     
+    if (strncmp(p, "error", 4)==0) {
+      display_error = DO_DISPLAY;
+      NEXT(p);
+    }           
+    
     if (strncmp(p, "trash", 5)==0) {
       display_trash_cfg = DO_DISPLAY;
       NEXT(p);
@@ -2421,6 +2447,7 @@ int main(int argc, char *argv[]) {
         {"Onw", no_argument, 0, 18},
         {"out", required_argument, 0, 'o'},
         {"junk", required_argument, 0, 'j'},
+        {"wrerror", required_argument, 0, 'w'},
 
         {0, 0, 0, 0}
     };
@@ -2453,7 +2480,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "<:-:>:+:=:!:*:abcde:fghjk:lmno:p:rtsuvxyzACDMPRSTXY", long_options, &option_index);
+      c = getopt_long(argc, argv, "<:-:>:+:=:!:*:abcde:fghjk:lmno:p:rtsuvwxyzACDMPRSTXY", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -2604,7 +2631,13 @@ int main(int argc, char *argv[]) {
               if (search_dir) {
                 usage("Directory (-d) and junk files (-j) are incompatible");     
               }
-              break;                     
+              break;  
+          case 'w':
+              only_wrerror = 1;
+              if (search_dir) {
+                usage("Directory (-d) and write errror files (-w) are incompatible");     
+              }
+              break;                                   
            case 'T':
               exclude_trash = 1;
               break;                     

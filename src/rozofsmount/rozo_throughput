@@ -22,6 +22,10 @@ active_list    = []
 #___________________________
 def append_target(eid,exports):
 
+  # Check this eid is not yet referenced
+  for other_eid in eid_list:
+    if eid == other_eid: return
+      
   eid_list.append(eid)
   exports_list.append(exports)
   
@@ -31,6 +35,13 @@ def append_target(eid,exports):
   clients,count  = get_client_list(active_export,eid)
   client_list.append(clients)
   count_list.append(count)
+
+  print "  Clients of eid %s : "%(eid)
+  for client in clients.split("-i"):
+    words = client.split()
+    if len(words) >= 3:
+      print "  - %s:%s"%(words[0],words[2])
+  print
   
   max_read_list.append(0)
   max_write_list.append(0)
@@ -362,6 +373,7 @@ if options.Niprange != None:
 #
 # input RozoFS mount point is either in args or current path
 #
+print
 if len(args) == 0:
   eid,exports = get_eid_and_exports_from_path(os.getcwd())
   append_target(eid,exports)

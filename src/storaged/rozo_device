@@ -32,7 +32,7 @@ blink = '\033[5m'
 reverse = '\033[7m'
 
 
-partitioned =  []
+newlsblk = False
 
 #_______________________________________________
 class constants:
@@ -265,25 +265,6 @@ class adaptative_tbl:
       self.row[row].display(self.column_desc)
       previous_line=self.row[row]
 
-#_____________________________________________  
-#
-# Builld list of partitioned devices
-#
-def rozo_get_partitionned_devices() :
-  global partitioned
-  
-  partitioned[:] = []
-  return
-  
-  # Get the name of the partitionned devices
-  string="lsblk -Po PKNAME"
-  parsed = shlex.split(string)
-  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-  for line in cmd.stdout:
-    val = line.split('"')[1].strip()
-    if val == '': continue
-    if not val in partitioned:
-      partitioned.append(val)
 
 #_____________________________________________  
 #
@@ -292,7 +273,7 @@ def rozo_get_partitionned_devices() :
 # meaningfull
 #
 def rozo_list_all_block_devices(blockDev=None) :
-  global partitioned
+  global newlsblk
   
   tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
   previous_uuid="UNKNOWN"
@@ -316,7 +297,10 @@ def rozo_list_all_block_devices(blockDev=None) :
   d.end_separator()   
   
   # List every block device and find out a specific one
-  string1="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,TRAN,MODEL,VENDOR,HCTL,ROTA,RA,SIZE,UUID -x LABEL"
+  if newlsblk == False:
+    string1="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,MODEL,ROTA,SIZE,UUID "
+  else:
+    string1="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,MODEL,ROTA,SIZE,UUID,TRAN,VENDOR,HCTL,RA -x LABEL"
   parsed1 = shlex.split(string1)
   cmd1 = subprocess.Popen(parsed1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -334,7 +318,6 @@ def rozo_list_all_block_devices(blockDev=None) :
 
     device = line.split('"')[1].strip()
     
-    if device in partitioned: continue
 
     if blockDev != None:
       if blockDev != device:
@@ -344,18 +327,12 @@ def rozo_list_all_block_devices(blockDev=None) :
     fs         = line.split('"')[5].strip()
     mountpoint = line.split('"')[7].strip()  
     scheduler  = line.split('"')[9].strip()
-    interface  = line.split('"')[11].strip()
-    model      = line.split('"')[13].strip()
+    model      = line.split('"')[11].strip()
     if model == "": model ="?"
-    vendor     = line.split('"')[15].strip()
-    if vendor == "": vendor ="?" 
-    hctl       = line.split('"')[17].strip()
-    rota       = line.split('"')[19].strip()
+    rota       = line.split('"')[13].strip()
     if rota == "1": rota = "Yes"
-    else:           rota = "No"
-    ra        = line.split('"')[21].strip()
-    size       = line.split('"')[23].strip()      
-    uuid      = line.split('"')[25].strip()
+    size       = line.split('"')[15].strip()      
+    uuid      = line.split('"')[17].strip()
     if uuid == previous_uuid: 
       color = yellow 
     else:
@@ -365,6 +342,18 @@ def rozo_list_all_block_devices(blockDev=None) :
        previous_uuid="UNKNOWN"
     else:      
       previous_uuid = uuid        
+      
+    if len(line.split('"')) < int(25):
+      interface =""
+      vendor= "?"
+      hctl = ""
+      ra = ""
+    else:
+      interface  = line.split('"')[19].strip()
+      vendor     = line.split('"')[21].strip()
+      if vendor == "": vendor ="?" 
+      hctl       = line.split('"')[23].strip()
+      ra        = line.split('"')[25].strip()
          
     d.new_line()
     d.set_column(1,device,color)  
@@ -387,13 +376,11 @@ def rozo_list_all_block_devices(blockDev=None) :
 # List one block device
 #
 def rozo_list_some_block_device(blockDev) :
-  global partitioned
-  
+  global newlsblk
   
   # List every block device and find out a specific one
   for b in blockDev:
   
-    if b in partitioned: continue
 
     # Create a display array
     d = adaptative_tbl(2,"%s device"%(b)) 
@@ -401,8 +388,10 @@ def rozo_list_some_block_device(blockDev) :
     d.set_column(1,"Name")
     d.set_column(2,"Value")
     d.end_separator()  
-    
-    string="lsblk -PO /dev/%s"%(b)
+    if newlsblk == True:
+      string="lsblk -PO /dev/%s"%(b)
+    else:
+      string = "lsblk -Po KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,MODEL,ROTA,SIZE,UUID /dev/%s"%(b)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
@@ -442,7 +431,6 @@ def rozo_led_device(blockDev,status="get"):
 # meaningfull
 #
 def rozo_get_block_devices(dev) :
-  global partitioned
   
   # List every block device and find out a specific one
   string="lsblk -Pno KNAME,FSTYPE,MOUNTPOINT"
@@ -450,7 +438,6 @@ def rozo_get_block_devices(dev) :
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
     device = line.split('"')[1] 
-    if device in partitioned: continue
     if device == dev:
       fstype = line.split('"')[3]   
       if fstype == "": fstype = None
@@ -790,6 +777,14 @@ parser.add_option("-l","--led", action="store",type="string", dest="led", help="
 #
 if len(args) != 0 and args[0] == "?": syntax("?")
 
+string="lsblk -o HCTL"
+parsed = shlex.split(string)
+cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+output, error = cmd.communicate()
+if error == None or error == "":
+  newlsblk = True
+else:
+  newlsblk = False 
 #
 # Read block devices
 #
@@ -800,8 +795,6 @@ for b in args:
   else:
     blockdev.append(b.strip())
 
-# Make the list of partitionned devices
-rozo_get_partitionned_devices()
 
 
 # Check block devices exists when given as parameter

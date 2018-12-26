@@ -79,7 +79,7 @@ char prompt[64];
 */
 void syntax_display() {
   printf("\n%s - RozoFS %s\n\n", prgName, VERSION);
-  printf("%s ([-i <nodes>] {-p <NPorts>|-T <LPorts>})... [-c <cmd|all>]... [-f <cmd file>]... [-period <seconds>] [-t <seconds>]\n\n",prgName);
+  printf("%s ([-i <nodes>] {-p <NPorts>|-T <LPorts>})... [-c <cmd|all>]... [-f <cmd file>]... [--period <seconds>] [-t <seconds>]\n\n",prgName);
   printf("Several diagnostic targets can be specified ( [-i <nodes>] {-p <NPorts>|-T <LPorts>} )...\n");
   printf("    -i <nodes>     IP address or hostname of the diagnostic targets.\n");
   printf("                   When omitted in a target definition, the -i value of the previous target is used.\n");
@@ -113,7 +113,7 @@ void syntax_display() {
   printf("         \"all\" is used to run all the commands the target knows.\n");    
   printf("  [-f <cmd file>]...\n");  
   printf("         The list of commands can be specified through some files.\n");
-  printf("  [-period <seconds>]\n");       
+  printf("  [--period, -P <seconds>]\n");       
   printf("         Periodicity in seconds (floating value) when running commands using -c or/and -f options.\n");  
   printf("\nMiscellaneous options:\n");
   printf("  -t <seconds>     Timeout value to wait for a response (default %d seconds).\n",DEFAULT_TIMEOUT);
@@ -1054,7 +1054,7 @@ char *argv[];
     }    
     
     /* -period <period> */
-    if (strcmp(argv[idx],"-period")==0) {
+    if ((strcmp(argv[idx],"-period")==0)||(strcmp(argv[idx],"--period")==0)||(strcmp(argv[idx],"-P")==0)) {
       idx++;
       float fl;
       if (idx == argc) {
