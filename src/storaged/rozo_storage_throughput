@@ -248,9 +248,22 @@ def get_color_code(val):
   return WHITE    
 #______________________________________    
 def append_target(vid,storages,count):
+
+  # Check this vid is not yet referenced
+  for other_vid in vid_list:
+    if vid == other_vid: return
+
   vid_list.append(vid)
   storage_list.append(storages)
   count_list.append(count)
+  
+  print "  Storages of vid %s : "%(vid)
+  for storage in storages.split("-i"):
+    words = storage.split()
+    if len(words) >= 3:
+      print "  - %s %s"%(words[0],words[2])
+  print
+    
   max_read_list.append(0)
   max_write_list.append(0)
 #______________________________________    
@@ -375,6 +388,7 @@ if options.Niprange != None:
 #
 # input RozoFS mount point is either in args or current path
 #
+print
 if len(args) == 0:
   vid,exports = resolve_eid_and_exports_from_path(os.getcwd())
   storages,count = get_storage_list(exports,vid)
