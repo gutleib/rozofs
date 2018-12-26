@@ -6944,6 +6944,13 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     // Get the lv2 entry
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid)))
         goto out;
+    /*
+    ** A length of 1 has been set by the rozofsmount to tell that a write error occured on 
+    ** the file which could lead to a file corruption
+    */
+    if (len & 1) {
+      rozofs_set_werror(lv2);
+    }    
 #ifdef ROZOFS_DIR_STATS
     /*
     ** attempt to get the parent attribute to address the case of the asynchronous fast replication
@@ -7585,6 +7592,13 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
   DISPLAY_ATTR_ULONG("SIZE",lv2->attributes.s.attrs.size);
 
+  if (rozofs_is_wrerror(lv2)){
+    DISPLAY_ATTR_TXT("WRERROR", "YES");
+  }
+  else {
+    DISPLAY_ATTR_TXT("WRERROR", "no");
+  }
+  
   if (lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK){
     DISPLAY_ATTR_TXT("FLOCKP", "This file");
   }
@@ -8101,7 +8115,18 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     }
     return 0;
   }
-  
+
+  /*
+  ** Clear the write error bit in the meta data
+  */  
+  if (sscanf(p," clear error = %llu", (long long unsigned int *) &valu64) == 1) {
+    if (valu64 != 1) {
+      errno = ERANGE;
+      return -1;            
+    }
+    rozofs_clear_werror(lv2);
+    return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+  }  
   /*
   ** Is this a nlink change 
   */  

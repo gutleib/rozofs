@@ -137,6 +137,7 @@ typedef struct _af_unix_socket_conf_t
   void        *xmitPool; /* user pool reference or -1 */
   void        *recvPool; /* user pool reference or -1 */
   uint8_t      dscp;     /**< QOS for the TCP connection */
+  uint8_t      priority; /**< Socket controller prioroty when different from 16 */
 } af_unix_socket_conf_t;
 
 

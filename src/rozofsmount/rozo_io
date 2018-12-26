@@ -396,7 +396,15 @@ if options.short == True:
   SIZE = int(30)
 else:
   SIZE = int(60)  
-  
+
+print
+print "  Clients of eid %s : "%(eid)
+for client in clients.split("-i"):
+  words = client.split()
+  if len(words) >= 3:
+    print "  - %s:%s"%(words[0],words[2])
+print  
+
 #
 # Change current directory 
 # Not to block the file system
