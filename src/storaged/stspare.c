@@ -72,7 +72,7 @@ static char      buffer[BUFFER_SIZE];
 ** Statistics
 */
 typedef struct _stspare_stat_t {
-  time_t        seconds_before_next_run;
+  time_t        next_run_time;
   uint64_t      number_of_run_done;
   uint64_t      rebuild_nominal_attempt;
   uint64_t      rebuild_nominal_success;
@@ -143,7 +143,8 @@ uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
 #define  STSPARE_DEBUG_INT(name,val) pChar += sprintf(pChar,"    \"%s\"\t: %llu,\n",#name,(long long unsigned int)val);
 #define  STSPARE_DEBUG_STAT(name) STSPARE_DEBUG_INT(name,stspare_stat.name);
 void stspare_debug_stat(char * pChar) {
-
+  uint32_t  now;
+  
   /*
   ** Begin
   */
@@ -169,12 +170,15 @@ void stspare_debug_stat(char * pChar) {
   pChar += sprintf(pChar, "  \"spare restore statistics\" : {\n");
 
   STSPARE_DEBUG_STAT(number_of_run_done);
-  if (stspare_stat.seconds_before_next_run==0) {
+
+  now = time(NULL);
+  if (stspare_stat.next_run_time <= now) {
     STSPARE_DEBUG_INT(seconds_before_next_run,0);
   }  
   else {
-    STSPARE_DEBUG_INT(seconds_before_next_run,stspare_stat.seconds_before_next_run-time(NULL));
+    STSPARE_DEBUG_INT(seconds_before_next_run,stspare_stat.next_run_time-now);
   }  
+
   STSPARE_DEBUG_STAT(rebuild_nominal_attempt);
   STSPARE_DEBUG_STAT(rebuild_nominal_success);
   STSPARE_DEBUG_STAT(rebuild_nominal_failure);
@@ -273,7 +277,39 @@ display:
   return;
         
 }
+/*
+**______________________________________________________________________________
+**
+** Spare restorer statistics diagnostic functions
+**____________________________________________________
+*/
+void stspare_set_delay(char * argv[], uint32_t tcpRef, void *bufRef) {
+  uint32_t    val;
+  char * p = uma_dbg_get_buffer();
 
+  /*
+  ** Display current throughput value
+  */  
+  if (argv[1] == 0) {
+    p += rozofs_string_append_error(p,"No delay given in command\n");
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+    return;
+  }
+  
+  /*
+  ** Read a new throughput value
+  */
+  if (sscanf(argv[1],"%u",&val)!=1) {
+    p += rozofs_string_append_error(p,"Bad delay value\n");
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+    return;
+  }
+  
+  stspare_stat.next_run_time = time(NULL) + val;
+  p += rozofs_string_append(p,"Done\n");
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+  return;
+}
 /*
 **____________________________________________________
 **
@@ -1245,8 +1281,37 @@ void stspare_scan_all_spare_files() {
 **
 **____________________________________________________
 */
+static void wait_until_time_to_run(uint32_t  now) {
+
+  /*
+  ** Wait until export host name is defined in rozofs.conf
+  */
+  while (1) {
+    
+    if (stspare_stat.next_run_time <= now) {
+      stspare_stat.next_run_time = 0;
+      return;
+    }
+    
+    if ((stspare_stat.next_run_time - now) > 60) {
+      sleep (60);
+    }
+    else {
+      sleep(stspare_stat.next_run_time - now);
+    }   
+    
+    now = time(NULL);   
+  }
+}  
+/*
+**____________________________________________________
+**
+** Wait until export host name is defined
+**
+**____________________________________________________
+*/
 static void wait_until_ready_to_run() {
-  int delay;
+  uint32_t now;  
   
   /*
   ** Wait until export host name is defined in rozofs.conf
@@ -1269,11 +1334,12 @@ static void wait_until_ready_to_run() {
     /*
     ** Wait until it is defined
     */
-    delay = 15*60;
-    stspare_stat.seconds_before_next_run = time(NULL)+delay;
-    sleep (delay);
+    now = time(NULL);
+    stspare_stat.next_run_time = now + 300;
+    wait_until_time_to_run(now);
   }
-}  
+} 
+
 /*
 **____________________________________________________
 **
@@ -1282,15 +1348,18 @@ static void wait_until_ready_to_run() {
 **____________________________________________________
 */
 void *stspare_thread(void *arg) {
+  uint32_t   now;
+  uint32_t   delay; 
      
   uma_dbg_thread_add_self("stspare");  
   
   /*
   ** 1rst delay not to start every process at the same time
   */
-  int delay = random() % (60*common_config.spare_restore_loop_delay);
-  stspare_stat.seconds_before_next_run = time(NULL)+delay;
-  sleep(delay);
+  delay = random() % (60*common_config.spare_restore_loop_delay);
+  now   =  time(NULL);
+  stspare_stat.next_run_time = now + delay;
+  wait_until_time_to_run(now);
   
   while(1) {
        
@@ -1308,7 +1377,7 @@ void *stspare_thread(void *arg) {
     ** Statistics 
     */
     stspare_stat.number_of_run_done++;
-    stspare_stat.seconds_before_next_run = 0;
+    stspare_stat.next_run_time = 0;
     
     /*
     ** Load throughput value from config
@@ -1331,8 +1400,10 @@ void *stspare_thread(void *arg) {
     /*
     ** Sleep until next run
     */ 
-    stspare_stat.seconds_before_next_run = time(NULL)+common_config.spare_restore_loop_delay*60;    
-    sleep(common_config.spare_restore_loop_delay*60);    
+    now = time(NULL);
+    stspare_stat.next_run_time = now + common_config.spare_restore_loop_delay*60;    
+    wait_until_time_to_run(now);   
+     
   }
 }
 /*
@@ -1352,6 +1423,7 @@ void *stspare_thread_launch() {
   */
   uma_dbg_addTopic("spare", stspare_debug); 
   uma_dbg_addTopic("throughput", stspare_set_throughput); 
+  uma_dbg_addTopic("delay", stspare_set_delay); 
 
   /*
   ** Initialize FID cache
