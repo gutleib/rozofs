@@ -648,7 +648,7 @@ int af_unix_sock_accept_create(int socketRef,int af_family, char *nickname,af_un
    */
    if (conf_p->xmitPool != 0) xmit_p->xmitPoolRef = conf_p->xmitPool;
    if (conf_p->xmitPool != 0) recv_p->rcvPoolRef  = conf_p->recvPool;
-   if (conf_p->dscp != 0) priority = conf_p->dscp;
+   if (conf_p->priority != 0) priority = conf_p->priority;
 
    /*
    ** OK, we are almost done, just need to connect with the socket controller
