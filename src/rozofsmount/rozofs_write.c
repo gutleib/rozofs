@@ -1101,7 +1101,7 @@ error:
     */
     {
       int save_errno = errno;
-      rozofs_iowr_err_log(f->fid,off,len,errno);
+      rozofs_iowr_err_log(f->fid,off,len,errno,ie);
       errno = save_errno;
     }
     f->buf_write_pending--;
@@ -1444,6 +1444,9 @@ void rozofs_ll_write_cbk(void *this,void *param)
    errno = 0;
    int trc_idx;
    rpc_reply.acpted_rply.ar_results.proc = NULL;
+   ientry_t *ie;
+   
+
    /*
    ** update the number of storcli pending request
    */
@@ -1452,8 +1455,10 @@ void rozofs_ll_write_cbk(void *this,void *param)
 
    RESTORE_FUSE_STRUCT(param,fi,sizeof( struct fuse_file_info));    
    RESTORE_FUSE_PARAM(param,trc_idx);
-       
+          
    file = (file_t *) (unsigned long)  fi->fh;   
+   ie =  file->ie;
+
    file->buf_write_pending--;
    if (file->buf_write_pending < 0)
    {
@@ -1589,7 +1594,7 @@ error:
       
       RESTORE_FUSE_PARAM(param,buf_flush_offset);
       RESTORE_FUSE_PARAM(param,buf_flush_len);
-      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno);    
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno,ie);    
       errno = save_errno;
     }
     /*
@@ -1996,7 +2001,7 @@ error:
       
       RESTORE_FUSE_PARAM(param,buf_flush_offset);
       RESTORE_FUSE_PARAM(param,buf_flush_len);
-      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno);  
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno,file->ie);  
       errno = save_errno;  
     }
     /*
@@ -2159,7 +2164,7 @@ error:
       
       RESTORE_FUSE_PARAM(param,buf_flush_offset);
       RESTORE_FUSE_PARAM(param,buf_flush_len);
-      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno);   
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno,file->ie);   
       errno = save_errno; 
     }
     fuse_reply_err(req, errno);
@@ -2555,7 +2560,7 @@ error:
       
       RESTORE_FUSE_PARAM(param,buf_flush_offset);
       RESTORE_FUSE_PARAM(param,buf_flush_len);
-      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno); 
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno,file->ie); 
       errno = save_errno;   
     }
 
@@ -2862,6 +2867,8 @@ int export_force_write_block_asynchrone(void *fuse_ctx_p,  ientry_t *ientry, uin
     arg.arg_gw.offset = to; //buf_flush_offset;
     arg.arg_gw.geo_wr_start = from;
     arg.arg_gw.geo_wr_end   = to;
+    arg.arg_gw.write_error = 0; 
+    
     /*
     ** now initiates the transaction towards the remote end
     */
@@ -3027,6 +3034,16 @@ void export_write_block_retry_cbk(void *this,void *param)
 	rozofs_ientry_slave_inode_write(ie,ret.slave_ino_len,payload+position);
       }
       ie->file_extend_running = 0;
+
+      /*
+      ** Check whether a write error is detected by the rozofsmount and known by the exportd
+      */
+      if ((ie->write_error==1) && (ie->attrs.bitfield1 & ROZOFS_BITFIELD1_WRITE_ERROR)) {
+        /* 
+        ** Clear localy the write error detection bit
+        */
+        ie->write_error = 0;
+      }      
       /*
       ** check if some more write blocks are pending
       */
@@ -3085,6 +3102,12 @@ int export_write_block_asynchrone_retry(void *fuse_ctx_p, ientry_t *ie)
     arg.arg_gw.offset = ie->attrs.attrs.size; //buf_flush_offset;
     arg.arg_gw.geo_wr_start = 0;
     arg.arg_gw.geo_wr_end   = 0;
+    if (ie->write_error) {
+      arg.arg_gw.write_error = 1; /* Tell the export that a write error occured on the file */
+    }    
+    else {
+      arg.arg_gw.write_error = 0; /* Tell the export that a write error occured on the file */
+    }     
     /*
     ** now initiates the transaction towards the remote end
     */
@@ -3254,24 +3277,11 @@ int export_write_block_asynchrone(void *fuse_ctx_p, file_t *file_p, sys_recv_pf_
     arg.arg_gw.length = 0; //buf_flush_len;
     arg.arg_gw.offset = ie->attrs.attrs.size; //buf_flush_offset;
     
-    /*
-    ** PREVIOUSLY
-    **____________
-    ** - exportd did use the received (offset+length) as the new file size
-    ** - rozofsmount used to set file size in offset and length to 0
-    **
-    ** NOW
-    **____
-    ** - exportd still uses the received (offset+length) as the new file size
-    **   and if length is 1 records the write error occurence in the meta-data
-    ** - rozofsmount still sets file size in offset and set length to 0 when no error
-    **   and set file size minus one in offset and set length to 1 in case of error
-    **
-    ** This way any set of old/new rozofsmount/exportd are compatible.
-    */
-    if (file_p->wr_error) {
-      arg.arg_gw.length = 1; /* Raise bit 1 of length filed to report write error */
-      arg.arg_gw.offset--;
+    if (ie->write_error) {
+      arg.arg_gw.write_error = 1; /* Tell the export that a write error occured on the file */
+    }    
+    else {
+      arg.arg_gw.write_error = 0; /* Tell the export that a write error occured on the file */
     }    
     
     arg.arg_gw.geo_wr_start = file_p->off_wr_start;
@@ -3618,6 +3628,17 @@ void export_write_block_cbk(void *this,void *param)
       }
 
       ie->file_extend_running = 0;
+      
+      /*
+      ** Check whether a write error is detected by the rozofsmount and known by the exportd
+      */
+      if ((ie->write_error==1) && (ie->attrs.bitfield1 & ROZOFS_BITFIELD1_WRITE_ERROR)) {
+        /* 
+        ** Clear localy the write error detection bit
+        */
+        ie->write_error = 0;
+      }
+      
       /*
       ** check if some more write blocks are pending
       */

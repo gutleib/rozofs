@@ -1558,6 +1558,7 @@ void ep_write_block_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 			   arg->hdr.gateway_rank,
 			   arg->arg_gw.geo_wr_start,
 			   arg->arg_gw.geo_wr_end,
+                           arg->arg_gw.write_error,
                            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) < 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  

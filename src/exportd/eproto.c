@@ -1653,6 +1653,7 @@ epgw_mattr_ret_t * ep_write_block_1_svc(epgw_write_block_arg_t * arg,
 			   arg->hdr.gateway_rank,
 			   arg->arg_gw.geo_wr_start,
 			   arg->arg_gw.geo_wr_end,
+                           arg->arg_gw.write_error,
                            (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs) < 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  

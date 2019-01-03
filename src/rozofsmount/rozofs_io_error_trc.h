@@ -26,6 +26,7 @@
 #include <mntent.h>
 #include <sys/resource.h>
 #include <rozofs/rozofs.h>
+#include "rozofsmount.h"
 
 
 #define ROZOFS_IO_ERROR_MAX_ENTRY (256*1024)/sizeof(rozofs_io_err_entry_t)
@@ -74,10 +75,11 @@ int rozofs_iowr_err_init(int instance);
    @param off: offset in the file
    @param len: expected length to write
    @param error : error code returned
+   @param ie : ientry in error
    
    @retval none
 */
-void rozofs_iowr_err_log(fid_t fid,off_t off, uint32_t len,int error);
+void rozofs_iowr_err_log(fid_t fid,off_t off, uint32_t len,int error, ientry_t *ie);
 /*
 **__________________________________________
 */

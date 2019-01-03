@@ -540,12 +540,19 @@ int rozofs_iowr_err_init(int instance)
    @param off: offset in the file
    @param len: expected length to write
    @param error : error code returned
+   @param ie : ientry in error
    
    @retval none
 */
-void rozofs_iowr_err_log(fid_t fid,off_t off, uint32_t len,int error)
+void rozofs_iowr_err_log(fid_t fid,off_t off, uint32_t len,int error, ientry_t *ie)
 {
   rozofs_io_err_entry_t *entry_p;
+  
+  /*
+  ** Memorize in ientry that a write error occured for this file and must be reported
+  ** to the exportd via the write block
+  */
+  ie->write_error = 1;
 
   if (rozofs_ioerr_context_p == NULL) return;
   if (rozofs_ioerr_context_p->valid == 0) return;

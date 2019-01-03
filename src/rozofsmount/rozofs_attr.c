@@ -806,7 +806,7 @@ error:
       {
 	int save_errno = errno;
 
-	rozofs_iowr_err_log(ie->fid,buf_flush_offset,0,errno);   
+	rozofs_iowr_err_log(ie->fid,buf_flush_offset,0,errno,ie);   
 	errno = save_errno; 
       }          
     }
@@ -1283,7 +1283,7 @@ error:
       {
 	int save_errno = errno;
 
-	rozofs_iowr_err_log(ie->fid,buf_flush_offset,0,errno);   
+	rozofs_iowr_err_log(ie->fid,buf_flush_offset,0,errno,ie);   
 	errno = save_errno; 
       }             
     }

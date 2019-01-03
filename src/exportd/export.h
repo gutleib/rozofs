@@ -598,6 +598,7 @@ int export_read_block(export_t *e, fid_t fid, bid_t bid, uint32_t n, dist_t * d)
  * @param site_number: siet number for geo-replication
  * @param geo_wr_start: write start offset
  * @param geo_wr_end: write end offset
+ * @param write_error: whether a write error occured on the file
  * @param[out] attrs: updated attributes of the file
  *
  * @return: the written length on success or -1 otherwise (errno is set)
@@ -605,6 +606,7 @@ int export_read_block(export_t *e, fid_t fid, bid_t bid, uint32_t n, dist_t * d)
 int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
                            dist_t d, uint64_t off, uint32_t len,
 			   uint32_t site_number,uint64_t geo_wr_start,uint64_t geo_wr_end,
+                           uint32_t write_error,
 			   struct inode_internal_t *attrs);
 
 /** read a directory

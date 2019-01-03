@@ -7596,6 +7596,7 @@ int64_t export_write(export_t *e, fid_t fid, uint64_t off, uint32_t len) {
 int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
                            dist_t d, uint64_t off, uint32_t len,
 			   uint32_t site_number,uint64_t geo_wr_start,uint64_t geo_wr_end,
+                           uint32_t write_error,
 	                   struct inode_internal_t *attrs) {
     int64_t length = -1;
     lv2_entry_t *lv2 = NULL;
@@ -7609,10 +7610,9 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid)))
         goto out;
     /*
-    ** A length of 1 has been set by the rozofsmount to tell that a write error occured on 
-    ** the file which could lead to a file corruption
+    ** A write may have been detected in the rozofsmount
     */
-    if (len & 1) {
+    if (write_error) {
       rozofs_set_werror(lv2);
     }    
 #ifdef ROZOFS_DIR_STATS

@@ -148,6 +148,7 @@ typedef struct ientry {
     uint64_t  file_extend_pending:1; /**< assert to one when file is extended by not yet confirm on exportd */
     uint64_t  file_extend_running:1; /**< assert to one when file is extended by not yet confirm on exportd */
     uint64_t  ientry_long:1; /**< assert to one when the ientry contains the extended attributes of the inode*/
+    uint64_t  write_error:1; /**< Asserted when a write error ocuures. Cleared when write block is sent to exportd */
     dirbuf_t db; ///< buffer used for directory listing
     unsigned long nlookup; ///< number of lookup done on this entry (used for forget)
     list_t list;
@@ -467,6 +468,7 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
 	  ie = xmalloc(sizeof(ientry_t));
 	  ie->ientry_long = 0;
 	}
+        ie->write_error = 0;
         
         list_init(&ie->this_ie_lock_owners);    /**< List of owner of locks on this ientry */
         list_init(&ie->next_ie_in_granted_list);/**< To chain ientries in list of files owning a lock (rozofsmount_granted_lock_list) */

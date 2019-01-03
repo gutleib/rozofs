@@ -2087,7 +2087,7 @@ error:
   /*
   ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
   */
-  rozofs_iowr_err_log(f->fid,off,len,errno);
+  rozofs_iowr_err_log(f->fid,off,len,errno,ie);
   return -1;
 }  
 #else
@@ -2188,7 +2188,7 @@ error:
     /*
     ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
     */
-    rozofs_iowr_err_log(file->fid,off,size,errno);
+    rozofs_iowr_err_log(file->fid,off,size,errno,file->ie);
     /*
     **  Release the fuse context and reply to the calling thread
     */
@@ -2793,7 +2793,7 @@ error:
   /*
   ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
   */
-  rozofs_iowr_err_log(f->fid,off,len,errno);
+  rozofs_iowr_err_log(f->fid,off,len,errno,f->ie);
 
   return -1;
 }      

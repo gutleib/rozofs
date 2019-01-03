@@ -705,6 +705,7 @@ struct ep_write_block_arg_t {
 	uint32_t length;
 	uint64_t geo_wr_start;
 	uint64_t geo_wr_end;
+	uint32_t write_error;
 };
 typedef struct ep_write_block_arg_t ep_write_block_arg_t;
 

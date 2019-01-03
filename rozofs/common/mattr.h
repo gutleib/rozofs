@@ -246,8 +246,6 @@ typedef struct _inode_fname_t
 /*___________________________________
 ** Bits mask of bit field 1 in ext_mattr_t
 */
-/* when asserted it indicates an I/O error on file write */
-#define ROZOFS_BITFIELD1_IO_WR_ERROR    2
 /* Wether locks on this file must be kept on export switchover */
 #define ROZOFS_BITFIELD1_PERSISTENT_FLOCK    1
 /* Whether this file has had a write error which could lead to file corruption */

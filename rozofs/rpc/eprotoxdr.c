@@ -1510,6 +1510,8 @@ xdr_ep_write_block_arg_t (XDR *xdrs, ep_write_block_arg_t *objp)
 		 return FALSE;
 	 if (!xdr_uint64_t (xdrs, &objp->geo_wr_end))
 		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->write_error))
+		 return FALSE;
 	return TRUE;
 }
 
