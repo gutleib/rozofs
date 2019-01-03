@@ -250,6 +250,8 @@ typedef struct _inode_fname_t
 #define ROZOFS_BITFIELD1_IO_WR_ERROR    2
 /* Wether locks on this file must be kept on export switchover */
 #define ROZOFS_BITFIELD1_PERSISTENT_FLOCK    1
+/* Whether this file has had a write error which could lead to file corruption */
+#define ROZOFS_BITFIELD1_WRITE_ERROR         2
 
 /*___________________________________
 ** Case of the multiple files

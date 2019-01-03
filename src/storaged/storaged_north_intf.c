@@ -414,6 +414,7 @@ void * storaged_north_RcvAllocBufCallBack(void *userRef,uint32_t socket_context_
   @retval : TRUE-> receiver ready
   @retval : FALSE-> receiver not ready
 */
+uint64_t last_out_of_buffer_sec = 0;
 uint32_t storaged_north_userRcvReadyCallBack(void * socket_ctx_p,int socketId)
 {
 
@@ -421,8 +422,18 @@ uint32_t storaged_north_userRcvReadyCallBack(void * socket_ctx_p,int socketId)
     
     if (free_count < 1)
     {
+      if (last_out_of_buffer_sec == 0) {
+        last_out_of_buffer_sec = rozofs_get_ticker_s();
+      }
+      else {
+        if ((rozofs_get_ticker_s()-last_out_of_buffer_sec) > 60) {
+          fatal("All buffers are lost");
+        } 
+      }
       return FALSE;
     }
+    
+    last_out_of_buffer_sec = 0;
     return TRUE;
 
 }
@@ -488,7 +499,8 @@ void  storaged_north_userDiscCallBack(void *userRef,uint32_t socket_context_ref,
 
   NULL,  //    *userRef;             /* user reference that must be recalled in the callbacks */
   NULL,  //    *xmitPool; /* user pool reference or -1 */
-  NULL   //    *recvPool; /* user pool reference or -1 */
+  NULL,   //    *recvPool; /* user pool reference or -1 */
+  .priority = 3,  /** set the af_unix socket priority */
 }; 
 
 

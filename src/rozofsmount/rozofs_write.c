@@ -3253,6 +3253,27 @@ int export_write_block_asynchrone(void *fuse_ctx_p, file_t *file_p, sys_recv_pf_
     arg.arg_gw.nrb = 1;
     arg.arg_gw.length = 0; //buf_flush_len;
     arg.arg_gw.offset = ie->attrs.attrs.size; //buf_flush_offset;
+    
+    /*
+    ** PREVIOUSLY
+    **____________
+    ** - exportd did use the received (offset+length) as the new file size
+    ** - rozofsmount used to set file size in offset and length to 0
+    **
+    ** NOW
+    **____
+    ** - exportd still uses the received (offset+length) as the new file size
+    **   and if length is 1 records the write error occurence in the meta-data
+    ** - rozofsmount still sets file size in offset and set length to 0 when no error
+    **   and set file size minus one in offset and set length to 1 in case of error
+    **
+    ** This way any set of old/new rozofsmount/exportd are compatible.
+    */
+    if (file_p->wr_error) {
+      arg.arg_gw.length = 1; /* Raise bit 1 of length filed to report write error */
+      arg.arg_gw.offset--;
+    }    
+    
     arg.arg_gw.geo_wr_start = file_p->off_wr_start;
     arg.arg_gw.geo_wr_end = file_p->off_wr_end;
     /*

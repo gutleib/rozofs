@@ -1415,7 +1415,7 @@ uint32_t uma_tcp_createTcpConnection(uint32_t tcpIdx, char * name)
   uint64_t val64 = (uint64_t)tcpIdx;
   p->connectionId = ruc_sockctl_connect(p->socketRef,
                                         name,
-                                        3, //uma_tcp_sockNameAndPriorityTab[0].priority,
+                                        2, //uma_tcp_sockNameAndPriorityTab[0].priority,
                                         (void*)val64,
                                         uma_tcp_sockNameAndPriorityTab[0].pCallBack);
 
