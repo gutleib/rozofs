@@ -131,6 +131,10 @@ static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
   ** Remove symbolic link name if any 
   */
   if (entry->symlink_target != NULL) free(entry->symlink_target);
+  /*
+  ** release slave inode if any 
+  */
+  if (entry->slave_inode_p != NULL) xfree(entry->slave_inode_p);
   
   list_remove(&entry->list);
   /*
@@ -282,6 +286,43 @@ int exp_meta_get_object_attributes(export_tracking_table_t *trk_tb_p,fid_t fid,l
    { 
      return -1;
    }  
+   /*
+   ** Check the case of a regular file with slave inodes (multiple file mode)
+   */
+   if ((fake_inode->s.key == ROZOFS_REG) && (entry_p->attributes.s.multi_desc.common.master != 0))
+   {
+     int attr_sz;
+      /*
+      ** Get the striping factor of the master inode in order to find out how many slave inodes need
+      ** to be read
+      */
+      attr_sz = sizeof(ext_mattr_t)*(1<<entry_p->attributes.s.multi_desc.master.striping_factor);
+      /*
+      ** allocate the memory array for the slave inodes
+      */
+      entry_p->slave_inode_p = xmalloc(attr_sz);
+      if (entry_p->slave_inode_p== NULL)
+      {
+        severe("Out of memory while loading slave inodes");
+	errno = ENOMEM;
+	return -1;
+      }
+      /*
+      ** move the pointer to the first index of the slave inodes
+      */
+      if (exp_metadata_read_slave_inode_burst(p,fake_inode,entry_p->slave_inode_p,attr_sz) < 0)
+      {
+         /*
+	 ** release the allocated memory
+	 */
+	 int xerror = errno;
+	 
+	 xfree(entry_p->slave_inode_p);
+	 entry_p->slave_inode_p = NULL;
+	 errno = xerror;
+	 return -1;
+      }	    
+   }
    return 0; 
 }
 
@@ -497,12 +538,13 @@ out:
   @param attr_p: pointer to the attributes of the object
   @param cache : pointer to the export attributes cache
   @param fid : unique identifier of the object
+  @param slave_inode_p: pointer to the slave_inode: might be NULL
   
   @retval <> NULL: attributes of the object
   @retval == NULL : no attribute returned for the object (see errno for details)
 */
 
-lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p) {
+inline lv2_entry_t *lv2_cache_put_forced_internal(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p,ext_mattr_t *slave_inode_p) {
     lv2_entry_t *entry;
     int count=0;
 
@@ -522,6 +564,7 @@ lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *att
     ** copy the attributes
     */
     memcpy(entry,attr_p,sizeof( ext_mattr_t));
+    entry->slave_inode_p = slave_inode_p;
     /*
     ** Initialize file locking 
     */
@@ -604,6 +647,42 @@ lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *att
     cache->size++;    
 out:
     return entry;
+}
+/*
+**__________________________________________________________________
+*/
+/**
+*   The purpose of that service is to store object attributes in the attributes cache
+
+  @param attr_p: pointer to the attributes of the object
+  @param cache : pointer to the export attributes cache
+  @param fid : unique identifier of the object
+  
+  @retval <> NULL: attributes of the object
+  @retval == NULL : no attribute returned for the object (see errno for details)
+*/
+
+lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p) {
+   return lv2_cache_put_forced_internal(cache,fid,attr_p,NULL);
+}
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+*   The purpose of that service is to store object master and slaves attributes in the attributes cache
+
+  @param attr_p: pointer to the attributes of the object
+  @param cache : pointer to the export attributes cache
+  @param fid : unique identifier of the object
+  
+  @retval <> NULL: attributes of the object
+  @retval == NULL : no attribute returned for the object (see errno for details)
+*/
+
+lv2_entry_t *lv2_cache_put_forced_multiple(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p,ext_mattr_t *slave_inode_p) {
+   return lv2_cache_put_forced_internal(cache,fid,attr_p,slave_inode_p);
 }
 
 /*
@@ -858,6 +937,121 @@ int exp_attr_delete(export_tracking_table_t *trk_tb_p,fid_t fid)
    }
    return 0;
 }
+
+/*
+**__________________________________________________________________
+*/
+/**
+*    delete a master inode with its associated slave inodes (case of the multiple file mode)
+
+   @param trk_tb_p: export attributes tracking table
+   @param fid: fid of the object (key)
+   @param nb_slaves: number of slave inodes
+   
+   @retval 0 on success
+   @retval -1 on error
+*/
+int exp_attr_delete_multiple(export_tracking_table_t *trk_tb_p,fid_t fid,int nb_slaves)
+{
+   rozofs_inode_t *fake_inode;
+   exp_trck_top_header_t *p = NULL;
+   int ret;
+
+   fake_inode = (rozofs_inode_t*)fid;
+   if (fake_inode->s.key >= ROZOFS_MAXATTR)
+   {
+     errno = EINVAL;
+     return -1;
+   }
+   p = trk_tb_p->tracking_table[fake_inode->s.key];
+   if (p == NULL)
+   {
+     errno = ENOTSUP;
+     return -1;    
+   }   
+   /*
+   ** release the inode
+   */
+   ret = exp_metadata_release_inode_multiple(p,fake_inode,nb_slaves);
+   if (ret < 0)
+   { 
+      return -1;
+   }
+   return 0;
+}
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+*  Create the attributes of a regular file in burst mode without writing attributes on disk
+
+  create an oject according to its type. The service performs the allocation of the fid. 
+  It is assumed that all the other fields of the object attributes are already been filled in.
+  
+  @param trk_tb_p: export attributes tracking table
+  @param slice: slice of the parent directory
+  @param global_attr_p : pointer to the attributes of the object (master inode attributes)
+  @param inode_count: number of consecutive inode to allocated
+
+  
+  @retval 0 on success: (the attributes contains the lower part of the fid that is allocated by the service)
+  @retval -1 on error (see errno for details)
+*/
+int exp_attr_create_write_cond_burst(export_tracking_table_t *trk_tb_p,uint32_t slice,ext_mattr_t *global_attr_p,int inode_count)
+{
+   fid_t fid;
+   rozofs_inode_t *fake_inode;
+   int ret;
+   exp_trck_top_header_t *p = NULL;
+   int inode_allocated = 0;
+
+   
+   rozofs_uuid_generate(fid,rozofs_get_export_host_id());
+
+
+   fake_inode = (rozofs_inode_t*)fid;
+   fake_inode->fid[1] = 0;
+   fake_inode->s.key = ROZOFS_REG;
+   fake_inode->s.usr_id = slice; /** always the parent slice for storage */
+   fake_inode->s.eid = trk_tb_p->eid; 
+      
+   if (fake_inode->s.key >= ROZOFS_MAXATTR)
+   {
+     errno = EINVAL;
+     return -1;
+   }
+   p = trk_tb_p->tracking_table[fake_inode->s.key];
+   if (p == NULL)
+   {
+     errno = ENOTSUP;
+     goto error;
+   }   
+   /*
+   ** allocate the inode
+   */
+   ret = exp_metadata_allocate_inode_burst(p,fake_inode,ROZOFS_REG,slice,inode_count);
+   if (ret < 0)
+   { 
+      goto error;
+   }
+   inode_allocated = 1;
+   /*
+   ** copy the definitive fid of the object
+   */
+   memcpy(&global_attr_p->s.attrs.fid,fake_inode,sizeof(fid_t));
+
+   return 0;
+
+error:
+   if (inode_allocated)
+   {
+     exp_attr_delete(trk_tb_p,global_attr_p->s.attrs.fid);           
+   }
+   return -1;
+}
+
 
 /*
 **__________________________________________________________________

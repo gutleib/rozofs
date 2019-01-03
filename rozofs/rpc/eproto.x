@@ -244,6 +244,17 @@ union ep_mattr_ret_t switch (ep_status_t status) {
 };
 
 
+struct epgw_mattr_ret_no_data_t
+{
+  struct ep_gateway_t hdr;
+  uint64_t          free_quota;
+  uint32_t          bsize; /* Block size. From enum ROZOFS_BSIZE_E */
+  uint8_t           layout;
+  ep_mattr_ret_t    status_gw;
+  ep_mattr_ret_t    parent_attr;
+  uint32_t            slave_ino_len;  /**< slave inodes: distribution, children and size */
+};
+
 struct epgw_mattr_ret_t
 {
   struct ep_gateway_t hdr;
@@ -252,6 +263,7 @@ struct epgw_mattr_ret_t
   uint8_t           layout;
   ep_mattr_ret_t    status_gw;
   ep_mattr_ret_t    parent_attr;
+  opaque            slave_ino<>;  /**< slave inodes: distribution, children and size */
 };
 
 union ep_fid_ret_t switch (ep_status_t status) {

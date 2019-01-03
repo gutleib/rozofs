@@ -22,6 +22,7 @@
 #include "rozofs_fuse_api.h"
 #include "rozofs_modeblock_cache.h"
 #include "rozofs_rw_load_balancing.h"
+#include "rozofs_io_error_trc.h"
 
 DECLARE_PROFILING(mpp_profiler_t);
 int rozofs_max_getattr_pending = 0;
@@ -189,11 +190,11 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
    fuse_ino_t ino;
    struct stat stbuf;
    fuse_req_t req; 
-   epgw_mattr_ret_t ret ;
+   epgw_mattr_ret_no_data_t ret ;
    int status;
    ientry_t *ie = 0;
    ientry_t *pie = 0;
-   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
    
    uint8_t  *payload;
    void     *recv_buf = NULL;   
@@ -379,6 +380,15 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(ie,&attr);  
+    if (ret.slave_ino_len !=0)
+    {
+      /*
+      ** copy the slave inode information in the ientry of the master inode
+      */
+      int position;
+      position = XDR_GETPOS(&xdrs); 
+      rozofs_ientry_slave_inode_write(ie,ret.slave_ino_len,payload+position);
+    }
     stbuf.st_size = ie->attrs.attrs.size;
     /*
     ** update the getattr pending count
@@ -490,7 +500,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     int lkup_cpt = 0;
     struct stat o_stbuf;
     uint32_t readahead = 0;
-
+    uint64_t buf_flush_offset;
     /*
     ** Update the IO statistics
     */
@@ -626,6 +636,11 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	*/
 	bid = attr.size / bbytes;
 	last_seg = (attr.size % bbytes);
+	/*
+	** save the size as the offset to write, the length is always 0
+	*/
+	buf_flush_offset =  attr.size;
+	SAVE_FUSE_PARAM(buffer_p,buf_flush_offset);
 
 	SAVE_FUSE_PARAM(buffer_p,to_set);
 	SAVE_FUSE_STRUCT(buffer_p,stbuf,sizeof(struct stat ));      
@@ -642,9 +657,8 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	ie->pending_setattr_with_size_update++;
 	/*
 	** Check if the ientry designates a file with multiple inodes
-	*/
-#warning FDL check the presence of a master inode with slave inode	
-        if(1) 
+	*/	
+        if(ie->attrs.multi_desc.common.master != 0)
 	{
 	   /*
 	   ** multiple inode case: multiple inodes per user's file
@@ -684,8 +698,9 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
                                      STORCLI_TRUNCATE,(xdrproc_t) xdr_storcli_truncate_arg_t,(void *)&args,
                                      rozofs_ll_truncate_cbk,buffer_p,storcli_idx,ie->fid); 
 	}
-	if (ret < 0) goto error;
-
+	if (ret < 0) { 
+	  goto error;
+        }
         if (lkup_cpt) goto async_setattr;
 	/*
 	** all is fine, wait from the response of the storcli and then updates the exportd upon
@@ -784,7 +799,16 @@ error:
       if ( ie->pending_setattr_with_size_update <= 0)
       {
 	ie->pending_setattr_with_size_update = 0;
-      }    
+      }
+      /*
+      ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+      */
+      {
+	int save_errno = errno;
+
+	rozofs_iowr_err_log(ie->fid,buf_flush_offset,0,errno);   
+	errno = save_errno; 
+      }          
     }
     fuse_reply_err(req, errno);
     /*
@@ -823,7 +847,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
 //    struct fuse_file_info *fi = NULL;
     struct stat o_stbuf;
     fuse_req_t req; 
-    epgw_mattr_ret_t ret ;
+    epgw_mattr_ret_no_data_t ret ;
     struct inode_internal_t  attr;
     uint32_t readahead = 0;
     struct inode_internal_t  pattr;
@@ -834,7 +858,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     XDR       xdrs;    
     int      bufsize;
    struct rpc_msg  rpc_reply;
-   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    errno = 0;
    int lkup_cpt = 0;
@@ -1001,6 +1025,15 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(ie,&attr);    
+    if (ret.slave_ino_len !=0)
+    {
+      /*
+      ** copy the slave inode information in the ientry of the master inode
+      */
+      int position;
+      position = XDR_GETPOS(&xdrs); 
+      rozofs_ientry_slave_inode_write(ie,ret.slave_ino_len,payload+position);
+    }
     /*
     ** clear the running flag in case of a time modification
     */
@@ -1041,7 +1074,7 @@ error:
       if ( ie->pending_setattr_with_size_update <= 0)
       {
 	ie->pending_setattr_with_size_update = 0;
-      }    
+      }     
     }
 out:
     rozofs_trc_rsp_attr(srv_rozofs_ll_setattr,ino,(ie==NULL)?NULL:ie->attrs.attrs.fid,status,(ie==NULL)?-1:ie->attrs.attrs.size,trc_idx);
@@ -1075,6 +1108,7 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
    mattr_t attr;
    int to_set;
    epgw_setattr_arg_t arg;
+   uint64_t buf_flush_offset;
        
    int status;
    uint8_t  *payload;
@@ -1101,6 +1135,7 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
    RESTORE_FUSE_PARAM(param,lkup_cpt);   
     RESTORE_FUSE_PARAM(param,trc_idx);
     RESTORE_FUSE_PARAM(param,readahead);
+    RESTORE_FUSE_PARAM(param,buf_flush_offset);
     /*
     ** Update the exportd with the filesize if that one has changed
     */ 
@@ -1125,7 +1160,7 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
        ** something wrong happened
        */
        errno = rozofs_tx_get_errno(this); 
-       severe(" transaction error %s",strerror(errno));
+       //severe(" transaction error %s",strerror(errno));
        goto error; 
     }
     /*
@@ -1241,7 +1276,16 @@ error:
       if ( ie->pending_setattr_with_size_update <= 0)
       {
 	ie->pending_setattr_with_size_update = 0;
-      }    
+      }
+      /*
+      ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+      */
+      {
+	int save_errno = errno;
+
+	rozofs_iowr_err_log(ie->fid,buf_flush_offset,0,errno);   
+	errno = save_errno; 
+      }             
     }
     /*
     ** reply to fuse and release the transaction context and the fuse context

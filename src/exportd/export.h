@@ -397,31 +397,37 @@ int export_stat(export_t * e, ep_statfs_t * st);
  * @param name: pointer to the name of the searched file
  * @param[out] attrs:  to fill (child attributes used by upper level functions)
  * @param[out] pattrs:  to fill (parent attributes) 
- 
+  @param slave_ino_len : length of the slave_inode array in bytes (0 at calling time)
+  @param slave_inode: pointer to the array when information about slave inode must be returned
+   
  * @return: 0 on success -1 otherwise (errno is set)
  */
-int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t * attrs, struct inode_internal_t * pattrs);
+int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t * attrs, struct inode_internal_t * pattrs,
+                  uint32_t *slave_ino_len,rozofs_slave_inode_t *slave_inode_p);
 
 /** get attributes of a managed file
- *
- * @param e: the export managing the file
- * @param fid: the id of the file
- * @param attrs: attributes to fill.
- * @param pattrs: parent attributes to fill.
- *
- * @return: 0 on success -1 otherwise (errno is set)
- */
-int export_getattr(export_t *e, fid_t fid, struct inode_internal_t * attrs, struct inode_internal_t * pattrs);
+ 
+  @param e: the export managing the file
+  @param fid: the id of the file
+  @param attrs: attributes to fill.
+  @param pattrs: parent attributes to fill.
+ 
+  @return: 0 on success -1 otherwise (errno is set)
+*/
+int export_getattr(export_t *e, fid_t fid, struct inode_internal_t * attrs, struct inode_internal_t * pattrs,
+                   uint32_t *slave_ino_len,rozofs_slave_inode_t *slave_inode_p);
 
 /** set attributes of a managed file
- *
- * @param e: the export managing the file
- * @param fid: the id of the file
- * @param attrs: attributes to set.
- * @param to_set: fields to set in attributes
- *
- * @return: 0 on success -1 otherwise (errno is set)
- */
+ 
+  @param e: the export managing the file
+  @param fid: the id of the file
+  @param attrs: attributes to set.
+  @param to_set: fields to set in attributes
+  @param slave_ino_len : length of the slave_inode array in bytes (0 at calling time)
+  @param slave_inode: pointer to the array when information about slave inode must be returned
+ 
+  @return: 0 on success -1 otherwise (errno is set)
+*/
 int export_setattr(export_t *e, fid_t fid, mattr_t * attrs, int to_set);
 
 /** create a hard link
@@ -438,23 +444,30 @@ int export_setattr(export_t *e, fid_t fid, mattr_t * attrs, int to_set);
 int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname,
         struct inode_internal_t *attrs,struct inode_internal_t *pattrs);
 
+/*
+**__________________________________________________________________
+*/
 /** create a new file
  *
- * @param e: the export managing the file
- * @param site_number: needed for geo-replication
- * @param pfid: the id of the parent
- * @param name: the name of this file.
- * @param uid: the user id
- * @param gid: the group id
- * @param mode: mode of this file
- * @param[out] attrs:  to fill (child attributes used by upper level functions)
- * @param[out] pattrs:  to fill (parent attributes)
+ @param e: the export managing the file
+ @param site_number: site number for geo-replication
+ @param pfid: the id of the parent
+ @param name: the name of this file.
+ @param uid: the user id
+ @param gid: the group id
+ @param mode: mode of this file
+ @param[out] attrs:  to fill (child attributes used by upper level functions)
+ @param[out] pattrs:  to fill (parent attributes)
+ @param slave_len[out]: length of the slave inode part 
+ @param slave_buf_p[out]: pointer to the array where content of slave inode context is found
   
- * @return: 0 on success -1 otherwise (errno is set)
+ @retval: 0 on success 
+ @retval -1 otherwise (errno is set)
  */
-int export_mknod(export_t *e,uint32_t site_number,
-                 fid_t pfid, char *name, uint32_t uid,
-                 uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs);
+
+int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
+        uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs,
+	unsigned int *slave_len,rozofs_slave_inode_t *slave_inode_buffer);
 
 /** create a new directory
  *

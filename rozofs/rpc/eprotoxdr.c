@@ -624,6 +624,28 @@ xdr_ep_mattr_ret_t (XDR *xdrs, ep_mattr_ret_t *objp)
 }
 
 bool_t
+xdr_epgw_mattr_ret_no_data_t (XDR *xdrs, epgw_mattr_ret_no_data_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->free_quota))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->bsize))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->layout))
+		 return FALSE;
+	 if (!xdr_ep_mattr_ret_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	 if (!xdr_ep_mattr_ret_t (xdrs, &objp->parent_attr))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->slave_ino_len))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_epgw_mattr_ret_t (XDR *xdrs, epgw_mattr_ret_t *objp)
 {
 	//register int32_t *buf;
@@ -639,6 +661,8 @@ xdr_epgw_mattr_ret_t (XDR *xdrs, epgw_mattr_ret_t *objp)
 	 if (!xdr_ep_mattr_ret_t (xdrs, &objp->status_gw))
 		 return FALSE;
 	 if (!xdr_ep_mattr_ret_t (xdrs, &objp->parent_attr))
+		 return FALSE;
+	 if (!xdr_bytes (xdrs, (char **)&objp->slave_ino.slave_ino_val, (u_int *) &objp->slave_ino.slave_ino_len, ~0))
 		 return FALSE;
 	return TRUE;
 }

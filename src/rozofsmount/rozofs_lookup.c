@@ -632,7 +632,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
    ientry_t *nie = 0;
    struct stat stbuf;
    fuse_req_t req; 
-   epgw_mattr_ret_t ret ;
+   epgw_mattr_ret_no_data_t ret ;
    struct rpc_msg  rpc_reply;
    char *name;
    
@@ -642,7 +642,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
    XDR       xdrs;    
    int      bufsize;
    struct inode_internal_t  attrs;
-   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    int trc_idx;
    errno = 0;
@@ -828,6 +828,15 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(nie,&attrs);  
+    if (ret.slave_ino_len !=0)
+    {
+      /*
+      ** copy the slave inode information in the ientry of the master inode
+      */
+      int position;
+      position = XDR_GETPOS(&xdrs); 
+      rozofs_ientry_slave_inode_write(nie,ret.slave_ino_len,payload+position);
+    }
     /*
     ** get the parent attributes
     */

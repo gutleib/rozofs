@@ -251,7 +251,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
   fuse_ino_t ino;
    fuse_req_t req; 
    struct fuse_file_info *fi ;  
-   epgw_mattr_ret_t ret ;
+   epgw_mattr_ret_no_data_t ret ;
    int status;
    struct rpc_msg  rpc_reply;
    
@@ -260,7 +260,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
    XDR       xdrs;    
    int      bufsize;
    struct inode_internal_t  attr;
-   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    errno = 0;
    int trc_idx;
@@ -415,6 +415,15 @@ void rozofs_ll_open_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(ie,&attr);  
+    if (ret.slave_ino_len !=0)
+    {
+      /*
+      ** copy the slave inode information in the ientry of the master inode
+      */
+      int position;
+      position = XDR_GETPOS(&xdrs); 
+      rozofs_ientry_slave_inode_write(ie,ret.slave_ino_len,payload+position);
+    }
     if (rozofs_bugwatch){
         char fid_str[37];
         rozofs_uuid_unparse(file->fid, fid_str);

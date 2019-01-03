@@ -775,6 +775,88 @@ int exp_trck_main_allocate_inode(exp_trck_header_memory_t  *main_trck_p,rozofs_i
    ret = exp_trck_check_tracking_file_full(main_trck_p);
    return ret;   
 }
+
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    allocate an inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the inode
+    @param inode_count: number of inode to allocated
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_trck_main_allocate_inode_burst(exp_trck_header_memory_t  *main_trck_p,rozofs_inode_t *inode,int inode_count)
+{
+   int reloop = 0;
+   int ret;
+
+   /**
+   *  check the presence of the tracking file
+   */
+
+reload:
+   if (main_trck_p->index_available == 0)
+   {
+     /*
+     ** the file is not opened, so attempt to open the file reference by the last index of the 
+     ** of the main tracking file
+     */
+     ret = exp_trck_open_tracking_file(main_trck_p,&reloop);
+     if (ret < 0)
+     {
+       /**
+       * cannot open/create the tracking file,face an issue while reading it or runs out of memory
+       */
+       return -1;      
+     }
+   }  
+   /*
+   ** Check if it remains enough consecutive inodes in the current tracking file
+   ** if it is not the case, we need to increment the index in the main tracking file of the directory
+   */
+   if ((main_trck_p->cur_idx + inode_count)> EXP_TRCK_MAX_INODE_PER_FILE) 
+   {
+      /*
+      ** need to allocate a new tracking file to store the inodes
+      **  reinit the indexes for the next tracking file
+      */
+      main_trck_p->cur_idx = 0;  
+      main_trck_p->index_available = 0;
+      /*
+      ** update the tracking main tracking file
+      */
+      ret = exp_trck_increment_main_tracking_file(main_trck_p);
+      if (ret < 0) return -1;
+      /*
+      ** reload the next tracking file: it corresponds to the creation of the tracking file
+      */
+      goto reload;
+   }   
+   /*
+   ** allocate an entry within the current tracking file
+   */
+   inode->s.file_id = main_trck_p->entry.last_idx;
+   /*
+   ** Just register the index of the fisrt inode: it corresponds to the master i-node, the next i-node are
+   ** the slave inodes
+   */
+   inode->s.idx = main_trck_p->cur_idx;
+   main_trck_p->cur_idx =+inode_count;
+   /*
+   ** check if the tracking file is full:
+   ** when the tracking file is full, the main trk file is updated, the
+   ** current tracking file is closed and a new tracking file is created
+   ** starting at cur_idx 0
+   */
+   ret = exp_trck_check_tracking_file_full(main_trck_p);
+   return ret;   
+}
 /*
 **__________________________________________________________________
 */
@@ -809,6 +891,43 @@ int exp_metadata_allocate_inode(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t 
     inode->s.idx = 0;
     inode->s.key = key;
     return exp_trck_main_allocate_inode(main_trck_p,inode);
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+*    allocate an consecutive range of inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the inode
+    @param key: key associated with the inode (opaque to the inode allocator
+    @param slice: slice to which the inode will belong
+    @param inode_count: number of consecutive inodes that must be allocated
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_allocate_inode_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,uint16_t key,uint8_t slice,int inode_count)
+{
+
+   exp_trck_header_memory_t  *main_trck_p;
+    /*
+    ** use the slice to get the right entry
+    */
+    main_trck_p = top_hdr_p->entry_p[slice];
+    if (main_trck_p == NULL)
+    {
+       severe("slice %d does not exist\n",slice);
+       errno = ENOENT;
+       return -1;
+    }
+    inode->s.usr_id = slice;
+    inode->s.file_id = 0;
+    inode->s.idx = 0;
+    inode->s.key = key;
+    return exp_trck_main_allocate_inode_burst(main_trck_p,inode,inode_count);
 }
 
 /*
@@ -895,6 +1014,69 @@ int exp_metadata_release_inode(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *
     return 0;
 }
 
+
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    release an inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the first inode
+    @param nb_inodes: number of consecutive inode to delete
+
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_release_inode_multiple(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,int nb_inodes)
+{
+   exp_trck_header_memory_t  *main_trck_p;
+   ssize_t count;
+   int fd= -1;
+   off_t off;
+   uint16_t  buf_reset[32];  
+   int i;
+   char pathname[1024]; 
+   
+    main_trck_p = top_hdr_p->entry_p[inode->s.usr_id];    
+    sprintf(pathname,"%s/%d/trk_%llu",main_trck_p->root_path,inode->s.usr_id,(long long unsigned int)inode->s.file_id);
+
+    if (main_trck_p == NULL)
+    {
+       severe("slice %d does not exist\n",inode->s.usr_id);
+       errno = ENOENT;
+       return -1;
+    }
+    /*
+    ** read the header of the tracking file referenced by the inode, clear the entry and re-write the header
+    */
+    open_count++;
+
+    if ((fd = open(pathname, O_RDWR , 0640)) < 0)  
+    {
+     severe(" open failure :%s:%s\n",pathname,strerror(errno));
+      return -1;
+    } 
+    /**
+    * clear the entry on disk
+    */
+    off = GET_FILE_OFFSET(inode->s.idx);
+    for (i = 0; i < (nb_inodes+1); i++)
+    {
+       buf_reset[i]=0xffff;    
+    }
+    count = pwrite(fd,buf_reset,sizeof(uint16_t)*(nb_inodes+1),off);
+    if (count != sizeof(uint16_t)*(nb_inodes+1))
+    {
+      close(fd);
+      return -1;
+    }             
+    close(fd);
+    return 0;
+}
 /*
 **__________________________________________________________________
 */
@@ -1093,15 +1275,147 @@ int exp_metadata_create_attributes_burst(exp_trck_top_header_t *top_hdr_p,rozofs
    if (fd != -1) close(fd);
    return 0; 
 
-
-
-
-
-
-
    
    return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0,sync);
 }
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    write attributes of the slave inode associated with an master inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the master inode
+    @param attr_p: pointer to the attribute array
+    @param attr_sz: size of the attributes
+    @param sync: whether to force sync on disk of attributes
+
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_write_slave_inode_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz, int sync)
+{
+   exp_trck_header_memory_t  *main_trck_p;
+   int fd = -1;
+   ssize_t count;
+   char pathname[1024];
+   
+   main_trck_p = top_hdr_p->entry_p[inode->s.usr_id];
+   if (main_trck_p == NULL)
+   {
+      severe("user_id %d does not exist\n",inode->s.usr_id);
+      errno = ENOENT;
+      return -1;
+   }
+    /*
+    ** build the pathname of the tracking file
+    */
+    sprintf(pathname,"%s/%d/trk_%llu",main_trck_p->root_path,inode->s.usr_id,(long long unsigned int)inode->s.file_id);
+   /*
+   ** the file exist so open it and read its header in order to find out where is the 
+   ** next index to allocated
+   */
+     open_count++;
+
+   if ((fd = open(pathname, O_RDWR , 0640)) < 0)  
+   {
+     severe("cannot open %s: %s\n",pathname,strerror(errno));
+     return -1;
+   } 
+   /*
+   ** write the attributes on disk: 
+   */
+   off_t attr_offset = (inode->s.idx+1)*main_trck_p->max_attributes_sz+sizeof(exp_trck_file_header_t);
+   count = pwrite(fd,attr_p,attr_sz, attr_offset);		         
+   /*
+   ** sync data on disk immeditely if requested 
+   ** and allowed
+   */
+   if ((sync) && (!common_config.disable_sync_attributes)){
+     fdatasync(fd);
+   } 
+   if (count != attr_sz)
+   {
+     CLOSE_CONTROL(__LINE__);
+     if (fd != -1) close(fd);
+     return -1;
+   } 
+   CLOSE_CONTROL(__LINE__);
+   if (fd != -1) close(fd);
+   return 0; 
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    read attributes of the slave inodes associated with an master inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the master inode
+    @param attr_p: pointer to the attribute array
+    @param attr_sz: size of the attributes
+
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_read_slave_inode_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz)
+{
+   exp_trck_header_memory_t  *main_trck_p;
+   int fd = -1;
+   ssize_t count;
+   char pathname[1024];
+   
+   main_trck_p = top_hdr_p->entry_p[inode->s.usr_id];
+   if (main_trck_p == NULL)
+   {
+      severe("user_id %d does not exist\n",inode->s.usr_id);
+      errno = ENOENT;
+      return -1;
+   }
+    /*
+    ** build the pathname of the tracking file
+    */
+    sprintf(pathname,"%s/%d/trk_%llu",main_trck_p->root_path,inode->s.usr_id,(long long unsigned int)inode->s.file_id);
+   /*
+   ** the file exist so open it and read its header in order to find out where is the 
+   ** next index to allocated
+   */
+     open_count++;
+
+   if ((fd = open(pathname, O_RDWR , 0640)) < 0)  
+   {
+     severe("cannot open %s: %s\n",pathname,strerror(errno));
+     return -1;
+   } 
+   /*
+   ** read the attributes from disk: 
+   */
+   off_t attr_offset = (inode->s.idx+1)*main_trck_p->max_attributes_sz+sizeof(exp_trck_file_header_t);
+   count = pread(fd,attr_p,attr_sz, attr_offset);		         
+   /*
+   ** sync data on disk immeditely if requested 
+   ** and allowed
+   */
+   if (count != attr_sz)
+   {
+     CLOSE_CONTROL(__LINE__);
+     if (fd != -1) close(fd);
+     return -1;
+   } 
+   CLOSE_CONTROL(__LINE__);
+   if (fd != -1) close(fd);
+   return 0; 
+}
+
 
 /*
 **__________________________________________________________________

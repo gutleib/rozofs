@@ -918,7 +918,59 @@ error:
    if (fd != -1) close(fd);
    return -1;
 }
+/*
+**__________________________________________________________________
+*/
+/*
+**  Multi-file case
+ Copy the information related to the slave inodes associated with a master inode
+ 
+ @param slave_buf_p : pointer to the buffer that will content the information return to a rozofsmount client
+ @param lv2: cache entry that contains the information related to the file inode
+ 
+ @retval 0: no slave inodes
+ @retval > 1 : length of the data 
+ @retval < 0: error
+*/
+int rozofs_export_slave_inode_copy(rozofs_slave_inode_t *slave_buf_p,lv2_entry_t *lv2)
+{
+  uint32_t nb_slaves;
+  ext_mattr_t    *slave_inode_p;
+  rozofs_slave_inode_t *dest_p;
+  int i;
+  /*
+  ** take care of the regular file only
+  */
+  if (!S_ISREG(lv2->attributes.s.attrs.mode)) return 0;
+  /*
+  ** check the case of the multifile
+  */
+  if (lv2->attributes.s.multi_desc.common.master == 0) return 0;
+  
+  nb_slaves = 1 << (lv2->attributes.s.multi_desc.master.striping_factor);
+  slave_inode_p = lv2->slave_inode_p;
+  /*
+  ** The buffer MUST not be NULL
+  */
+  if (slave_inode_p == NULL)
+  {
+     errno = EPROTO;
+     return -1;
+  }
+  dest_p = slave_buf_p;
+  /*
+  ** Copy the size, the distribution and the children fields
+  */
 
+  for (i = 0; i < nb_slaves; i++,slave_inode_p++,dest_p++)
+  {
+    memcpy(dest_p->sids,slave_inode_p->s.attrs.sids,sizeof(sid_t)*ROZOFS_SAFE_MAX);
+    dest_p->cid = slave_inode_p->s.attrs.cid;
+    dest_p->size = slave_inode_p->s.attrs.size;
+    dest_p->children = slave_inode_p->s.attrs.children;  
+  }
+  return (nb_slaves*sizeof(rozofs_slave_inode_t));
+}
 /*
  **__________________________________________________________________
  */
@@ -1998,10 +2050,25 @@ out:
     STOP_PROFILING_EID(export_stat,e->eid);
     return status;
 }
+
 /*
 **__________________________________________________________________
 */
-int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *attrs,struct inode_internal_t *pattrs) {
+/** Perform a lookup of a managed file
+ *
+  @param e: the export managing the file
+  @param pfid: inode of the parent
+  @param name: the name to resolve
+  @param attrs: attributes to fill on return.
+  @param pattrs: parent attributes to fill.
+  @param slave_ino_len : length of the slave_inode array in bytes (0 at calling time)
+  @param slave_inode: pointer to the array when information about slave inode must be returned
+ 
+  @return: 0 on success -1 otherwise (errno is set)
+*/
+int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *attrs,struct inode_internal_t *pattrs,
+                  uint32_t *slave_ino_len,rozofs_slave_inode_t *slave_inode_p) 
+{
     int status = -1;
     lv2_entry_t *plv2 = 0;
     lv2_entry_t *pplv2 = 0;
@@ -2117,6 +2184,19 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
          
         export_recopy_extended_attributes(e,lv2, attrs);
 	/*
+	** copy the slave inodes if any
+	*/
+	{
+	   int length;
+	   length = rozofs_export_slave_inode_copy(slave_inode_p,lv2);
+	   if (length < 0)
+	   {
+	      severe("slave inode pointer has been released");
+	      goto out;
+	   }
+	   *slave_ino_len = length;		
+	}
+	/*
 	** copy the fid provided in the input argument
 	*/
 	memcpy(attrs->attrs.fid,fid_direct,sizeof(fid_t));
@@ -2202,6 +2282,19 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     */
     rozofs_mover_check_for_validation(e,lv2,child_fid);
     export_recopy_extended_attributes(e,lv2, attrs);
+    /*
+    ** copy the slave inodes if any
+    */
+    {
+       int length;
+       length = rozofs_export_slave_inode_copy(slave_inode_p,lv2);
+       if (length < 0)
+       {
+	  severe("slave inode pointer has been released");
+	  goto out;
+       }
+       *slave_ino_len = length;		
+    }
     /*
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
@@ -2371,14 +2464,17 @@ void export_get_parent_attributes(export_t *e, fid_t pfid, struct inode_internal
 */
 /** get attributes of a managed file
  *
- * @param e: the export managing the file
- * @param fid: the id of the file
- * @param attrs: attributes to fill.
- * @param pattrs: parent attributes to fill.
- *
- * @return: 0 on success -1 otherwise (errno is set)
- */
-int export_getattr(export_t *e, fid_t fid, struct inode_internal_t *attrs,struct inode_internal_t * pattrs) {
+  @param e: the export managing the file
+  @param fid: the id of the file
+  @param attrs: attributes to fill.
+  @param pattrs: parent attributes to fill.
+   @param slave_ino_len : length of the slave_inode array in bytes (0 at calling time)
+   @param slave_inode: pointer to the array when information about slave inode must be returned
+ 
+  @return: 0 on success -1 otherwise (errno is set)
+*/
+int export_getattr(export_t *e, fid_t fid, struct inode_internal_t *attrs,struct inode_internal_t * pattrs,
+                   uint32_t *slave_ino_len,rozofs_slave_inode_t *slave_inode_p) {
     int status = -1;
     lv2_entry_t *lv2 = 0;
     START_PROFILING(export_getattr);
@@ -2405,6 +2501,19 @@ int export_getattr(export_t *e, fid_t fid, struct inode_internal_t *attrs,struct
     */
     export_recopy_extended_attributes(e,lv2,attrs);   
     memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
+    /*
+    ** check the case of the slave inodes (multiple file)
+    */
+    {
+      int length;
+      length = rozofs_export_slave_inode_copy(slave_inode_p,lv2);
+      if (length < 0)
+      {
+	 severe("slave inode pointer has been released");
+	 goto out;
+      }
+      *slave_ino_len = length;        
+    }
     /*
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
@@ -3139,6 +3248,309 @@ lv2_entry_t *  export_get_recycled_inode(export_t *e,fid_t pfid,ext_mattr_t *ext
    free(rmfe);
    return lv2; 
 }
+/*
+**___________________________________________________________________________________________
+*/
+void fdl_debug_print_storage(export_t *e,ext_mattr_t *q,int master,int fileid)
+{
+   char bufall[256];
+   char *pbuf = bufall;
+   int idx = 0;
+   char buffer2[128];
+   char *p;
+   
+   p = buffer2;
+   
+   uint16_t rozofs_safe    = rozofs_get_rozofs_safe(e->layout);
+   
+   pbuf+=sprintf(pbuf,"storage %s %u : ",(master==0)?"Slave":"Master",fileid);
+   p += rozofs_u32_padded_append(p,3, rozofs_zero,q->s.attrs.sids[idx]);
+  for (idx = 1; idx < rozofs_safe; idx++) {
+    *p++ = '-';
+    p += rozofs_u32_padded_append(p,3, rozofs_zero,q->s.attrs.sids[idx]);
+  } 
+  pbuf +=sprintf(pbuf,"%s",buffer2);
+  info("FDL %s",bufall); 
+}
+/*
+**___________________________________________________________________________________________
+*/
+/*
+    @param e: pointer tio the exportd context
+    @param site_number: site identifier
+    @param name: name of the file to create (not used)
+    @param uid: user identifier
+    @param gid: group identifier
+    @param mode : file mode
+    @param plv2: pointer to the parent attributes (memory)
+    @param pslice: slice of the parent directory
+    
+    @param striping_factor: number of slave inode to create
+    @param striping_unit : striping unit in power of 2
+    @param hybrid: assert to one if the first striping_unit must be allocated in fast volume
+    
+    @retval attr_p: pointer to the attributes of the master inode (NULL in case of error)
+    @retval slave_attr_p: pointer to the context of the first slave inoode (NULL in case of error)
+*/    
+
+int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
+                           uint32_t gid, mode_t mode, ext_mattr_t  *ext_attrs_p,lv2_entry_t *plv2,uint32_t pslice,ext_mattr_t **attr_slave_p,
+			   uint32_t striping_factor,uint32_t striping_unit,int hybrid)
+{
+      int inode_count;
+      ext_mattr_t *buf_slave_inode_p = NULL;
+      ext_mattr_t *buf_slave_inode_work_p = NULL;
+      rozofs_inode_t *fake_inode;  
+      exp_trck_top_header_t *p = NULL;  
+      int ret;  
+      int xerrno; 
+      int k; 
+      int inode_allocated = 0;
+
+      info("FDL create a file in multiple mode : factor %u unit %u",striping_factor,striping_unit);
+      *attr_slave_p = NULL;
+      
+      /*
+      ** get the number of inode to create according to the striping factor
+      */
+      inode_count = 1 << striping_factor;
+      /*
+      ** allocate the buffer
+      */
+      buf_slave_inode_p = memalign(32,sizeof(ext_mattr_t)*(inode_count));
+      if (buf_slave_inode_p == NULL)
+      {
+	xerrno=ENOMEM;
+	goto error;
+      }
+      buf_slave_inode_work_p = buf_slave_inode_p;
+
+      /*
+      ** copy the parent fid of the regular file
+      */
+      memset(ext_attrs_p,0x00,sizeof(ext_mattr_t));
+      memcpy(&ext_attrs_p->s.pfid,pfid,sizeof(fid_t));
+      /*
+      ** Put the reference of the share (or project) in the i-node
+      */
+      ext_attrs_p->s.hpc_reserved.reg.share_id = plv2->attributes.s.attrs.cid;    
+      /*
+      ** For the case of the hybrid mode, we try to allocate the distribution of the master inode in the 
+      ** fast volume: the max size that could be written is found in striping_unit_byte
+      */
+      if (e->volume_fast != NULL) 
+      {
+        hybrid = 1;
+      }
+      if (hybrid)
+      {
+	/*
+	** get the distribution for the file:
+	**  When the export has a fast volume, we check the suffix of the file to figure out if the file can be allocated
+	**  with the fast volume. When the fast volume is full or because the fast quota is reached, we allocate the file
+	**  within the default volume associated with the exportd
+	*/
+	while (1)
+	{
+	  if ((e->volume_fast != NULL) /*&& (rozofs_htable_tab_p[e->suffix_file_idx] !=NULL)*/)
+	  {
+             /*
+	     ** we check if the suffix of the file can be candidate for fast volume
+	     */
+	     /* if (export_file_create_check_fast_htable(name,e->suffix_file_idx) >= 0) */
+	     {
+	       /*
+	       ** Check that some space left for the new file in case a hard quota is set for the fast volume
+	       */
+	       if (e->hquota_fast) {
+		 export_fstat_t * estats = export_fstat_get_stat(e->eid); 
+		 /*
+		 ** the thin provisioning does not apply to fast volume
+		 ** need to take care of the max size of the striping_unit.
+		 */         
+		 if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
+        	   /*
+		   ** no space left: use the regular procedure
+		   */
+		   if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) != 0)
+        	       goto error;
+		   break;
+		 }
+	       }	     
+	       /*
+	       ** attempt to allocate on fast volume
+	       */
+	       if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) == 0)
+	       {
+		 rozofs_mover_children_t *children_p;
+		 /*
+		 ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
+		 */
+		 children_p = (rozofs_mover_children_t*) &ext_attrs_p->s.attrs.children;
+		 children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
+		 break;
+	       }
+	     }
+	  }	
+	  /*
+	  ** default case
+	  */ 
+	  if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) != 0)
+              goto error;
+	  break;
+	}
+      }
+      
+//      fdl_debug_print_storage(e,ext_attrs_p,1,0);
+
+      ext_attrs_p->s.attrs.mode = mode;
+      rozofs_clear_xattr_flag(&ext_attrs_p->s.attrs.mode);
+      ext_attrs_p->s.attrs.uid = uid;
+      ext_attrs_p->s.attrs.gid = gid;
+      ext_attrs_p->s.attrs.nlink = 1;
+      ext_attrs_p->s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;
+      ext_attrs_p->s.i_state = 0;
+      ext_attrs_p->s.i_file_acl = 0;
+      ext_attrs_p->s.i_link_name = 0;
+      /*
+      ** Fill up the striping information
+      */
+      ext_attrs_p->s.multi_desc.master.master = 1;
+      ext_attrs_p->s.multi_desc.master.striping_unit = striping_unit;
+      ext_attrs_p->s.multi_desc.master.striping_factor = striping_factor;
+      ext_attrs_p->s.multi_desc.master.hybrid = hybrid;
+
+     /*
+     ** set atime,ctime and mtime
+     */
+      if ((ext_attrs_p->s.attrs.ctime = ext_attrs_p->s.attrs.atime = ext_attrs_p->s.attrs.mtime = ext_attrs_p->s.cr8time= time(NULL)) == -1)
+          goto error;
+      ext_attrs_p->s.attrs.size = 0;
+      /*
+      ** create the inode and write the attributes on disk:
+      ** allocate one more inode because we should consider the master inode
+      */
+      if(exp_attr_create_write_cond_burst(e->trk_tb_p,pslice,ext_attrs_p,inode_count+1) < 0)
+          goto error;
+      inode_allocated = 1;
+      /*
+      ** OK, now fill up all the slave inodes
+      */
+
+      for (k = 0; k < inode_count ; k++,buf_slave_inode_work_p++)
+      {
+	 /*
+	 ** copy the current attribute of the master inode
+	 */
+	 memcpy(buf_slave_inode_work_p,ext_attrs_p,sizeof(ext_mattr_t));
+	 /*
+	 ** allocate the distribution for the slave file
+	 */
+	 if (volume_distribute(e->layout,e->volume,site_number, &buf_slave_inode_work_p->s.attrs.cid, buf_slave_inode_work_p->s.attrs.sids) != 0)
+             goto error;
+	     
+//	 fdl_debug_print_storage(e,buf_slave_inode_work_p,0,k);
+
+	 /*
+	 ** Put the file index in the multi-file descriptor and adjust the fid (index part)
+	 */
+	 /*
+	 ** copy the parent fid of the regular file
+	 */
+	 memcpy(&buf_slave_inode_work_p->s.pfid,pfid,sizeof(fid_t));
+	 /*
+	 ** Put the reference of the share (or project) in the i-node
+	 */
+	 buf_slave_inode_work_p->s.multi_desc.byte = 0;
+	 buf_slave_inode_work_p->s.multi_desc.slave.master = 0;
+	 buf_slave_inode_work_p->s.multi_desc.slave.file_idx = k;
+	 fake_inode = (rozofs_inode_t*)buf_slave_inode_work_p->s.attrs.fid;
+	 /*
+	 ** update the fid of the slave inode
+	 */
+	 fake_inode->s.idx += (k+1);
+      }
+      /*
+      ** OK now flush the slave inode on disk
+      */
+      /*
+      ** set the pointer to the fid of the master inode
+      */
+      fake_inode  = (rozofs_inode_t*)ext_attrs_p->s.attrs.fid;
+      p = e->trk_tb_p->tracking_table[fake_inode->s.key];
+      ret = exp_metadata_write_slave_inode_burst(p,fake_inode,buf_slave_inode_p,sizeof(ext_mattr_t)*(inode_count), 0 /* sync */);
+      if (ret < 0)
+      {
+	/*
+	** error on writing inode
+	*/
+	goto error;
+       }
+       /*
+       ** the flushing of the master inode on disk and sync will take place after the insertion in the dentry
+       */
+       *attr_slave_p = buf_slave_inode_p;
+       return 0;
+
+  error:
+       if (buf_slave_inode_p != NULL) xfree(buf_slave_inode_p);
+       xerrno = errno;
+       if (inode_allocated)
+       {
+          export_tracking_table_t *trk_tb_p;   
+	  fake_inode = (rozofs_inode_t*)ext_attrs_p->s.attrs.fid;
+	  /*
+	  ** release the inodes that has been allocated
+	  */
+	  trk_tb_p = e->trk_tb_p;
+	  for (k = 0; k < inode_count+1; k++)
+	  {
+            fake_inode->s.idx += (k+1);
+            exp_attr_delete(trk_tb_p,(unsigned char *)&fake_inode);     
+	  }
+	}
+	errno = xerrno;
+	return -1;              
+}    
+/*
+**__________________________________________________________________
+*/
+/**
+*   Get the striping factor and unit (provided in power of 2)
+
+    These 2 parameters depends on
+    - how the exportd has been configured
+    - how the directory has been configured (a directory can be marked with a striping factor & striping unit
+    - the suffix of the file to create (see the profile that can be associated with either the exportd or the directory
+    
+    @param e : pointer to the exportd context
+    @param plv2: pointer to the attributes of the parent directory
+    @param name: name of the file
+    @param striping_factor : pointer to the striping_factor value (return)
+    @param striping_unit: pointer to the striping unit (return)
+    
+    @retval none
+*/
+void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,char *name,uint32_t *striping_factor,uint32_t *striping_unit,int *hybrid)
+{
+   /*
+   ** Check if the striping is configured at directory level
+   */
+   if (plv2->attributes.s.multi_desc.byte == 0)
+   {
+     /*
+     ** nothing defined at directory level so get the information from the exportd
+     */   
+     *striping_factor = e->stripping.factor;
+     *striping_unit =  e->stripping.unit;
+     *hybrid = 0;
+     return;
+   }
+   *striping_factor = plv2->attributes.s.multi_desc.master.striping_factor;
+   *striping_unit= plv2->attributes.s.multi_desc.master.striping_unit;
+   *hybrid = 0;
+}
+
 
 
 /*
@@ -3146,22 +3558,26 @@ lv2_entry_t *  export_get_recycled_inode(export_t *e,fid_t pfid,ext_mattr_t *ext
 */
 /** create a new file
  *
- * @param e: the export managing the file
- * @param site_number: site number for geo-replication
- * @param pfid: the id of the parent
- * @param name: the name of this file.
- * @param uid: the user id
- * @param gid: the group id
- * @param mode: mode of this file
- * @param[out] attrs:  to fill (child attributes used by upper level functions)
- * @param[out] pattrs:  to fill (parent attributes)
+ @param e: the export managing the file
+ @param site_number: site number for geo-replication
+ @param pfid: the id of the parent
+ @param name: the name of this file.
+ @param uid: the user id
+ @param gid: the group id
+ @param mode: mode of this file
+ @param[out] attrs:  to fill (child attributes used by upper level functions)
+ @param[out] pattrs:  to fill (parent attributes)
+ @param slave_len[out]: length of the slave inode part 
+ @param slave_buf_p[out]: pointer to the array where content of slave inode context is found
   
- * @return: 0 on success -1 otherwise (errno is set)
+ @retval: 0 on success 
+ @retval -1 otherwise (errno is set)
  */
 #define ROZOFS_SLICE "@rozofs_slice@"
 
 int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
-        uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs) {
+        uint32_t gid, mode_t mode, struct inode_internal_t *attrs,struct inode_internal_t *pattrs,
+	unsigned int *slave_len,rozofs_slave_inode_t *slave_buf_p) {
     int status = -1;
     lv2_entry_t *plv2=NULL;
     lv2_entry_t *lv2_child = NULL;
@@ -3175,6 +3591,12 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     mdirent_fid_name_info_t fid_name_info;
     int root_dirent_mask = 0;
     lv2_entry_t *lv2_recycle=NULL;
+    uint32_t striping_factor = 0;
+    uint32_t striping_unit = 0;
+    int hybrid = 0;
+    int ret;
+    ext_mattr_t *attr_slave_p = NULL;
+    int length;
 
    
     START_PROFILING(export_mknod);
@@ -3328,98 +3750,123 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
       exp_trck_get_slice(pfid,&pslice);
     }
     /*
-    ** copy the parent fid of the regular file
+    ** Check if the file must be created with slave inodes: it will depends on the directory , the way the
+    ** export has been configured and the suffix of the file to create
     */
-    memset(&ext_attrs,0x00,sizeof(ext_attrs));
-    memcpy(&ext_attrs.s.pfid,pfid,sizeof(fid_t));
-    /*
-    ** Put the reference of the share (or project) in the i-node
-    */
-    ext_attrs.s.hpc_reserved.reg.share_id = plv2->attributes.s.attrs.cid;    
-    /*
-    ** check if there some fid to recycle
-    */
-    lv2_recycle = export_get_recycled_inode(e,pfid,&ext_attrs);
-    if (lv2_recycle == NULL)
+    rozofs_get_striping_factor_and_unit(e,plv2,name,&striping_factor,&striping_unit,&hybrid);
+    if (striping_factor != 0)
     {
+       ret = export_mknod_multiple2(e,site_number,
+                                    pfid,name,uid,gid, mode,
+				    &ext_attrs,
+				    plv2,pslice,&attr_slave_p,
+			            striping_factor,striping_unit,hybrid);
+       if (ret < 0) goto error;
+       /*
+       ** Indicate that the inodes have been allocated (master and slaves)
+       */
+       inode_allocated = 1;
+    } 
+    else
+    {   
+    
       /*
-      ** get the distribution for the file:
-      **  When the export has a fast volume, we check the suffix of the file to figure out if the file can be allocated
-      **  with the fast volume. When the fast volume is full or because the fast quota is reached, we allocate the file
-      **  within the default volume associated with the exportd
+      ** copy the parent fid of the regular file
       */
-      while (1)
+      memset(&ext_attrs,0x00,sizeof(ext_attrs));
+      memcpy(&ext_attrs.s.pfid,pfid,sizeof(fid_t));
+      /*
+      ** Put the reference of the share (or project) in the i-node
+      */
+      ext_attrs.s.hpc_reserved.reg.share_id = plv2->attributes.s.attrs.cid;    
+
+      /*
+      ** check if there some fid to recycle
+      */
+      lv2_recycle = export_get_recycled_inode(e,pfid,&ext_attrs);
+      if (lv2_recycle == NULL)
       {
-	if ((e->volume_fast != NULL) && (rozofs_htable_tab_p[e->suffix_file_idx] !=NULL))
+	/*
+	** get the distribution for the file:
+	**  When the export has a fast volume, we check the suffix of the file to figure out if the file can be allocated
+	**  with the fast volume. When the fast volume is full or because the fast quota is reached, we allocate the file
+	**  within the default volume associated with the exportd
+	*/
+	while (1)
 	{
-           /*
-	   ** we check if the suffix of the file can be candidate for fast volume
-	   */
-	   if (export_file_create_check_fast_htable(name,e->suffix_file_idx) >= 0)
-	   {
-	     /*
-	     ** Check that some space os left for the new file in case a hard quota is set for the fast volume
+	  if ((e->volume_fast != NULL) && (rozofs_htable_tab_p[e->suffix_file_idx] !=NULL))
+	  {
+             /*
+	     ** we check if the suffix of the file can be candidate for fast volume
 	     */
-	     if (e->hquota_fast) {
-	       export_fstat_t * estats = export_fstat_get_stat(e->eid); 
+	     if (export_file_create_check_fast_htable(name,e->suffix_file_idx) >= 0)
+	     {
 	       /*
-	       ** the thin provisioning does not apply to fast volume
-	       */         
-	       if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
-        	 /*
-		 ** no space left: use the regular procedure
+	       ** Check that some space os left for the new file in case a hard quota is set for the fast volume
+	       */
+	       if (e->hquota_fast) {
+		 export_fstat_t * estats = export_fstat_get_stat(e->eid); 
+		 /*
+		 ** the thin provisioning does not apply to fast volume
+		 */         
+		 if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
+        	   /*
+		   ** no space left: use the regular procedure
+		   */
+		   if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
+        	       goto error;
+		   break;
+		 }
+	       }	     
+	       /*
+	       ** attempt to allocate on fast volume
+	       */
+	       if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) == 0)
+	       {
+		 rozofs_mover_children_t *children_p;
+		 /*
+		 ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
 		 */
-		 if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
-        	     goto error;
+		 children_p = (rozofs_mover_children_t*) &ext_attrs.s.attrs.children;
+		 children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
 		 break;
 	       }
-	     }	     
-	     /*
-	     ** attempt to allocate on fast volume
-	     */
-	     if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) == 0)
-	     {
-	       rozofs_mover_children_t *children_p;
-	       /*
-	       ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
-	       */
-	       children_p = (rozofs_mover_children_t*) &ext_attrs.s.attrs.children;
-	       children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
-	       break;
 	     }
-	   }
-	}	
-	/*
-	** default case
-	*/ 
-	if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
-            goto error;
-	break;
+	  }	
+	  /*
+	  ** default case
+	  */ 
+	  if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
+              goto error;
+	  break;
+	}
       }
-    }
-    ext_attrs.s.attrs.mode = mode;
-    rozofs_clear_xattr_flag(&ext_attrs.s.attrs.mode);
-    ext_attrs.s.attrs.uid = uid;
-    ext_attrs.s.attrs.gid = gid;
-    ext_attrs.s.attrs.nlink = 1;
-    ext_attrs.s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;
-    ext_attrs.s.i_state = 0;
-    ext_attrs.s.i_file_acl = 0;
-    ext_attrs.s.i_link_name = 0;
-   /*
-   ** set atime,ctime and mtime
-   */
-    if ((ext_attrs.s.attrs.ctime = ext_attrs.s.attrs.atime = ext_attrs.s.attrs.mtime = ext_attrs.s.cr8time= time(NULL)) == -1)
-        goto error;
-    ext_attrs.s.attrs.size = 0;
-    if (lv2_recycle == NULL)
-    {
-      /*
-      ** create the inode and write the attributes on disk
-      */
-      if(exp_attr_create_write_cond(e->trk_tb_p,pslice,&ext_attrs,ROZOFS_REG,NULL,0) < 0)
+//      fdl_debug_print_storage(e,&ext_attrs,1,0);
+
+      ext_attrs.s.attrs.mode = mode;
+      rozofs_clear_xattr_flag(&ext_attrs.s.attrs.mode);
+      ext_attrs.s.attrs.uid = uid;
+      ext_attrs.s.attrs.gid = gid;
+      ext_attrs.s.attrs.nlink = 1;
+      ext_attrs.s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;
+      ext_attrs.s.i_state = 0;
+      ext_attrs.s.i_file_acl = 0;
+      ext_attrs.s.i_link_name = 0;
+     /*
+     ** set atime,ctime and mtime
+     */
+      if ((ext_attrs.s.attrs.ctime = ext_attrs.s.attrs.atime = ext_attrs.s.attrs.mtime = ext_attrs.s.cr8time= time(NULL)) == -1)
           goto error;
-      inode_allocated = 1;
+      ext_attrs.s.attrs.size = 0;
+      if (lv2_recycle == NULL)
+      {
+	/*
+	** create the inode and write the attributes on disk
+	*/
+	if(exp_attr_create_write_cond(e->trk_tb_p,pslice,&ext_attrs,ROZOFS_REG,NULL,0) < 0)
+            goto error;
+	inode_allocated = 1;
+      }
     }
     /*
     ** update the bit in the root_idx bitmap of the parent directory
@@ -3461,7 +3908,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     */
     if (lv2_recycle == NULL)
     {  
-      lv2_child = lv2_cache_put_forced(e->lv2_cache,ext_attrs.s.attrs.fid,&ext_attrs);
+      lv2_child = lv2_cache_put_forced_multiple(e->lv2_cache,ext_attrs.s.attrs.fid,&ext_attrs,attr_slave_p);
     }
     else
     {
@@ -3495,10 +3942,18 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     
     status = 0;
     /*
-    ** return the parent attributes and the child attributes
+    ** return the parent attributes and the child attributes and the slave inodes if any
     */
     export_recopy_extended_attributes(e,plv2,pattrs);
     export_recopy_extended_attributes(e,(lv2_entry_t*)&ext_attrs,attrs);
+    length = rozofs_export_slave_inode_copy(slave_buf_p,lv2_child);
+    if (length < 0)
+    {
+       severe("slave inode pointer has been released");
+       goto error;
+    }
+    *slave_len = length;
+    
     goto out;
 
 error:
@@ -3507,7 +3962,12 @@ error:
     {
        export_tracking_table_t *trk_tb_p;   
        trk_tb_p = e->trk_tb_p;
-       exp_attr_delete(trk_tb_p,ext_attrs.s.attrs.fid);        
+       exp_attr_delete(trk_tb_p,ext_attrs.s.attrs.fid);   
+       /*
+       ** release the memory allocated for the slave inodes
+       */
+       if (attr_slave_p!=NULL) xfree(attr_slave_p);
+            
     }
 error_read_only:
     errno = xerrno;
@@ -3749,6 +4209,20 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     {
          ((rozofs_dir0_sids_t*)&ext_attrs.s.attrs.sids[0])->s.trash = ROZOFS_DIR_TRASH_RECURSIVE;
     }
+    /*
+    ** Check the case of the striping: new to kno if the child inherits from parent striping configuration
+    */
+    if (plv2->attributes.s.multi_desc.byte != 0)
+    {
+      /*
+      ** check the hybrid bit that is used at directory level to indicate that the children inherit from striping configuration
+      ** of the parent
+      */
+      if (plv2->attributes.s.multi_desc.master.hybrid != 0) 
+      {
+        ext_attrs.s.multi_desc.byte = plv2->attributes.s.multi_desc.byte;
+      }
+    }
     ext_attrs.s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;
     ext_attrs.s.i_state = 0;
     ext_attrs.s.i_file_acl = 0;
@@ -3965,8 +4439,22 @@ int exp_delete_file(export_t * e, lv2_entry_t *lvl2)
     }
     /*
     ** now delete the inode that contains the main attributes
+    ** need to take care of the multiple file case
     */
-    exp_attr_delete(trk_tb_p,rozofs_attr_p->s.attrs.fid);
+    if (rozofs_attr_p->s.multi_desc.common.master == 0)
+    {
+       /*
+       ** regular code without slave inodes
+       */
+       exp_attr_delete(trk_tb_p,rozofs_attr_p->s.attrs.fid);
+    }
+    else
+    {
+       /*
+       ** multiple file case
+       */
+       exp_attr_delete_multiple(trk_tb_p,rozofs_attr_p->s.attrs.fid,(int) (1<<rozofs_attr_p->s.multi_desc.master.striping_factor));
+    }
     return 0;        
 }  
  
@@ -4311,7 +4799,9 @@ int export_fid_recycle_attempt(export_t * e,lv2_entry_t *lv2)
    list_push_back(&e->recycle_buckets[fake_inode_p->s.usr_id].rmfiles, &rmfe->list);
    return 1;
 }
-
+/*
+**__________________________________________________________________
+*/
 char *export_build_deleted_name(char *buffer,uint64_t *inode_val,char *name)
 {
     time_t secondes;
@@ -4329,6 +4819,137 @@ char *export_build_deleted_name(char *buffer,uint64_t *inode_val,char *name)
     else sprintf(buffer,"@%s@%llx@%s",bufall,(unsigned long long int)*inode_val,name);
     return buffer;
 }
+
+/*
+**__________________________________________________________________
+*/
+/**
+*   Remove the projections associated with the slave inodes
+
+
+  @param e: pointer to the exportd context
+  @param master: pointer to the master inode cache entry
+  @param parent: fid of the parent inode
+  @name: name of the file to delete
+  
+  @retval 0 on success
+  @retval < 0 on error (see errno for details)
+
+ 
+*/
+int export_unlink_multiple2(export_t * e,lv2_entry_t *master,fid_t parent,char *name)
+{
+   ext_mattr_t *buf_slave_inode_p;
+   int nb_files;
+   int i;
+   lv2_entry_t *lv2;
+/*   uint64_t fake_size; */
+   rmfentry_disk_t trash_entry;   
+   rozofs_inode_t *fake_inode_p;
+   int ret;
+   /*
+   ** Check if the inode has slave inodes
+   */
+   if (master->attributes.s.multi_desc.common.master == 0) return 0;
+   
+   /*
+   ** find out the number of files to delete according to the striping
+   ** factor of the master inode
+   */
+   nb_files = 1 << master->attributes.s.multi_desc.master.striping_factor;
+
+   buf_slave_inode_p = master->slave_inode_p;
+   /*
+   ** The slave inodes MUST exist
+   */
+   if (buf_slave_inode_p == NULL)
+   {
+      errno = EPROTO;
+      return -1;
+
+   }
+   for (i=0; i< nb_files;i++,buf_slave_inode_p++)
+   {
+     /*
+     ** use a fake lv2 entry 
+     */
+     lv2 = (lv2_entry_t*)buf_slave_inode_p;
+     /*
+     ** Put a fake size  for trash usage
+     */
+#warning need to compute a fake size for the slave inode
+     lv2->attributes.s.attrs.size = master->attributes.s.attrs.size;
+ 
+     /*
+     ** take care of the mover: the "mover" distribution must be pushed in trash when it exists
+     */
+     rozofs_mover_unlink_mover_distribution(e,lv2);
+     // Compute hash value for this fid
+     uint32_t hash = rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid);
+     /*
+     ** prepare the trash entry
+     */
+     trash_entry.size = lv2->attributes.s.attrs.size;
+     memcpy(trash_entry.fid, lv2->attributes.s.attrs.fid, sizeof (fid_t));
+     /*
+     ** compute the storage fid
+     */
+     {
+       rozofs_mover_children_t mover_idx;
+       mover_idx.u32 = lv2->attributes.s.attrs.children;
+       rozofs_build_storage_fid(trash_entry.fid,mover_idx.fid_st_idx.primary_idx);
+     }
+
+     trash_entry.cid = lv2->attributes.s.attrs.cid;
+     memcpy(trash_entry.initial_dist_set, lv2->attributes.s.attrs.sids,
+             sizeof (sid_t) * ROZOFS_SAFE_MAX);
+     memcpy(trash_entry.current_dist_set, lv2->attributes.s.attrs.sids,
+             sizeof (sid_t) * ROZOFS_SAFE_MAX);
+     fake_inode_p =  (rozofs_inode_t *)parent;   
+     ret = exp_trash_entry_create(e->trk_tb_p,fake_inode_p->s.usr_id,&trash_entry); 
+     if (ret < 0)
+     {
+	/*
+	** error while inserting entry in trash file
+	*/
+	severe("error on trash insertion name %s error %s",name,strerror(errno)); 
+     }
+     /*
+     ** Preparation of the rmfentry
+     */
+     rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
+
+     /* Acquire lock on bucket trash list
+     */
+     if ((errno = pthread_rwlock_wrlock
+             (&e->trash_buckets[hash].rm_lock)) != 0) {
+         severe("pthread_rwlock_wrlock failed: %s", strerror(errno));
+         // Best effort
+     }
+     /*
+     ** Check size of file 
+     */
+     if (hash >= common_config.storio_slice_number )
+     {	      
+       severe(" bad hash value %d (max %d)",hash,common_config.storio_slice_number);
+     }
+     if (lv2->attributes.s.attrs.size >= RM_FILE_SIZE_TRESHOLD) {
+         // Add to front of list
+         list_push_front(&e->trash_buckets[hash].rmfiles, &rmfe->list);
+     } else {
+         // Add to back of list
+         list_push_back(&e->trash_buckets[hash].rmfiles, &rmfe->list);
+     }
+
+     if ((errno = pthread_rwlock_unlock
+             (&e->trash_buckets[hash].rm_lock)) != 0) {
+         severe("pthread_rwlock_unlock failed: %s", strerror(errno));
+         // Best effort
+     }
+   }
+   return 0;
+}
+
 /*
 **__________________________________________________________________
 */
@@ -4678,101 +5299,127 @@ duplicate_deleted_file:
 	      fid_has_been_recycled = export_fid_recycle_attempt(e,lv2);
 	      if (fid_has_been_recycled == 0)
 	      {
-	        /*
-		** take care of the mover: the "mover" distribution must be pushed in trash when it exists
-		*/
-	        rozofs_mover_unlink_mover_distribution(e,lv2);
-        	// Compute hash value for this fid
-        	uint32_t hash = rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid);
-
-        	/*
-		** prepare the trash entry
-		*/
-		trash_entry.size = lv2->attributes.s.attrs.size;
-        	memcpy(trash_entry.fid, lv2->attributes.s.attrs.fid, sizeof (fid_t));
+	        int no_master_distribution = 0;
+		uint32_t hash;
 		/*
-		** compute the storage fid
+		** Check the case of the multiple file
 		*/
-		{
-		  rozofs_mover_children_t mover_idx;
-		  mover_idx.u32 = lv2->attributes.s.attrs.children;
-		  rozofs_build_storage_fid(trash_entry.fid,mover_idx.fid_st_idx.primary_idx);
-		}
-
-        	trash_entry.cid = lv2->attributes.s.attrs.cid;
-        	memcpy(trash_entry.initial_dist_set, lv2->attributes.s.attrs.sids,
-                	sizeof (sid_t) * ROZOFS_SAFE_MAX);
-        	memcpy(trash_entry.current_dist_set, lv2->attributes.s.attrs.sids,
-                	sizeof (sid_t) * ROZOFS_SAFE_MAX);
-		fake_inode_p =  (rozofs_inode_t *)parent;   
-        	ret = exp_trash_entry_create(e->trk_tb_p,fake_inode_p->s.usr_id,&trash_entry); 
-		if (ret < 0)
+		if (lv2->attributes.s.multi_desc.common.master != 0)
 		{
 		   /*
-		   ** error while inserting entry in trash file
+		   ** check the case of the hybrid mode (in that case the master has a distribution within the fast volume
 		   */
-		   severe("error on trash insertion name %s error %s",name,strerror(errno)); 
-        	}
+		   if (lv2->attributes.s.multi_desc.master.hybrid == 0) no_master_distribution = 1;
+		   /*
+		   ** delete the projections associated with the slave inodes
+		   */
+		   export_unlink_multiple2(e,lv2,parent,name);
+		}
+		/*
+		** If there is no master distribution there is no need to release a projection file since there
+		** is no storage distribution
+		*/
+		if (no_master_distribution == 0)
+		{		
+	          /*
+		  ** take care of the mover: the "mover" distribution must be pushed in trash when it exists
+		  */
+	          rozofs_mover_unlink_mover_distribution(e,lv2);
+        	  // Compute hash value for this fid
+        	  hash = rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid);
+
+        	  /*
+		  ** prepare the trash entry
+		  */
+		  trash_entry.size = lv2->attributes.s.attrs.size;
+        	  memcpy(trash_entry.fid, lv2->attributes.s.attrs.fid, sizeof (fid_t));
+		  /*
+		  ** compute the storage fid
+		  */
+		  {
+		    rozofs_mover_children_t mover_idx;
+		    mover_idx.u32 = lv2->attributes.s.attrs.children;
+		    rozofs_build_storage_fid(trash_entry.fid,mover_idx.fid_st_idx.primary_idx);
+		  }
+
+        	  trash_entry.cid = lv2->attributes.s.attrs.cid;
+        	  memcpy(trash_entry.initial_dist_set, lv2->attributes.s.attrs.sids,
+                	  sizeof (sid_t) * ROZOFS_SAFE_MAX);
+        	  memcpy(trash_entry.current_dist_set, lv2->attributes.s.attrs.sids,
+                	  sizeof (sid_t) * ROZOFS_SAFE_MAX);
+		  fake_inode_p =  (rozofs_inode_t *)parent;   
+        	  ret = exp_trash_entry_create(e->trk_tb_p,fake_inode_p->s.usr_id,&trash_entry); 
+		  if (ret < 0)
+		  {
+		     /*
+		     ** error while inserting entry in trash file
+		     */
+		     severe("error on trash insertion name %s error %s",name,strerror(errno)); 
+        	  }
+		}
         	/*
 		** delete the metadata associated with the file
 		*/
 		ret = exp_delete_file(e,lv2);
-		/*
-		* In case of geo replication, insert a delete request from the 2 sites 
-		*/
-		if (e->volume->georep) 
-		{
+		if (no_master_distribution == 0)
+		{		
 		  /*
-		  ** update the geo replication: set start=end=0 to indicate a deletion 
+		  * In case of geo replication, insert a delete request from the 2 sites 
 		  */
-		  geo_rep_insert_fid(e->geo_replication_tb[0],
-                		     lv2->attributes.s.attrs.fid,
-				     0/*start*/,0/*end*/,
-				     e->layout,
-				     lv2->attributes.s.attrs.cid,
-				     lv2->attributes.s.attrs.sids);
-		  /*
-		  ** update the geo replication: set start=end=0 to indicate a deletion 
+		  if (e->volume->georep) 
+		  {
+		    /*
+		    ** update the geo replication: set start=end=0 to indicate a deletion 
+		    */
+		    geo_rep_insert_fid(e->geo_replication_tb[0],
+                		       lv2->attributes.s.attrs.fid,
+				       0/*start*/,0/*end*/,
+				       e->layout,
+				       lv2->attributes.s.attrs.cid,
+				       lv2->attributes.s.attrs.sids);
+		    /*
+		    ** update the geo replication: set start=end=0 to indicate a deletion 
+		    */
+		    geo_rep_insert_fid(e->geo_replication_tb[1],
+                		       lv2->attributes.s.attrs.fid,
+				       0/*start*/,0/*end*/,
+				       e->layout,
+				       lv2->attributes.s.attrs.cid,
+				       lv2->attributes.s.attrs.sids);
+		  }	
+        	  /*
+		  ** Preparation of the rmfentry
 		  */
-		  geo_rep_insert_fid(e->geo_replication_tb[1],
-                		     lv2->attributes.s.attrs.fid,
-				     0/*start*/,0/*end*/,
-				     e->layout,
-				     lv2->attributes.s.attrs.cid,
-				     lv2->attributes.s.attrs.sids);
-		}	
-        	/*
-		** Preparation of the rmfentry
-		*/
-                rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
+                  rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
 
-        	/* Acquire lock on bucket trash list
-		*/
-        	if ((errno = pthread_rwlock_wrlock
-                	(&e->trash_buckets[hash].rm_lock)) != 0) {
-                    severe("pthread_rwlock_wrlock failed: %s", strerror(errno));
-                    // Best effort
-        	}
-        	/*
-		** Check size of file 
-		*/
-		if (hash >= common_config.storio_slice_number )
-		{	      
-	          severe(" bad hash value %d (max %d)",hash,common_config.storio_slice_number);
+        	  /* Acquire lock on bucket trash list
+		  */
+        	  if ((errno = pthread_rwlock_wrlock
+                	  (&e->trash_buckets[hash].rm_lock)) != 0) {
+                      severe("pthread_rwlock_wrlock failed: %s", strerror(errno));
+                      // Best effort
+        	  }
+        	  /*
+		  ** Check size of file 
+		  */
+		  if (hash >= common_config.storio_slice_number )
+		  {	      
+	            severe(" bad hash value %d (max %d)",hash,common_config.storio_slice_number);
+		  }
+        	  if (lv2->attributes.s.attrs.size >= RM_FILE_SIZE_TRESHOLD) {
+                      // Add to front of list
+                      list_push_front(&e->trash_buckets[hash].rmfiles, &rmfe->list);
+        	  } else {
+                      // Add to back of list
+                      list_push_back(&e->trash_buckets[hash].rmfiles, &rmfe->list);
+        	  }
+
+        	  if ((errno = pthread_rwlock_unlock
+                	  (&e->trash_buckets[hash].rm_lock)) != 0) {
+                      severe("pthread_rwlock_unlock failed: %s", strerror(errno));
+                      // Best effort
+        	  }
 		}
-        	if (lv2->attributes.s.attrs.size >= RM_FILE_SIZE_TRESHOLD) {
-                    // Add to front of list
-                    list_push_front(&e->trash_buckets[hash].rmfiles, &rmfe->list);
-        	} else {
-                    // Add to back of list
-                    list_push_back(&e->trash_buckets[hash].rmfiles, &rmfe->list);
-        	}
-
-        	if ((errno = pthread_rwlock_unlock
-                	(&e->trash_buckets[hash].rm_lock)) != 0) {
-                    severe("pthread_rwlock_unlock failed: %s", strerror(errno));
-                    // Best effort
-        	}
 	      }
 	    }
             /*
@@ -7518,6 +8165,27 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     ctime_r((const time_t *)&ext_dir_mattr_p->s.update_time,bufall);
     DISPLAY_ATTR_TXT_NOCR("UTIME ", bufall);    
     DISPLAY_ATTR_ULONG("TSIZE",ext_dir_mattr_p->s.nb_bytes);
+    /*
+    ** Striping configuration
+    */
+    if (lv2->attributes.s.multi_desc.byte == 0)
+    {
+      DISPLAY_ATTR_TXT ("STRIPING","Not configured (follow either volume or export striping)");
+    }
+    else
+    {
+      if (lv2->attributes.s.multi_desc.master.striping_factor == 0)
+      {
+	DISPLAY_ATTR_TXT ("STRIPING","no striping forced");    
+	DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
+      }
+      else
+      {
+      DISPLAY_ATTR_UINT("S_FACTOR",1<< lv2->attributes.s.multi_desc.master.striping_factor);     
+      DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
+      DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
+      }
+    }
    return (p-value);  
   }
 
@@ -7621,6 +8289,69 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
      p += rozofs_format_flockp_string(p,lv2);
     *p++ = '\n';   
   }
+  /*
+  ** case of the multi file
+  */
+  if ((S_ISREG(lv2->attributes.s.attrs.mode)) && ( lv2->attributes.s.multi_desc.common.master != 0))
+  {
+    ext_mattr_t *slave_p;
+    int i;
+    int file_count = 1<< lv2->attributes.s.multi_desc.master.striping_factor;
+    slave_p = lv2->slave_inode_p;
+    DISPLAY_ATTR_UINT("S_FACTOR",1<< lv2->attributes.s.multi_desc.master.striping_factor);     
+    DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
+    DISPLAY_ATTR_TXT ("HYBRID",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
+    if (lv2->slave_inode_p == NULL)
+    {
+      DISPLAY_ATTR_TXT ("STATUS","Corrupted");
+    }
+    else
+    {
+       for (i = 0;i < file_count; i++,slave_p++)
+       {
+         char bufall[48];
+	  /*
+	  ** File only
+	  */
+	  sprintf(bufall," -- slave inode #%d --",i+1);
+	  DISPLAY_ATTR_TXT("S_INODE",bufall);
+	  DISPLAY_ATTR_UINT("CLUSTER",slave_p->s.attrs.cid);
+	  DISPLAY_ATTR_TITLE("STORAGE");
+	  p += rozofs_u32_padded_append(p,3, rozofs_zero,slave_p->s.attrs.sids[0]); 
+	  for (idx = 1; idx < rozofs_safe; idx++) {
+	    *p++ = '-';
+	    p += rozofs_u32_padded_append(p,3, rozofs_zero,slave_p->s.attrs.sids[idx]);
+	  } 
+	  p += rozofs_eol(p);
+	  
+	  DISPLAY_ATTR_TITLE("ST.SLICE");
+	  p += rozofs_u32_append(p,rozofs_storage_fid_slice(slave_p->s.attrs.fid)); 
+	  p += rozofs_eol(p);
+	  /*
+	  ** display the FID used for the storage
+	  */
+	  {
+	     fid_t fid_storage;
+	     int retcode;
+
+	     rozofs_build_storage_fid_from_attr(&slave_p->s.attrs,fid_storage,ROZOFS_PRIMARY_FID);
+	     DISPLAY_ATTR_TITLE( "FID_SP"); 
+	     rozofs_uuid_unparse(fid_storage,p);
+	     p += 36;
+	     *p++ = '\n';     
+	     retcode = rozofs_build_storage_fid_from_attr(&slave_p->s.attrs,fid_storage,ROZOFS_MOVER_FID);
+	     if (retcode == 0)
+	     {
+	       DISPLAY_ATTR_TITLE( "FID_SM"); 
+	       rozofs_uuid_unparse(fid_storage,p);
+	       p += 36;
+	       *p++ = '\n';             
+	     }  
+	  }         
+        }
+    }
+  }
+    
   return (p-value);  
 } 
 /*
@@ -7907,7 +8638,11 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   int          new_sids[ROZOFS_SAFE_MAX]; 
   uint8_t      rozofs_safe;
   uint64_t     valu64;
+  uint64_t     striping_factor;
+  uint64_t     striping_unit;
+  uint64_t     striping_follow;
   char * value=buf_xattr;
+  int ret;
   
   p=value;
   memcpy(buf_xattr,input_buf,length);
@@ -8062,6 +8797,71 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     }
     return 0;
   }
+  /*
+  ** case of the striping: striping_factor,striping_unit,follow
+  */
+  striping_follow = 0xAA55;
+  ret = sscanf(p," striping = %llu,%llu,%llu", 
+  		(long long unsigned int *)&striping_factor,
+		(long long unsigned int *)&striping_unit,
+		(long long unsigned int *)&striping_follow
+		);
+ 
+  switch (ret)
+  {
+    case 3: 
+      {
+striping:
+
+	if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
+	  errno = ENOTDIR;
+	  return -1;
+	}
+	if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR_POWEROF2)
+	{
+	  errno = ERANGE;
+	  return -1;        
+	}
+	if (striping_unit > ROZOFS_MAX_STRIPING_UNIT_POWEROF2)
+	{
+	  errno = ERANGE;
+	  return -1;        
+	}
+	/*
+	**  use he master bit to figure out if the children directory will inherit the striping configuration
+	**  of the parent directory. When striping_follow is different from 0 , the master bit is asserted
+	**
+	**  It is legal to configure a striping_factor of 0 for the case of the directory. It clearly indicates
+	**  that the files created under that directory will not use the striping even if it has been configured at
+	**  ether export or volume level.
+	*/
+	lv2->attributes.s.multi_desc.master.master = 1;
+	if (striping_follow != 0) lv2->attributes.s.multi_desc.master.hybrid = 1;
+	else lv2->attributes.s.multi_desc.master.hybrid = 0;
+	lv2->attributes.s.multi_desc.master.striping_factor = striping_factor;
+	lv2->attributes.s.multi_desc.master.striping_unit = striping_unit;
+	/*
+	** Save the striping configuration  on disk
+	*/
+	return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+      }
+
+    case 2:
+       if (striping_follow == 0xAA55) 
+       {
+	 striping_follow = 0;
+	 goto striping;  
+       } 
+       errno = EINVAL;
+       return -1;
+
+    case 1:
+       errno = EINVAL;
+       return -1;
+    default:
+       break;
+  }
+
   /*
   ** Is this an uid change 
   */  

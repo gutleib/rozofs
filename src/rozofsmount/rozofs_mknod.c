@@ -147,9 +147,9 @@ void rozofs_ll_mknod_cbk(void *this,void *param)
    ientry_t *pie = 0;
    struct stat stbuf;
    fuse_req_t req; 
-   epgw_mattr_ret_t ret ;
+   epgw_mattr_ret_no_data_t ret ;
    struct rpc_msg  rpc_reply;
-   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
 
    
    int status;
@@ -301,6 +301,15 @@ void rozofs_ll_mknod_cbk(void *this,void *param)
     *  update the timestamp in the ientry context
     */
     nie->timestamp = rozofs_get_ticker_us();
+    if (ret.slave_ino_len !=0)
+    {
+      /*
+      ** copy the slave inode information in the ientry of the master inode
+      */
+      int position;
+      position = XDR_GETPOS(&xdrs); 
+      rozofs_ientry_slave_inode_write(nie,ret.slave_ino_len,payload+position);
+    }
     /*
     ** get the parent attributes
     */

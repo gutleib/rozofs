@@ -71,6 +71,7 @@ typedef struct lv2_entry {
     list_t         file_lock;   ///< List of the lock on the FID
     list_t         move_list;   ///< pending fist of the file waiting for move validation
     void           *thin_provisioning_ctx_p;   /**< pointer to the thin provisioning context (for exportd with thin provisioning option) */
+    ext_mattr_t    *slave_inode_p;   /**< pointer to the contexts of the slave inode associated with a master inode */
 } lv2_entry_t;
 
 /** lv2 cache
@@ -233,6 +234,22 @@ lv2_entry_t *lv2_cache_put_th(export_tracking_table_t *trk_tb_p,lv2_cache_t *cac
 
 lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p);
 lv2_entry_t *lv2_cache_put_forced_th(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p);
+
+/*
+**__________________________________________________________________
+*/
+/**
+*   The purpose of that service is to store object master and slaves attributes in the attributes cache
+
+  @param attr_p: pointer to the attributes of the object
+  @param cache : pointer to the export attributes cache
+  @param fid : unique identifier of the object
+  
+  @retval <> NULL: attributes of the object
+  @retval == NULL : no attribute returned for the object (see errno for details)
+*/
+
+lv2_entry_t *lv2_cache_put_forced_multiple(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p,ext_mattr_t *slave_inode_p);
 
 /** Format statistics information about the lv2 cache
  *
@@ -472,4 +489,71 @@ void exp_release_attributes_tracking_context(export_tracking_table_t *tab_p);
    @retval -1 on error (see errno for details
 */
 int exp_meta_get_object_attributes(export_tracking_table_t *trk_tb_p,fid_t fid,lv2_entry_t *entry_p);
+/*
+**__________________________________________________________________
+*/
+/*
+**
+   Get the pointer to the slave inodes (multi-file)
+   
+   @param lv2_entry_t *entry_p
+   
+   @retval pointer to the slave inodes
+*/
+static inline ext_mattr_t *export_lv2_get_slave_inode_ptr (lv2_entry_t *entry_p)
+{
+  return entry_p->slave_inode_p;
+}
+
+/*
+**__________________________________________________________________
+*/
+/*
+**
+  Set the pointer to the slave inodes (multi-file)
+   
+   @param lv2_entry_t *entry_p
+   @param slave_inode_p: pointer to the slave inodes 
+   
+   @retval none
+*/
+static inline void export_lv2_set_slave_inode_ptr (lv2_entry_t *entry_p,ext_mattr_t *slave_inode_p)
+{
+  entry_p->slave_inode_p = slave_inode_p;
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+*  Create the attributes of a regular file in burst mode without write attributes on disk
+
+  create an oject according to its type. The service performs the allocation of the fid. 
+  It is assumed that all the other fields of the object attributes are already been filled in.
+  
+  @param trk_tb_p: export attributes tracking table
+  @param slice: slice of the parent directory
+  @param global_attr_p : pointer to the attributes of the object (master inode attributes)
+  @param inode_count: number of consecutive inode to allocated
+
+  
+  @retval 0 on success: (the attributes contains the lower part of the fid that is allocated by the service)
+  @retval -1 on error (see errno for details)
+*/
+int exp_attr_create_write_cond_burst(export_tracking_table_t *trk_tb_p,uint32_t slice,ext_mattr_t *global_attr_p,int inode_count);
+
+/*
+**__________________________________________________________________
+*/
+/**
+*    delete a master inode with its associated slave inodes (case of the multiple file mode)
+
+   @param trk_tb_p: export attributes tracking table
+   @param fid: fid of the object (key)
+   @param nb_slaves: number of slave inodes
+   
+   @retval 0 on success
+   @retval -1 on error
+*/
+int exp_attr_delete_multiple(export_tracking_table_t *trk_tb_p,fid_t fid,int nb_slaves);
 #endif

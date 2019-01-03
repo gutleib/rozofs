@@ -999,6 +999,8 @@ out:
     STOP_PROFILING(ep_statfs);
     return &ret;
 }
+
+
 /*
 **______________________________________________________________________________
 */
@@ -1011,6 +1013,8 @@ out:
 */
 epgw_mattr_ret_t * ep_lookup_1_svc(epgw_lookup_arg_t * arg, struct svc_req * req) {
     static epgw_mattr_ret_t ret;
+    fatal("Obsolete");
+#if 0
     export_t *exp;
     DEBUG_FUNCTION;
 
@@ -1020,7 +1024,8 @@ epgw_mattr_ret_t * ep_lookup_1_svc(epgw_lookup_arg_t * arg, struct svc_req * req
     START_PROFILING(ep_lookup);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_lookup
@@ -1039,8 +1044,10 @@ error:
     ret.status_gw.ep_mattr_ret_t_u.error = errno;
 out:
     STOP_PROFILING(ep_lookup);
+#endif
     return &ret;
 }
+
 /*
 **______________________________________________________________________________
 */
@@ -1054,6 +1061,9 @@ out:
 */
 epgw_mattr_ret_t * ep_getattr_1_svc(epgw_mfile_arg_t * arg, struct svc_req * req) {
     static epgw_mattr_ret_t ret;
+    
+     fatal("Obselete");
+#if 0
     export_t *exp;
     DEBUG_FUNCTION;
 
@@ -1063,7 +1073,8 @@ epgw_mattr_ret_t * ep_getattr_1_svc(epgw_mfile_arg_t * arg, struct svc_req * req
     START_PROFILING(ep_getattr);
 
     ret.parent_attr.status = EP_EMPTY;
-    
+    ret.slave_ino.slave_ino_len = 0;
+        
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_getattr
@@ -1083,8 +1094,11 @@ error:
     ret.status_gw.ep_mattr_ret_t_u.error = errno;
 out:
     STOP_PROFILING(ep_getattr);
+#endif
     return &ret;
 }
+
+
 /*
 **______________________________________________________________________________
 */
@@ -1097,7 +1111,11 @@ out:
     @retval: EP_FAILURE :error code associated with the operation (errno)
 */
 epgw_mattr_ret_t * ep_setattr_1_svc(epgw_setattr_arg_t * arg, struct svc_req * req) {
+    
     static epgw_mattr_ret_t ret;
+    
+     fatal("Obselete");
+#if 0
     export_t *exp;
     DEBUG_FUNCTION;
 
@@ -1107,7 +1125,8 @@ epgw_mattr_ret_t * ep_setattr_1_svc(epgw_setattr_arg_t * arg, struct svc_req * r
     START_PROFILING(ep_setattr);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_setattr(exp, (unsigned char *) arg->arg_gw.attrs.fid,
@@ -1127,8 +1146,10 @@ error:
     ret.status_gw.ep_mattr_ret_t_u.error = errno;
 out:
     STOP_PROFILING(ep_setattr);
+#endif
     return &ret;
 }
+
 /*
 **______________________________________________________________________________
 */
@@ -1196,7 +1217,8 @@ epgw_mattr_ret_t * ep_link_1_svc(epgw_link_arg_t * arg, struct svc_req * req) {
     START_PROFILING(ep_link);
     
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_link(exp, (unsigned char *) arg->arg_gw.inode,
@@ -1239,14 +1261,18 @@ epgw_mattr_ret_t * ep_mknod_1_svc(epgw_mknod_arg_t * arg, struct svc_req * req) 
     START_PROFILING(ep_mknod);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_mknod(
             exp,arg->hdr.gateway_rank, 
 	    (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name, arg->arg_gw.uid, arg->arg_gw.gid,
             arg->arg_gw.mode, (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
+	    &ret.slave_ino.slave_ino_len,
+	    NULL	    
+	    ) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.parent_attr.status = EP_SUCCESS;
@@ -1284,7 +1310,8 @@ epgw_mattr_ret_t * ep_mkdir_1_svc(epgw_mkdir_arg_t * arg, struct svc_req * req) 
     START_PROFILING(ep_mkdir);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_mkdir
@@ -1412,7 +1439,8 @@ epgw_mattr_ret_t * ep_symlink_1_svc(epgw_symlink_arg_t * arg, struct svc_req * r
     START_PROFILING(ep_symlink);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
 
@@ -1457,7 +1485,8 @@ epgw_mattr_ret_t * ep_symlink2_1_svc(epgw_symlink2_arg_t * arg, struct svc_req *
     START_PROFILING(ep_symlink);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
 
@@ -1612,7 +1641,8 @@ epgw_mattr_ret_t * ep_write_block_1_svc(epgw_write_block_arg_t * arg,
     START_PROFILING_IO(ep_write_block, arg->arg_gw.length);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_write_block(exp,(unsigned char *) arg->arg_gw.fid, 

@@ -594,6 +594,20 @@ typedef union
    } meta;
 } rozofs_inode_t;
 
+/*
+**__________________________________________
+*/
+/*
+** I/O write error log entry structure
+*/
+typedef struct _rozofs_io_err_entry_t
+{
+  fid_t fid;       /**< FID of the file                */
+  uint64_t time;   /**< time at which the error occur  */
+  off_t    off;    /**< offset in file                 */
+  uint32_t len;    /**< length to write                */
+  int      error;  /**< returned error code (errno)    */
+} rozofs_io_err_entry_t;
 
 /*
 **__________________________________________

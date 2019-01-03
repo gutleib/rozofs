@@ -846,6 +846,9 @@ out:
 */
 void ep_lookup_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
+    
+    rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
+    
     epgw_lookup_arg_t * arg = (epgw_lookup_arg_t*)pt; 
     export_t *exp;
     DEBUG_FUNCTION;
@@ -856,13 +859,17 @@ void ep_lookup_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(ep_lookup);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    ret.slave_ino.slave_ino_val = (char*) slave_inode;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_lookup
             (exp, (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name,
             (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
+	    &ret.slave_ino.slave_ino_len,
+	    slave_inode) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status   = EP_SUCCESS;
@@ -892,6 +899,7 @@ out:
 void ep_getattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
     epgw_mfile_arg_t * arg = (epgw_mfile_arg_t*)pt; 
+    rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
     export_t *exp;
     DEBUG_FUNCTION;
 
@@ -901,13 +909,17 @@ void ep_getattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
    START_PROFILING(ep_getattr);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    ret.slave_ino.slave_ino_val = (char*) slave_inode;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_getattr
             (exp, (unsigned char *) arg->arg_gw.fid,
             (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-	    (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+	    (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
+	    &ret.slave_ino.slave_ino_len,
+	    slave_inode) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
@@ -939,6 +951,8 @@ out:
 void ep_setattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
     epgw_setattr_arg_t * arg = (epgw_setattr_arg_t*)pt; 
+    rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
+    
     export_t *exp;
     DEBUG_FUNCTION;
 
@@ -948,7 +962,9 @@ void ep_setattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(ep_setattr);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    ret.slave_ino.slave_ino_val = (char*) slave_inode;
+        
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_setattr(exp, (unsigned char *) arg->arg_gw.attrs.fid,
@@ -956,7 +972,9 @@ void ep_setattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         goto error;
     if (export_getattr(exp, (unsigned char *) arg->arg_gw.attrs.fid,
             (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-	    (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+	    (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
+	    &ret.slave_ino.slave_ino_len,
+	    slave_inode	) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.status_gw.status = EP_SUCCESS;
@@ -1045,7 +1063,8 @@ void ep_link_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(ep_link);
     
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_link(exp, (unsigned char *) arg->arg_gw.inode,
@@ -1080,6 +1099,7 @@ out:
 */
 void ep_mknod_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
+    static rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
     epgw_mknod_arg_t * arg = (epgw_mknod_arg_t*)pt; 
     export_t *exp;
     DEBUG_FUNCTION;
@@ -1090,14 +1110,17 @@ void ep_mknod_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(ep_mknod);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    ret.slave_ino.slave_ino_val = (char*) slave_inode;    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_mknod(
             exp,arg->hdr.gateway_rank, 
             (unsigned char *) arg->arg_gw.parent, arg->arg_gw.name, arg->arg_gw.uid, arg->arg_gw.gid,
             arg->arg_gw.mode, (struct inode_internal_t *) & ret.status_gw.ep_mattr_ret_t_u.attrs,
-            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs) != 0)
+            (struct inode_internal_t *) & ret.parent_attr.ep_mattr_ret_t_u.attrs,
+	    &ret.slave_ino.slave_ino_len,
+	    slave_inode) != 0)
         goto error;
     ret.hdr.eid = arg->arg_gw.eid ;  
     ret.parent_attr.status = EP_SUCCESS;
@@ -1137,7 +1160,8 @@ void ep_mkdir_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(ep_mkdir);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
     if (export_mkdir
@@ -1271,7 +1295,8 @@ void ep_symlink_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(ep_symlink);
 
     ret.parent_attr.status = EP_EMPTY;
-
+    ret.slave_ino.slave_ino_len = 0;
+    
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
 
@@ -1318,6 +1343,7 @@ void ep_symlink2_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING(ep_symlink);
 
     ret.parent_attr.status = EP_EMPTY;
+    ret.slave_ino.slave_ino_len = 0;
 
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
@@ -1520,6 +1546,7 @@ void ep_write_block_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     START_PROFILING_IO(ep_write_block, arg->arg_gw.length);
 
     ret.parent_attr.status = EP_EMPTY;
+    ret.slave_ino.slave_ino_len = 0;
 
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;

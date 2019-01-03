@@ -29,6 +29,7 @@
 #include "rozofs_fuse_thread_intf.h"
 #include "rozofs_kpi.h"
 #include "rozofs_cachetrack.h"
+#include "rozofs_io_error_trc.h"
 
 // For trace purpose
 struct timeval Global_timeDay;
@@ -770,8 +771,10 @@ int rozofs_stat_start(void *args) {
     }
     fuse_reply_thread_init();
     uma_dbg_addTopic("fuse_reply_thread", show_fuse_reply_thread);  
-    
-      
+    /*
+    ** init of the write error logging
+    */    
+    rozofs_iowr_err_init(args_p->instance);  
     /*
      ** main loop
      */

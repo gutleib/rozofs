@@ -31,6 +31,7 @@
 #include "file.h"
 #include "rozofs_ext4.h"
 
+
 #define ROZOFSMOUNT_MAX_EXPORT_TX 128
 #define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_STANDALONE  128
 #define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_PER_PROCESS  48
@@ -997,6 +998,68 @@ static inline int rozofs_get_striping_factor_from_ie(ientry_t *ie)
 
 }
 
+
+/*
+**__________________________________________________________________
+*/
+/**
+  Write slave inode context
+  
+  That service allocates memory to save the information related to the slave i-node.
+  The size of the arry depends on the striping factor of the master inode.
+  
+
+    @param ie: pointer to the inode information
+    @param len : data length in buffer_p
+    @param buffer_p: pointer to the slave inodes descriptors
+    
+    @retval  0 on success
+    @retval < 0 : error (see errno for details)
+*/
+
+static inline int rozofs_ientry_slave_inode_write(ientry_t *ie,uint32_t len,uint8_t *buffer_p)
+{
+  rozofs_multiple_desc_t *p;
+  rozofs_slave_inode_t *slave_inode_p;
+  int striping_factor;
+  struct inode_internal_t *inode_p = &ie->attrs;  
+  
+  p = &inode_p->multi_desc;
+  slave_inode_p = (rozofs_slave_inode_t*)buffer_p;
+  /*
+  ** Get the number of files
+  */
+  striping_factor = rozofs_get_striping_factor(p);
+  if (striping_factor < 0) return -1;
+  
+
+  if (striping_factor == 1) 
+  {
+    /*
+    ** Nothing to do since it the default case: single file
+    */
+    return 0;
+  }
+  if (len != sizeof(rozofs_slave_inode_t)*striping_factor)
+  {
+    severe("slave inode buffer size insconsistent: %u (expected :%u)",(unsigned int) len,(unsigned int)sizeof(rozofs_slave_inode_t)*striping_factor);
+    errno = EINVAL;
+    return -1;
+  }
+  if (ie->slave_inode_p == NULL) 
+  {
+    ie->slave_inode_p = xmalloc(sizeof(rozofs_slave_inode_t)*striping_factor);
+    if (ie->slave_inode_p == NULL)
+    {
+      errno = ENOMEM;
+      return -1;
+    }
+  }
+  memcpy(ie->slave_inode_p,slave_inode_p,sizeof(rozofs_slave_inode_t)*striping_factor);
+  return 0;
+}
+
+
 /*
 **__________________________________________________________________
 */
@@ -1094,6 +1157,7 @@ static inline rozofs_slave_inode_t *rozofs_get_slave_inode_from_ie(ientry_t *ie)
 static inline int rozofs_fill_storage_info_multiple(ientry_t *ie,cid_t *cid,uint8_t *sids_p,fid_t fid_storage,uint16_t file_idx)
 {
   mattr_t *attrs_p;
+  rozofs_inode_t *inode_p;
   rozofs_mover_children_t mover_idx;   
   rozofs_slave_inode_t *slave_inode_p = NULL; 
    
@@ -1119,12 +1183,12 @@ static inline int rozofs_fill_storage_info_multiple(ientry_t *ie,cid_t *cid,uint
   /*
   ** get the cluster and the list of the sid
   */
-  /*
-  ** !!!!!! WARNING !!!!!!!!
-  **   need to append file_idx+1 to the index part of the master FID
-  */
-  
   memcpy(fid_storage,attrs_p->fid,sizeof(fid_t));
+  /*
+  ** append the file index to the fid to get the real fid of the slave inode on the storage side
+  */
+  inode_p = (rozofs_inode_t*)fid_storage;
+  inode_p->s.idx += (file_idx+1);
 
   rozofs_build_storage_fid(fid_storage,mover_idx.fid_st_idx.primary_idx);   
   
@@ -1134,7 +1198,8 @@ static inline int rozofs_fill_storage_info_multiple(ientry_t *ie,cid_t *cid,uint
 }
 
 
-
+#define ROZOFS_FDL_MAX_SID 12  /* for test purpose */
+#define ROZOFS_FDL_FILE_SID 8 /* for test purpose */
 static inline int rozofs_build_fake_slave_inode(ientry_t *ie,int striping_factor,int striping_unit)
 {
 
@@ -1144,7 +1209,19 @@ static inline int rozofs_build_fake_slave_inode(ientry_t *ie,int striping_factor
   int ret;
   rozofs_multiple_desc_t * p;
   int i;
-   
+
+#if 0
+  uint8_t dist1[]={1,3,4,5,6,7,8,2};
+  uint8_t dist2[]={6,7,8,9,10,11,12,2};
+  uint8_t dist3[]={10,11,12,1,2,3,4,5};
+  uint8_t dist4[]={3,4,5,6,7,8,10,11};     
+#endif
+
+  uint8_t dist1[]={1,4,7,10,2,5,8,11};
+  uint8_t dist2[]={3,5,8,11,1,6,9,12};
+  uint8_t dist3[]={1,6,9,12,3,4,7,10};
+  uint8_t dist4[]={3,5,8,11,10,7,6,2};    
+
   
   struct inode_internal_t *inode_p = &ie->attrs;  
   p = &inode_p->multi_desc;
@@ -1173,7 +1250,37 @@ static inline int rozofs_build_fake_slave_inode(ientry_t *ie,int striping_factor
   {
       q->size = 0;
       q->cid = inode_p->attrs.cid;
-      memcpy(q->sids,inode_p->attrs.sids,ROZOFS_SAFE_MAX);
+      memset(q->sids,0,ROZOFS_SAFE_MAX);
+      switch (i)
+      {
+         case 0:
+	   memcpy(q->sids,dist1,ROZOFS_FDL_FILE_SID);
+	   break;
+         case 1:
+	   memcpy(q->sids,dist2,ROZOFS_FDL_FILE_SID);
+	   break;
+         case 2:
+	   memcpy(q->sids,dist3,ROZOFS_FDL_FILE_SID);
+	   break;
+         case 3:
+	   memcpy(q->sids,dist4,ROZOFS_FDL_FILE_SID);
+	   break;
+      
+      }
+#if 0
+      {
+         int idx;
+//	 pbuf += sprintf(pbuf,"File %d: ",i+1);
+         for (idx = 0; idx < ROZOFS_FDL_FILE_SID;idx++)
+	 {
+//	   q->sids[idx]=(idx+1+4*(i))%ROZOFS_FDL_MAX_SID;
+//           q->sids[idx]=(dist[idx]+4*(i))%ROZOFS_FDL_MAX_SID;
+	   if (q->sids[idx] == 0) q->sids[idx]=ROZOFS_FDL_MAX_SID;
+//	   pbuf +=sprintf(pbuf,"%d ",q->sids[idx]);
+         }
+      }
+//      info ("FDL distrib: %s",bufall);
+#endif
       mover_idx.fid_st_idx.primary_idx = i+1;
       q->children = mover_idx.u32;      
   
@@ -1186,6 +1293,93 @@ static inline int rozofs_build_fake_slave_inode(ientry_t *ie,int striping_factor
   return ret;
   
 }
+
+/*
+**__________________________________________________________________
+*/
+/*
+**  Update the size of a slave inode
+    
+    That function is called during file write
+   
+    @param ie: pointer to the master ientry
+    @param file_idx : index of the slave inode
+    @param size: new size
+    
+    @retval 0 on success
+    @retval < 0 on error see errno for details
+*/
+static inline int rozofs_slave_inode_update_size_write(ientry_t *ie,int file_idx,size_t size)
+{
+  rozofs_slave_inode_t *slave_inode_p = NULL; 
+   
+  /*
+  ** does not care about file index 0 since it designates the master inode
+  */
+  if (file_idx == 0) return 0;
+  
+  /*
+  ** case of a slave file
+  */
+  file_idx -=1;
+  /*
+  ** Get the pointer to the slave inodes
+  */
+  slave_inode_p = rozofs_get_slave_inode_from_ie(ie);
+  if (slave_inode_p == NULL)
+  {  
+     errno = EINVAL;
+     return -1;
+  }
+  slave_inode_p +=file_idx;
+  if (slave_inode_p->size < size) slave_inode_p->size = size;
+
+  return 0;
+}
+
+
+/*
+**__________________________________________________________________
+*/
+/*
+**  Update the size of a slave inode
+    
+    That function is called during file truncate 
+   
+    @param ie: pointer to the master ientry
+    @param file_idx : index of the slave inode
+    @param size: new size
+    
+    @retval 0 on success
+    @retval < 0 on error see errno for details
+*/
+static inline int rozofs_slave_inode_update_size_truncate(ientry_t *ie,int file_idx,size_t size)
+{
+  rozofs_slave_inode_t *slave_inode_p = NULL; 
+   
+  /*
+  ** does not care about file index 0 since it designates the master inode
+  */
+  if (file_idx == 0) return 0;
+  
+  /*
+  ** case of a slave file
+  */
+  file_idx -=1;
+  /*
+  ** Get the pointer to the slave inodes
+  */
+  slave_inode_p = rozofs_get_slave_inode_from_ie(ie);
+  if (slave_inode_p == NULL)
+  {  
+     errno = EINVAL;
+     return -1;
+  }
+  slave_inode_p +=file_idx;
+  slave_inode_p->size = size;
+
+  return 0;
+}   
 
 /*
 **__________________________________________________________________
@@ -1214,4 +1408,95 @@ void rozofs_ll_truncate_cbk(void *this,void *param);
  
 */ 
 int truncate_buf_multitple_nb(void *fuse_ctx_p,ientry_t *ie, uint64_t size);
+/*
+**__________________________________________________________________
+*/
+/** Send a request to the export server to know the file size
+ *  adjust the write buffer to write only whole data blocks,
+ *  reads blocks if necessary (incomplete blocks)
+ *  and uses the function write_blocks to write data
+ 
+    The opaque fields of the transaction context are used as follows:
+    
+     - opaque[0]: command index (index within the shared buffer=
+     - opaque[1]: index of the file
+     - opaque[2]: requested length
+ *
+ * @param *f: pointer to the file structure
+ * @param off: offset to write from
+ * @param *buf: pointer where the data are be stored
+ * @param len: length to write
+*/
+ 
+int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char *buf, uint32_t len);
+/*
+**__________________________________________________________________
+*/
+/** Send a request to the export server to know the file size
+   adjust the write buffer to write only whole data blocks,
+   reads blocks if necessary (incomplete blocks)
+   and uses the function write_blocks to write data
+   
+   When 'thread' is asserted, we just copy the data from kernel to the allocated shared bufffer 
+   and then sends back a response in order to finish the write transaction.
+ 
+    The opaque fields of the transaction context are used as follows:
+    
+     - opaque[0]: command index (index within the shared buffer=
+     - opaque[1]: index of the file
+ 
+ @param *f: pointer to the file structure
+ @param off: offset to write from
+ @param *buf: pointer where the data are be stored
+ @param len: length to write
+ @param thread : assert to 1 if it is called from the write thread , 0 otherwise
+*/
+ 
+int64_t write_buf_multiple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char *buf, uint32_t len,int thread);
+
+/*
+**__________________________________________________________________________
+*/
+/**
+   
+   Process a write request after the copy of data from kernel to shared buffer by a write thread.
+   It corresponds to the function which is called when the file has no slave inodes (multiple file)
+
+    The message contains the following information:
+   -opcode          : ROZOFS_FUSE_WRITE_BUF_MULTI
+   -rozofs_tx_ctx_p : contains the pointer to the fuse_context
+   -status          : 0 if not error -1 otherwise
+   -errval          : errno value
+   
+   The message has been encoded by the write thread, so we just need to send the message to the selected storcli
+*/   
+void af_unix_fuse_write_process_response_multiple(void *msg_p);
+
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*   Post a write request in multiple mode towards a write thread
+
+    In multiple mode, the write thread performs the copy of the write data from the kernel space towards 
+    the allocated shared buffer, then upon receiving the response, the main thread allocates
+    all the need resources to perform the write.
+    The only difference between the write without threads is the copy of the data from the kernel by the thread
+
+    The message contains the following information:
+   -opcode          : ROZOFS_FUSE_WRITE_BUF_MULTI
+   -rozofs_tx_ctx_p : contains the pointer to the fuse_context
+   -rm_xid          : length to write
+   
+   all the other fields are not significant 
+    
+    @param fuse_ctx_p
+    @param off: file offset
+    @param len: length to copy
+    
+    @retval 0 on success
+    @retval -1 on error (see errno for details)
+*/
+int rozofs_storcli_wr_thread_send_multiple(void *fuse_ctx_p,uint64_t off,uint32_t len);
 #endif

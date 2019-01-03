@@ -28,6 +28,7 @@
 #include "rozofs_rw_load_balancing.h"
 #include "rozofs_sharedmem.h"
 #include "rozofs_kpi.h"
+#include "rozofs_io_error_trc.h"
 DECLARE_PROFILING(mpp_profiler_t);
 
 
@@ -950,9 +951,17 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
    ientry_t *ie;
    int use_write_thread = 0 ;
 
-#warning FDL all is multiple
-   return write_buf_multitple_nb(buffer_p,f,off,buf,len);
-   
+    ie = f->ie;
+   /*
+   ** Check the case of the multifile mode: there is a master inode with several slave inodes associated with it
+   */
+   if (ie->attrs.multi_desc.common.master != 0)
+   {   
+      return  write_buf_multiple_nb(buffer_p,f,off,buf,len,0);
+   }  
+   /*
+   ** default case: only the master inode with no slave inodes
+   */    
    if (ROZOFS_MAX_WRITE_THREADS != 0)
    {
      void * kernel_fuse_write_request;
@@ -963,7 +972,7 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
    }  
 
     // Fill request
-    ie = f->ie;
+
     args.cid = ie->attrs.attrs.cid;
     args.layout = f->export->layout;
     args.bsize = exportclt.bsize;
@@ -1087,6 +1096,14 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
 
     return ret;    
 error:
+    /*
+    ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+    */
+    {
+      int save_errno = errno;
+      rozofs_iowr_err_log(f->fid,off,len,errno);
+      errno = save_errno;
+    }
     f->buf_write_pending--;
     return ret;
 
@@ -1458,7 +1475,7 @@ void rozofs_ll_write_cbk(void *this,void *param)
        ** something wrong happened
        */
        errno = rozofs_tx_get_errno(this); 
-       severe(" transaction error %s",strerror(errno));
+       //severe(" transaction error %s",strerror(errno));
        goto error; 
     }
     /*
@@ -1562,7 +1579,19 @@ error:
     {
        file->wr_error = errno; 
     }
-    
+    /*
+    ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+    */
+    {
+      uint32_t buf_flush_len;
+      uint64_t buf_flush_offset;
+      int save_errno = errno;
+      
+      RESTORE_FUSE_PARAM(param,buf_flush_offset);
+      RESTORE_FUSE_PARAM(param,buf_flush_len);
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno);    
+      errno = save_errno;
+    }
     /*
     ** When a fuse response is expected send it
     */
@@ -1880,7 +1909,7 @@ void rozofs_asynchronous_flush_cbk(void *this,void *param)
        ** something wrong happened
        */
        errno = rozofs_tx_get_errno(this); 
-       severe(" transaction error %s",strerror(errno));
+       //severe(" transaction error %s",strerror(errno));
        goto error; 
     }
     /*
@@ -1958,6 +1987,19 @@ error:
     }
 //    fuse_reply_err(req, errno);
     /*
+    ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+    */
+    {
+      uint32_t buf_flush_len;
+      uint64_t buf_flush_offset;
+      int save_errno = errno;
+      
+      RESTORE_FUSE_PARAM(param,buf_flush_offset);
+      RESTORE_FUSE_PARAM(param,buf_flush_len);
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno);  
+      errno = save_errno;  
+    }
+    /*
     ** release the transaction context and the fuse context
     */
 //    STOP_PROFILING_NB(param,rozofs_ll_flush);
@@ -2028,7 +2070,7 @@ void rozofs_ll_flush_cbk(void *this,void *param)
        ** something wrong happened
        */
        errno = rozofs_tx_get_errno(this); 
-       severe(" transaction error %s",strerror(errno));
+       // severe(" transaction error %s",strerror(errno));
        goto error; 
     }
     /*
@@ -2106,6 +2148,19 @@ error:
     if (file != NULL)
     {
        file->wr_error = errno; 
+    }
+    /*
+    ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+    */
+    {
+      uint32_t buf_flush_len;
+      uint64_t buf_flush_offset;
+      int save_errno = errno;
+      
+      RESTORE_FUSE_PARAM(param,buf_flush_offset);
+      RESTORE_FUSE_PARAM(param,buf_flush_len);
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno);   
+      errno = save_errno; 
     }
     fuse_reply_err(req, errno);
     /*
@@ -2391,7 +2446,7 @@ void rozofs_ll_release_cbk(void *this,void *param)
        ** something wrong happened
        */
        errno = rozofs_tx_get_errno(this); 
-       severe(" transaction error %s",strerror(errno));
+       //severe(" transaction error %s",strerror(errno));
        goto error; 
     }
     /*
@@ -2490,6 +2545,19 @@ error:
        file->wr_error = errno; 
     }
     fuse_reply_err(req, errno);
+    /*
+    ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+    */
+    {
+      uint32_t buf_flush_len;
+      uint64_t buf_flush_offset;
+      int save_errno = errno;
+      
+      RESTORE_FUSE_PARAM(param,buf_flush_offset);
+      RESTORE_FUSE_PARAM(param,buf_flush_len);
+      rozofs_iowr_err_log(file->fid,buf_flush_offset,buf_flush_len,errno); 
+      errno = save_errno;   
+    }
 
     /*
     ** release the transaction context and the fuse context
@@ -2594,7 +2662,7 @@ void rozofs_ll_release_defer(void *ns,void *param)
 */
 void export_force_write_block_cbk(void *this,void *param)
 {
-  epgw_mattr_ret_t ret ;
+  epgw_mattr_ret_no_data_t ret ;
   struct rpc_msg  rpc_reply;
 
 
@@ -2603,7 +2671,7 @@ void export_force_write_block_cbk(void *this,void *param)
   void     *recv_buf = NULL;   
   XDR       xdrs;    
   int      bufsize;
-  xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+  xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
   rozofs_fuse_save_ctx_t *fuse_ctx_p;
   errno = 0;
   int trc_idx;
@@ -2734,6 +2802,15 @@ void export_force_write_block_cbk(void *this,void *param)
     */
     rozofs_ientry_update(ie,(struct inode_internal_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
     //ie->file_extend_running = 0;
+    if (ret.slave_ino_len !=0)
+    {
+      /*
+      ** copy the slave inode information in the ientry of the master inode
+      */
+      int position;
+      position = XDR_GETPOS(&xdrs); 
+      rozofs_ientry_slave_inode_write(ie,ret.slave_ino_len,payload+position);
+    }
   }
 
   xdr_free((xdrproc_t) decode_proc, (char *) &ret);    
@@ -2837,7 +2914,7 @@ int rozofs_export_queue_ie_in_wr_block_list_from_fuse_ctx(void *param)
  
 void export_write_block_retry_cbk(void *this,void *param) 
 {
-   epgw_mattr_ret_t ret ;
+   epgw_mattr_ret_no_data_t ret ;
    struct rpc_msg  rpc_reply;
 
    
@@ -2846,7 +2923,7 @@ void export_write_block_retry_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
    errno = 0;
    int trc_idx;
    ientry_t *ie = 0;
@@ -2940,6 +3017,15 @@ void export_write_block_retry_cbk(void *this,void *param)
       ** update the attributes in the ientry
       */
       rozofs_ientry_update(ie,(struct inode_internal_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
+      if (ret.slave_ino_len !=0)
+      {
+	/*
+	** copy the slave inode information in the ientry of the master inode
+	*/
+	int position;
+	position = XDR_GETPOS(&xdrs); 
+	rozofs_ientry_slave_inode_write(ie,ret.slave_ino_len,payload+position);
+      }
       ie->file_extend_running = 0;
       /*
       ** check if some more write blocks are pending
@@ -3361,7 +3447,7 @@ out:
  
 void export_write_block_cbk(void *this,void *param) 
 {
-   epgw_mattr_ret_t ret ;
+   epgw_mattr_ret_no_data_t ret ;
    struct rpc_msg  rpc_reply;
 
    
@@ -3370,7 +3456,7 @@ void export_write_block_cbk(void *this,void *param)
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
-   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_no_data_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    errno = 0;
    int trc_idx;
@@ -3500,6 +3586,16 @@ void export_write_block_cbk(void *this,void *param)
       ** update the attributes in the ientry
       */
       rozofs_ientry_update(ie,(struct inode_internal_t *)&ret.status_gw.ep_mattr_ret_t_u.attrs);  
+      if (ret.slave_ino_len !=0)
+      {
+	/*
+	** copy the slave inode information in the ientry of the master inode
+	*/
+	int position;
+	position = XDR_GETPOS(&xdrs); 
+	rozofs_ientry_slave_inode_write(ie,ret.slave_ino_len,payload+position);
+      }
+
       ie->file_extend_running = 0;
       /*
       ** check if some more write blocks are pending

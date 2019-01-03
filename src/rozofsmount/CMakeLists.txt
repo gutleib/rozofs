@@ -91,7 +91,8 @@ add_executable(rozofsmount
 #   ../exportd/rozofs_stdalone_eproto_nb.h
 #   ../exportd/rozofs_stdalone_eprotosvc_nb.c
 #   ../exportd/rozofs_stdalone_eprotosvc_nb.h
-
+   rozofs_io_error_trc.h
+   rozofs_io_error_trc.c   
 )
 #pthread need by fuse
 target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})

@@ -447,6 +447,76 @@ static inline void *exp_trk_malloc(int size, int line) {
     return p + 1;
 }
 
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    write attributes of the slave inode associated with an master inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the first slave inode
+    @param attr_p: pointer to the attribute array
+    @param attr_sz: size of the attributes
+    @param sync: whether to force sync on disk of attributes
 
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_write_slave_inode_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz, int sync);
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    read attributes of the slave inodes associated with an master inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the first slave inode
+    @param attr_p: pointer to the attribute array
+    @param attr_sz: size of the attributes
 
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_read_slave_inode_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz);
+
+/*
+**__________________________________________________________________
+*/
+/**
+*    allocate an consecutive range of inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the inode
+    @param key: key associated with the inode (opaque to the inode allocator
+    @param slice: slice to which the inode will belong
+    @param inode_count: number of consecutive inodes that must be allocated
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_allocate_inode_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,uint16_t key,uint8_t slice,int inode_count);
+/*
+**__________________________________________________________________
+*/
+/**
+*
+    release an inode within a given space
+    
+    @param top_hdr_p: pointer to the top table
+    @param inode: address of the first inode
+    @param nb_inodes: number of consecutive inode to delete
+
+    
+    @retval 0 on success
+    @retval -1 on error
+    
+*/
+int exp_metadata_release_inode_multiple(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,int nb_inodes);
 #endif

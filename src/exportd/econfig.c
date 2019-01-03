@@ -69,8 +69,8 @@
 #define ENODEID     "nodeid"
 #define EFLOCKP     "flockp"
 
-#define ESTRIPPING     "stripping" // Multi file stripping configuration
-#define ESTRIPUNIT     "unit"      // Multi file stripping size in bytes = 256M * (1<<unit)
+#define ESTRIPPING     "striping" // Multi file striping configuration
+#define ESTRIPUNIT     "unit"      // Multi file striping size in bytes = 256KB * (1<<unit)
 #define ESTRIPFACTOR   "factor"    // Multi file number of sub file = 1<<factor 
 
 

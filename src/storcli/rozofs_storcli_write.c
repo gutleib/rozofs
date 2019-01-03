@@ -593,7 +593,7 @@ void rozofs_storcli_write_req_processing_exec(rozofs_storcli_ctx_t *working_ctx_
       /*
       ** direct error while attempting to read
       */
-      errcode = EFAULT;
+      errcode = EREMOTEIO;
       storcli_trace_error(__LINE__,errcode, working_ctx_p);     	   
       goto failure;   
    }

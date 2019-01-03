@@ -100,12 +100,17 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
    {
      severe("bad nb_prj %d max %d bid %llu off %llu len %u",nb_prj,max_prj,(long long unsigned int)bid,(long long unsigned int)off,len);   
    }
-#warning FDL force multiple file reading
-
-   return  read_buf_multitple_nb(buffer_p,f, off, buf,len);
-   
-   
+   /*
+   ** Check the case of the multifile mode: there is a master inode with several slave inodes associated with it
+   */
    ie = f->ie; 
+   if (ie->attrs.multi_desc.common.master != 0)
+   {   
+      return  read_buf_multitple_nb(buffer_p,f, off, buf,len);
+   }
+   /*
+   ** default case: only the master inode with no slave inodes
+   */
     if (rozofs_rotation_read_modulo == 0) {
       f->rotation_idx = 0;
     }

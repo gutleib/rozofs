@@ -402,7 +402,9 @@ int rozofs_storcli_internal_read_before_truncate_rsp_cbk(void *buffer,uint32_t s
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    uint32_t bsize = storcli_truncate_rq_p->bsize;
    uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize);
+   rozofs_storcli_ingress_write_buf_t  *wr_proj_buf_p;
    
+    wr_proj_buf_p = working_ctx_p->wr_proj_buf;   
 
    /*
    ** decode the read internal read reply
@@ -484,6 +486,20 @@ int rozofs_storcli_internal_read_before_truncate_rsp_cbk(void *buffer,uint32_t s
    position = XDR_GETPOS(&xdrs);
    data     = (char*)(payload+position);
 
+   /*
+   ** check the status of the read operation
+   */
+   if (rozofs_status.status != STORCLI_SUCCESS)
+   {
+     errcode = rozofs_status.storcli_status_ret_t_u.error;
+   
+     if (errcode != ENOENT) {
+       wr_proj_buf_p[ROZOFS_WR_FIRST].state = ROZOFS_WR_ST_ERROR;
+       wr_proj_buf_p[ROZOFS_WR_FIRST].errcode = errcode;
+       storcli_trace_error(__LINE__,errcode, working_ctx_p);     	   
+       goto failure;
+     }
+   }
    /*
    ** check the status of the read operation
    */
@@ -880,6 +896,7 @@ void rozofs_storcli_truncate_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
 {
 
   storcli_truncate_arg_t *storcli_truncate_rq_p = (storcli_truncate_arg_t*)&working_ctx_p->storcli_truncate_arg;
+  rozofs_storcli_ingress_write_buf_t  *wr_proj_buf_p = working_ctx_p->wr_proj_buf;
   int                     ret;
   int                     errcode;
     
@@ -894,6 +911,11 @@ void rozofs_storcli_truncate_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
     ** Release the pre-allocated storcli contexts
     */
     rozofs_storcli_rsvd_context_release(working_ctx_p);
+    /*
+    ** use the first buffer because we need the returned errcode
+    */
+    wr_proj_buf_p[ROZOFS_WR_FIRST].state = ROZOFS_WR_ST_RD_REQ;
+    wr_proj_buf_p[ROZOFS_WR_FIRST].errcode = 0;
     working_ctx_p->write_ctx_lock = 1;  /* Avoid direct response on internal read error */
     ret = rozofs_storcli_internal_read_before_truncate_req(working_ctx_p);
     working_ctx_p->write_ctx_lock = 0;
@@ -905,7 +927,14 @@ void rozofs_storcli_truncate_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
       storcli_trace_error(__LINE__,errcode,working_ctx_p);     	   
       goto fail;        
     } 
-    
+    /*
+    ** check if there is no immediate error on the internal read
+    */
+    if (wr_proj_buf_p[ROZOFS_WR_FIRST].state == ROZOFS_WR_ST_ERROR)
+    {
+       errcode = wr_proj_buf_p[ROZOFS_WR_FIRST].errcode;
+       goto fail;
+    }    
     /* Wait for the internal response */
     return;   
   } 

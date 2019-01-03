@@ -269,6 +269,17 @@ struct ep_mattr_ret_t {
 };
 typedef struct ep_mattr_ret_t ep_mattr_ret_t;
 
+struct epgw_mattr_ret_no_data_t {
+	struct ep_gateway_t hdr;
+	uint64_t free_quota;
+	uint32_t bsize;
+	uint8_t layout;
+	ep_mattr_ret_t status_gw;
+	ep_mattr_ret_t parent_attr;
+	uint32_t slave_ino_len;
+};
+typedef struct epgw_mattr_ret_no_data_t epgw_mattr_ret_no_data_t;
+
 struct epgw_mattr_ret_t {
 	struct ep_gateway_t hdr;
 	uint64_t free_quota;
@@ -276,6 +287,10 @@ struct epgw_mattr_ret_t {
 	uint8_t layout;
 	ep_mattr_ret_t status_gw;
 	ep_mattr_ret_t parent_attr;
+	struct {
+		u_int slave_ino_len;
+		char *slave_ino_val;
+	} slave_ino;
 };
 typedef struct epgw_mattr_ret_t epgw_mattr_ret_t;
 
@@ -1226,6 +1241,7 @@ extern  bool_t xdr_ep_conf_ret_t (XDR *, ep_conf_ret_t*);
 extern  bool_t xdr_epgw_conf_ret_t (XDR *, epgw_conf_ret_t*);
 extern  bool_t xdr_ep_mattr_t (XDR *, ep_mattr_t*);
 extern  bool_t xdr_ep_mattr_ret_t (XDR *, ep_mattr_ret_t*);
+extern  bool_t xdr_epgw_mattr_ret_no_data_t (XDR *, epgw_mattr_ret_no_data_t*);
 extern  bool_t xdr_epgw_mattr_ret_t (XDR *, epgw_mattr_ret_t*);
 extern  bool_t xdr_ep_fid_ret_t (XDR *, ep_fid_ret_t*);
 extern  bool_t xdr_epgw_fid_ret_t (XDR *, epgw_fid_ret_t*);
@@ -1356,6 +1372,7 @@ extern bool_t xdr_ep_conf_ret_t ();
 extern bool_t xdr_epgw_conf_ret_t ();
 extern bool_t xdr_ep_mattr_t ();
 extern bool_t xdr_ep_mattr_ret_t ();
+extern bool_t xdr_epgw_mattr_ret_no_data_t ();
 extern bool_t xdr_epgw_mattr_ret_t ();
 extern bool_t xdr_ep_fid_ret_t ();
 extern bool_t xdr_epgw_fid_ret_t ();

@@ -328,8 +328,111 @@ out:
 
 }
 
+/*__________________________________________________________________________
+*/
+/**
+*  Read data from a file
+   
+    The message contains the following information:
+   -opcode          : ROZOFS_FUSE_WRITE_BUF_MULTI
+   -rozofs_tx_ctx_p : contains the pointer to the fuse_context
+   -rm_xid          : length to write
+   
+   all the other fields are not significant 
+   
 
+  @param thread_ctx_p: pointer to the thread context
+  @param msg_p         : address of the message received
+  
+  @retval: none
+*/
+void rozofs_fuse_th_fuse_write_buf_multiple(rozofs_fuse_thread_ctx_t *thread_ctx_p,rozofs_fuse_wr_thread_msg_t * msg) 
+{
+    struct timeval     timeDay;
+    unsigned long long timeBefore, timeAfter;
+    void *shared_buf_ref;
+    void *fuse_ctx_p;
+    void * kernel_fuse_write_request;
+    int alignment;
+    int ret;
+    off_t off;
+    uint32_t size;
+    rozofs_shared_buf_wr_hdr_t  *share_wr_p;  
 
+    gettimeofday(&timeDay,(struct timezone *)0);  
+    timeBefore = MICROLONG(timeDay);
+    
+      
+    /*
+    ** update statistics
+    */
+    thread_ctx_p->stat.write_count++;     
+
+    fuse_ctx_p =msg->rozofs_tx_ctx_p;
+
+    /*
+    ** check the case of the READ since, we must set the value of the xid
+    ** at the top of the buffer
+    */
+    RESTORE_FUSE_PARAM(fuse_ctx_p,shared_buf_ref);
+    RESTORE_FUSE_PARAM(fuse_ctx_p,off);
+    RESTORE_FUSE_PARAM(fuse_ctx_p,size);
+    if (shared_buf_ref == NULL)
+    {
+       fatal("No shared buffer reference");
+    }
+    share_wr_p = (rozofs_shared_buf_wr_hdr_t*)ruc_buf_getPayload(shared_buf_ref);
+    alignment = off%16;
+    /*
+    ** copy the data in the shared buffer 
+    ** Set pointer to the buffer start and adjust with alignment
+    */
+    uint8_t * buf_start = (uint8_t *)share_wr_p;
+    buf_start += alignment+ROZOFS_SHMEM_WRITE_PAYLOAD_OFF;
+
+    /**
+    * copy the buffer 
+    */
+    
+    RESTORE_FUSE_PARAM(fuse_ctx_p,kernel_fuse_write_request);
+    if (kernel_fuse_write_request != NULL)
+    {
+       ioctl_big_wr_t data;
+
+       data.req = kernel_fuse_write_request;
+       data.user_buf = buf_start;      
+       data.user_bufsize = size;
+       ret = ioctl(rozofs_fuse_ctx_p->fd,5,&data); 
+       if (ret != 0)
+       {
+          msg->errval = EIO;
+	  goto error;
+       }
+    }
+    else
+    {
+       fatal("kernel_fuse_write_request NULL not supported !");  
+    }
+
+    msg->status = 0;
+out:
+    /*
+    ** Update statistics
+    */
+    gettimeofday(&timeDay,(struct timezone *)0);  
+    timeAfter = MICROLONG(timeDay);
+    thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+    return rozofs_fuse_wr_th_send_response(thread_ctx_p,msg);
+
+    
+  error:
+    msg->status = -1;
+    goto out;      
+
+}
+
+/*__________________________________________________________________________
+*/
 /*
 **   F U S E   W R I T E    T H R E A D
 */
@@ -399,7 +502,10 @@ void *rozofs_fuse_wr_thread(void *arg) {
       case ROZOFS_FUSE_WRITE_BUF:
         rozofs_fuse_th_fuse_write_buf(ctx_p,&msg);
         break;
-	
+      case ROZOFS_FUSE_WRITE_BUF_MULTI:
+        rozofs_fuse_th_fuse_write_buf_multiple(ctx_p,&msg);
+        break;
+		
       default:
         fatal(" unexpected opcode : %d\n",msg.opcode);
         exit(0);       
@@ -407,6 +513,8 @@ void *rozofs_fuse_wr_thread(void *arg) {
 //    sched_yield();
   }
 }
+/*__________________________________________________________________________
+*/
 /*
 ** Create the threads that will handle all the disk requests
 

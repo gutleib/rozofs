@@ -62,6 +62,7 @@ extern rozofs_fuse_thread_ctx_t rozofs_fuse_wr_thread_ctx_tb[];
 typedef enum _rozofs_fuse_thread_request_e {
   ROZOFS_FUSE_REPLY_BUF=1,
   ROZOFS_FUSE_WRITE_BUF,
+  ROZOFS_FUSE_WRITE_BUF_MULTI,
   ROZOFS_FUSE_THREAD_MAX_OPCODE
 } rozofs_fuse_thread_request_e;
 

@@ -420,6 +420,9 @@ void af_unix_fuse_response(rozofs_fuse_rd_wr_thread_msg_u *msg)
     }  
     case ROZOFS_FUSE_WRITE_BUF:          
       return af_unix_fuse_write_process_response(&msg->write);
+
+    case ROZOFS_FUSE_WRITE_BUF_MULTI:          
+      return af_unix_fuse_write_process_response_multiple(&msg->write);
       
     default:
       severe("Unexpected opcode %d", opcode);
