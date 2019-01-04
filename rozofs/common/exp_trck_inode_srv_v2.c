@@ -847,7 +847,7 @@ reload:
    ** the slave inodes
    */
    inode->s.idx = main_trck_p->cur_idx;
-   main_trck_p->cur_idx =+inode_count;
+   main_trck_p->cur_idx +=inode_count;
    /*
    ** check if the tracking file is full:
    ** when the tracking file is full, the main trk file is updated, the

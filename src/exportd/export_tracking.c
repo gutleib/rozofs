@@ -3307,7 +3307,6 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       int k; 
       int inode_allocated = 0;
 
-      info("FDL create a file in multiple mode : factor %u unit %u",striping_factor,striping_unit);
       *attr_slave_p = NULL;
       
       /*
@@ -5147,6 +5146,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,struct inode
     int parent_state;
 
     START_PROFILING(export_unlink);
+                
 
     // Get the lv2 parent
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, parent)))
@@ -5654,11 +5654,12 @@ out:
 ** Build the list of mstorage clients to reach every storaged required on this volume
 **
 ** @param volume       The volume we are to process
+** @param volume_fast       The SSD volume we are to process, might be NULL
 ** @param cnx          The head of the list of mstorage clients to build
 **
 ** @retval 0 on success / -1 on error
 */
-int mstoraged_setup_cnx(volume_t *volume, list_t * cnx) {
+int mstoraged_setup_cnx(volume_t *volume,volume_t *volume_fast, list_t * cnx) {
   list_t *p, *q;
   int     status = 0;
   int     i;
@@ -5694,6 +5695,38 @@ out:
   if ((errno = pthread_rwlock_unlock(&volume->lock)) != 0) {
     severe("pthread_rwlock_unlock failed (vid: %d): %s", volume->vid, strerror(errno));
   }
+  /**
+  *  process the fast volume if it exists
+  */
+  if (volume_fast == NULL) return status;
+  if ((errno = pthread_rwlock_rdlock(&volume_fast->lock)) != 0) {
+    severe("pthread_rwlock_rdlock failed (vid: %d): %s", volume_fast->vid, strerror(errno));
+    return -1;
+  }
+
+  list_for_each_forward(p, &volume_fast->clusters) {
+
+    cluster_t *cluster = list_entry(p, cluster_t, list);
+
+    for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) {
+      list_for_each_forward(q, (&cluster->storages[i])) {
+
+        volume_storage_t *vs = list_entry(q, volume_storage_t, list);
+
+        mclt = mstorage_client_get(cnx, vs->host, cluster->cid, vs->sid);
+	if (mclt == NULL) {
+	  severe("out of memory");
+          status = -1;
+	  goto out_fast;		
+        }
+      }
+    }
+  }
+
+out_fast:
+  if ((errno = pthread_rwlock_unlock(&volume_fast->lock)) != 0) {
+    severe("pthread_rwlock_unlock failed (vid: %d): %s", volume_fast->vid, strerror(errno));
+  }  
 
   return status;
 }
@@ -6090,7 +6123,7 @@ static inline int export_rm_bucket(export_t * e, uint8_t * cnx_init, list_t * co
     */
     if (*cnx_init == 0) {
       *cnx_init = 1;
-      if (mstoraged_setup_cnx(e->volume, connexions) != 0) {
+      if (mstoraged_setup_cnx(e->volume,e->volume_fast, connexions) != 0) {
         goto out;
       }
     }
