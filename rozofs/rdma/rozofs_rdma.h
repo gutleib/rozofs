@@ -915,7 +915,9 @@ void *rozofs_rdma_allocate_rpc_buffer();
    @retval 0 on success
    @retval<0 on error
 */
+
 void rozofs_rdma_release_rpc_buffer(void *buf);
+
 /*
 **__________________________________________________
 */
@@ -942,5 +944,11 @@ int rozofs_is_rdma_rpc_buffer(void *buf);
   retval NULL on error
 */
 void * rozofs_poll_rdma_async_event_th(void *ctx);
+
+
+#else
+static inline void rozofs_rdma_release_rpc_buffer(void *buf) {
+  return;
+}
 #endif // ROZOFS_RDMA
 #endif

@@ -934,6 +934,11 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
   fatal(" RDMA is not supported by storio"); 
   return;
 }
+void storio_rdma_send_response (rozofs_disk_thread_ctx_t *thread_ctx_p, storio_disk_thread_msg_t * msg) 
+{
+  fatal(" RDMA is not supported by storio"); 
+  return;
+}
 #endif
 
 
@@ -1645,7 +1650,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
   
 */
 
-
+#ifdef ROZOFS_RDMA
 void *storio_rdma_write_thread(void *arg) 
 {
 
@@ -1862,6 +1867,7 @@ void *storio_rdma_write_thread(void *arg)
      }     
   }
 }
+#endif
 
 
 
