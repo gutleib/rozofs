@@ -39,8 +39,182 @@
 #include <rozofs/rdma/rozofs_rdma.h>
 #include "rdma_client_send.h"
 
+void rozofs_rdma_tx_out_of_seq_on_rdma_cbk(uint32_t lbg_id,uint32_t xid);
 
 int storage_bin_read_first_bin_to_write = 0;
+
+int       rozofs_storcli_rdma_post_recv_sockpair[2];       /**< index 0 is used by the RDMA signaling thread, index 1 is used by the client */
+void *storcli_rdma_post_recv_sockctrl_p=NULL;
+/*
+**__________________________________________________
+*/
+/**
+ Send a ruc_buffer from the completion queue associated with the SRQ of RDMA
+  
+
+  @param buf buffer received from the completion (SRQ) 
+  
+  @retval 0 on success
+  @retval -1 on error (see errno for details)
+*/
+int rozofs_rdma_send2mainthread(void *buf)
+{
+
+   int ret;
+   
+
+   ret = write(rozofs_storcli_rdma_post_recv_sockpair[0],buf,sizeof(buf));
+   if (ret < 0) return -1;
+   if (ret != sizeof(buf)) return -1;
+   return 0;
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Call back used upon receiving a RPC message over RDMA
+   That call-back is called under the context onf the Completion Queue thread
+   attached to a SRQ
+   
+   @param opcode: RDMA opcode MUST be IBV_WC_RECV
+   @param ruc_buf: reference of the ruc_buffer that contains the encoded RPC message
+   @param qp_num: reference of the QP on which the message has been received
+   @param rozofs_rmda_ibv_cxt_p: pointer to the context of the adaptor from the rozofs side
+   @param status: status of the operation (0 if no error)
+   @param error: error code
+*/
+
+void storcli_rdma_msg_recv_form_cq_cbk(int opcode,void *ruc_buf, uint32_t qp_num,void *rozofs_rmda_ibv_cxt_p,int status,int error)
+{
+   rozofs_rdma_send2mainthread(ruc_buf);
+
+}
+
+/*
+**__________________________________________________
+*/
+/**  
+*  Always ready
+*/
+uint32_t storcli_rdma_post_recv_rcvReadyTcpSock(void * timerRef,int socketId)
+{
+    return TRUE;
+}
+
+/*
+**__________________________________________________
+*/
+
+uint32_t storcli_rdma_post_recv_rcvMsgTcpSock(void * timerRef,int socketId)
+{
+   int ret;
+   void *msg;
+   while(1)
+   {
+     ret = read(rozofs_storcli_rdma_post_recv_sockpair[1],&msg,sizeof(msg));
+     if (ret < 0) 
+     {
+        if (errno == EAGAIN) break;
+	if  (errno == EINTR) continue;
+	fatal("unexpected error on socketpair %s",strerror(errno));
+     }
+     if (ret != sizeof(msg)) 
+     {
+       fatal("Wrong message size %d",ret);
+     }
+     /*
+     ** Call the transaction module in order to find out the transaction based on the xid
+     */
+     rozofs_tx_recv_rdma_rpc_cbk(msg);
+
+   }
+  return TRUE;
+}
+/*
+**__________________________________________________
+*/
+uint32_t storcli_rdma_post_recv_xmitReadyTcpSock(void * timerRef,int socketId)
+{
+    return FALSE;
+}
+/*
+**__________________________________________________
+*/
+uint32_t storcli_rdma_post_recv_xmitEvtTcpSock(void * timerRef,int socketId)
+{
+  return FALSE;
+
+}
+/*
+**  Call back function for socket controller
+*/
+ruc_sockCallBack_t storcli_rdma_post_recv_callBack=
+  {
+     storcli_rdma_post_recv_rcvReadyTcpSock,
+     storcli_rdma_post_recv_rcvMsgTcpSock,
+     storcli_rdma_post_recv_xmitReadyTcpSock,
+     storcli_rdma_post_recv_xmitEvtTcpSock
+  };
+/*
+**__________________________________________________
+*/
+/**
+*  Create the socket pair that will be used to get the RPC responses sent over RDMA
+
+   @retval 0: OK
+   @retval < 0 error (see errno for details
+*/
+int rozofs_storcli_rdma_rpc_create_receive_socket()
+{
+  int fileflags;
+  /*
+  ** Put the callbacks for buffer releasing & for out of sequence reception
+  */
+  rozofs_tx_set_rdma_buf_free_cbk(rozofs_rdma_release_rpc_buffer);
+  rozofs_tx_set_rdma_out_of_sequence_cbk(rozofs_rdma_tx_out_of_seq_on_rdma_cbk);
+  /* 
+  ** create the socket pair
+  */
+  if (socketpair(  AF_UNIX,SOCK_DGRAM,0,&rozofs_storcli_rdma_post_recv_sockpair[0])< 0)
+  {
+      fatal("failed on socketpair:%s",strerror(errno));
+     return -1;
+  }
+  while(1)
+  {
+    /*
+    ** change socket mode to asynchronous for the socket used by the main thread side (it is the only
+    ** socket index of the pair that is registered with the socket controller
+    */
+    if((fileflags=fcntl(rozofs_storcli_rdma_post_recv_sockpair[1],F_GETFL,0))<0)
+    {
+      warning ("rozofs_storcli_rdma_post_recv_sockpair[1]fcntl error:%s",strerror(errno));
+      break;
+    }
+    if (fcntl(rozofs_storcli_rdma_post_recv_sockpair[1],F_SETFL,(fileflags|O_NDELAY))<0)
+    {
+      warning ("rozofs_storcli_rdma_post_recv_sockpair[1]fcntl error:%s",strerror(errno));
+      break;
+    }
+    break;
+  }
+  /*
+  ** perform the regsitration with the socket controller
+  */
+  storcli_rdma_post_recv_sockctrl_p = ruc_sockctl_connect(rozofs_storcli_rdma_post_recv_sockpair[1],
+                                	   "RDMA_POST_RECV",
+                                	    16,
+                                	    NULL,
+                                	    &storcli_rdma_post_recv_callBack);
+  if (storcli_rdma_post_recv_sockctrl_p== NULL)
+  {
+    fatal("Cannot connect with socket controller");;
+    return -1;
+  }
+  return 0;
+}
+
 /*
 **__________________________________________________________________________
 */
@@ -149,11 +323,201 @@ typedef struct _rdma_buf_tmo_entry_t
 
 
 int rozofs_rdma_tmo_table_init_done=0;
-uint32_t rozofs_rmda_tmo_context_count=0;                              /**< number of context to handle                                               */
+uint32_t rozofs_rdma_lbg_context_count=0;                              /**< number of context to handle                                               */
 int rozofs_rdma_tmo_buffer_count;                                      /**< number of buffer that are waiting for out of seq or TCP disconnect        */
 rozofs_rdma_cli_lbg_stats_t *rozofs_rdma_cli_lbg_stats_table_p=NULL;   /**< pointer to the allocated array that contains the number of buffer blocked */
 list_t   *rozofs_rdma_tmo_lbg_head_table_p=NULL;                       /**< head of the list for each potential lbg   */
 rozofs_rmda_cli_stats_t rozofs_rdma_cli_stats;                         /**< glabal RDMA client statistics    */
+ruc_obj_desc_t *rozofs_rdma_tx_lbg_in_progress_p = NULL ;             /**< linked list of the pending transaction on RDMA */
+int rozofs_rdma_tx_count = 0;
+
+/*
+**__________________________________________________________________________
+*/
+/**
+* Insert a transaction in the pending list that corresponds to a load balancing group
+
+  @param lbg_id: reference of the load balancing group
+  @param tx_p: pointer to the transaction context
+  
+  @retval none
+*/
+void rozofs_rdma_insert_pending_tx_on_lbg(uint32_t lbg_id,void *tx_p)
+{
+
+   ruc_obj_desc_t *phead;
+   if (lbg_id >= rozofs_rdma_lbg_context_count)
+   {
+     severe("lbg_id is out of range :%u (max: %d)",lbg_id,rozofs_rdma_lbg_context_count);
+   }
+   phead = &rozofs_rdma_tx_lbg_in_progress_p[lbg_id];
+   ruc_objRemove((ruc_obj_desc_t*)tx_p);
+   ruc_objInsertTail((ruc_obj_desc_t*)phead,(ruc_obj_desc_t*)tx_p);  
+}
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Purge all the pending transaction upon a QP error that triggers the teardown 
+   of the RDMA connection
+   
+   @param lbg_id: reference of the associated load balancing group
+   
+   @retval none
+*/
+void rozofs_rdma_purge_pending_tx_on_lbg(uint32_t lbg_id)
+{
+   rozofs_tx_ctx_t *tx_p;
+   ruc_obj_desc_t *phead;
+   ruc_obj_desc_t *pnext=NULL;
+   if (lbg_id >= rozofs_rdma_lbg_context_count)
+   {
+     severe("lbg_id is out of range :%u (max: %d)",lbg_id,rozofs_rdma_lbg_context_count);
+   }
+   phead = &rozofs_rdma_tx_lbg_in_progress_p[lbg_id];
+   while ((tx_p = (rozofs_tx_ctx_t*) ruc_objGetNext((ruc_obj_desc_t*)phead,
+                                        &pnext))
+               !=NULL) 
+   {         
+     ruc_objRemove((ruc_obj_desc_t*)tx_p);
+     if (tx_p->xmit_buf == NULL)
+     {
+        severe("pending transaction without xmit_buf");
+	continue;
+     }
+     rozofs_tx_xmit_abort_rpc_cbk(NULL,lbg_id,tx_p->xmit_buf,ECONNRESET);
+   }
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Callback associated with Send a RPC request over RDMA
+
+
+   @param user_param: reference of the RPC buffer used for RDMA
+   @param status: 0 if the RDMA transfer is OK
+   @param error: RDMA error when status is not 0.
+   
+   @retval none
+
+*/
+void rozofs_storcli_rdma_post_send_rpc_request_cbk(void *user_param,int status, int error)   
+{
+  rozofs_rdma_tcp_assoc_t *assoc_p;
+  rozofs_storcli_rdma_post_send_stat_t *stat_post_send_p;  
+  rozofs_rdma_cli_lbg_stats_t *lbg_stats_p;
+//#warning debug
+//   info("FDL  rozofs_storcli_rdma_post_send_rpc_request_cbk %x", user_param);
+  /*
+  ** The buffer contains at the top the association block followed by the RPC message
+  */
+  assoc_p = (rozofs_rdma_tcp_assoc_t*)ruc_buf_getPayload(user_param);
+  stat_post_send_p = (rozofs_storcli_rdma_post_send_stat_t*)(assoc_p+1);
+  
+  lbg_stats_p = &rozofs_rdma_cli_lbg_stats_table_p[stat_post_send_p->lbg_id];
+  /*
+  ** update statistics
+  */
+  lbg_stats_p->write_stats.attempts++;
+  if (status < 0)
+  {
+     if (stat_post_send_p->read) lbg_stats_p->read_stats.rdma_post_send_nok++;
+     else lbg_stats_p->write_stats.rdma_post_send_nok++;
+     /*
+     ** force the shutdown of the RDMA connection.
+     */
+     rozofs_rdma_on_completion_check_status_of_rdma_connection(status,-1,assoc_p);
+  }
+  /*
+  ** Release the xmit buffer
+  */
+  rozofs_rdma_release_rpc_buffer(user_param);
+}
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Send a RPC request over RDMA
+
+   @param: xmit_buf: ruc_buffer that contains the encoded RPC message
+   @param read: assert to 1 for read and 0 for write
+   @param lbg_id : useless
+   @param assoc_p: pointer to the association block that contains the client & server TCP connection index
+   @param tx_p: pointer to the transaction context (needed to queue it in the pending transaction list of the lbg)
+ 
+   @retval 0 on success
+   @retval -1 on error  
+*/
+int rozofs_storcli_rdma_post_send_rpc_request(uint32_t lbg_id,int read,void *xmit_buf,rozofs_rdma_tcp_assoc_t *assoc_p,void *tx_p)
+{
+   uint8_t *src_p;
+   int len;
+   uint8_t *dst_p;
+   void *rdma_rpc_buf;
+   int ret;
+   rozofs_wr_id2_t wr_th;
+   rozofs_wr_id2_t *wr_th_p;
+   rozofs_storcli_rdma_post_send_stat_t stat_post_send;
+   
+   stat_post_send.lbg_id = lbg_id;
+   stat_post_send.read = read;
+   /*
+   ** need to allocate a buffer from the rpc pool registered with the RDMA adaptor
+   */
+   rdma_rpc_buf = rozofs_rdma_allocate_rpc_buffer();
+   if (rdma_rpc_buf  == NULL)
+   {
+     severe("Out of RDMA RPC buffer");
+     errno = ENOMEM;
+     return -1;
+   }
+   src_p = (uint8_t *)ruc_buf_getPayload(xmit_buf);
+   dst_p = (uint8_t *)ruc_buf_getPayload(rdma_rpc_buf);
+   /*
+   ** Copy the association block at the top of the RPC buffer
+   */
+   memcpy(dst_p,assoc_p,sizeof(rozofs_rdma_tcp_assoc_t));
+   dst_p +=sizeof(rozofs_rdma_tcp_assoc_t);
+   /*
+   ** save the reference of the lbg and operation code
+   */
+   memcpy(dst_p,&stat_post_send,sizeof(stat_post_send));
+   dst_p +=sizeof(stat_post_send);
+   /*
+   ** Put the end of transmission callback in the ruc buffer as well as the reference of the ruc buffer
+   */
+   wr_th.cqe_cbk = rozofs_storcli_rdma_post_send_rpc_request_cbk;
+   wr_th.user_param = rdma_rpc_buf;   
+   memcpy(dst_p,&wr_th,sizeof(wr_th));
+   wr_th_p = (rozofs_wr_id2_t*) dst_p;
+   dst_p +=sizeof(wr_th);
+      
+   len = ruc_buf_getPayloadLen(xmit_buf);
+   /*
+   ** Copy the rpc message
+   */
+   memcpy(dst_p,src_p,len);
+   ruc_buf_setPayloadLen(rdma_rpc_buf,len+sizeof(rozofs_rdma_tcp_assoc_t)+sizeof(stat_post_send)+sizeof(wr_th_p));
+   
+
+   //info ("FDL Write dst_p %p len %u wr_th_p %p",dst_p,len,wr_th_p);
+   ret = rozofs_rdma_post_send_ibv_wr_send(wr_th_p,assoc_p->cli_ref,rdma_rpc_buf,dst_p,len);
+   if (ret < 0)
+   {
+     /*
+     ** release the allocated RPC RDMA buffer
+     */
+     rozofs_rdma_release_rpc_buffer(rdma_rpc_buf);
+   }
+   else
+   {
+     rozofs_rdma_insert_pending_tx_on_lbg(lbg_id,tx_p);
+   }
+   return ret;
+}
+
 
 /**
 *  SHow the buffer that are blocked becauce of lack or response from storio
@@ -173,7 +537,7 @@ void show_rdma_buf_tmo(char * argv[], uint32_t tcpRef, void *bufRef) {
     ** display per lbg the number of buffer that are blocked
     */
     
-    for (i = 0; i < rozofs_rmda_tmo_context_count; i++)
+    for (i = 0; i < rozofs_rdma_lbg_context_count; i++)
     {
        lbg_stats_p = &rozofs_rdma_cli_lbg_stats_table_p[i];
        if (lbg_stats_p->rdma_tmo_buffer_count != 0)
@@ -192,60 +556,7 @@ out:
 **__________________________________________________________________________
 */
 
-#define SHOW_RDMA_CLI_READ(probe) pChar += sprintf(pChar,"   %-16s : %15llu \n",\
-                    #probe,\
-                    (unsigned long long int)lbg_stats_p->read_stats.probe);
-#define SHOW_RDMA_CLI_WRITE(probe) pChar += sprintf(pChar,"   %-16s : %15llu \n",\
-                    #probe,\
-                    (unsigned long long int)lbg_stats_p->write_stats.probe);
 
-
-/**
-*  SHow the buffer that are blocked becauce of lack or response from storio
-*/
-void show_rdma_cli_stats(char * argv[], uint32_t tcpRef, void *bufRef) {
-    char *pChar = uma_dbg_get_buffer();
-    int i;
-    rozofs_rdma_cli_lbg_stats_t *lbg_stats_p;
-        
-    if (rozofs_rdma_tmo_table_init_done == 0)
-    {
-      sprintf(pChar,"The table has not been initialized\n");
-      goto out;
-    }
-    
-    for (i = 0; i < rozofs_rmda_tmo_context_count; i++)
-    {
-       lbg_stats_p = &rozofs_rdma_cli_lbg_stats_table_p[i];
-//       if ((lbg_stats_p->read_stats.attempts == 0) && (lbg_stats_p->write_stats.attempts == 0)) continue;
-       pChar +=sprintf(pChar,"LBG #%3d\n",i);
-       pChar +=sprintf(pChar,"Read Statistics:\n");
-       SHOW_RDMA_CLI_READ(attempts);
-       SHOW_RDMA_CLI_READ(no_TCP_context);
-       SHOW_RDMA_CLI_READ(no_RDMA_context);
-       SHOW_RDMA_CLI_READ(bad_RDMA_state);
-       SHOW_RDMA_CLI_READ(no_RDMA_memory);
-       SHOW_RDMA_CLI_READ(no_buffer);
-       SHOW_RDMA_CLI_READ(no_tx_context);
-       SHOW_RDMA_CLI_READ(lbg_send_ok);
-       SHOW_RDMA_CLI_READ(lbg_send_nok);
-       pChar +=sprintf(pChar,"\nWrite Statistics:\n");
-       SHOW_RDMA_CLI_WRITE(attempts);
-       SHOW_RDMA_CLI_WRITE(no_TCP_context);
-       SHOW_RDMA_CLI_WRITE(no_RDMA_context);
-       SHOW_RDMA_CLI_WRITE(bad_RDMA_state);
-       SHOW_RDMA_CLI_WRITE(no_RDMA_memory);
-       SHOW_RDMA_CLI_WRITE(no_buffer);
-       SHOW_RDMA_CLI_WRITE(no_tx_context);
-       SHOW_RDMA_CLI_WRITE(lbg_send_ok);
-       SHOW_RDMA_CLI_WRITE(lbg_send_nok);
-  
-    }
-    sprintf(pChar,"\n");
-
-out:    
-    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
-}
 
 #define SHOW_RDMA_CLI_READ2(probe) pChar += sprintf(pChar," %12llu |",\
                     (unsigned long long int)lbg_stats_p->read_stats.probe);
@@ -268,7 +579,7 @@ void show_rdma_cli_stats2(char * argv[], uint32_t tcpRef, void *bufRef) {
     }
     pChar +=sprintf(pChar,"LBG |  Ope  | attempts     | no_TCP_ctx   | no_RDMA_ctx  | bad_RDMA_st  | no_RDMA_mem. |  no_buffer   |  no_tx_ctx   | lbg_send_ok  | lbg_send_nok |\n");
     pChar +=sprintf(pChar,"----+-------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+\n");
-    for (i = 0; i < rozofs_rmda_tmo_context_count; i++)
+    for (i = 0; i < rozofs_rdma_lbg_context_count; i++)
     {
        lbg_stats_p = &rozofs_rdma_cli_lbg_stats_table_p[i];
        if ((lbg_stats_p->read_stats.attempts == 0) && (lbg_stats_p->write_stats.attempts == 0)) continue;
@@ -283,6 +594,7 @@ void show_rdma_cli_stats2(char * argv[], uint32_t tcpRef, void *bufRef) {
        SHOW_RDMA_CLI_READ2(no_tx_context);
        SHOW_RDMA_CLI_READ2(lbg_send_ok);
        SHOW_RDMA_CLI_READ2(lbg_send_nok);
+       SHOW_RDMA_CLI_READ2(rdma_post_send_nok);
        pChar +=sprintf(pChar,"\n    | Write |");
        SHOW_RDMA_CLI_WRITE2(attempts);
        SHOW_RDMA_CLI_WRITE2(no_TCP_context);
@@ -293,6 +605,7 @@ void show_rdma_cli_stats2(char * argv[], uint32_t tcpRef, void *bufRef) {
        SHOW_RDMA_CLI_WRITE2(no_tx_context);
        SHOW_RDMA_CLI_WRITE2(lbg_send_ok);
        SHOW_RDMA_CLI_WRITE2(lbg_send_nok);
+       SHOW_RDMA_CLI_WRITE2(rdma_post_send_nok);
        pChar +=sprintf(pChar,"\n----+-------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+--------------+\n");
   
     }
@@ -317,11 +630,12 @@ int  rdma_lbg_tmo_table_init(uint32_t mx_lbg_north_ctx)
 {
 
   list_t *p;
+  ruc_obj_desc_t *q;
   int i;
   
   if (rozofs_rdma_tmo_table_init_done) return RUC_OK;
   
-  rozofs_rmda_tmo_context_count = mx_lbg_north_ctx;
+  rozofs_rdma_lbg_context_count = mx_lbg_north_ctx;
   
   /*
   ** allocate the stats table
@@ -336,11 +650,22 @@ int  rdma_lbg_tmo_table_init(uint32_t mx_lbg_north_ctx)
   ** init of the lists
   */
   p = &rozofs_rdma_tmo_lbg_head_table_p[0];
-  for (i = 0; i <rozofs_rmda_tmo_context_count; i++,p++)
+  for (i = 0; i <rozofs_rdma_lbg_context_count; i++,p++)
   {
     list_init(p);
   }
+
+  /*
+  ** allocate memory for handling transactions in progress
+  */
+  rozofs_rdma_tx_lbg_in_progress_p =  xmalloc(mx_lbg_north_ctx*sizeof(ruc_obj_desc_t));
+  q = &rozofs_rdma_tx_lbg_in_progress_p[0];
+  for (i = 0; i <mx_lbg_north_ctx; i++,q++)
+  {
+    ruc_listHdrInit(q);
+  }    
   rozofs_rdma_tmo_buffer_count = 0;
+  rozofs_rdma_tx_count = 0;
   uma_dbg_addTopic("rdma_tmo_buf",show_rdma_buf_tmo);
   uma_dbg_addTopic("rdma_lbg_stats",show_rdma_cli_stats2);
   
@@ -423,11 +748,14 @@ void rozofs_rdma_tx_tmo_proc(void *this)
 error:
    if (tmo_ctx_p != NULL) free(tmo_ctx_p);
 }
+
+
+
 /*
 **__________________________________________________________________________
 */
 /**
-*  RDMA : OUT of sequence processing
+*  RDMA : OUT of sequence processing this addresses the case of an out of sequence reception from TCP
 
   That function is called upon detecting an out of sequence transaction at the tx_engine side
   The Out of sequence might not be related to a RDMA transfer.
@@ -444,9 +772,9 @@ void rozofs_rdma_tx_out_of_seq_cbk(uint32_t lbg_id,uint32_t xid)
     list_t *p, *q;    
     rozofs_rdma_cli_lbg_stats_t *lbg_stats_p;
     
-    if (lbg_id >=rozofs_rmda_tmo_context_count )
+    if (lbg_id >=rozofs_rdma_lbg_context_count )
     {
-       warning("Out of range lbg_id %u (max is %u)",lbg_id,rozofs_rmda_tmo_context_count);
+       warning("Out of range lbg_id %u (max is %u)",lbg_id,rozofs_rdma_lbg_context_count);
        return;
     }
     lbg_list_p = &rozofs_rdma_tmo_lbg_head_table_p[lbg_id];
@@ -492,6 +820,25 @@ void rozofs_rdma_tx_out_of_seq_cbk(uint32_t lbg_id,uint32_t xid)
 **__________________________________________________________________________
 */
 /**
+*  RDMA : OUT of sequence processing: this addresses the case of an out of sequence reception from RDMA
+
+  That function is called upon detecting an out of sequence transaction at the tx_engine side
+  The Out of sequence might not be related to a RDMA transfer.
+  
+  @param lbg_id : reference of the load balancing group for which out of seq transaction is detected
+  @param xid: transaction identifier found in the received buffer
+
+  @retval : none
+*/
+void rozofs_rdma_tx_out_of_seq_on_rdma_cbk(uint32_t lbg_id,uint32_t xid)
+{
+  return rozofs_rdma_tx_out_of_seq_cbk(lbg_id,xid);
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
 *  RDMA : TCP disconnect callback processing
 
   That function is called upon the disconnection of the TCP connection that is used in conjunction with RDMA
@@ -507,9 +854,9 @@ void rozofs_rdma_tcp_connection_disc_cbk(uint32_t lbg_id)
     list_t *p, *q;    
     rozofs_rdma_cli_lbg_stats_t *lbg_stats_p;
 
-    if (lbg_id >=rozofs_rmda_tmo_context_count )
+    if (lbg_id >=rozofs_rdma_lbg_context_count )
     {
-       warning("Out of range lbg_id %u (max is %u)",lbg_id,rozofs_rmda_tmo_context_count);
+       warning("Out of range lbg_id %u (max is %u)",lbg_id,rozofs_rdma_lbg_context_count);
        return;
     }
     lbg_list_p = &rozofs_rdma_tmo_lbg_head_table_p[lbg_id];
@@ -543,6 +890,10 @@ void rozofs_rdma_tcp_connection_disc_cbk(uint32_t lbg_id)
       */ 
       free(tmo_ctx_p);
     }
+    /*
+    ** Go through the list of the pending transaction that have sent sent with IBV_WR_SEND
+    */
+    rozofs_rdma_purge_pending_tx_on_lbg(lbg_id);
 }
 
 /*
@@ -574,6 +925,11 @@ void rozofs_storcli_read_rdma_req_processing_cbk(void *this,void *param)
    char *dst_payload;
    uint32_t max_size;
    int error;
+
+   /*
+   ** remove the transaction from the pending list
+   */
+   ruc_objRemove((ruc_obj_desc_t*)this);   
    /*
    ** Get the RDMA buffer from the transaction context
    */
@@ -657,7 +1013,9 @@ void rozofs_storcli_read_rdma_req_processing_cbk(void *this,void *param)
     /*
     ** Release the received buffer and push the RDMA buffer as the received buffer.
     */
-    ruc_buf_freeBuffer(recv_buf);
+    if (rozofs_is_rdma_rpc_buffer(recv_buf)) rozofs_rdma_release_rpc_buffer(recv_buf);
+    else ruc_buf_freeBuffer(recv_buf);
+
     rozofs_tx_put_recvBuf(this,rdma_buf_ref);
     /*
     ** remove the reference of the rdma_buffer
@@ -778,7 +1136,6 @@ int rozofs_sorcli_sp_read_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uint
     /*
     ** get the memory descriptor that contains the local RDMA key
     */
-#warning always context with index 0
     mr_p = s_ctx->memreg[0];
     if (mr_p == NULL)
     {
@@ -881,7 +1238,6 @@ int rozofs_sorcli_sp_read_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uint
     XDR_PUTINT32(&xdrs, (int32_t *)&null_val);
     XDR_PUTINT32(&xdrs, (int32_t *)&null_val);
     XDR_PUTINT32(&xdrs, (int32_t *)&null_val);
-        
     /*
     ** ok now call the procedure to encode the message
     */
@@ -891,6 +1247,10 @@ int rozofs_sorcli_sp_read_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uint
        errno = EPROTO;
        goto error;
     }
+    /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_request(xmit_buf,lbg_id);   
     /*
     ** Now get the current length and fill the header of the message
     */
@@ -919,10 +1279,21 @@ int rozofs_sorcli_sp_read_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uint
     rozofs_tx_write_opaque_data( rozofs_tx_ctx_p,0,seqnum);  
     rozofs_tx_write_opaque_data( rozofs_tx_ctx_p,1,opaque_value_idx1);  
     rozofs_tx_write_opaque_data( rozofs_tx_ctx_p,2,lbg_id);  
+
     /*
-    ** now send the message
+    ** Check the case of the full RDMA
     */
-    ret = north_lbg_send_with_shaping(lbg_id,xmit_buf,0,0);
+    if (common_config.rdma_full)
+    {
+        ret =rozofs_storcli_rdma_post_send_rpc_request(lbg_id,1,xmit_buf,&tcp_cnx_p->assoc,rozofs_tx_ctx_p);
+    }
+    else
+    {
+      /*
+      ** now send the message on TCP
+      */
+      ret = north_lbg_send_with_shaping(lbg_id,xmit_buf,0,0);
+    }
     if (ret < 0)
     {
        lbg_stats_p->read_stats.lbg_send_nok++;   
@@ -977,14 +1348,24 @@ int rozofs_sorcli_sp_read_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uint
 void rozofs_storcli_write_rdma_req_processing_cbk(void *this,void *param) 
 {
    void *rdma_buf_ref;
-   void *recv_buf;
    int status;   
    int error;
+   
+   /*
+   ** remove the transaction from the pending list
+   */
+   ruc_objRemove((ruc_obj_desc_t*)this);
+   
    /*
    ** Get the RDMA buffer from the transaction context
    */
    rdma_buf_ref = rozofs_tx_read_rdma_bufref(this);
-   
+   /*
+   ** decrement the in_use counter of the RDMA buffer which is the projection buffer reference within the storcli context
+   ** It might be incremented again in case of TMO
+   */
+   ruc_buf_inuse_decrement(rdma_buf_ref);
+      
    status = rozofs_tx_get_status(this);
    if (status < 0)
    {
@@ -1004,10 +1385,12 @@ void rozofs_storcli_write_rdma_req_processing_cbk(void *this,void *param)
        /*
        ** the reference from the transaction context
        */
+       warning("FDL RDMA error code %d",error);
        rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
        
      return rozofs_storcli_write_req_processing_cbk(this,param);
    }
+#if 0
    /*
    ** Get the received buffer
    */
@@ -1019,9 +1402,12 @@ void rozofs_storcli_write_rdma_req_processing_cbk(void *this,void *param)
        ** transaction context: the buffer must not be release since the
        ** write process might attempt to use it on another lbg
        */
+       warning("FDL RDMA no receive buffer");
+
        rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
        return rozofs_storcli_write_req_processing_cbk(this,param);
     }
+#endif
     /*
     ** normal case : just remove the reference of the rdma_buffer
     */
@@ -1140,7 +1526,6 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
     /*
     ** get the memory descriptor that contains the local RDMA key
     */
-#warning always context with index 0
     mr_p = s_ctx->memreg[0];
     if (mr_p == NULL)
     {
@@ -1178,7 +1563,8 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
        pbuf = ruc_buf_getPayload(proj_buf); 
        pbuf += rozofs_storcli_get_position_of_first_byte2write();
        request_rdma.remote_addr = (uint64_t) pbuf;    
-    }        
+       request_rdma.remote_len = (uint32_t) extra_len;
+    }    
     /*
     ** allocate a transaction context
     */
@@ -1200,6 +1586,11 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
     ** store the RDMA buffer in the transaction context
     */
     rozofs_tx_set_rdma_bufref( rozofs_tx_ctx_p,proj_buf);
+    /*
+    ** increment the in_use counter since the storcli context can be release while there is
+    ** a transaction that has been engaged with that buffer
+    */
+    ruc_buf_inuse_increment(proj_buf);
     /*
     ** store the reference of the xmit buffer in the transaction context: might be useful
     ** in case we want to remove it from a transmit list of the underlying network stacks
@@ -1256,6 +1647,10 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
        goto error;
     }
     /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_request(xmit_buf,lbg_id);   
+    /*
     ** Now get the current length and fill the header of the message
     */
     position = XDR_GETPOS(&xdrs);
@@ -1284,9 +1679,19 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
     rozofs_tx_write_opaque_data( rozofs_tx_ctx_p,1,opaque_value_idx1);  
     rozofs_tx_write_opaque_data( rozofs_tx_ctx_p,2,lbg_id);  
     /*
-    ** now send the message
+    ** Check the case of the full RDMA
     */
-    ret = north_lbg_send(lbg_id,xmit_buf);
+    if (common_config.rdma_full)
+    {
+        ret =rozofs_storcli_rdma_post_send_rpc_request(lbg_id,0,xmit_buf,&tcp_cnx_p->assoc,rozofs_tx_ctx_p);
+    }
+    else
+    {
+       /*
+       **  send the RDMA write request over TCP (IP or IPoIB)
+       */
+       ret = north_lbg_send(lbg_id,xmit_buf);
+    }
     if (ret < 0)
     {
        lbg_stats_p->write_stats.lbg_send_nok++;
@@ -1308,7 +1713,14 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
     return 0;  
     
   error:
-    if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);
+    if (rozofs_tx_ctx_p != NULL) 
+    {
+       /*
+       ** decrement the in_use of the projection buffer since the transaction is going to be aborted
+       */
+       ruc_buf_inuse_decrement(proj_buf);      
+       rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);
+    }
     /*
     ** need to check with the tx module: since the buffer is also refernce in it
     */
@@ -1444,6 +1856,10 @@ int rozofs_rdma_send_rq(uint32_t lbg_id,uint32_t timeout_sec, uint32_t prog,uint
        errno = EPROTO;
        goto error;
     }
+    /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_request(xmit_buf,lbg_id);   
     /*
     ** Now get the current length and fill the header of the message
     */
@@ -1642,7 +2058,12 @@ out_error:
 void rozofs_client_rdma_cnx_lbg_state_change(uint32_t lbg_id,uint32_t state,uint32_t socketCtrlRef)
 {
   if (state == 0) {
-    north_lbg_set_rdma_down(lbg_id);  
+    north_lbg_set_rdma_down(lbg_id); 
+    /*
+    ** Purge any pending transaction sent by IBV_WR_SEND (rdma) on that load balancing group
+    */
+    rozofs_rdma_purge_pending_tx_on_lbg(lbg_id);
+     
   }
   else
   {

@@ -22,6 +22,12 @@
 #include <string.h>
 #include <unistd.h>
  
+ typedef struct _rozofs_storcli_rdma_post_send_stat_t
+ {
+    uint32_t lbg_id;   /**< reference of the lbg_id for the RDMA */
+    uint32_t read;     /**< 1: read, 0:write                     */
+ } rozofs_storcli_rdma_post_send_stat_t;
+ 
  typedef struct _rozofs_rmda_cli_stats_t
  {
     uint64_t attempts;        /**< number of RDMA transfer attempts                   */
@@ -31,8 +37,9 @@
     uint64_t no_RDMA_memory;   /**< memory region is not found                        */
     uint64_t no_tx_context;    /**< out of transaction context                        */
     uint64_t no_buffer;        /**< cannot allocate a south buffer                    */
-    uint64_t lbg_send_ok;      /**< successfully submitted to lbg                     */
-    uint64_t lbg_send_nok;     /**< error in lbg send                                 */
+    uint64_t lbg_send_ok;      /**< successfully submitted to lbg or rdma (post_send)      */
+    uint64_t lbg_send_nok;     /**< error in lbg send or rdma (post_send)                  */
+    uint64_t rdma_post_send_nok;     /**< incremented in the context of the completion     */
 } rozofs_rmda_cli_stats_t;
  
 /*
@@ -281,5 +288,34 @@ int  rdma_lbg_tmo_table_init(uint32_t mx_lbg_north_ctx);
    @retval ref_p: pointer to the rdma_tcp context (rozofs_rdma_tcp_cnx_t structure)
 */
 int storcli_lbg_is_rdma_up(int lbg_idx,uint32_t *ref_p);
+
+/*
+**__________________________________________________
+*/
+/**
+*  Create the socket pair that will be used to get the RPC responses sent over RDMA
+
+   @retval 0: OK
+   @retval < 0 error (see errno for details
+*/
+int rozofs_storcli_rdma_rpc_create_receive_socket();
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Call back used upon receiving a RPC message over RDMA
+   That call-back is called under the context onf the Completion Queue thread
+   attached to a SRQ
+   
+   @param opcode: RDMA opcode MUST be IBV_WC_RECV
+   @param ruc_buf: reference of the ruc_buffer that contains the encoded RPC message
+   @param qp_num: reference of the QP on which the message has been received
+   @param rozofs_rmda_ibv_cxt_p: pointer to the context of the adaptor from the rozofs side
+   @param status: status of the operation (0 if no error)
+   @param error: error code
+*/
+
+void storcli_rdma_msg_recv_form_cq_cbk(int opcode,void *ruc_buf, uint32_t qp_num,void *rozofs_rmda_ibv_cxt_p,int status,int error);
 
  #endif 

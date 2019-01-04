@@ -168,6 +168,10 @@ void storio_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
     rozorpc_srv_ctx_p->src_transaction_id = hdr.hdr.xid;
     rozorpc_srv_ctx_p->recv_buf  = recv_buf;
     rozorpc_srv_ctx_p->socketRef = socket_ctx_idx;
+    /*
+    ** get the reference of the lbg_id of the client from the received rpc message
+    */
+    rozorpc_srv_ctx_p->client_lbg_id = rozofs_rpc_get_lbg_id_in_request(recv_buf);
     
     /*
     ** Allocate buffer for decoded aeguments

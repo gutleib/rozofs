@@ -159,7 +159,9 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t rozofsmount_instance)
    /*
    ** init of the RDMA in client mode
    */
-   ret = rozofs_rdma_init(ROZO_SOCKCTRL_CTX_STORCLI,1);
+   rozofs_storcli_rdma_rpc_create_receive_socket();
+   
+   ret = rozofs_rdma_init(ROZO_SOCKCTRL_CTX_STORCLI,1,STORCLI_CTX_CNT*rozofs_get_rozofs_safe(conf.layout)+ROZOFS_MAX_SRQ_WR, ROZOFS_RPC_RDMA_MSG_SZ,storcli_rdma_msg_recv_form_cq_cbk);
    if (ret < 0)
    {
      severe("fail to initialize RDMA");

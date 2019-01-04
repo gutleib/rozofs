@@ -173,7 +173,9 @@ set (librozofs_sources
     core/rozofs_numa.h
     core/rozofs_numa.c
     core/rozofs_throughput.h
-    core/rozofs_throughput.c            
+    core/rozofs_throughput.c   
+    core/rozofs_queue.c
+    core/rozofs_queue.h         
 )
 
 add_library(rozofs STATIC ${librozofs_sources})

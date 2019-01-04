@@ -49,6 +49,7 @@ uint64_t   af_unix_disk_pending_req_tbl[MAX_PENDING_REQUEST];
 
 extern uint64_t   af_unix_disk_parallel_req_tbl[ROZOFS_MAX_DISK_THREADS];
 extern uint64_t   af_unix_disk_parallel_req;
+extern uint64_t   rdma_write_parallel_req_tbl[];
 
 struct  sockaddr_un storio_south_socket_name;
 struct  sockaddr_un storio_north_socket_name;
@@ -364,7 +365,18 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += rozofs_u32_append(pChar,af_unix_disk_pending_req_tbl[i]);
     if ((i%8)==0) pChar += rozofs_string_append(pChar,"\n                         ");
   }
-  
+
+  pChar += rozofs_string_append(pChar,"\npending RDMA write requests table   ");  
+  for (i=0; i<ROZFS_MAX_RDMA_WRITE_IN_PRG; i++) {
+    if (rdma_write_parallel_req_tbl[i]==0) {
+      continue;
+    }
+    pChar += rozofs_string_append(pChar," [");
+    pChar += rozofs_u32_append(pChar,i);
+    pChar += rozofs_string_append(pChar,"]=");    
+    pChar += rozofs_u32_append(pChar,rdma_write_parallel_req_tbl[i]);
+    if ((i%8)==0) pChar += rozofs_string_append(pChar,"\n                         ");
+  }  
   pChar += rozofs_string_append(pChar,"\nparallel active requests = ");
   pChar += rozofs_u32_append(pChar,af_unix_disk_parallel_req); 
   pChar += rozofs_string_append(pChar,"\nactive requests table    ");
@@ -408,6 +420,8 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     display_line_val("!! Unknown cid/sid",read_badCidSid, display_short);  
     display_line_val("!! error spare",read_error_spare, display_short);  
     display_line_val("!! error",read_error, display_short);  
+    display_line_val("!! rdma error",rdma_read_error, display_short);  
+    display_line_val("!! rdma_st error",rdma_read_status_error,display_short); 
     display_line_val("   Bytes",read_Byte_count, display_short);      
     display_line_val("   Cumulative Time (us)",read_time, display_short);
     display_line_div("   Average Bytes",read_Byte_count,read_count, display_short);  
@@ -417,7 +431,9 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     display_line_topic("Write Requests", display_short);  
     display_line_val("   number", write_count, display_short);
     display_line_val("!! Unknown cid/sid",write_badCidSid, display_short);  
-    display_line_val("!! error",write_error, display_short);  
+    display_line_val("!! error",write_error, display_short); 
+    display_line_val("!! rdma error",rdma_write_error, display_short);  
+    display_line_val("!! rdma_st error",rdma_write_status_error, display_short);   
     display_line_val("!! no space left",write_nospace, display_short);  
     display_line_val("   Bytes",write_Byte_count, display_short);      
     display_line_val("   Cumulative Time (us)",write_time, display_short);
@@ -481,6 +497,8 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     }
     memset(af_unix_disk_pending_req_tbl,0,sizeof(af_unix_disk_pending_req_tbl));
     memset(af_unix_disk_parallel_req_tbl,0,sizeof(uint64_t)*ROZOFS_MAX_DISK_THREADS);
+    memset(rdma_write_parallel_req_tbl,0,sizeof(uint64_t)*ROZFS_MAX_RDMA_WRITE_IN_PRG);
+    
     pChar += rozofs_string_append(pChar,"Reset done\n");                
   }
   
@@ -733,19 +751,26 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
   } 
     
   /*
-  ** send the response towards the storcli process that initiates the disk operation
+  ** When the RPC request has been received over RDMA, we MUST not send it back on TCP
+  ** so the next section is skipped of the RPC context has been tagged with RDMA flag
   */
-  ret = af_unix_generic_send_stream_with_idx((int)rpcCtx->socketRef,rpcCtx->xmitBuf); 
-  if (ret == 0) {
-    /**
-    * success so remove the reference of the xmit buffer since it is up to the called
-    * function to release it
+  if ( rpcCtx->rdma == 0)
+  { 
+    /*
+    ** send the response towards the storcli process that initiates the disk operation
     */
-    ROZORPC_SRV_STATS(ROZORPC_SRV_SEND);
-    rpcCtx->xmitBuf = NULL;
-  }
-  else {
-    ROZORPC_SRV_STATS(ROZORPC_SRV_SEND_ERROR);
+    ret = af_unix_generic_send_stream_with_idx((int)rpcCtx->socketRef,rpcCtx->xmitBuf); 
+    if (ret == 0) {
+      /**
+      * success so remove the reference of the xmit buffer since it is up to the called
+      * function to release it
+      */
+      ROZORPC_SRV_STATS(ROZORPC_SRV_SEND);
+      rpcCtx->xmitBuf = NULL;
+    }
+    else {
+      ROZORPC_SRV_STATS(ROZORPC_SRV_SEND_ERROR);
+    }
   }
     
   rozorpc_srv_release_context(rpcCtx);          
@@ -879,8 +904,18 @@ void storio_set_socket_name_with_hostname(struct sockaddr_un *socketname,char *n
 void storio_send_response (rozofs_disk_thread_ctx_t *thread_ctx_p, storio_disk_thread_msg_t * msg, int status) 
 {
   int                     ret;
-  
+  rozorpc_srv_ctx_t      * rpcCtx;
   msg->status = status;
+  /*
+  ** check if the RPC message has been receive on RDMA, in that case we must send back the response over RDMA
+  */
+  {
+      rpcCtx = msg->rpcCtx;
+      if (rpcCtx->rdma != 0)
+      {
+         return storio_rdma_send_response(thread_ctx_p,msg);
+      }  
+  }
   
   /*
   ** send back the response

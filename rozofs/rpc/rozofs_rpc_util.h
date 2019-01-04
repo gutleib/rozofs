@@ -37,6 +37,7 @@
 #include <rozofs/rozofs.h>
 #include <rozofs/common/list.h>
 #include <rozofs/common/log.h>
+#include <rozofs/core/ruc_buffer_api.h>
 #include <errno.h>  
 
 
@@ -137,13 +138,123 @@ static inline int rozofs_rpc_get_min_rpc_reply_hdr_len()
     xid       : 4 bytes
     direction : 4 bytes
     status    : 4 bytes
-    verifier_flavor    : 4 bytes
+    verifier_flavor or lbg_id    : 4 bytes
     verifier_len    : 4 bytes
     status    : 4 bytes
  */
  return   (6*sizeof(uint32_t));
 
 }
+/*
+*________________________________________________________
+*/
+/**
+   Put the reference of the client lbg_id in the RPC reply buffer
+   
+   offset 0: rpc_msg_len
+   offset 1: xid
+   offset 2: dir
+   offset 3: ststus (MSG_ACCEPTED)
+   offset: lbg_id
+   
+   
+   @param  ruc_buf: reference of a ruc_buffer
+   @param lbg_id : reference of the lbg_id
+   
+   @retval none
+*/
+
+static inline void rozofs_rpc_set_lbg_id_in_reply(void *ruc_buf,uint32_t lbg_id)
+{
+  uint32_t *p32_p =  (uint32_t *) ruc_buf_getPayload(ruc_buf);
+   
+  p32_p +=4; 
+  *p32_p = lbg_id;
+}  
+/*
+*________________________________________________________
+*/
+/**
+   get the reference of the client lbg_id from the RPC reply buffer
+   
+   offset 0: rpc_msg_len
+   offset 1: xid
+   offset 2: dir
+   offset 3: ststus (MSG_ACCEPTED)
+   offset: lbg_id
+   
+   
+   @param  ruc_buf: reference of a ruc_buffer
+   
+   @retval: lbg_id : reference of the lbg_id
+*/  
+  
+static inline uint32_t rozofs_rpc_get_lbg_id_in_reply(void *ruc_buf)
+{
+  uint32_t *p32_p = (uint32_t *) ruc_buf_getPayload(ruc_buf);
+  
+  p32_p +=4; 
+ 
+  return (*p32_p);
+}  
+
+/*
+*________________________________________________________
+*/
+/**
+   Put the reference of the client lbg_id in the RPC request buffer
+   
+   offset 0: rpc_msg_len
+   offset 1: xid
+   offset 2: dir
+   offset 3: version
+   offset 4: prog
+   offset 5: vers
+   offset 6: opcode or proc
+   offset 7: lbg_id
+   
+   
+   @param  ruc_buf: reference of a ruc_buffer
+   @param lbg_id : reference of the lbg_id
+   
+   @retval none
+*/
+
+static inline void rozofs_rpc_set_lbg_id_in_request(void *ruc_buf,uint32_t lbg_id)
+{
+  uint32_t *p32_p = (uint32_t *)ruc_buf_getPayload(ruc_buf);
+   p32_p +=7; 
+  *p32_p = lbg_id;
+}  
+/*
+*________________________________________________________
+*/
+/**
+   get the reference of the client lbg_id from the RPC request buffer
+   
+   offset 0: rpc_msg_len
+   offset 1: xid
+   offset 2: dir
+   offset 3: version
+   offset 4: prog
+   offset 5: vers
+   offset 6: opcode or proc
+   offset 7: lbg_id
+   
+   
+   @param  ruc_buf: reference of a ruc_buffer
+   
+   @retval: lbg_id : reference of the lbg_id
+*/  
+  
+static inline uint32_t rozofs_rpc_get_lbg_id_in_request(void *ruc_buf)
+{
+  uint32_t *p32_p =  (uint32_t *)ruc_buf_getPayload(ruc_buf);
+  
+  p32_p +=7; 
+ 
+  return (*p32_p);
+}      
 
 /*
 *________________________________________________________
@@ -229,7 +340,7 @@ static inline bool_t rozofs_encode_rpc_reply(XDR *xdrs,xdrproc_t proc,caddr_t wh
     rpc_reply.rm_direction        = REPLY;
     rpc_reply.rm_reply.rp_stat    = MSG_ACCEPTED;
     rpc_reply.acpted_rply.ar_stat = SUCCESS;
-//    rpc_reply.acpted_rply.ar_verf = NULL;   /* not used */
+    rpc_reply.acpted_rply.ar_verf.oa_length = 0;   /* not used */
     rpc_reply.acpted_rply.ar_results.where = where;
     rpc_reply.acpted_rply.ar_results.proc = proc;
     if (rozofs_xdr_replymsg(xdrs,&rpc_reply) != TRUE)

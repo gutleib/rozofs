@@ -98,7 +98,7 @@ static af_unix_socket_conf_t  af_inet_storaged_conf =
   sizeof(uint32_t),  /* msgLenSize  -> size of the message length field in bytes  */
   
   (1024*256), /*  bufSize        -> length of buffer (xmit and received)        */
-  (300*1024), /*  so_sendbufsize -> length of buffer (xmit and received)        */
+  (10*1024*1024), /*  so_sendbufsize -> length of buffer (xmit and received)        */
   storage_lbg_userRcvAllocBufCallBack, /*  userRcvAllocBufCallBack -> user callback for buffer allocation             */
   rozofs_tx_recv_rpc_cbk,            /*  userRcvCallBack         -> callback provided by the connection owner block */
   rozofs_tx_xmit_abort_rpc_cbk,      /*  userDiscCallBack        ->callBack for TCP disconnection detection         */

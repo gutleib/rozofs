@@ -96,6 +96,8 @@ extern unsigned long long Global_timeBefore, Global_timeAfter;
 
 
 typedef void (*ruc_pf_2uint32_t)(uint32_t par1, uint32_t par2);
+typedef void (*ruc_pf_1uint32_t)(uint32_t par1);
+typedef void (*ruc_pf_void_t)(void *par);
 /*
 **____________________________________________________________________________
 */

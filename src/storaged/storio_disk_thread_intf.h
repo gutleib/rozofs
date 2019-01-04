@@ -34,6 +34,15 @@
 #include "storio_device_mapping.h"
 #include <semaphore.h>
 #include <rozofs/rdma/rozofs_rdma.h>
+#include <rozofs/core/rozofs_queue.h>
+
+/*
+** Queue used by RDMA_write
+*/
+
+#define DISK_THREAD_QUEUE_RING_SZ 128
+#define ROZFS_MAX_RDMA_WRITE_IN_PRG 64
+
 
 
 typedef struct _rozofs_disk_thread_stat_t {
@@ -86,6 +95,8 @@ typedef struct _rozofs_disk_thread_stat_t {
   uint64_t            rdma_write_error;
   uint64_t            rdma_read_error;
 
+  uint64_t            rdma_write_status_error;
+  uint64_t            rdma_read_status_error;
 } rozofs_disk_thread_stat_t;
 /*
 ** Disk thread context
@@ -93,17 +104,20 @@ typedef struct _rozofs_disk_thread_stat_t {
 typedef struct _rozofs_disk_thread_ctx_t
 {
   pthread_t                    thrdId; /* of disk thread */
+  
   int                          thread_idx;
+  rozofs_queue_t               ring4rdma;
   char                       * hostname;  
   int                          sendSocket;
   sem_t                        sema_rdma;       /**< storio semaphore for RDMA      */
 #ifdef ROZOFS_RDMA
-  rozofs_wr_id_t               rdma_ibv_post_send_ctx;   /**< context for ibv_post_send */
+//  rozofs_wr_id_t               rdma_ibv_post_send_ctx;   /**< context for ibv_post_send */
 #endif
   rozofs_disk_thread_stat_t    stat;
 } rozofs_disk_thread_ctx_t;
 
 extern rozofs_disk_thread_ctx_t rozofs_disk_thread_ctx_tb[];
+extern struct  sockaddr_un storio_south_socket_name;
 
 /*
 * Message sent/received in the af_unix disk sockets
@@ -199,4 +213,65 @@ void storio_send_response (rozofs_disk_thread_ctx_t *thread_ctx_p, storio_disk_t
 */
 int storio_disk_thread_intf_serial_send(storio_device_mapping_t      * fidCtx,
 				         uint64_t       timeStart);
+
+/*
+** Create the RDMA write threads that will handle all the disk write requests after the RDMA transfer
+
+* @param hostname    storio hostname (for tests)
+* @param nb_threads  number of threads to create
+*  
+* @retval 0 on success -1 in case of error
+*/
+int storio_rdma_write_disk_thread_create(char * hostname, int nb_threads, int instance_id);
+
+
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Thar API is intended to be used by a disk thread for sending back a 
+   disk response in RDMA mode (read/write ) towards the remote end
+   Upon the receiving of the message by the remote end, a message is posted towards
+   the main thread in order to release the resources.
+   
+   @param thread_ctx_p: pointer to the thread context (contains the thread source socket )
+   @param msg: pointer to the message that contains the disk response
+
+   
+   @retval none
+*/
+void storio_rdma_send_response (rozofs_disk_thread_ctx_t *thread_ctx_p, storio_disk_thread_msg_t * msg);
+
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Call back used upon receiving a RPC message over RDMA
+   That call-back is called under the context onf the Completion Queue thread
+   attached to a SRQ
+   
+   @param opcode: RDMA opcode MUST be IBV_WC_RECV
+   @param ruc_buf: reference of the ruc_buffer that contains the encoded RPC message
+   @param qp_num: reference of the QP on which the message has been received
+   @param rozofs_rmda_ibv_cxt_p: pointer to the context of the adaptor from the rozofs side
+   @param status: status of the operation (0 if no error)
+   @param error: error code
+*/
+
+void storio_rdma_msg_recv_form_cq_cbk(int opcode,void *ruc_buf, uint32_t qp_num,void *rozofs_rmda_ibv_cxt_p,int status,int error);
+
+/*
+**__________________________________________________________________________
+*/
+/**
+* fill the storio  AF_UNIX name in the global data
+
+  @param hostname
+  @param socketname : pointer to a sockaddr_un structure
+  
+  @retval none
+*/
+void storio_set_socket_name_with_hostname(struct sockaddr_un *socketname,char *name,char *hostname,int instance_id);
 #endif

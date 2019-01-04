@@ -128,6 +128,8 @@ typedef struct _rozorpc_srv_ctx_t
   uint32_t            integrity;     /**< the value of this field is incremented at  each MS ctx allocation  */
   uint32_t            opcode;      /**< opcode associated with the request, when the key is not used the value is ROZORPC_SRV_NULL */
   uint32_t   src_transaction_id;  /**< transaction id of the source request                                       */
+  uint32_t   rdma;                /**< assert to 1 when the context is used with RDMA protocol                    */
+  uint32_t   client_lbg_id;       /**< reference of the lbg_id on client side (between storcli & storio) needed for full rdma */
   uint64_t            timestamp;
   int                 position;  /**< position of the last decoded arg in the request                 */
   void      *recv_buf;             /**< pointer to the receive buffer that carries the request        */

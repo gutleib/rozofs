@@ -762,6 +762,10 @@ int rozofs_sorcli_sp_read_standalone(uint32_t lbg_id,uint32_t socket_context_ref
        goto error;
     }
     /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_request(xmit_buf,lbg_id);   
+    /*
     ** Now get the current length and fill the header of the message
     */
     position = XDR_GETPOS(&xdrs);
@@ -1051,6 +1055,10 @@ int rozofs_sorcli_sp_write_standalone(uint32_t lbg_id,uint32_t socket_context_re
        goto error;
     }
     /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_request(xmit_buf,lbg_id);   
+    /*
     ** Now get the current length and fill the header of the message
     */
     position = XDR_GETPOS(&xdrs);
@@ -1243,6 +1251,10 @@ int rozofs_standalone_send_rq(uint32_t lbg_id,uint32_t timeout_sec, uint32_t pro
        errno = EPROTO;
        goto error;
     }
+    /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_request(xmit_buf,lbg_id);   
     /*
     ** Now get the current length and fill the header of the message
     */

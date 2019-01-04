@@ -46,6 +46,7 @@
 #include "storcli_main.h"
 #include <rozofs/rozofs_timer_conf.h>
 #include "rozofs_storcli_mojette_thread_intf.h"
+#include <rozofs/rdma/rozofs_rdma.h>
 
 int rozofs_storcli_get_position_of_first_byte2write();
 
@@ -1488,6 +1489,25 @@ fatal:
 
 }
 
+/**
+  Need to take care that the buffer can come from the RPC pool of the RDMA
+  In that case we must take a lock for the buffer release
+  
+  @param buf: buffer to release
+  
+  @retval none
+*/
+#ifdef ROZOFS_RDMA
+void rozofs_write_free_recv_buf(void *buf)
+{
+   if (rozofs_is_rdma_rpc_buffer(buf)) rozofs_rdma_release_rpc_buffer(buf);
+   else ruc_buf_freeBuffer(buf);
+}
+#else
+
+#define  rozofs_write_free_recv_buf ruc_buf_freeBuffer
+
+#endif
 /*
 **__________________________________________________________________________
 */
@@ -1719,7 +1739,7 @@ void rozofs_storcli_write_req_processing_cbk(void *this,void *param)
     /*
     ** release the root context and the transaction context
     */
-    if(recv_buf!= NULL) ruc_buf_freeBuffer(recv_buf); 
+    if(recv_buf!= NULL) rozofs_write_free_recv_buf(recv_buf); 
     rozofs_tx_free_from_ptr(this);
     /*
     ** check if all projections have been received
@@ -1761,7 +1781,7 @@ drop_msg:
     ** the message has not the right sequence number,so just drop the received message
     ** and release the transaction context
     */  
-     if(recv_buf!= NULL) ruc_buf_freeBuffer(recv_buf);       
+     if(recv_buf!= NULL) rozofs_write_free_recv_buf(recv_buf);       
      rozofs_tx_free_from_ptr(this);
      return;
 
@@ -1778,7 +1798,7 @@ fatal:
     */  
     STORCLI_STOP_NORTH_PROF((&working_ctx_p->prj_ctx[projection_id]),write_prj,0);
 
-    if(recv_buf!= NULL) ruc_buf_freeBuffer(recv_buf);       
+    if(recv_buf!= NULL) rozofs_write_free_recv_buf(recv_buf);       
     rozofs_tx_free_from_ptr(this);
     severe("Cannot get the pointer to the receive buffer");
 
@@ -1797,7 +1817,7 @@ retry_attempt:
     */
     STORCLI_STOP_NORTH_PROF((&working_ctx_p->prj_ctx[projection_id]),write_prj,0);
 
-    if(recv_buf!= NULL) ruc_buf_freeBuffer(recv_buf);       
+    if(recv_buf!= NULL) rozofs_write_free_recv_buf(recv_buf);       
     rozofs_tx_free_from_ptr(this);
     /**
     * attempt to select a new storage
@@ -1810,7 +1830,7 @@ wait_more_projection:
     ** need to wait for some other write transaction responses
     ** 
     */
-    if(recv_buf!= NULL) ruc_buf_freeBuffer(recv_buf);           
+    if(recv_buf!= NULL) rozofs_write_free_recv_buf(recv_buf);           
     rozofs_tx_free_from_ptr(this);
     return;
 

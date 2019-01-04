@@ -73,6 +73,7 @@
 #include "storio_crc32.h"
 #include "storio_device_mapping.h"
 #include <rozofs/rdma/rozofs_rdma.h>
+#include "storio_rdma_recv.h"
 
 extern sconfig_t storaged_config;
 
@@ -338,7 +339,7 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
 	** init of the RDMA in server mode
 	*/
 #ifdef ROZOFS_RDMA
-	ret = rozofs_rdma_init(ROZO_SOCKCTRL_CTX_STORIO,0);
+	ret = rozofs_rdma_init(ROZO_SOCKCTRL_CTX_STORIO,0,common_config.storio_buf_cnt+ROZOFS_MAX_SRQ_WR, ROZOFS_RPC_RDMA_MSG_SZ,storio_rdma_msg_recv_form_cq_cbk);
 	if (ret < 0)
 	{
 	  severe("fail to initialize RDMA");
@@ -435,7 +436,18 @@ int storio_start_nb_th(void *args) {
     fatal("storio_disk_thread_intf_create");
     return -1;
   }
-
+#ifdef ROZOFS_RDMA
+  ret = storio_rdma_rpc_cmd_intf_create(IPString,args_p->instance_id) ;
+  if (ret < 0) {
+    fatal("storio_rdma_rpc_cmd_intf_create");
+    return -1;
+  }
+  ret = storio_rdma_write_disk_thread_create(IPString,common_config.nb_write_rdma_threads,args_p->instance_id) ;
+  if (ret < 0) {
+    fatal("storio_rdma_write_disk_thread_create");
+    return -1;
+  }
+#endif
   /*
   ** Init of the north interface (read/write request processing)
   */ 

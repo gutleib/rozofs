@@ -63,6 +63,14 @@ int rozofs_rdma_listener_max = 0;                                   /**< max num
 rozofs_rdma_mod_stats_t rozofs_rdma_mod_stats;                    /**< RDMA module statistics                */
 uint64_t rdma_err_stats[ROZOFS_IBV_WC_MAX_ERR+1] = {0} ;             /**< RDMA error counters */
 int  rozofs_rdma_qp_next_idx=0;
+void *rozofs_rdma_pool_rpc=NULL;   /**< pool for sending RPC messages */
+pthread_rwlock_t rozofs_rdma_pool_rpc_lock;  /**< lock on the ruc_buffer pool that contains the RPC messages */
+int  rozofs_max_rpc_buffer_srq_refill;            /**< max number of number to refill on the SRQ during the processing of one message  */
+rozofs_rdma_pf_rpc_cqe_done_t  rozofs_rdma_rpc_cbk = NULL;  /**< user callback for the RPC message over RDMA */
+
+rozofs_rdma_memory_reg_t rozofs_rdma_memreg_rpc;  /**< memory descriptor for the command   */
+//rozofs_qc_th_t *rozofs_cq_th_post_send[ROZOFS_CQ_THREAD_NUM];  /**< thread context of the completion queue thread associated with post_send */
+//rozofs_qc_th_t *rozofs_cq_th_post_recv[ROZOFS_CQ_THREAD_NUM];  /**< thread context of the completion queue thread associated with post_recv */
 /*
 ** local prototypes
 */
@@ -313,6 +321,8 @@ void show_rdma_statistics(char * argv[], uint32_t tcpRef, void *bufRef) {
     SHOW_RDMA_STATS( rdma_destroy_id);            /**< cm_id contextdeletion: rdma_destroy_id       */
     SHOW_RDMA_STATS( signalling_sock_create);  /**<signalling socket creation               */
     SHOW_RDMA_STATS( rdma_listen);            /**<number of RDMA listen                     */
+    SHOW_RDMA_STATS( ibv_create_srq);            /**<number of RDMA share queues             */
+    SHOW_RDMA_STATS( ibv_post_srq_recv);            /**<number of RDMA post received on shared queue    */
     if (argv[1] != NULL)
     {
       if (strcmp(argv[1],"reset")==0) {
@@ -425,7 +435,11 @@ char *rozofs_rdma_display_device_properties(struct ibv_context *device_p,char *p
      pChar +=sprintf(pChar,"max_qp_rd_atom      %d\n",device_attr.max_qp_rd_atom);
      pChar +=sprintf(pChar,"max_res_rd_atom     %d\n",device_attr.max_res_rd_atom);
      pChar +=sprintf(pChar,"max_qp              %d\n",device_attr.max_qp);
+     pChar +=sprintf(pChar,"max_qp_wr           %d\n",device_attr.max_qp_wr);
+     pChar +=sprintf(pChar,"max_cq              %d\n",device_attr.max_cq);
+     pChar +=sprintf(pChar,"max_cqe             %d\n",device_attr.max_cqe);
      pChar +=sprintf(pChar,"phys_port_cnt       %d\n",device_attr.phys_port_cnt);
+     pChar +=sprintf(pChar,"max_mr_size         %llu\n",(unsigned long long)device_attr.max_mr_size);
      return pChar;
    }
    /*
@@ -464,6 +478,82 @@ void show_rdma_devices(char * argv[], uint32_t tcpRef, void *bufRef) {
      if (rozofs_rmda_ibv_tb[i]== 0) continue;
      ctx = rozofs_rmda_ibv_tb[i];
      if (ctx->ctx != NULL) rozofs_rdma_display_device_properties(ctx->ctx,pChar,i,0);
+  }   
+   
+out:
+    
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());      
+    
+}
+
+/*
+**__________________________________________________
+*/
+/**
+
+  Completion queue thread statistics
+*/
+
+char *rozofs_rdma_printcq_stats_header(char *pChar)
+{
+  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+\n");
+  pChar += sprintf(pChar,"|  CQ_ID   |   IBV_SEND     |   IBV_RECV     |  IBV_RDMA_READ | IBV_RDMA_WRITE |    ADDRESS     |  NB ENTRIES    |\n");
+  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+\n");
+  return pChar;
+}
+
+char *rozofs_rdma_printcq_stats(char *pChar,int adaptor,int id,int recv,rozofs_cq_th_stat_t *stats,struct ibv_cq *cq_p,uint64_t post_send_counter)
+{
+  pChar += sprintf(pChar,"| %d/%d-%s    |  %12llu  |  %12llu  |  %12llu  |  %12llu  |  %12llx  |  %12d  |  %12u/%12u  |  %12llu  |\n",adaptor,id,(recv==0)?"S":"R",
+          (long long unsigned int) stats->ibv_wc_send_count,
+          (long long unsigned int)stats->ibv_wc_recv_count,
+          (long long unsigned int)stats->ibv_wc_rdma_read_count,
+          (long long unsigned int)stats->ibv_wc_rdma_write_count,
+	  (long long unsigned int)cq_p,
+	  cq_p->cqe,
+	  cq_p->comp_events_completed,
+	  cq_p->async_events_completed,
+	  (long long unsigned int)post_send_counter
+	  	  
+	  );
+  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+----------------+\n"); 
+  return pChar; 
+}
+
+
+void show_rdma_cq_threads(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char *pChar = uma_dbg_get_buffer();
+  int i,j;
+  int count = 0;
+  rozofs_rmda_ibv_cxt_t *ctx;
+  rozofs_qc_th_t *th_p;
+  
+  for (i=0;i< ROZOFS_MAX_RDMA_ADAPTOR; i++) 
+  {
+     if (rozofs_rmda_ibv_tb[i]== 0) continue;
+     ctx = rozofs_rmda_ibv_tb[i];
+     if (ctx->ctx != NULL) count++;
+  } 
+  pChar+=sprintf(pChar,"number of active devices contexts: %d/%d\n",count,(int) ROZOFS_MAX_RDMA_ADAPTOR);
+  if ( count == 0) goto out;
+  /*
+  ** Display the devices
+  */
+  pChar = rozofs_rdma_printcq_stats_header(pChar);
+  for (i=0;i< ROZOFS_MAX_RDMA_ADAPTOR; i++) 
+  {
+     if (rozofs_rmda_ibv_tb[i]== 0) continue;
+     ctx = rozofs_rmda_ibv_tb[i];
+     for (j= 0; j < ROZOFS_CQ_THREAD_NUM; j++)
+     {
+       th_p = ctx->rozofs_cq_th_post_send[j];
+       pChar = rozofs_rdma_printcq_stats(pChar,i,j,0,&th_p->stats,ctx->cq[j],ctx->post_send_stat[j]);
+     }
+     for (j= 0; j < ROZOFS_CQ_THREAD_NUM; j++)
+     {
+       th_p = ctx->rozofs_cq_th_post_recv[j];
+       pChar = rozofs_rdma_printcq_stats(pChar,i,j,1,&th_p->stats,ctx->cq_rpc[j],0);
+     }       
   }   
    
 out:
@@ -626,6 +716,61 @@ void show_rdma_mem(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 }
 
+
+/*
+**__________________________________________________
+*/
+
+char *show_memory_region(char *pChar,struct ibv_mr *mr_p,char *name)
+{
+   if (mr_p == NULL) return pChar;
+   pChar += sprintf(pChar,"| %10s | %12llx | %12llx | %12llu | %8u | %8u |\n",name,(long long unsigned int)(mr_p->pd),
+                                                                              (long long unsigned int)(mr_p->addr),
+									      (long long unsigned int)mr_p->length,mr_p->lkey,mr_p->rkey);
+   return pChar;
+
+}
+
+void show_rdma_regions(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char *pChar = uma_dbg_get_buffer();
+  int i;
+  int count = 0;
+  rozofs_rmda_ibv_cxt_t *ctx;
+  
+  for (i=0;i< ROZOFS_MAX_RDMA_ADAPTOR; i++) 
+  {
+     if (rozofs_rmda_ibv_tb[i]== 0) continue;
+     ctx = rozofs_rmda_ibv_tb[i];
+     if (ctx->ctx != NULL) count++;
+  } 
+  pChar+=sprintf(pChar,"number of active devices contexts: %d/%d\n",count,(int) ROZOFS_MAX_RDMA_ADAPTOR);
+  if ( count == 0) goto out;
+
+  for (i=0;i< ROZOFS_MAX_RDMA_ADAPTOR; i++) 
+  {
+     if (rozofs_rmda_ibv_tb[i]== 0) continue;
+  /*
+  ** Display the devices
+  */
+     pChar += sprintf(pChar,"\nAdaptor #%d\n",i);
+     pChar += sprintf(pChar,"|  name      |  Prot. Dom.  |  Address     |  Length      | loc. key | rem. key |\n");
+     pChar += sprintf(pChar,"+------------+--------------+--------------+--------------+----------+----------+\n");
+     ctx = rozofs_rmda_ibv_tb[i];
+
+     {
+       pChar = show_memory_region(pChar,ctx->memreg[0],"Data");
+       pChar += sprintf(pChar,"+------------+--------------+--------------+--------------+----------+----------+\n");       
+       pChar = show_memory_region(pChar,ctx->memreg_rpc,"Rpc");
+       pChar += sprintf(pChar,"+------------+--------------+--------------+--------------+----------+----------+\n");       
+
+     }
+  }   
+   
+out:
+    
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());      
+    
+}
 
 /*
 **___________________________________________________________
@@ -1015,7 +1160,248 @@ int rozofs_rdma_send2rdma_side(int opcode,rozofs_rdma_tcp_assoc_t *assoc_p)
    return 0;
 
 }
+/*
+**______________________________________________________________________________________
 
+        R P C   O V E R   R D M A    B U F F E R   M A N A G E M E N T
+
+**______________________________________________________________________________________
+*/	
+/*
+**__________________________________________________
+*/
+/*
+** Create the user pool for sending RPC messages
+   The pool is common for request and response
+   
+   The buffers on that pool will be used by the shared received queue of the rdma
+   
+   @param count :number of buffer
+   @param length : length of a buffer
+   
+   
+   @retval 0 on success
+   @retval < 0 on error s(see errno for details )
+*/
+int rozofs_rdma_pool_rpc_create(int count,int size)
+{
+   if (rozofs_rdma_pool_rpc != NULL)
+   {
+      /*
+      ** Already created
+      */
+      return 0;
+   }
+   /*
+   ** Init of the Mutex to protect alloc/release in a multithreaded environment
+   */
+   pthread_rwlock_init(&rozofs_rdma_pool_rpc_lock, NULL); 
+   
+   rozofs_rdma_pool_rpc = ruc_buf_poolCreate(count,size);
+   if (rozofs_rdma_pool_rpc == NULL) return -1;
+   /*
+   ** Register the pool with rozodiag
+   */
+   ruc_buffer_debug_register_pool("RDMA_rpc_pool",rozofs_rdma_pool_rpc);
+   /*
+   ** register the user memory region
+   */
+   rozofs_rdma_memreg_rpc.mem = ruc_buf_get_pool_base_and_length(rozofs_rdma_pool_rpc,&rozofs_rdma_memreg_rpc.len);
+   return 0;
+}
+
+/*
+**__________________________________________________
+*/
+/**
+*   Post a buffer in the shared queue for receiving a RPC message over RDMA
+    
+    @param s_ctx: RDMA context of the adaptor
+    
+    @retval 0: success
+    @retval -1: error (see errno for details)    
+*/    
+int rozofs_ibv_post_srq_recv4rpc(rozofs_rmda_ibv_cxt_t *s_ctx)
+{
+  struct ibv_recv_wr wr, *bad_wr = NULL;
+  struct ibv_sge sge;
+  struct ibv_mr  *mr_p; 
+
+  void *pool;
+  void *ruc_buf_p;
+  int error;
+  
+  if (s_ctx->shared_queue4rpc == NULL)
+  {
+    severe("The RDMA shared queue does not exist\n");
+    errno = ENOSYS;
+    return -1;
+  }
+  /*
+  ** Get the context asssociated to the type of buffer
+  */
+
+  pool = rozofs_rdma_pool_rpc;
+
+  mr_p = s_ctx->memreg_rpc;
+  /*
+  ** Allocate a ruc_buffer according to the selected pool
+  */
+  pthread_rwlock_wrlock(&rozofs_rdma_pool_rpc_lock);
+  ruc_buf_p = ruc_buf_getBuffer(pool);
+  pthread_rwlock_unlock(&rozofs_rdma_pool_rpc_lock);
+  if (ruc_buf_p == NULL)
+  {
+    errno = ENOMEM;
+    return -1;
+  }
+  /*
+  ** The reference of the ruc_buffer is moved in the wr_id field in order to be able to
+  ** release it when user needs to release
+  */
+  wr.wr_id = (uint64_t)ruc_buf_p;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+
+  sge.addr = (uintptr_t)ruc_buf_getPayload(ruc_buf_p);
+  sge.length = ruc_buf_getMaxPayloadLen(ruc_buf_p);
+  sge.lkey = mr_p->lkey;;
+  
+  if(ibv_post_srq_recv(s_ctx->shared_queue4rpc, &wr, &bad_wr)!=0)
+  {
+     warning ("ibv_post_srq_recv error :%s",strerror(errno));
+     error = errno;
+     /*
+     ** Release the buffer
+     */
+     pthread_rwlock_wrlock(&rozofs_rdma_pool_rpc_lock);
+     ruc_buf_freeBuffer(ruc_buf_p);
+     pthread_rwlock_unlock(&rozofs_rdma_pool_rpc_lock);
+     errno = error;
+     return -1;     
+  }
+  return 0;
+}
+
+
+/*
+**__________________________________________________
+*/
+/**
+*   Post a buffer in the shared queue for receiving a RPC message over RDMA
+    
+    @param s_ctx: RDMA context of the adaptor
+    @param ruc_buf_p: reference of the allocated ruc_buffer
+    
+    @retval 0: success
+    @retval -1: error (see errno for details)    
+*/    
+int rozofs_ibv_post_srq_recv4rpc_with_ruc_buf(rozofs_rmda_ibv_cxt_t *s_ctx,void *ruc_buf_p)
+{
+  struct ibv_recv_wr wr, *bad_wr = NULL;
+  struct ibv_sge sge;
+  struct ibv_mr  *mr_p; 
+  int error;
+  
+  if (s_ctx->shared_queue4rpc == NULL)
+  {
+    severe("The RDMA shared queue does not exist\n");
+    errno = ENOSYS;
+    return -1;
+  }
+  /*
+  ** Get the context asssociated to the type of buffer
+  */
+
+  mr_p = s_ctx->memreg_rpc;
+  /*
+  ** The reference of the ruc_buffer is moved in the wr_id field in order to be able to
+  ** release it when user needs to release
+  */
+  wr.wr_id = (uint64_t)ruc_buf_p;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+
+  sge.addr = (uintptr_t)ruc_buf_getPayload(ruc_buf_p);
+  sge.length =ruc_buf_getMaxPayloadLen(ruc_buf_p);
+  sge.lkey = mr_p->lkey;;
+  
+  if(ibv_post_srq_recv(s_ctx->shared_queue4rpc, &wr, &bad_wr)!=0)
+  {
+     warning ("ibv_post_srq_recv error :%s",strerror(errno));
+     error = errno;
+     /*
+     ** Release the buffer
+     */
+     pthread_rwlock_wrlock(&rozofs_rdma_pool_rpc_lock);
+     ruc_buf_freeBuffer(ruc_buf_p);
+     pthread_rwlock_unlock(&rozofs_rdma_pool_rpc_lock);
+     errno = error;
+     return -1;     
+  }
+  return 0;
+}
+/*
+**__________________________________________________
+*/
+/**
+*  Allocate a rdma RPC buffer
+
+   @param none
+   
+   @retval <> NULL pointer to the ruc_buffer
+   @retval NULL: out of buffer
+*/
+void *rozofs_rdma_allocate_rpc_buffer()
+{
+   void *buf;
+   
+   if (rozofs_rdma_pool_rpc == NULL) return NULL;
+   
+   pthread_rwlock_wrlock(&rozofs_rdma_pool_rpc_lock);
+   buf = ruc_buf_getBuffer(rozofs_rdma_pool_rpc);
+   pthread_rwlock_unlock(&rozofs_rdma_pool_rpc_lock);
+   return buf;
+
+}
+
+/*
+**__________________________________________________
+*/
+/**
+* Release a rdma RPC buffer
+
+   @param buf: pointer to the ruc_buffer
+   
+   @retval 0 on success
+   @retval<0 on error
+*/
+void rozofs_rdma_release_rpc_buffer(void *buf)
+{
+   pthread_rwlock_wrlock(&rozofs_rdma_pool_rpc_lock);
+   ruc_buf_freeBuffer(buf);
+   pthread_rwlock_unlock(&rozofs_rdma_pool_rpc_lock);
+}
+/*
+**__________________________________________________
+*/
+/**
+*check if the ruc_buffer belongs to the RPC RDMA pool
+
+   @param buf: pointer to the ruc_buffer
+   
+   @retval 1 yes
+   @retval 0 no
+*/
+int rozofs_is_rdma_rpc_buffer(void *buf)
+{
+   ruc_obj_desc_t* p =ruc_objGetHead(buf);
+   if (NULL==p) return 0;
+   if (p == rozofs_rdma_pool_rpc) return 1;
+   return 0;
+}
 /*
 **__________________________________________________
 */
@@ -1024,19 +1410,25 @@ int rozofs_rdma_send2rdma_side(int opcode,rozofs_rdma_tcp_assoc_t *assoc_p)
    
    @param nb_rmda_tcp_context : number of RDMA TCP contexts
    @param client_mode: assert to 1 for client; 0 for server mode
+   @param count : number of RPC context (for sending & receiving)
+   @param size: size of the RPC buffer
+   @param rpc_rdma_cbk: pointer to the callback used for RPC received over RDMA
    
    retval 0 on sucess
    retval -1 on error
 */   
-int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode)
+int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode,int count,int size,rozofs_rdma_pf_rpc_cqe_done_t rdma_rpc_recv_cbk)
 {
   int ret = 0;
   int i;
   int    fileflags;  
   rozofs_cur_act_rmda_tcp_context = 0;
   rozofs_cur_del_rmda_tcp_context = 0; 
+  rozofs_max_rpc_buffer_srq_refill = ROZOFS_RDMA_BUF_SRQ_MAX_REFILL;
   rozofs_rdma_listener_count = 0;
   rozofs_rdma_listener_max   = ROZOFS_RDMA_MAX_LISTENER;
+  rozofs_rdma_rpc_cbk = rdma_rpc_recv_cbk;
+  
   memset(&rozofs_rdma_listener[0],0,sizeof(uint64_t*)*ROZOFS_RDMA_MAX_LISTENER);
   /*
   ** signalling thread conf. parameters
@@ -1044,6 +1436,10 @@ int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode)
   rdma_sig_reconnect_credit_conf = ROZOFS_RDMA_SIG_RECONNECT_CREDIT_COUNT;
   rdma_sig_reconnect_credit = rdma_sig_reconnect_credit_conf;
   rdma_sig_reconnect_period_conf = ROZOFS_RDMA_SIG_RECONNECT_CREDIT_PERIOD_SEC;
+  /*
+  ** create the pool used for RPC message over RDMA
+  */
+  ret = rozofs_rdma_pool_rpc_create(count,size);
   
   rozofs_rdma_tcp_table = malloc(sizeof(rozofs_rdma_connection_t*)*nb_rmda_tcp_context);
   if (rozofs_rdma_tcp_table ==NULL)
@@ -1147,6 +1543,8 @@ int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode)
   uma_dbg_addTopic("rdma_devices", show_rdma_devices);  
   uma_dbg_addTopic("rdma_ports", show_rdma_ports);  
   uma_dbg_addTopic("rdma_mem", show_rdma_mem);  
+  uma_dbg_addTopic("rdma_regions", show_rdma_regions);  
+  uma_dbg_addTopic("rdma_cq_threads", show_rdma_cq_threads);  
   uma_dbg_addTopicAndMan("rdma_qp", rozofs_rdma_qp_debug, rozofs_rdma_qp_debug_man, 0);
   return ret;
 error:
@@ -1412,6 +1810,7 @@ void rozofs_rdma_release_context_effective(rozofs_rdma_connection_t *cnx_p)
 {
 
   if (cnx_p->id !=NULL) {
+
     if (cnx_p->id->qp !=NULL) 
     {
       RDMA_STATS_REQ(rdma_destroy_qp);
@@ -1444,7 +1843,8 @@ void rozofs_rdma_del_process(time_t del_time)
    list_for_each_forward_safe(p, q,&rozofs_rdma_del_head_list)
    {
      cnx_p = list_entry(p, rozofs_rdma_connection_t, list);
-     if (del_time > (cnx_p->del_tv_sec+1))
+#warning need to set a parameter to delay the qp deletion
+     if (del_time > (cnx_p->del_tv_sec+10))
      {
        list_remove(p);
        rozofs_rdma_release_context_effective(cnx_p);
@@ -1459,34 +1859,86 @@ void rozofs_rdma_del_process(time_t del_time)
 }
 
 /*
+**_________________________________________________________________________________________________
+
+     R D M A   C O M P L E T I O N   Q U E U E    T H R E A D (post_recv)
+     
+         Process the reception of the RPC messages (either storcli or storio for I/O)
+	 rozofsmount & exportd for metadata (future)
+
+**_________________________________________________________________________________________________
+*/
+
+/**
+*  Update statistics on Completion queue thread
+
+   @param opcode: RDMA opcode
+   @param th_ctx_p: context of the thread
+
+   @retval none
+*/
+void rozofs_rdma_cq_th_stats_update(uint32_t opcode,rozofs_qc_th_t *th_ctx_p)
+{
+   switch (opcode)
+   {
+     case IBV_WC_RECV:
+        th_ctx_p->stats.ibv_wc_recv_count++;
+	break;
+     case IBV_WC_SEND:
+        th_ctx_p->stats.ibv_wc_send_count++;
+	break;
+     case IBV_WC_RDMA_READ:
+        th_ctx_p->stats.ibv_wc_rdma_read_count++;
+	break;
+     case IBV_WC_RDMA_WRITE:
+        th_ctx_p->stats.ibv_wc_rdma_write_count++;
+	break;
+     default:
+     break;
+   }
+}
+/*
 **__________________________________________________
 */
 /**
   Function that process the status returned by the RDMA operation 
   That service is called under the thread context associated with a RDMA adaptor
   
+  Version 2
+  
   In case of error, the service can send a RDMA_DISCONNECT_REQ on the socketpair
   In any case, the service ends by a sem_post() to wake up the thread that has initiated the
   RDMA transfer.
   
-  The service is intended to support only two kinds of RDMA service:
-     - RDMA_READ : read data from storcli in order to perform a pwrite of projections
-     - RDMA_WRITE: write data towards storcli after reading projections.
+ 
+  The opcode that can be found of a completion queue are:
+  IBV_WC_RECV: Send data operation for a WR that was posted to a Receive Queue (of a QP or to an SRQ)
   
-  @param wc : RDMA ibv_post_send context
+  On the storio side it might be a RPC read or write request 
+  On the storcli side it might be a PRC read or write response
+  
+  The wr_id found in the message is the reference of ruc_buffer. The RPC message can be found in the payload of the ruc_buffer
+  the reference of the qp on which the message has been sent can be found in the qp_num of the ibv_wc context
+  
+  @param wc : RDMA ibv_post_recv context (wc->wr_id contains the reference of the ruc buffer that has been pushed on the SRQ
+  @param th_ctx_p: context of the thread: needed to refill the shared queue with Work Request buffer
   
 */
 
-void rozofs_on_completion(struct ibv_wc *wc)
+void rozofs_on_completion2_rcv(struct ibv_wc *wc,rozofs_qc_th_t *th_ctx_p)
 {
-  rozofs_wr_id_t *thread_wr_p = (rozofs_wr_id_t *)(uintptr_t)wc->wr_id;
-//  rozofs_rdma_connection_t *conn= NULL;
-//  if (thread_wr_p!= NULL) conn = thread_wr_p->conn;
+  int status = 0;
+  int error = 0;
+  void *ruc_buf_p;
+  
+  rozofs_rdma_cq_th_stats_update(wc->opcode,th_ctx_p);
+  
+  ruc_buf_p = (void*)wc->wr_id;
+  
   
   switch (wc->status)
   {
 	case IBV_WC_SUCCESS:
-	  if (thread_wr_p!= NULL) thread_wr_p->status = 0;
 	  break;
 	case IBV_WC_LOC_LEN_ERR:
 	case IBV_WC_LOC_QP_OP_ERR:
@@ -1510,13 +1962,10 @@ void rozofs_on_completion(struct ibv_wc *wc)
 	case IBV_WC_RESP_TIMEOUT_ERR:
 	case IBV_WC_GENERAL_ERR: 
 	default: 
-	  if (thread_wr_p != NULL)
-	  {
-	    thread_wr_p->status = -1;
-	    thread_wr_p->error = wc->status;
-	  }
-	  rozofs_rdma_error_register(wc->status);
-	  goto error;    
+	    rozofs_rdma_error_register(wc->status);
+            status = -1;
+	    error = wc->status;
+	  break;    
   }
   /*
   ** we don't really care about the opcode that should be either 
@@ -1525,37 +1974,130 @@ void rozofs_on_completion(struct ibv_wc *wc)
   /*
   ** Now signaled the thread that has submitted the ibv_post_send
   */
-  if (thread_wr_p!=NULL)
+  if ((status == 0)&&(rozofs_rdma_rpc_cbk!=NULL))
   {
-    if (sem_post(thread_wr_p->sem) < 0)
-    {
-      /*
-      ** issue a fatal since this situation MUST not occur
-      */
-      fatal("RDMA failure on sem_post: %s",strerror(errno));
-    }
+    /*
+    ** Set the payload len in the ruc buffer
+    */
+    ruc_buf_setPayloadLen(ruc_buf_p,wc->byte_len);
+    (rozofs_rdma_rpc_cbk)(wc->opcode,ruc_buf_p,wc->qp_num,th_ctx_p->ctx_p,status,error);
   }
-  return;
+  else
+  {
+     /*
+     ** there is an error or no registered callback, no to release the buffer
+     */
+     rozofs_rdma_release_rpc_buffer(ruc_buf_p);
   
-error:  
-  /*
-  ** error: there was a RDMA error, the thread is signaled and a RDMA disconnect is
-  ** issue
-  */
-  if (thread_wr_p!=NULL)
-  {
-    if (sem_post(thread_wr_p->sem) < 0)
-    {
-      /*
-      ** issue a fatal since this situation MUST not occur
-      */
-      fatal("RDMA failure on sem_post: %s",strerror(errno));
-    }
-//#warning do not disconnect
-//    rdma_disconnect(conn->id);
   }
+  /*
+  ** Attempt to refill the Share Queue with a new buffer
+  */
+  th_ctx_p->rpc_buf_count2alloc++;
+  {
+    int ret;
+    int i;
+    int count = th_ctx_p->rpc_buf_count2alloc;
+    if (count < 0) 
+    {
+       warning ("Completion Queue Thread with a wrong SRQ count %d",count);
+       count = 1; 
+    }
+    for (i = 0; i < count; i++)
+    {
+       ruc_buf_p = rozofs_rdma_allocate_rpc_buffer();
+       if (ruc_buf_p == NULL) break;
+       ret = rozofs_ibv_post_srq_recv4rpc_with_ruc_buf(th_ctx_p->ctx_p,ruc_buf_p);
+       if (ret < 0)
+       {
+          /*
+	  ** Check if the share receive queu  is full
+	  */
+          if (errno == ENOMEM) th_ctx_p->rpc_buf_count2alloc = 0;
+	  break;
+       }
+       th_ctx_p->rpc_buf_count2alloc--;
+       /*
+       ** Check if we have reach the maximum of the queue refill during the processing on one message
+       */
+       if (i >=rozofs_max_rpc_buffer_srq_refill) break;
+    }  
+   }
 }
 
+/*
+**__________________________________________________
+*/
+/**
+  Poll thread associated with a RDMA adapator: that thread is intended to process the RPC messages received from the SRQ
+  It is typically :
+      - the RPC write & Read request on the server side (storio)
+      - the RPC write & read response on the client side (storcli)
+  
+  
+  @param ctx : pointer to the RDMA context associated with the thread
+  
+  retval NULL on error
+*/
+void * rozofs_poll_cq_rpc_recv_th(void *ctx)
+{
+  rozofs_qc_th_t *th_ctx_p = (rozofs_qc_th_t*)ctx;
+  rozofs_rmda_ibv_cxt_t *s_ctx = (rozofs_rmda_ibv_cxt_t*)th_ctx_p->ctx_p;
+  struct ibv_cq *cq;
+  struct ibv_wc wc;
+//  int wc_to_ack = 0;
+  
+  info("CQ-R thread#%d started \n",th_ctx_p->thread_idx);
+
+    uma_dbg_thread_add_self("CQ_Th_rpc");
+    {
+      struct sched_param my_priority;
+      int policy=-1;
+      int ret= 0;
+
+      pthread_getschedparam(pthread_self(),&policy,&my_priority);
+          info("storio main thread Scheduling policy   = %s\n",
+                    (policy == SCHED_OTHER) ? "SCHED_OTHER" :
+                    (policy == SCHED_FIFO)  ? "SCHED_FIFO" :
+                    (policy == SCHED_RR)    ? "SCHED_RR" :
+                    "???");
+
+      my_priority.sched_priority= 98;
+      policy = SCHED_FIFO;
+      ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
+      if (ret < 0) 
+      {
+	severe("error on sched_setscheduler: %s",strerror(errno));	
+      }
+      pthread_getschedparam(pthread_self(),&policy,&my_priority);    
+    }      
+
+  while (1) {
+    TEST_NZ(ibv_get_cq_event(s_ctx->comp_channel_rpc[th_ctx_p->thread_idx], &cq, &ctx));
+    ibv_ack_cq_events(cq, 1);
+    TEST_NZ(ibv_req_notify_cq(cq, 0));
+
+    while (ibv_poll_cq(cq, 1, &wc))
+      rozofs_on_completion2_rcv(&wc,th_ctx_p);
+  }
+
+error:
+  return NULL;
+}
+
+
+
+/*
+**_________________________________________________________________________________________________
+
+     R D M A   C O M P L E T I O N   Q U E U E    T H R E A D (post_send)
+     
+         IBV_WC_SEND
+	 IBV_WC_RDMA_READ
+	 IBV_WC_RDMA_WRITE
+
+**_________________________________________________________________________________________________
+*/
 /*
 **__________________________________________________
 */
@@ -1570,18 +2112,24 @@ error:
   RDMA transfer.
   
   The service is intended to support only two kinds of RDMA service:
-     - RDMA_READ : read data from storcli in order to perform a pwrite of projections
-     - RDMA_WRITE: write data towards storcli after reading projections.
+  IBV_WC_SEND: Send operation for a WR that was posted to the Send Queue
+  IBV_WC_RDMA_READ : RDMA Read operation for a WR that was posted to the Send Queue
+  IBV_WC_RDMA_WRITE: RDMA write operation for a WR that was posted to the Send Queue
   
   @param wc : RDMA ibv_post_send context
+  @param th_ctx_p : completion queue context
   
 */
 
-void rozofs_on_completion2(struct ibv_wc *wc)
+void rozofs_on_completion2(struct ibv_wc *wc,rozofs_qc_th_t *th_ctx_p)
 {
   rozofs_wr_id2_t *thread_wr_p = (rozofs_wr_id2_t *)(uintptr_t)wc->wr_id;
   int status = 0;
   int error = 0;
+
+  rozofs_rdma_cq_th_stats_update(wc->opcode,th_ctx_p);
+//#warning FDL_debug  rozofs_on_completion2
+//  info("rozofs_on_completion2 opcode %d status %d", wc->opcode,wc->status);
   switch (wc->status)
   {
 	case IBV_WC_SUCCESS:
@@ -1686,12 +2234,22 @@ void * rozofs_poll_cq_th(void *ctx)
 //  int wc_to_ack = 0;
   
   info("CQ thread#%d started \n",th_ctx_p->thread_idx);
+  uma_dbg_thread_add_self("CQ_Th_rw");
 #if 1
     {
       struct sched_param my_priority;
       int policy=-1;
       int ret= 0;
-      
+
+      /**
+      *  The priority of the completion queue thread must be higher than
+      * the priority of the disk threads otherwise we can face a deadlock in
+      * the ibv_post_send() while attempting to take the spin_lock on the QP.
+      * If the task that has the spin_lock cannot be schedule because all the
+      * core are allocated to disk threads with an higher priority compared
+      * the priority of the completion queue thread, we enter the dead lock
+      */
+            
       pthread_getschedparam(pthread_self(),&policy,&my_priority);
           info("storio main thread Scheduling policy   = %s\n",
                     (policy == SCHED_OTHER) ? "SCHED_OTHER" :
@@ -1699,7 +2257,7 @@ void * rozofs_poll_cq_th(void *ctx)
                     (policy == SCHED_RR)    ? "SCHED_RR" :
                     "???");
  #if 1
-      my_priority.sched_priority= 96;
+      my_priority.sched_priority= 98;
       policy = SCHED_FIFO;
       ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
       if (ret < 0) 
@@ -1720,7 +2278,7 @@ void * rozofs_poll_cq_th(void *ctx)
     TEST_NZ(ibv_req_notify_cq(cq, 0));
 
     while (ibv_poll_cq(cq, 1, &wc))
-      rozofs_on_completion2(&wc);
+      rozofs_on_completion2(&wc,th_ctx_p);
   }
 #else
   while (1) {
@@ -1736,7 +2294,7 @@ void * rozofs_poll_cq_th(void *ctx)
     while (ibv_poll_cq(cq, 1, &wc))
     {
       wc_to_ack++;
-      rozofs_on_completion2(&wc);
+      rozofs_on_completion2(&wc,th_ctx_p);
     }
   }
 
@@ -1906,6 +2464,10 @@ rozofs_rmda_ibv_cxt_t *rozofs_build_rdma_context(struct ibv_context *verbs)
     severe("Error while creating ROZOFS_RMDA_IBV_CXT:%s\n",strerror(errno));
     return NULL;
   }
+  /*
+  ** Clear the context before using it
+  */
+  memset(s_ctx,0,sizeof(rozofs_rmda_ibv_cxt_t));
 
   s_ctx->ctx = verbs;
   rozofs_rdma_print_device_properties(verbs);
@@ -1919,7 +2481,7 @@ rozofs_rmda_ibv_cxt_t *rozofs_build_rdma_context(struct ibv_context *verbs)
   }
   RDMA_STATS_RSP_OK(ibv_alloc_pd);
   /*
-  ** create a number of completion queue corresponding to the number of CQ threads
+  ** create a number of completion queue corresponding to the number of CQ threads (one set  for RDMA read/write and one set for RPC over RDMA
   */
   for (k=0; k<ROZOFS_CQ_THREAD_NUM; k++)
   {
@@ -1942,6 +2504,31 @@ rozofs_rmda_ibv_cxt_t *rozofs_build_rdma_context(struct ibv_context *verbs)
     TEST_NZ(ibv_req_notify_cq(s_ctx->cq[k], 0));
   }
   /*
+  ** Create the completion queue and channel for RPC message over RDMA
+  */
+  for (k=0; k<ROZOFS_CQ_THREAD_NUM; k++)
+  {
+    RDMA_STATS_REQ(ibv_create_comp_channel);
+    if ((s_ctx->comp_channel_rpc[k] = ibv_create_comp_channel(s_ctx->ctx))==NULL)
+    {
+      severe("RDMA ibv_create_comp_channel failure for context %p:%s",s_ctx->ctx,strerror(errno));
+      RDMA_STATS_RSP_NOK(ibv_create_comp_channel);
+      goto error;    
+    }
+    RDMA_STATS_RSP_OK(ibv_create_comp_channel);
+    RDMA_STATS_REQ(ibv_create_cq);
+    if ((s_ctx->cq_rpc[k] = ibv_create_cq(s_ctx->ctx, ROZOFS_RDMA_COMPQ_RPC_SIZE, NULL, s_ctx->comp_channel_rpc[k], 0))==NULL) /* cqe=10 is arbitrary */
+    {
+      severe("RDMA ibv_create_cq failure for context %p:%s",s_ctx->ctx,strerror(errno));
+      RDMA_STATS_RSP_NOK(ibv_create_cq);
+      goto error;        
+    }
+    RDMA_STATS_RSP_OK(ibv_create_cq);
+    info("FDL index %d %p ",k,s_ctx->cq_rpc[k]);
+    
+    TEST_NZ(ibv_req_notify_cq(s_ctx->cq_rpc[k], 0));
+  }
+  /*
   ** associate the user memory region with adaptor
   */
   for (i=0; i < ROZOFS_MAX_RDMA_MEMREG; i++)
@@ -1954,17 +2541,19 @@ rozofs_rmda_ibv_cxt_t *rozofs_build_rdma_context(struct ibv_context *verbs)
 		       mem_reg_p->mem,
 		       mem_reg_p->len,
 		       IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
-    if (s_ctx->memreg[i] < 0)
+    if (s_ctx->memreg[i] == 0)
     {
-       severe("ibv_reg_mr error for addr %p len %llu : %s",mem_reg_p->mem,(unsigned long long int)mem_reg_p->len,strerror(errno));
+       severe("ibv_reg_mr idx %d error for addr %p len %llu : %s",i,mem_reg_p->mem,(unsigned long long int)mem_reg_p->len,strerror(errno));
        RDMA_STATS_RSP_NOK(ibv_reg_mr);
        goto error;  
     }
+#if 0 // debug 
     {
-     struct ibv_mr  *mr_p;     
-     mr_p = s_ctx->memreg[i];
-    //info("FDL memreg idx %d addr/len %llx/%llu key %x\n",i,mem_reg_p->mem,mem_reg_p->len,mr_p->lkey);
+      struct ibv_mr  *mr_p;     
+      mr_p = s_ctx->memreg[i];
+      info("FDL memreg idx %d addr/len %llx/%llu key %x\n",i,mem_reg_p->mem,mem_reg_p->len,mr_p->lkey);
     }
+#endif
     RDMA_STATS_RSP_OK(ibv_reg_mr);    
   }
   /*
@@ -1972,14 +2561,104 @@ rozofs_rmda_ibv_cxt_t *rozofs_build_rdma_context(struct ibv_context *verbs)
   */
   if (mem_reg_p == NULL) goto error;
   /*
+  ** Create the memory region for the RPC messages over RDMA
+  */
+  RDMA_STATS_REQ(ibv_reg_mr);
+  s_ctx->memreg_rpc = ibv_reg_mr(
+		     s_ctx->pd,
+		     rozofs_rdma_memreg_rpc.mem,
+		     rozofs_rdma_memreg_rpc.len,
+		     IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
+  if (s_ctx->memreg_rpc == 0)
+  {
+     severe("ibv_reg_mr  error for addr %p len %llu : %s",rozofs_rdma_memreg_rpc.mem,(unsigned long long int)rozofs_rdma_memreg_rpc.len,strerror(errno));
+     RDMA_STATS_RSP_NOK(ibv_reg_mr);
+     goto error;  
+  }
+#if 0 // debug
+  {
+     struct ibv_mr  *mr_p;     
+     mr_p = s_ctx->memreg_rpc;
+     info("FDL memreg idx %d addr/len %llx/%llu key %x\n",i,mem_reg_p->mem,mem_reg_p->len,mr_p->lkey);
+  }
+#endif
+  RDMA_STATS_RSP_OK(ibv_reg_mr);
+  /*
+  ** Create the Shared Queue for the RPC messages over RDMA
+  */
+  {
+    struct ibv_srq_init_attr srq_attr;
+    
+    RDMA_STATS_REQ(ibv_create_srq);    
+    srq_attr.srq_context  = s_ctx;
+    srq_attr.attr.max_wr  = ROZOFS_MAX_SRQ_WR;  /**< max of outstanding Work Request that can be posted to that shared queue */
+    srq_attr.attr.max_sge = 1;
+    srq_attr.attr.srq_limit = 0; /* that paramter is ignored, aonly relevant for iWARP */
+    
+    s_ctx->shared_queue4rpc = ibv_create_srq(s_ctx->pd,&srq_attr); 
+    if (s_ctx->shared_queue4rpc == NULL)
+    {
+      severe("ibv_create_srq  error: %s",strerror(errno));
+      RDMA_STATS_RSP_NOK(ibv_create_srq);
+      goto error;          
+    } 
+    RDMA_STATS_RSP_OK(ibv_create_srq);
+  }  
+  /*
+  ** Fill up the srq with the rpc buffer
+  */
+  {
+    RDMA_STATS_REQ(ibv_post_srq_recv);    
+
+    int count; 
+    int ret;      
+    for (count = 0 ; count < ROZOFS_RDMA_COMPQ_RPC_SIZE; count++)
+    {
+      ret = rozofs_ibv_post_srq_recv4rpc(s_ctx);
+      if (ret < 0)
+      {
+	warning("error while filling up the SRQ ( count (cur/max) %d,%d) error: %s",count,ROZOFS_RDMA_COMPQ_RPC_SIZE,strerror(errno));
+        RDMA_STATS_RSP_NOK(ibv_post_srq_recv);
+	goto error;
+      }
+    }	       
+    RDMA_STATS_RSP_OK(ibv_post_srq_recv);
+  }   
+  /*
   ** create the CQ threads
   */
   for (k=0; k<ROZOFS_CQ_THREAD_NUM; k++)
   {
     rozofs_qc_th_t *ctx_cur_p = malloc(sizeof(rozofs_qc_th_t));
+    memset(ctx_cur_p,0,sizeof(rozofs_qc_th_t));
     ctx_cur_p->thread_idx = k;
     ctx_cur_p->ctx_p = s_ctx;
+    s_ctx->rozofs_cq_th_post_send[k] = ctx_cur_p;
     TEST_NZ(pthread_create(&s_ctx->cq_poller_thread[k], NULL, rozofs_poll_cq_th, ctx_cur_p));
+  }
+  /*
+  ** Put Code to create the completion queue thread for the processing of the RPC message
+  */
+
+  for (k=0; k<ROZOFS_CQ_THREAD_NUM; k++)
+  {
+    rozofs_qc_th_t *ctx_cur_p = malloc(sizeof(rozofs_qc_th_t));
+    memset(ctx_cur_p,0,sizeof(rozofs_qc_th_t));
+    ctx_cur_p->thread_idx = k;
+    ctx_cur_p->ctx_p = s_ctx;
+    s_ctx->rozofs_cq_th_post_recv[k] = ctx_cur_p;
+    TEST_NZ(pthread_create(&s_ctx->cq_rpc_poller_thread[k], NULL, rozofs_poll_cq_rpc_recv_th, ctx_cur_p));
+  }
+  /*
+  ** create the RDMA asynchronous event thread : use to get more information about RDMA error
+  */
+  {
+    rozofs_rdma_async_event_th_t *ctx_cur_p = malloc(sizeof(rozofs_rdma_async_event_th_t)); 
+    ctx_cur_p->thread_idx = 0;
+    ctx_cur_p->ctx_p = s_ctx;
+    s_ctx->rozofs_rdma_async_event_th = ctx_cur_p;  
+    TEST_NZ(pthread_create(&s_ctx->rozofs_rdma_async_event_thread, NULL, rozofs_poll_rdma_async_event_th, ctx_cur_p));
+
   }
   /*
   ** insert on the table
@@ -2009,13 +2688,17 @@ void rozofs_build_qp_attr(struct ibv_qp_init_attr *qp_attr, rozofs_rmda_ibv_cxt_
   memset(qp_attr, 0, sizeof(*qp_attr));
   s_ctx->next_cq_idx++;
   qp_attr->send_cq = s_ctx->cq[s_ctx->next_cq_idx%ROZOFS_CQ_THREAD_NUM];
-  qp_attr->recv_cq = s_ctx->cq[s_ctx->next_cq_idx%ROZOFS_CQ_THREAD_NUM];
+  qp_attr->recv_cq = s_ctx->cq_rpc[s_ctx->next_cq_idx%ROZOFS_CQ_THREAD_NUM];
+  /*
+  ** store the reference  of the shared queue used for RPC over RDMA
+  */
+  qp_attr->srq = s_ctx->shared_queue4rpc;
   qp_attr->qp_type = IBV_QPT_RC;
   /*
   **  need to adjust the number of WQ to the number of disk threads to avoid ENOEM on ibv_post_send()
   */
-  qp_attr->cap.max_send_wr = 64;
-  qp_attr->cap.max_recv_wr = 64;
+  qp_attr->cap.max_send_wr = 512;
+  qp_attr->cap.max_recv_wr = 512;
   qp_attr->cap.max_send_sge = 1;
   qp_attr->cap.max_recv_sge = 1;
 }
@@ -2052,7 +2735,11 @@ int rozofs_rdma_srv_on_connect_request(struct rdma_cm_id *id,struct rdma_cm_even
 //  info(" FDL receive connection request.\n");
 
   s_ctx = rozofs_build_rdma_context(id->verbs);
-  if (s_ctx == NULL) goto error;
+  if (s_ctx == NULL) 
+  {
+    severe("rozofs_build_rdma_context error");
+    goto error;
+  }
   /*
   ** Get the information associated with the connection
   */
@@ -2069,6 +2756,9 @@ int rozofs_rdma_srv_on_connect_request(struct rdma_cm_id *id,struct rdma_cm_even
      severe("on_connect_request: out of range server reference : %d max %d\n",assoc_p->srv_ref,rozofs_nb_rmda_tcp_context);
      goto error;  
   }  
+  /*
+  ** the index of the cq that will be used is found in s_ctx->next_cq_idx
+  */
   rozofs_build_qp_attr(&qp_attr,s_ctx);
   /*
   ** create the queue pair needed for communication with the peer
@@ -2093,8 +2783,19 @@ int rozofs_rdma_srv_on_connect_request(struct rdma_cm_id *id,struct rdma_cm_even
   list_init(&conn->list);
   conn->state = ROZOFS_RDMA_ST_WAIT_ESTABLISHED;
   conn->qp = id->qp;
+  /*
+  ** save the reference of the QP it might be need for reception from the SRQ since the
+  ** RDMA connexion is identified by the qp_num value
+  */
+  conn->qp_num = conn->qp->qp_num;
   conn->id = id;
   conn->tcp_index = assoc_p->srv_ref;
+  /*
+  ** set the index of the completion queues: for statistics purpose
+  */
+  conn->cq_xmit_idx = s_ctx->next_cq_idx;
+  conn->cq_recv_idx = s_ctx->next_cq_idx;
+  
   conn->s_ctx = s_ctx;
   info("FDL QP %llx  cli/srv_ref %d/%d port_cli/srv %d/%d len %d \n",(long long unsigned int)conn->qp,assoc_p->cli_ref,
              assoc_p->srv_ref,
@@ -2107,6 +2808,15 @@ int rozofs_rdma_srv_on_connect_request(struct rdma_cm_id *id,struct rdma_cm_even
   */
   prev_conn = rozofs_rdma_tcp_table[conn->tcp_index];
   rozofs_rdma_tcp_table[conn->tcp_index] = conn;
+  /*
+  ** Insert the index of the TCP connection in the QP hash table
+  ** That information will be used upon receiving a message from storcli in order to
+  ** identify the source of the request. The only case for which it is needed it when there
+  ** is an error while we decode the RPC message. Since the association block is in the RPC
+  ** message (that association block is the way we identify the connection) we have no way to
+  ** find out the source of the wrong request if we have not that qp_num hash table.
+  */
+  
   if (prev_conn != NULL)
   {
     rozofs_rdma_release_context(prev_conn);
@@ -2396,7 +3106,8 @@ void rozofs_rdma_srv_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,struct rdma_cm_even
    }
    rozofs_print_rdma_fsm_state(conn->state,evt_code,(event==NULL)?0:event->event);
    memcpy(&assoc_loc,&conn->assoc,sizeof(rozofs_rdma_tcp_assoc_t));
-   
+//#warning RDMA srv trace
+//   info("FDL Server CNX %p state %d  evt_code %d event %d",conn,conn->state,evt_code,(event != NULL)?event->event:-1);   
    switch (conn->state)
    {
       case ROZOFS_RDMA_ST_IDLE:
@@ -2615,7 +3326,19 @@ int rozofs_rdma_cli_on_addr_resolved(struct rdma_cm_id *id)
   conn = id->context;
   conn->qp = id->qp;
   conn->s_ctx = s_ctx;
-
+  /*
+  ** Save the QP number in the connection context
+  */
+  conn->qp_num = conn->qp->qp_num;
+  /*
+  ** set the index of the completion queues: for statistics purpose
+  */
+  conn->cq_xmit_idx = s_ctx->next_cq_idx;
+  conn->cq_recv_idx = s_ctx->next_cq_idx;
+  /*
+  ** Need to insert the client local reference in the QP hash table
+  ** conn->assoc_p->cli_ref
+  */
   {
     struct ibv_qp_attr attr;
 
@@ -2900,6 +3623,8 @@ void rozofs_rdma_cli_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,struct rdma_cm_even
       return;
 
    }
+
+//   info("FDL Client CNX %p state %d  evt_code %d event %d",conn,conn->state,evt_code,(event != NULL)?event->event:-1);   
    rozofs_print_rdma_fsm_state(conn->state,evt_code,(event==NULL)?0:event->event);
    memcpy(&assoc_loc,&conn->assoc,sizeof(rozofs_rdma_tcp_assoc_t));
 
@@ -3022,6 +3747,7 @@ void rozofs_rdma_cli_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,struct rdma_cm_even
 	 ** any message while the FSM is in that state triggers a deletion of the RDMA context
 	 ** It is up to the TCP side to restart the connection process
 	 */
+	 info("FDL Client Disconnect evt_code %d event %d",evt_code,(event != NULL)?event->event:-1);
 	rozofs_rdma_release_context(conn);
 	if (evt_code != ROZOFS_RDMA_EV_RDMA_DEL_REQ) rozofs_rdma_send2tcp_side(ROZOFS_RDMA_EV_RDMA_DEL_IND,&assoc_loc);
 	return;
@@ -3468,134 +4194,6 @@ void rozofs_rdma_tcp_srv_fsm_exec(rozofs_rdma_tcp_assoc_t *assoc,rozofs_rdma_int
        S E R V I C E   T O  T R I G G E R   R D M A transfert 
 **___________________________________________________________________________
 */
-/*
-**__________________________________________________
-*/
-/**
-*  Post either a RDMA read or write command
-
-   @param wr_th_p: pointer to the RDMA thread context need to since it contains the semaphore of the thread
-   @param opcode: ROZOFS_TCP_RDMA_READ or ROZOFS_TCP_RDMA_WRITE
-   @param bufref: RUC buffer reference needed to find out the reference of the local RDMA key
-   @param local_addr: local address of the first byte to transfer
-   @param len: length to transfer
-   @param remote_addr: remote address
-   @param remote_key: RDMA remote key
-   
-   @retval 0 on success
-   @retval -1 on error
-   
-*/
-int rozofs_rdma_post_send(rozofs_wr_id_t *wr_th_p,
-                          uint8_t opcode,
-			  rozofs_rdma_tcp_assoc_t *assoc_p,
-			  void *bufref,
-			  void *local_addr,
-			  int len,
-			  uint64_t remote_addr,
-			  uint32_t remote_key)
-{
-    rozofs_rdma_connection_t *conn;
-    rozofs_rmda_ibv_cxt_t *s_ctx;
-    struct ibv_send_wr wr, *bad_wr = NULL;
-    struct ibv_sge sge;
-    struct ibv_mr  *mr_p;    
-    
-//    info("FDL RDMA_POST_SEND cli/srv:%d/%d ",assoc_p->cli_ref,assoc_p->srv_ref);
-    /*
-    **____________________________________________________________
-    ** Get the RDMA context associated with the file descriptor
-    **____________________________________________________________
-    */
-    conn = rozofs_rdma_get_connection_context_from_fd(assoc_p->srv_ref);
-    if (conn ==NULL)
-    {
-      info("FDL RDMA_POST_SEND conn NULL");
-      wr_th_p->status = -1;
-      wr_th_p->error = EPROTO;
-      goto error;
-    }
-    /*
-    ** Check if the RDMA connection is still effective
-    */
-    if ((conn->state != ROZOFS_RDMA_ST_ESTABLISHED) && (conn->state != ROZOFS_RDMA_ST_WAIT_ESTABLISHED))
-    {
-       /*
-       ** RDMA is no more supported on that TCP connection
-       */
-      info("FDL RDMA_POST_SEND bad state %d",conn->state );
-
-      wr_th_p->status = -1;
-      wr_th_p->error = ENOTSUP;
-      goto error;    
-    }
-    /*
-    ** OK the RDMA is operational with that connection so we can proceed with either a
-    ** READ or WRITE
-    */
-    s_ctx = conn->s_ctx;
-    /*
-    ** get the memory descriptor that contains the local RDMA key
-    */
-#warning always context with index 0
-    mr_p = s_ctx->memreg[0];
-    if (mr_p == NULL)
-    {
-      info("FDL RDMA_POST_SEND no memory context" );
-      wr_th_p->status = -1;
-      wr_th_p->error = EPROTO;
-      goto error;
-    }
-    wr_th_p->conn = conn;
-//    gettimeofday(&tv,NULL);
-//    time_before = MICROLONG(tv);
-
-    memset(&wr, 0, sizeof(wr));
-    wr.wr_id = (uint64_t)wr_th_p;
-    wr.opcode = (opcode == ROZOFS_TCP_RDMA_WRITE) ? IBV_WR_RDMA_WRITE : IBV_WR_RDMA_READ;
-    wr.sg_list = &sge;
-    wr.num_sge = 1;
-    wr.send_flags = IBV_SEND_SIGNALED;  
-    wr.wr.rdma.remote_addr = (uintptr_t)remote_addr;
-    wr.wr.rdma.rkey = remote_key;
-
-    sge.addr = (uintptr_t)local_addr;
-    sge.length = len;
-    sge.lkey = mr_p->lkey;
-
-//    info("IBV_WR_RDMA_READ QP %llx addr %llx len=%u key=%x raddr %llx rkey %x\n",conn->qp,sge.addr,sge.length,sge.lkey,wr.wr.rdma.remote_addr,wr.wr.rdma.rkey);
-
-    if (ibv_post_send(conn->qp, &wr, &bad_wr) < 0)
-    {
-       info("FDL RDMA_POST_SEND error: %s",strerror(errno));
-       goto error;
-    
-    
-    }
-    /*
-    ** now wait of the semaphore the end to the RDMA transfert
-    */
-//    info("FDL RDMA_POST_SEND sem_wait" );
-
-    sem_wait(wr_th_p->sem);
-
-//    gettimeofday(&tv,NULL);
-//    time_after = MICROLONG(tv);
-//    printf("service time %llu for %d bytes\n",(unsigned long long int)(time_after-time_before),rozofs_rdma_msg_p->remote_len);
-    /*
-    ** check the status of the operation
-    */
-    if (wr_th_p->status != 0)
-    {
-       info ("FDL POST_SEND error on service %d\n",wr_th_p->error);
-       goto error;
-    }
-    return 0;
-error:
-    return -1;
-}
-
-
 
 /*
 **__________________________________________________
@@ -3664,7 +4262,6 @@ int rozofs_rdma_post_send2(rozofs_wr_id2_t *wr_th_p,
     /*
     ** get the memory descriptor that contains the local RDMA key
     */
-#warning always context with index 0
     mr_p = s_ctx->memreg[0];
     if (mr_p == NULL)
     {
@@ -3685,9 +4282,108 @@ int rozofs_rdma_post_send2(rozofs_wr_id2_t *wr_th_p,
     sge.addr = (uintptr_t)local_addr;
     sge.length = len;
     sge.lkey = mr_p->lkey;
+//#warning FDL_DBG rdma_post trace
+//    info("IBV_WR_RDMA_READ opcode %d QP %llx addr %llx len=%u key=%x raddr %llx rkey %x\n",wr.opcode,conn->qp,sge.addr,sge.length,sge.lkey,wr.wr.rdma.remote_addr,wr.wr.rdma.rkey);
+//    info("FDL_DBG rozofs_rdma_post_send2 qp %llx",conn->qp);
+    if (ibv_post_send(conn->qp, &wr, &bad_wr) < 0)
+    {
+       info("FDL RDMA_POST_SEND error: %s",strerror(errno));
+       goto error;    
+    }
+    /*
+    ** update statistics
+    */
+    {
+       __atomic_fetch_add(&s_ctx->post_send_stat[conn->cq_xmit_idx%ROZOFS_CQ_THREAD_NUM],1,__ATOMIC_SEQ_CST);
+    }
+    return 0;
+error:
+    return -1;
+}
 
-//    info("IBV_WR_RDMA_READ QP %llx addr %llx len=%u key=%x raddr %llx rkey %x\n",conn->qp,sge.addr,sge.length,sge.lkey,wr.wr.rdma.remote_addr,wr.wr.rdma.rkey);
 
+
+/*
+**__________________________________________________
+*/
+/**
+*  Post either a RDMA message (RPC) with IBV_WR_SEND
+
+   @param wr_th_p: pointer to the RDMA thread context need to since it contains the semaphore of the thread
+   @param bufref: RUC buffer reference needed to find out the reference of the local RDMA key
+   @param tcp_cnx_idx: index of the TCP connection in the rozofs_rdma_tcp_table 
+   @param local_addr: local address of the first byte to transfer
+   @param len: length to transfer
+
+   
+   @retval 0 on success
+   @retval -1 on error
+   
+*/
+int rozofs_rdma_post_send_ibv_wr_send(rozofs_wr_id2_t *wr_th_p,
+			   uint16_t tcp_cnx_idx,
+			   void *bufref,
+			   void *local_addr,
+			   int len)
+{
+    rozofs_rdma_connection_t *conn;
+    rozofs_rmda_ibv_cxt_t *s_ctx;
+    struct ibv_send_wr wr, *bad_wr = NULL;
+    struct ibv_sge sge;
+    struct ibv_mr  *mr_p;    
+    
+//    info("FDL RDMA_POST_SEND cli/srv:%d/%d ",assoc_p->cli_ref,assoc_p->srv_ref);
+    /*
+    **____________________________________________________________
+    ** Get the RDMA context associated with the file descriptor
+    **____________________________________________________________
+    */
+    conn = rozofs_rdma_get_connection_context_from_fd(tcp_cnx_idx);
+    if (conn ==NULL)
+    {
+      info("FDL RDMA_POST_SEND conn NULL index %u",tcp_cnx_idx);
+       errno = EPROTO;
+      goto error;
+    }
+    /*
+    ** Check if the RDMA connection is still effective
+    */
+    if ((conn->state != ROZOFS_RDMA_ST_ESTABLISHED) && (conn->state != ROZOFS_RDMA_ST_WAIT_ESTABLISHED))
+    {
+       /*
+       ** RDMA is no more supported on that TCP connection
+       */
+      info("FDL RDMA_POST_SEND bad state %d",conn->state );
+
+       errno = ENOTSUP;
+      goto error;    
+    }
+    /*
+    ** OK the RDMA is operational with that connection so we can proceed with either a
+    ** READ or WRITE
+    */
+    s_ctx = conn->s_ctx;
+
+    mr_p = s_ctx->memreg_rpc;
+    if (mr_p == NULL)
+    {
+      fatal("FDL RDMA_POST_SEND no memory context" );
+      errno = EPROTO;
+      goto error;
+    }
+ 
+    memset(&wr, 0, sizeof(wr));
+    wr.wr_id = (uint64_t)wr_th_p;
+    wr.opcode = IBV_WR_SEND;
+    wr.sg_list = &sge;
+    wr.num_sge = 1;
+    wr.send_flags = IBV_SEND_SIGNALED;  
+    sge.addr = (uintptr_t)local_addr;
+    sge.length = len;
+    sge.lkey = mr_p->lkey;
+
+//    info("IBV_WR_RDMA_READ QP %llx addr %llx len=%u key=%u\n",conn->qp,sge.addr,sge.length,sge.lkey);
+//    info("FDL wr.wr_id %p",wr.wr_id);
     if (ibv_post_send(conn->qp, &wr, &bad_wr) < 0)
     {
        info("FDL RDMA_POST_SEND error: %s",strerror(errno));
@@ -3697,3 +4393,350 @@ int rozofs_rdma_post_send2(rozofs_wr_id2_t *wr_th_p,
 error:
     return -1;
 }
+
+/*
+**_________________________________________________________________________________________
+
+     R D M A   Q U E U E  P A I R   C A C H E 
+**_________________________________________________________________________________________
+*/
+#define QP_HTAB_SIZE 256
+#define QP_HTAB_LOCK_SZ 64
+int rozofs_rdma_qp_entries;     /**< number of ientries in the cache  */
+list_t rozofs_qp_entry_list_head;  /**< linked list of the qp lookup entries */
+htable_t rozofs_htable_qp;        /**< queue pair hash table  */
+int rozofs_rdma_qp_cache_init_done = 0;  /**< assert to 1 when the init has been done */
+
+
+static int qp_cmp(void *key1, void *key2) {
+    uint32_t *k1_p,*k2_p;
+    k1_p = key1;
+    k2_p = key2;    
+    if (*k1_p == *k2_p) return 0;
+    return 1;
+}
+
+static unsigned int qp_hash(void *key) {
+    uint32_t hash = 0;
+    uint8_t *c;
+    for (c = key; c != key + sizeof(uint32_t); c++)
+        hash = *c + (hash << 6) + (hash << 16) - hash;
+    return hash;
+}
+
+void qp_copy_tcp_index(void *src,void *dst)
+{
+   rozofs_qp_cache_entry_t *src_p;
+   uint32_t *dest_p;
+   dest_p = dst;
+   src_p = src;
+   *dest_p = src_p->cnx_idx; 
+}
+/*
+**__________________________________________________
+*/
+/**
+   Init of the RDMA QP cache
+   That cache is needed to process message received on a queue pair for a SEND or RECV event 
+   since the CQ provides the QP as a number.
+   
+   @param none
+   
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+*/
+int rozofs_rdma_qp_cache_init()
+{
+   if (rozofs_rdma_qp_cache_init_done != 0) return 0;
+   
+   rozofs_rdma_qp_entries = 0;
+   /* Initialize list and htables for QP_entries */
+   list_init(&rozofs_qp_entry_list_head);
+   /*
+   ** Init of the htable with mutex per cache line
+   */
+   htable_initialize_th(&rozofs_htable_qp, QP_HTAB_SIZE, QP_HTAB_LOCK_SZ,qp_hash, qp_cmp);
+   return 0;
+}
+
+/*
+**__________________________________________________
+*/
+/**
+*   Insert a qp in the cache entry
+
+    @param qp_num reference of the QP to insert (key)
+    @param cnx_idx: index of the rozofs_rdma_tcp context for that queue pair
+    
+    @retval>= 0 success
+    @retval < 0 error
+*/
+int rozofs_rdma_qp_cache_insert(uint32_t qp_num,uint32_t cnx_idx)
+{
+   rozofs_qp_cache_entry_t *entry_p;
+   uint32_t hash = qp_hash(&qp_num);
+   /*
+   ** Check if the entry already exist in the cache
+   */
+   entry_p = rozofs_rdma_qp_cache_lookup(qp_num);
+   if (entry_p !=NULL)
+   {
+      errno = EEXIST;
+      return -1;
+   }
+   entry_p = xmalloc(sizeof(rozofs_qp_cache_entry_t));
+   if (entry_p == NULL)
+   {
+      errno = ENOMEM;
+      return -1;
+   }
+   memset(entry_p,0,sizeof(rozofs_qp_cache_entry_t));
+   list_init(&entry_p->list);
+   entry_p->qp_num = qp_num;
+   entry_p->cnx_idx = cnx_idx;
+   entry_p->he.key = &entry_p->qp_num;
+   entry_p->he.value = entry_p;
+   /*
+   ** insert in the hash table
+   */
+   htable_put_entry_th(&rozofs_htable_qp,&entry_p->he,hash);
+   /*
+   ** we cannot use the global link list because of the multithreading....see in the future
+   */
+   rozofs_rdma_qp_entries++;
+   return 0;
+}
+
+/*
+**__________________________________________________
+*/
+/**
+*   lookup for a qp from the cache entry
+
+    @param qp_num reference of the QP to lookup at (key)
+    
+    @retval <> NULL:pointer to the cache entry that 
+    @retval NULL: error (see errno for details)
+*/
+rozofs_qp_cache_entry_t *rozofs_rdma_qp_cache_lookup(uint32_t qp_num)
+{
+   uint32_t hash = qp_hash(&qp_num);
+   /*
+   ** get it from the hash table
+   */
+   return htable_get_th(&rozofs_htable_qp,&qp_num,hash);
+
+}
+
+/*
+**__________________________________________________
+*/
+/**
+*   lookup for a qp from the cache entry
+
+    @param qp_num reference of the QP to lookup at (key)
+    
+    @retval>= 0 success
+    @retval < 0 error
+*/
+int rozofs_rdma_qp_cache_lookup_copy(uint32_t qp_num,uint32_t *cnx_idx_p)
+{
+   uint32_t hash = qp_hash(&qp_num);
+   /*
+   ** get it from the hash table
+   */
+   return htable_get_copy_th(&rozofs_htable_qp,&qp_num,hash,cnx_idx_p);
+
+}
+
+/*
+**__________________________________________________
+*/
+/**
+*   deletion of a qp from the cache entry
+
+    @param qp_num reference of the QP to delete (key)
+    
+    @retval none
+*/
+void rozofs_rdma_qp_cache_delete(uint32_t qp_num)
+{
+  uint32_t hash = qp_hash(&qp_num);
+  rozofs_qp_cache_entry_t *entry_p;  
+   /*
+   ** get it from the hash table
+   */
+   entry_p = htable_del_entry_th(&rozofs_htable_qp,&qp_num,hash);
+   if (entry_p == NULL) return;
+   /*
+   ** release the entry: take care of the race condition with a lookup
+   ** we might to assert an in_use flag and a delete_pending flag to avoid releasing
+   ** the memory while another context use it
+   */
+   xfree(entry_p);
+}
+
+/**
+**______________________________________________________________________________
+*   PROCESSING OF THE ASYNCHRONOUS EVENTS ASSOCIATED WITH A RDMA ADAPTOR
+**______________________________________________________________________________
+*
+
+Event name	           Element type	   Event type	Protocol
+IBV_EVENT_COMM_EST	       QP	   Info	         IB, RoCE
+IBV_EVENT_SQ_DRAINED	       QP	   Info	         IB, RoCE
+IBV_EVENT_PATH_MIG	       QP	   Info	         IB, RoCE
+IBV_EVENT_QP_LAST_WQE_REACHED  QP	   Info	         IB, RoCE
+IBV_EVENT_QP_FATAL	       QP	   Error	 IB, RoCE, iWARP
+IBV_EVENT_QP_REQ_ERR	       QP	   Error	 IB, RoCE, iWARP
+IBV_EVENT_QP_ACCESS_ERR	       QP	   Error	 IB, RoCE, iWARP
+IBV_EVENT_PATH_MIG_ERR	       QP	   Error	 IB, RoCE
+IBV_EVENT_CQ_ERR	       CQ	   Error	 IB, RoCE, iWARP
+IBV_EVENT_SRQ_LIMIT_REACHED    SRQ	   Info	         IB, RoCE, iWARP
+IBV_EVENT_SRQ_ERR	       SRQ	   Error	 IB, RoCE, iWARP
+IBV_EVENT_PORT_ACTIVE	       Port	   Info	         IB, RoCE, iWARP
+IBV_EVENT_LID_CHANGE	       Port	   Info	         IB
+IBV_EVENT_PKEY_CHANGE	       Port	   Info	         IB
+IBV_EVENT_GID_CHANGE	       Port	   Info	         IB, RoCE
+IBV_EVENT_SM_CHANGE	       Port	   Info	         IB
+IBV_EVENT_CLIENT_REREGISTER    Port	   Info	         IB
+IBV_EVENT_PORT_ERR	       Port	   Error	 IB, RoCE, iWARP
+IBV_EVENT_DEVICE_FATAL	       Device	   Error	 IB, RoCE, iWARP
+
+
+**/
+
+/* helper function to print the content of the async event */
+static void print_async_event(struct ibv_context *ctx,
+			      struct ibv_async_event *event)
+{
+	switch (event->event_type) {
+	/* QP events */
+	case IBV_EVENT_QP_FATAL:
+		warning("QP fatal event for QP with handle %p\n", event->element.qp);
+		break;
+	case IBV_EVENT_QP_REQ_ERR:
+		warning("QP Requestor error for QP with handle %p\n", event->element.qp);
+		break;
+	case IBV_EVENT_QP_ACCESS_ERR:
+		warning("QP access error event for QP with handle %p\n", event->element.qp);
+		break;
+	case IBV_EVENT_COMM_EST:
+		warning("QP communication established event for QP with handle %p\n", event->element.qp);
+		break;
+	case IBV_EVENT_SQ_DRAINED:
+		warning("QP Send Queue drained event for QP with handle %p\n", event->element.qp);
+		break;
+	case IBV_EVENT_PATH_MIG:
+		warning("QP Path migration loaded event for QP with handle %p\n", event->element.qp);
+		break;
+	case IBV_EVENT_PATH_MIG_ERR:
+		warning("QP Path migration error event for QP with handle %p\n", event->element.qp);
+		break;
+	case IBV_EVENT_QP_LAST_WQE_REACHED:
+		warning("QP last WQE reached event for QP with handle %p\n", event->element.qp);
+		break;
+ 
+	/* CQ events */
+	case IBV_EVENT_CQ_ERR:
+		warning("CQ error for CQ with handle %p\n", event->element.cq);
+		break;
+ 
+	/* SRQ events */
+	case IBV_EVENT_SRQ_ERR:
+		warning("SRQ error for SRQ with handle %p\n", event->element.srq);
+		break;
+	case IBV_EVENT_SRQ_LIMIT_REACHED:
+		warning("SRQ limit reached event for SRQ with handle %p\n", event->element.srq);
+		break;
+ 
+	/* Port events */
+	case IBV_EVENT_PORT_ACTIVE:
+		warning("Port active event for port number %d\n", event->element.port_num);
+		break;
+	case IBV_EVENT_PORT_ERR:
+		warning("Port error event for port number %d\n", event->element.port_num);
+		break;
+	case IBV_EVENT_LID_CHANGE:
+		warning("LID change event for port number %d\n", event->element.port_num);
+		break;
+	case IBV_EVENT_PKEY_CHANGE:
+		warning("P_Key table change event for port number %d\n", event->element.port_num);
+		break;
+	case IBV_EVENT_GID_CHANGE:
+		warning("GID table change event for port number %d\n", event->element.port_num);
+		break;
+	case IBV_EVENT_SM_CHANGE:
+		warning("SM change event for port number %d\n", event->element.port_num);
+		break;
+	case IBV_EVENT_CLIENT_REREGISTER:
+		warning("Client reregister event for port number %d\n", event->element.port_num);
+		break;
+ 
+	/* RDMA device events */
+	case IBV_EVENT_DEVICE_FATAL:
+		warning("Fatal error event for device %s\n", ibv_get_device_name(ctx->device));
+		break;
+ 
+	default:
+		warning("Unknown event (%d)\n", event->event_type);
+	}
+}
+ 
+/*
+**__________________________________________________
+*/
+/**
+  That thread is associated with a RDMA adaptor.
+  Its role is to process asynchronous events received on that adaptor
+  
+  
+  @param ctx : pointer to the RDMA context associated with the thread
+  
+  retval NULL on error
+*/
+void * rozofs_poll_rdma_async_event_th(void *ctx)
+{
+  rozofs_rdma_async_event_th_t *th_ctx_p = (rozofs_rdma_async_event_th_t*)ctx;
+  rozofs_rmda_ibv_cxt_t *s_ctx = (rozofs_rmda_ibv_cxt_t*)th_ctx_p->ctx_p;
+  int ret;
+  struct ibv_async_event event;
+  
+//  int wc_to_ack = 0;
+  
+  info("Adaptor Async event started  %d \n",th_ctx_p->thread_idx);
+
+    uma_dbg_thread_add_self("RDMA_async_evt");
+    {
+      struct sched_param my_priority;
+      int policy=-1;
+      int ret= 0;
+      
+      my_priority.sched_priority= 70;
+      policy = SCHED_FIFO;
+      ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
+      if (ret < 0) 
+      {
+	severe("error on sched_setscheduler: %s",strerror(errno));	
+      }
+      pthread_getschedparam(pthread_self(),&policy,&my_priority);    
+    }      
+
+
+     while (1) 
+     {
+	/* wait for the next async event */
+	ret = ibv_get_async_event(s_ctx->ctx, &event);
+	if (ret) {
+		severe("Error, ibv_get_async_event() failed\n");
+		return NULL;
+	}
+ 
+	/* print the event */
+	print_async_event(s_ctx->ctx, &event);
+ 
+	/* ack the event */
+	ibv_ack_async_event(&event);
+      }
+}
+

@@ -55,4 +55,7 @@ extern int    decoded_rpc_buffer_size;
 */
 void storio_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf);
 
+
+bool_t
+xdr_sp_read_rdma_ret_no_bins_t (XDR *xdrs, sp_read_ret_t *objp);
 #endif

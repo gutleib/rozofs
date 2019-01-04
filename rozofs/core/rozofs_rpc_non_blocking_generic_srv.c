@@ -266,6 +266,7 @@ void  rozorpc_srv_ctxInit(rozorpc_srv_ctx_t *p,uint8_t creation)
   p->socketRef    = -1;
   p->xmitBuf     = NULL;  
   p->opcode      = 0;
+  p->rdma        = 0;
   p->src_transaction_id = 0;
   p->profiler_probe = NULL;
   p->profiler_time  = 0;
@@ -548,7 +549,11 @@ void rozorpc_srv_forward_reply_with_extra_len (rozorpc_srv_ctx_t *p,char * arg_r
       ROZORPC_SRV_STATS(ROZORPC_SRV_ENCODING_ERROR);
       severe("rpc reply encoding error");
       goto error;     
-    }       
+    } 
+    /*
+    ** Copy the reference of the client lbg_id in the reply message
+    */
+    rozofs_rpc_set_lbg_id_in_reply(p->xmitBuf,p->client_lbg_id);      
     /*
     ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
     ** the ruc buffer to take care of the header length of the rpc message.

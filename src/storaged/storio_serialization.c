@@ -238,8 +238,15 @@ int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthrea
 	** there is some more request to process
 	*/
         list_move_nocheck(diskthread_list,&p->serial_pending_request);
+	if (list_empty(diskthread_list))
+	{
+	   fatal("FDL empty queue while not empty");     
+
+	}
+
         /* UNLOCK */
 	pthread_rwlock_unlock(&p->serial_lock);	
+
 	/*
 	** need to re-order the diskthread_list
 	*/
@@ -248,6 +255,11 @@ int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthrea
       /*
       ** the disk thread list is not empty: nothing to re-order
       */
+	if (list_empty(diskthread_list))
+	{
+	   fatal("FDL empty queue while not empty");     
+
+	}
       return 0;
    }
    /*
@@ -260,6 +272,12 @@ int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthrea
    */
    list_move_nocheck(diskthread_list,&p->serial_pending_request);
    /* UNLOCK */
+
+	if (list_empty(diskthread_list))
+	{
+	   fatal("FDL empty queue while not empty");     
+
+	}
    pthread_rwlock_unlock(&p->serial_lock);	
    /*
    ** need to re-order the diskthread_list
@@ -297,7 +315,7 @@ int storio_insert_pending_request_list(storio_device_mapping_t *p,list_t *reques
     if (p->serial_is_running==0)
     {
       p->serial_is_running=1;
-      need2activate = 1;
+      need2activate = 1;      
     }
     list_push_back(&p->serial_pending_request,request);
     pthread_rwlock_unlock(&p->serial_lock);

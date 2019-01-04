@@ -21,6 +21,7 @@
 #include <arpa/inet.h>
 
 #include <rozofs/common/log.h>
+#include <rozofs/rpc/rozofs_rpc_util.h>
 
 #include "rozofs_tx_common.h"
 #include "com_tx_timer_api.h"
@@ -50,6 +51,8 @@ int rozofs_large_tx_recv_count = 0;
 int rozofs_large_tx_recv_size = 0;
 
 void *rozofs_tx_pool[_ROZOFS_TX_MAX_POOL];
+ruc_pf_void_t rozofs_tx_rdma_recv_freeBuffer_cbk = NULL;
+ruc_pf_2uint32_t rozofs_tx_rdma_out_of_sequence_cbk = NULL;
 
 
 #define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
@@ -794,6 +797,116 @@ void rozofs_tx_recv_rpc_cbk(void *userRef, uint32_t lbg_id, void *recv_buf) {
 
     return;
 }
+
+/*
+ **____________________________________________________
+ */
+
+/**
+ *  transaction receive callback associated with the RPC protocol over RDMA
+  This corresponds to the callback that is call upon the
+  reception of the transaction reply from the remote end
+  
+  The input parameter is a receive buffer belonging to
+  the transaction egine module
+  
+  @param recv_buf: pointer to the receive buffer
+ */
+void rozofs_tx_recv_rdma_rpc_cbk(void *recv_buf) {
+    rozofs_rpc_common_t *com_hdr_p;
+    rozofs_tx_ctx_t *this;
+    uint32_t recv_xid;
+    uint32_t ctx_idx;
+
+    /*
+     ** get the pointer to the payload of the buffer
+     */
+    com_hdr_p = (rozofs_rpc_common_t*) ruc_buf_getPayload(recv_buf);
+    /*
+     ** extract the xid and get the reference of the transaction context from it
+     ** caution: need to swap to have it in host order
+     */
+    recv_xid = ntohl(com_hdr_p->xid);
+    ctx_idx = rozofs_tx_get_tx_idx_from_xid(recv_xid);
+    this = rozofs_tx_getObjCtx_p(ctx_idx);
+    if (this == NULL) {
+        /*
+         ** that case should not occur, just release the received buffer
+         */
+        TX_STATS(ROZOFS_TX_CTX_MISMATCH);
+        (*rozofs_tx_rdma_recv_freeBuffer_cbk)(recv_buf);
+        return;
+    }
+    /*
+     ** Check if the received xid matches with the one of the transacttion context
+     */
+    if (this->xid != recv_xid) {
+        /*
+         ** it might be an old transaction id -> drop the received buffer
+         */
+	 /*
+	 ** check if there is an associated out of sequence callback with the connection it comes from
+	 */
+	 if (rozofs_tx_rdma_out_of_sequence_cbk!= NULL)
+	 {
+	    /*
+	    ** extract the lbg_id from the RPC reply message 
+	    */
+	    uint32_t lbg_id = rozofs_rpc_get_lbg_id_in_reply(recv_buf);
+	    (*rozofs_tx_rdma_out_of_sequence_cbk)(lbg_id,this->xid);	 
+	 }
+        TX_STATS(ROZOFS_TX_RECV_OUT_SEQ);
+        (*rozofs_tx_rdma_recv_freeBuffer_cbk)(recv_buf);
+        return;
+    }
+    /*
+     ** update receive stats
+     */
+    TX_STATS(ROZOFS_TX_RECV_OK);
+    /*
+     ** store the reference of the received buffer in the transaction context
+     */
+    this->recv_buf = recv_buf;
+    /*
+     ** set the status and errno to 0
+     */
+    this->status = 0;
+    this->tx_errno = 0;
+    /*
+     ** OK, that transaction is the one associated with the context
+     ** stop the rpc guard timer and dispatch the processing 
+     ** according to the message opcode
+     */
+    rozofs_tx_stop_timer(this);
+    /*
+     ** remove the reference of the xmit buffer if that one has been saved in the transaction context
+     */
+    if (this->xmit_buf != NULL) {
+        /*
+         ** decrement the inuse counter<
+         */
+        int inuse = ruc_buf_inuse_decrement(this->xmit_buf);
+        if (inuse == 1) {
+            ruc_objRemove((ruc_obj_desc_t*) this->xmit_buf);
+            ruc_buf_freeBuffer(this->xmit_buf);
+        } else {
+            /* This buffer may be in a queue somewhere */
+            ruc_objRemove((ruc_obj_desc_t*) this->xmit_buf);
+            /* Prevent transmitter to call a xmit done call back 
+              that may queue this buffer somewhere */
+            ruc_buf_set_opaque_ref(this->xmit_buf, NULL);
+        }
+        this->xmit_buf = NULL;
+    }
+    /*
+     ** OK, let's get the receive callback associated with the transaction context and call it
+     */
+    (*(this->recv_cbk))(this, this->user_param);
+
+    return;
+}
+
+
 
 
 

@@ -25,8 +25,9 @@
 
 #define ROZOFS_HTABLE_MAX_LOCK 16
 typedef struct htable {
-    uint32_t(*hash) (void *);
-    int (*cmp) (void *, void *);
+    uint32_t(*hash) (void *);       /**< hash compute program */
+    int (*cmp) (void *, void *);    /**< compare program      */
+    void (*copy) (void *, void *);  /**< copy program (for htable_get_copy_th) */
     uint32_t size;
     uint32_t lock_size;
     pthread_rwlock_t lock[ROZOFS_HTABLE_MAX_LOCK]; /**< lock used for insertion/LRU handling */
@@ -64,6 +65,7 @@ static inline void htable_put_entry(htable_t * h, hash_entry_t * entry) {
   list_init(&entry->list);
   list_push_front(bucket, &entry->list);
 }
+
 /*
 **_____________________________________________________________
 ** Remove a hash entry from the hastable
@@ -74,6 +76,64 @@ static inline void htable_put_entry(htable_t * h, hash_entry_t * entry) {
 static inline void htable_del_entry(htable_t * h, hash_entry_t * entry) {  
   list_remove(&entry->list);
 }
+
+/*
+**_____________________________________________________________
+** Put a hash entry in the hastable in multithreaded mode
+**
+** @param h     : pointer to the hash table
+** @param entry : The address of the hash entry
+*/
+static inline void htable_put_entry_th(htable_t * h, hash_entry_t * entry,uint32_t hash) {
+  list_t *bucket;
+
+  bucket = h->buckets + (h->hash(entry->key) % h->size);
+
+  /*______________________________________________________
+  **
+  ** -- W A R N I N G -- W A R N I N G -- W A R N I N G --
+  **
+  **    THE EXISTENCE OF THE ENTRY SHOULD HAVE BEEN  
+  **       PREVIOUSLY TESTED THANKS TO A LOOKUP
+  **
+  ** -- W A R N I N G -- W A R N I N G -- W A R N I N G --
+  **______________________________________________________  
+  */
+  list_init(&entry->list);
+  pthread_rwlock_wrlock(&h->lock[hash%h->lock_size]);  
+  list_push_front(bucket, &entry->list);
+  pthread_rwlock_unlock(&h->lock[hash%h->lock_size]);
+}
+/*
+**_____________________________________________________________
+** Remove a hash entry from the hastable multithreaded mode
+**
+  @param key: key to search
+  @param hash : hash value of the key
+
+  @retval NULL if not found
+  @retval <> NULL : entry found  
+*/
+static inline void *htable_del_entry_th (htable_t * h, void *key,uint32_t hash) {  
+    void *value = NULL;
+    list_t *p, *q;
+
+    pthread_rwlock_wrlock(&h->lock[hash%h->lock_size]);
+
+    list_for_each_forward_safe(p, q, h->buckets + (hash % h->size)) {
+        hash_entry_t *he = list_entry(p, hash_entry_t, list);
+        if (h->cmp(he->key, key) == 0) {
+            value = he->value;
+            list_remove(p);
+            break;
+        }
+    }
+
+    pthread_rwlock_unlock(&h->lock[hash%h->lock_size]);
+    return value;
+}
+
+
 void htable_initialize(htable_t * h, uint32_t size, uint32_t(*hash) (void *),
                        int (*cmp) (void *, void *));
 
@@ -142,4 +202,22 @@ void *htable_del_th(htable_t * h, void *key,uint32_t hash);
   
 */
 void htable_put_th(htable_t * h, void *key, void *value,uint32_t hash);
+
+/*
+**________________________________________________________________
+*/
+/**
+*  Get an entry from the hash table
+
+  @param h: pointer to the hash table
+  @param key: key to search
+  @param hash : hash value of the key
+  @param dest: pointer to the destination array used by copy callback.
+  
+  @retval 1  found
+  @retval 0 not found
+  @retval < 0 error
+*/
+int htable_get_copy_th(htable_t * h, void *key,uint32_t hash,void *dest);
+
 #endif

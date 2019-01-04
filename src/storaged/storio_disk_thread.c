@@ -43,19 +43,24 @@
 
 bool_t xdr_sp_read_ret_no_bins_t (XDR *xdrs, sp_read_ret_t *objp);
 
+extern int    decoded_rpc_buffer_size;
+
 int af_unix_disk_socket_ref = -1;
  
  #define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
 
 uint64_t   af_unix_disk_parallel_req        = 0;
 uint64_t   af_unix_disk_parallel_req_tbl[ROZOFS_MAX_DISK_THREADS] = {0};
+uint64_t   rdma_write_parallel_req_tbl[ROZFS_MAX_RDMA_WRITE_IN_PRG] = {0};
 
 storage_t *storaged_lookup(cid_t cid, sid_t sid) ;
+rozofs_queue_t       storio_rdma_write_ring;  /**< common ring buffer for rdma write threads */
 
 /**
 *  Thread table
 */
 rozofs_disk_thread_ctx_t rozofs_disk_thread_ctx_tb[ROZOFS_MAX_DISK_THREADS];
+rozofs_disk_thread_ctx_t rozofs_rdma_write_disk_thread_ctx_tb[ROZOFS_MAX_DISK_THREADS];
 
 
 void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t * msg_in);
@@ -174,6 +179,11 @@ int storio_encode_rpc_response (rozorpc_srv_ctx_t *p,char * arg_ret) {
      severe("rpc reply encoding error");
      return -1;    
    }       
+
+    /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_reply(p->xmitBuf,p->client_lbg_id);   
    /*
    ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
    ** the ruc buffer to take care of the header length of the rpc message.
@@ -445,13 +455,16 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
 /*__________________________________________________________________________
 */
 /**
-*  Read data from a file with RDMA support
+*  Structure used for IBV_RDMA_WRITE, IBV_RDMA_READ & IBV_SEND_MSG
 
   @param thread_ctx_p: pointer to the thread context
   @param msg         : address of the message received
   
   @retval: none
 */
+/*
+** !!!! WARNING: the following structure MUST be less than 128 Bytes
+*/ 
 
 typedef struct _rozofs_rdma_disk_read_t {
    rozofs_wr_id2_t  rdma_hdr;      /**< Header for RDMA  */
@@ -460,7 +473,201 @@ typedef struct _rozofs_rdma_disk_read_t {
    int              fidIdx;        /**< FID index retrieved from storio_disk_thread_msg_t */
    uint64_t         timeStart;;    /**< retrieved from storio_disk_thread_msg_t */
    uint64_t         bins_len;;     /**< length of projection read */
+   int              error;         /**< error report by completion queue thread */
+   int              status;        /**< Infiniband error code                   */
+   void             *rdma_ring;    /**< RDMA ring buffer to use for the read    */
 } rozofs_rdma_disk_read_t;
+
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  RDMA callback for sending RPC response over RDMA for a either a READ or WRITE
+
+   @param user_param: pointer to a rozofs_rdma_disk_read_t context
+   @param status: 0 if the RDMA transfer is OK
+   @param error: RDMA error when status is not 0.
+   
+   @retval none
+
+*/
+void storio_disk_read_write_rdma_status_cbk(void *user_param,int status, int error)
+{
+  rozofs_rdma_disk_read_t   *rdma_p;
+  rozofs_disk_thread_ctx_t *thread_ctx_p;
+  rozorpc_srv_ctx_t      * rpcCtx;
+  storio_disk_thread_msg_t  message;
+  storio_disk_thread_msg_t * msg = &message;
+  rdma_p = (rozofs_rdma_disk_read_t*) user_param;
+  rozofs_rdma_tcp_assoc_t* rdma_key_p;
+  int ret;
+
+  thread_ctx_p = rdma_p->thread_ctx_p;
+  rpcCtx = rdma_p->rpcCtx;
+  /*
+  ** Release the xmit buffer
+  */
+  rozofs_rdma_release_rpc_buffer(rpcCtx->xmitBuf);
+  rpcCtx->xmitBuf = NULL;  
+  
+  msg->opcode     = rpcCtx->opcode;
+  msg->timeStart  = rdma_p->timeStart;
+  msg->fidIdx     = rdma_p->fidIdx;
+  msg->rpcCtx     = rdma_p->rpcCtx;
+  switch (rpcCtx->opcode)
+  {
+    case STORIO_DISK_THREAD_READ_RDMA:
+    {
+      sp_read_rdma_arg_t *args;
+      args   = (sp_read_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+      rdma_key_p = (rozofs_rdma_tcp_assoc_t*) &args->rdma_key;
+      break;
+    }
+    case STORIO_DISK_THREAD_WRITE_RDMA:
+    {
+      sp_write_rdma_arg_t *args;
+      args   = (sp_write_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+      rdma_key_p = (rozofs_rdma_tcp_assoc_t*) &args->rdma_key;
+      break;    
+    }
+    default:
+      fatal("FDL RDMA: unsupported opcode : %d",rpcCtx->opcode);
+      break;
+   }
+   
+   if (status < 0)
+   {
+     if (rpcCtx->opcode == STORIO_DISK_THREAD_WRITE_RDMA)  thread_ctx_p->stat.rdma_write_status_error++;
+     else thread_ctx_p->stat.rdma_read_status_error++;
+     /*
+     ** force the shutdown of the RDMA connection.
+     */
+     rozofs_rdma_on_completion_check_status_of_rdma_connection(status,-1,rdma_key_p);
+   }
+   /*
+   ** send back the message to the main thread in order to unlock serialization and to release resources
+   */
+   ret = sendto(thread_ctx_p->sendSocket,msg, sizeof(*msg),0,(struct sockaddr*)&storio_south_socket_name,sizeof(storio_south_socket_name));
+   if (ret <= 0) {
+      fatal("storio_send_response %d sendto(%s) %s", thread_ctx_p->thread_idx, storio_south_socket_name.sun_path, strerror(errno));
+      exit(0);  
+   }     
+}
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Thar API is intended to be used by a disk thread for sending back a 
+   disk response in RDMA mode (read/write ) towards the remote end
+   Upon the receiving of the message by the remote end, a message is posted towards
+   the main thread in order to release the resources.
+   
+   @param thread_ctx_p: pointer to the thread context (contains the thread source socket )
+   @param msg: pointer to the message that contains the disk response
+
+   
+   @retval none
+*/
+void storio_rdma_send_response (rozofs_disk_thread_ctx_t *thread_ctx_p, storio_disk_thread_msg_t * msg) 
+{
+  rozofs_rdma_tcp_assoc_t* rdma_key_p;
+  rozorpc_srv_ctx_t      * rpcCtx;  
+  uint8_t *pbuf;
+  rozofs_rdma_disk_read_t *rdma_p;
+  uint8_t *xmit_payload;
+  int xmit_len;
+  void *ruc_buf;
+  int status;
+
+  rpcCtx = msg->rpcCtx;
+  
+  ruc_buf = rpcCtx->xmitBuf;
+  if (ruc_buf == NULL)
+  {
+     fatal("FDL RDMA not ruc buffer in rpc context");
+  }
+  xmit_payload = (uint8_t *)ruc_buf_getPayload(ruc_buf);
+  xmit_len     = ruc_buf_getPayloadLen(ruc_buf);
+  
+  pbuf = (uint8_t *) ruc_buf_getPayload(rpcCtx->decoded_arg);
+  switch (rpcCtx->opcode)
+  {
+    case STORIO_DISK_THREAD_READ_RDMA:
+    {
+      sp_read_rdma_arg_t *args;
+      args   = (sp_read_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+      rdma_p = (rozofs_rdma_disk_read_t*)(pbuf+decoded_rpc_buffer_size);
+      rdma_p->rdma_hdr.cqe_cbk = storio_disk_read_write_rdma_status_cbk;
+      rdma_p->rdma_hdr.user_param = rdma_p;
+      rdma_p->thread_ctx_p = thread_ctx_p;
+      rdma_p->rpcCtx = rpcCtx;
+      rdma_p->fidIdx = msg->fidIdx;
+      rdma_p->timeStart = msg->timeStart;
+      rdma_key_p = (rozofs_rdma_tcp_assoc_t*) &args->rdma_key;
+      break;
+    }
+    case STORIO_DISK_THREAD_WRITE_RDMA:
+    {
+      sp_write_rdma_arg_t *args;
+      args   = (sp_write_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+      rdma_p = (rozofs_rdma_disk_read_t*)(pbuf+decoded_rpc_buffer_size);
+      rdma_p->rdma_hdr.cqe_cbk = storio_disk_read_write_rdma_status_cbk;
+      rdma_p->rdma_hdr.user_param = rdma_p;
+      rdma_p->thread_ctx_p = thread_ctx_p;
+      rdma_p->rpcCtx = rpcCtx;
+      rdma_p->fidIdx = msg->fidIdx;
+      rdma_p->timeStart = msg->timeStart;
+      rdma_key_p = (rozofs_rdma_tcp_assoc_t*) &args->rdma_key;
+      break;    
+    }
+    default:
+      fatal("FDL RDMA: unsupported opcode : %d",rpcCtx->opcode);
+      break;
+   }
+   /*
+   ** Send the RPC RDMA message 
+   */
+   status = rozofs_rdma_post_send_ibv_wr_send((rozofs_wr_id2_t*)rdma_p,
+				  rdma_key_p->srv_ref,
+				  rpcCtx->xmitBuf,
+				  xmit_payload,
+				  xmit_len);
+   if (status < 0 )
+   {
+     if (rpcCtx->opcode == STORIO_DISK_THREAD_WRITE_RDMA)  thread_ctx_p->stat.rdma_write_status_error++;
+     else thread_ctx_p->stat.rdma_read_status_error++;
+     /*
+     ** Release the xmit buffer
+     */
+     rozofs_rdma_release_rpc_buffer(rpcCtx->xmitBuf);
+     rpcCtx->xmitBuf = NULL;
+     /*
+     ** force the shutdown of the RDMA connection.
+     */
+     rozofs_rdma_on_completion_check_status_of_rdma_connection(status,-1,rdma_key_p);
+     /*
+     ** send back the message to the main thread in order to unlock serialization and to release resources
+     */
+     status = sendto(thread_ctx_p->sendSocket,msg, sizeof(*msg),0,(struct sockaddr*)&storio_south_socket_name,sizeof(storio_south_socket_name));
+     if (status <= 0) {
+	fatal("storio_send_response %d sendto(%s) %s", thread_ctx_p->thread_idx, storio_south_socket_name.sun_path, strerror(errno));
+	exit(0);  
+     }        
+   }
+}   
+
+
+/*__________________________________________________________________________
+*/
+/**
+*  Read data from a file with RDMA support
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
 
 void storio_disk_read_rdma_cbk(void *user_param,int status, int error)
 {
@@ -494,7 +701,7 @@ void storio_disk_read_rdma_cbk(void *user_param,int status, int error)
     ** them back, however we have to change the xdr_encode procedure and use the one of TCP
     */
     rpcCtx->xdr_result  = (xdrproc_t) xdr_sp_read_ret_no_bins_t;
-
+#warning RDMA when it is a full RDMA (RPC+data) we cannot use the TCP connection for sending back the data
 #if 0
     ret.status = SP_FAILURE;     
     ret.sp_read_ret_t_u.error = error;
@@ -527,6 +734,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
   int                      is_fid_faulty;
   storio_device_mapping_t * fidCtx;
   rozofs_rdma_disk_read_t   *rdma_p;
+  char *pbuf;
     
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeBefore = MICROLONG(timeDay);
@@ -545,7 +753,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
   */
   {
     uint8_t *pbuf = (uint8_t*)args;
-    rdma_p = (rozofs_rdma_disk_read_t*)(pbuf+ROZOFS_DECODED_BUF_RDMA_EXTRA_SIZE);
+    rdma_p = (rozofs_rdma_disk_read_t*)(pbuf+decoded_rpc_buffer_size);
     rdma_p->rdma_hdr.cqe_cbk = storio_disk_read_rdma_cbk;
     rdma_p->rdma_hdr.user_param = rdma_p;
     rdma_p->thread_ctx_p = thread_ctx_p;
@@ -589,9 +797,19 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
   }  
     
   /*
-  ** set the pointer to the bins
+  ** set the pointer to the bins: when the read is received over RDMA, we should
+  ** user the recv_buf field of the rpc context since the read request is given in a rpc buffer
+  ** that cannot carry the requested length for large read
+  **
   */
-  char *pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf);
+  if (rpcCtx->rdma)
+  {
+    pbuf = ruc_buf_getPayload(rpcCtx->recv_buf);
+  }
+  else
+  {
+    pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf);  
+  }
   pbuf += rpcCtx->position;     
   /*
   ** clear the length of the bins and set the pointer where data must be returned
@@ -649,7 +867,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
   status = rozofs_rdma_post_send2((rozofs_wr_id2_t*)rdma_p,
                                  ROZOFS_TCP_RDMA_WRITE,
 				 (rozofs_rdma_tcp_assoc_t*) &args->rdma_key,
-				 rpcCtx->xmitBuf,
+				 ((rpcCtx->rdma)!=0)?rpcCtx->recv_buf:rpcCtx->xmitBuf,
 				 ret.sp_read_ret_t_u.rsp.bins.bins_val,
 				 ret.sp_read_ret_t_u.rsp.bins.bins_len+sizeof(uint64_t),
 				 args->remote_addr,
@@ -718,7 +936,11 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
 }
 #endif
 
+
+#if 0
+
 #ifdef ROZOFS_RDMA
+
 
 /*__________________________________________________________________________
 */
@@ -769,7 +991,7 @@ void storio_disk_write_rdma_cbk(void *user_param,int status, int error)
   @retval: none
 */
 
-static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg) {
+static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg,list_t *diskthread_list_p) {
   struct timeval     timeDay;
   unsigned long long timeBefore, timeAfter;
   storage_t *st = 0;
@@ -782,7 +1004,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   storio_device_mapping_t * fidCtx;
   rozofs_rdma_disk_read_t   *rdma_p;
   int status;
-    
+  char *pbuf;   
 
   ret.status = SP_FAILURE;          
   
@@ -799,7 +1021,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   */
   {
     uint8_t *pbuf = (uint8_t*)args;
-    rdma_p = (rozofs_rdma_disk_read_t*)(pbuf+ROZOFS_DECODED_BUF_RDMA_EXTRA_SIZE);
+    rdma_p = (rozofs_rdma_disk_read_t*)(pbuf+decoded_rpc_buffer_size);
     rdma_p->rdma_hdr.cqe_cbk = storio_disk_write_rdma_cbk;
     rdma_p->rdma_hdr.user_param = rdma_p;
     rdma_p->thread_ctx_p = thread_ctx_p;    
@@ -812,7 +1034,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++ ;   
     storio_send_response(thread_ctx_p,msg,-1);
-    return;
+    return 0;
   }  
   /*
   ** trigger the RDMA transfer to get the data to write
@@ -822,12 +1044,25 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   ** set the pointer to the bins that are in the xmit buffer
   ** since received bufer is also used for the response
   */
-  char *pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf); 
+  /*
+  ** set the pointer to the bins: when the read is received over RDMA, we should
+  ** user the recv_buf field of the rpc context since the read request is given in a rpc buffer
+  ** that cannot carry the requested length for large read
+  **
+  */
+  if (rpcCtx->rdma)
+  {
+    pbuf = ruc_buf_getPayload(rpcCtx->recv_buf);
+  }
+  else
+  {
+    pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf);  
+  }
   pbuf += rpcCtx->position;
   status = rozofs_rdma_post_send2((rozofs_wr_id2_t*)rdma_p,
                                  ROZOFS_TCP_RDMA_READ,
 				 (rozofs_rdma_tcp_assoc_t*) &args->rdma_key,
-				 rpcCtx->xmitBuf,
+				 ((rpcCtx->rdma)!=0)?rpcCtx->recv_buf:rpcCtx->xmitBuf,
 				 pbuf,
 				 args->remote_len,
 				 args->remote_addr,
@@ -982,6 +1217,653 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
    return;
 }
 #endif
+
+#else
+#ifdef ROZOFS_RDMA
+#warning NEW_code
+/*__________________________________________________________________________
+*/
+/**
+*  WRITE RDMA callback
+   That function is called upon the completion of a remote RDMA read
+   It is used by the thread that performs a SP_WRITE_RDMA
+   
+   @param user_param: it is pointer that points to the thread context used for RDMA transfer
+   @param status : status of the RDMA transfer: 0 no error, < 0 error
+   @param error: RDMA error code when status is negative
+   
+   @retval none
+*/
+void storio_disk_write_rdma_cbk(void *user_param,int status, int error)
+{
+  rozofs_rdma_disk_read_t   *rdma_p;
+       
+  rdma_p = (rozofs_rdma_disk_read_t*) user_param;
+  
+  rdma_p->status=status;
+  rdma_p->error=error;
+  /*
+  ** post the reponse in the ring buffer of the thread: this should wake up it
+  */
+  rozofs_queue_put((rozofs_queue_t*)rdma_p->rdma_ring,user_param);
+
+}
+
+
+/*__________________________________________________________________________
+*/
+/**
+*  Write data to a file using RDMA
+
+  @param thread_ctx_p: pointer to the thread context
+  @param msg         : address of the message received
+  
+  @retval: none
+*/
+
+static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg,list_t *diskthread_list_p) {
+  struct timeval     timeDay;
+  unsigned long long timeBefore, timeAfter;
+  storage_t *st = 0;
+  sp_write_rdma_arg_t * args;
+  rozorpc_srv_ctx_t      * rpcCtx;
+  sp_write_ret_t           ret;
+  uint8_t                  version = 0;
+  int                      size;
+  int                      is_fid_faulty;
+  storio_device_mapping_t * fidCtx;
+  rozofs_rdma_disk_read_t   *rdma_p;
+  int status;
+  int rdma_wr_in_progress_counter = 0;
+  int empty = 0;
+  int sleep_done = 0;
+  int rdma_write_thread_enabled = 0;
+  char *pbuf;
+    
+
+  ret.status = SP_FAILURE;   
+   /*
+   ** get the current status if the RDMA threads for that run
+   */
+  rdma_write_thread_enabled = common_config.rdma_write_thread_enable;
+
+  fidCtx = storio_device_mapping_ctx_retrieve(msg->fidIdx);
+  if (fidCtx == NULL) {
+    ret.sp_write_ret_t_u.error = EIO;
+    severe("Bad FID ctx index %d",msg->fidIdx); 
+    rpcCtx = msg->rpcCtx;
+    storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+    thread_ctx_p->stat.write_error++ ;   
+    storio_send_response(thread_ctx_p,msg,-1);
+    return 0;
+  }  
+  /*
+  ** Load up the RPC context of the request that has triggered the call
+  */
+  rpcCtx = msg->rpcCtx;
+
+  while(1)
+  {
+    /*
+    ** update statistics
+    */
+    thread_ctx_p->stat.write_count++;
+
+
+    args   = (sp_write_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+
+    /*
+    ** Set the pointer to the rdma array: located after the decoded args 
+    */
+    {
+      uint8_t *pbuf = (uint8_t*)args;
+      rdma_p = (rozofs_rdma_disk_read_t*)(pbuf+decoded_rpc_buffer_size);
+      rdma_p->rdma_hdr.cqe_cbk = storio_disk_write_rdma_cbk;
+      rdma_p->rdma_hdr.user_param = rdma_p;
+      rdma_p->thread_ctx_p = thread_ctx_p;    
+      rdma_p->rpcCtx = rpcCtx;
+      rdma_p->fidIdx = msg->fidIdx;
+      rdma_p->timeStart = msg->timeStart;
+      if (rdma_write_thread_enabled) 
+      {
+        rdma_p->rdma_ring = &storio_rdma_write_ring;
+      }
+      else
+      {
+        rdma_p->rdma_ring = &thread_ctx_p->ring4rdma;
+      }
+    }
+    /*
+    ** trigger the RDMA transfer to get the data to write
+    **
+    */    
+    /*
+    ** set the pointer to the bins that are in the xmit buffer
+    ** since received bufer is also used for the response
+    */
+  /*
+  ** set the pointer to the bins: when the read is received over RDMA, we should
+  ** user the recv_buf field of the rpc context since the read request is given in a rpc buffer
+  ** that cannot carry the requested length for large read
+  **
+  */
+  if (rpcCtx->rdma)
+  {
+    pbuf = ruc_buf_getPayload(rpcCtx->recv_buf);
+  }
+  else
+  {
+    pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf);  
+  }
+  pbuf += rpcCtx->position;
+    status = rozofs_rdma_post_send2((rozofs_wr_id2_t*)rdma_p,
+                                   ROZOFS_TCP_RDMA_READ,
+				   (rozofs_rdma_tcp_assoc_t*) &args->rdma_key,
+				    ((rpcCtx->rdma)!=0)?rpcCtx->recv_buf:rpcCtx->xmitBuf,
+				   pbuf,
+				   args->remote_len,
+				   args->remote_addr,
+				   args->rkey);
+    if (status < 0)
+    {
+      /*
+      ** In case of error we stop trying to concatenate the write requests concerning that FID
+      */
+      ret.status = SP_FAILURE;     
+      ret.sp_write_ret_t_u.error = errno;
+      storio_encode_rpc_response(rpcCtx,(char*)&ret);
+      thread_ctx_p->stat.rdma_read_error++;
+      storio_send_response(thread_ctx_p,msg,-1);
+      break;  
+    } 
+//#warning FDL process only one request start
+//    rdma_wr_in_progress_counter++;
+//    break;
+//#warning FDL process only one request end
+
+
+#if 1
+    if (sleep_done == 0)
+    {
+       /*
+       ** check if it is the end of processing: this true with the
+       ** diskthread list is empty
+       */
+       if ((list_empty(&fidCtx->serial_pending_request)) && (list_empty(diskthread_list_p)))
+       {
+	 /*
+	 ** check if we have a network with latency
+	 */ 
+	 if (common_config.rdma_delay_ms != 0) 
+	 {  
+            usleep( common_config.rdma_delay_ms*1000);
+	    sleep_done = 1;
+	 }
+       }    
+    }
+#else
+    if (rdma_wr_in_progress_counter == 0)
+    {
+	 /*
+	 ** check if we have a network with latency
+	 */ 
+	 if (common_config.rdma_delay_ms != 0)
+	 {  
+            usleep( common_config.rdma_delay_ms*1000);
+	    sleep_done = 1;
+	 }            
+    }
+
+#endif
+    /*
+    ** increment the number of RDMA read from remote side
+    */
+    rdma_wr_in_progress_counter++;
+    if (rdma_wr_in_progress_counter > common_config.rdma_delay_threshold) sleep_done = 1;
+
+    /*
+    ** Check if there are some other pending Write requests
+    */
+    empty = storio_get_pending_request_list(fidCtx,diskthread_list_p);
+    if (empty) 
+    {
+      /*
+      ** The queue for that FID is now empty: wait for the RDMA response and then proceed
+      ** with the projection write
+      */
+      break;
+    }
+    /*
+    ** Get the next request and check that it is a RDMA_WRITE request, otherwise
+    ** we stop the acquistion
+    */
+    rpcCtx = list_first_entry(diskthread_list_p,rozorpc_srv_ctx_t,list);   
+    if ( rpcCtx->opcode != STORIO_DISK_THREAD_WRITE_RDMA) 
+    {
+      /*
+      ** the queue was not empty, however the next request is not a write. We keep
+      ** that message in the queue and start waiting for the RDMA response before
+      ** proceeding with the effective write
+      */
+      break;
+    }
+    /*
+    ** Remove it from the list and process it
+    */
+    list_remove(&rpcCtx->list);  
+  }
+  /*
+  **   BIG LOOP: Here we waiting for the RDMA read response.
+  **   We exit from the loop when the number of pending RDMA request reaches 0.
+  **   Each time we got a RDMA response, we attempt to write that data on disk
+  */
+  /*
+  ** update the statistics
+  */
+  if ( rdma_wr_in_progress_counter >= ROZFS_MAX_RDMA_WRITE_IN_PRG) rdma_write_parallel_req_tbl[ROZFS_MAX_RDMA_WRITE_IN_PRG-1]++;
+  else  rdma_write_parallel_req_tbl[rdma_wr_in_progress_counter]++;
+  /*
+  ** Wait wait for the completion of the RDMA transfer:
+  ** We do not enter that loop when the RDMA write thread are enabled
+  */
+  while ((rdma_write_thread_enabled== 0) && (rdma_wr_in_progress_counter != 0))
+  {
+    char *pbuf;
+      
+    rdma_p = rozofs_queue_get(&thread_ctx_p->ring4rdma);  
+    /*
+    ** Decrement the number of waiting context
+    */
+     rdma_wr_in_progress_counter--;
+     /*
+     ** Restore the rpc context that has been save in the rdma local context
+     ** as well as all the local variables needed to proceed with the write.
+     */
+     rpcCtx = rdma_p->rpcCtx;
+     args   = (sp_write_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+     msg->opcode     = rpcCtx->opcode;
+     msg->timeStart  = rdma_p->timeStart;
+     msg->fidIdx     = rdma_p->fidIdx;
+     msg->rpcCtx     = rdma_p->rpcCtx;  
+     /*
+     ** set the pointer to the bins: when the read is received over RDMA, we should
+     ** user the recv_buf field of the rpc context since the read request is given in a rpc buffer
+     ** that cannot carry the requested length for large read
+     **
+     */
+     if (rpcCtx->rdma)
+     {
+       pbuf = ruc_buf_getPayload(rpcCtx->recv_buf);
+     }
+     else
+     {
+       pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf);  
+     }
+     pbuf += rpcCtx->position;
+     /*
+     ** check the status of the rdma operation
+     */
+     if (rdma_p->status < 0)
+     {
+       ret.status = SP_FAILURE;     
+       ret.sp_write_ret_t_u.error = rdma_p->error;
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);
+       thread_ctx_p->stat.rdma_write_error++;
+       storio_send_response(thread_ctx_p,msg,-1);
+       /*
+       ** need to check if there is some more pending RDMA read from remote
+       */
+       continue;       
+     }
+     /*
+     ** adjust the length of the xmit buffer to reflect that fact that now is contains
+     ** the data to write
+     */
+     {
+	size = ruc_buf_getPayloadLen(rpcCtx->xmitBuf);
+	size += args->remote_len;
+	ruc_buf_setPayloadLen(rpcCtx->xmitBuf,size);  
+     }
+
+     /*
+     ** Get start time for KPI statistics
+     ** These statistics do not encompass the frame receiving time  
+     ** but only the device writing
+     */
+     gettimeofday(&timeDay,(struct timezone *)0);  
+     timeBefore = MICROLONG(timeDay);
+      /*
+      ** Check that the received data length is consistent with the bins length
+      */
+      size = ruc_buf_getPayloadLen(rpcCtx->xmitBuf) - rpcCtx->position;
+      if (size != args->remote_len) {
+	severe("Inconsistent bins length %d > %d = payloadLen(%d) - position(%d)",
+        	args->remote_len, size, ruc_buf_getPayloadLen(rpcCtx->xmitBuf), rpcCtx->position);
+	ret.sp_write_ret_t_u.error = EPIPE;
+	storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+	thread_ctx_p->stat.write_error++; 
+	storio_send_response(thread_ctx_p,msg,-1); 
+	continue;;   
+      }
+      /*
+      ** Check number of projection is consistent with the bins length
+      */
+      {
+	 uint16_t proj_psize = rozofs_get_max_psize_in_msg(args->layout,args->bsize);  
+	 size =  args->nb_proj * proj_psize;
+
+	 if (size > args->remote_len) {
+	   severe("Inconsistent bins length %d < %d = nb_proj(%d) x proj_size(%d)",
+        	   args->remote_len, size, args->nb_proj, proj_psize);
+	   ret.sp_write_ret_t_u.error = EIO;
+	   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+	   thread_ctx_p->stat.write_error++; 
+	   storio_send_response(thread_ctx_p,msg,-1); 
+	   continue;         
+	 }	        
+      } 
+     // Get the storage for the couple (cid;sid)
+     if ((st = storaged_lookup(args->cid, args->sid)) == 0) {
+       ret.sp_write_ret_t_u.error = errno;
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+       thread_ctx_p->stat.write_badCidSid++ ;   
+       storio_send_response(thread_ctx_p,msg,-1);
+       continue;
+     }    
+     /* Write projections */
+     size =  storage_write(st, fidCtx, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
+             (unsigned char *) args->fid, args->bid, args->nb_proj, version,
+             &ret.sp_write_ret_t_u.file_size,(bin_t *) pbuf, &is_fid_faulty);
+     if (size <= 0)  {
+       ret.sp_write_ret_t_u.error = errno;
+       if (errno == ENOSPC)
+	 thread_ctx_p->stat.write_nospace++;
+       else   
+	 thread_ctx_p->stat.write_error++; 
+       if (is_fid_faulty) {
+	 storio_register_faulty_fid(thread_ctx_p->thread_idx,
+				    args->cid,
+				    args->sid,
+				    (uint8_t*)args->fid);
+       }       
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+       storio_send_response(thread_ctx_p,msg,-1);
+       continue;
+     }
+     msg->size = size;   
+
+     ret.status = SP_SUCCESS;  
+     ret.sp_write_ret_t_u.file_size = 0;
+
+     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+     thread_ctx_p->stat.write_Byte_count += size;
+     storio_send_response(thread_ctx_p,msg,0);
+
+     /*
+     ** Update statistics
+     */
+     gettimeofday(&timeDay,(struct timezone *)0);  
+     timeAfter = MICROLONG(timeDay);
+     thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+     /*
+     ** Update KPI per device
+     */
+     {
+       int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+       int dev   = storio_get_dev(fidCtx, chunk); 
+       if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+	 storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                   thread_ctx_p->thread_idx, 
+                                   storage_device_kpi_write, 
+                                   size,
+                                   timeAfter-timeBefore); 
+       }  
+     }     
+  }
+  /*
+  ** need to return the status of the thread queue
+  */
+  return empty;
+} 
+#else
+static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg,list_t *diskthread_list_p) {
+   fatal("RDMA not supported by storio");
+   return -1;
+}
+#endif
+
+
+
+#endif
+
+
+/*__________________________________________________________________________
+*/
+/** RDMA write thread
+* That thread is activated by the CQ thread 
+  Its job is to write data that has been transfered in RDMA from the client on the right cid/sid
+  
+*/
+
+
+void *storio_rdma_write_thread(void *arg) 
+{
+
+  rozofs_disk_thread_ctx_t   * thread_ctx_p = (rozofs_disk_thread_ctx_t*)arg;
+  rozofs_rdma_disk_read_t    * rdma_p;   /* pointer to the message that has been formated by the Diskthread that post the rdma message */
+  sp_write_rdma_arg_t        * args;    /* pointer to the decoded RPC message */
+  rozorpc_srv_ctx_t          * rpcCtx;  /* pointer to the RPC context of the current write */
+  sp_write_ret_t               ret;
+  storio_disk_thread_msg_t     response_msg;
+  storio_disk_thread_msg_t   * msg = &response_msg;
+  struct timeval               timeDay;
+  unsigned long long           timeBefore, timeAfter;
+  int                          size;
+  storio_device_mapping_t * fidCtx;
+  storage_t *st      = 0;
+  uint8_t    version = 0;  
+  int        is_fid_faulty;          
+
+  uma_dbg_thread_add_self("Disk WR-RDMA");
+  {
+    struct sched_param my_priority;
+    int policy=-1;
+    int ret= 0;
+
+   pthread_getschedparam(pthread_self(),&policy,&my_priority);
+	DEBUG("storio RDMA write thread Scheduling policy   = %s\n",
+                  (policy == SCHED_OTHER) ? "SCHED_OTHER" :
+                  (policy == SCHED_FIFO)  ? "SCHED_FIFO" :
+                  (policy == SCHED_RR)    ? "SCHED_RR" :
+                  "???");
+    /*
+    ** MUST be higher than the disk thread
+    */
+    my_priority.sched_priority= 95;
+    policy = SCHED_FIFO;
+    ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
+    if (ret < 0) 
+    {
+      severe("error on sched_setscheduler: %s",strerror(errno));	
+    }
+    pthread_getschedparam(pthread_self(),&policy,&my_priority);
+	DEBUG("storio RDMA write thread Scheduling policy (prio %d)  = %s\n",my_priority.sched_priority,
+                  (policy == SCHED_OTHER) ? "SCHED_OTHER" :
+                  (policy == SCHED_FIFO)  ? "SCHED_FIFO" :
+                  (policy == SCHED_RR)    ? "SCHED_RR" :
+                  "???");
+  }  
+   
+  /*
+  ** Main loop : wait in the ring the answer from the RDMA read transfer
+  ** in case of success the thread attempts to write the data that has been transfered in RDMA on disk
+  */
+  while (1)
+  {
+    char *pbuf;
+      
+    rdma_p = rozofs_queue_get(&storio_rdma_write_ring);  
+     /*
+     ** Restore the rpc context that has been save in the rdma local context
+     ** as well as all the local variables needed to proceed with the write.
+     */
+     rpcCtx = rdma_p->rpcCtx;
+     args   = (sp_write_rdma_arg_t*) ruc_buf_getPayload(rpcCtx->decoded_arg);
+     msg->opcode     = rpcCtx->opcode;
+     msg->timeStart  = rdma_p->timeStart;
+     msg->fidIdx     = rdma_p->fidIdx;
+     msg->rpcCtx     = rdma_p->rpcCtx;  
+     /*
+     ** retrieve the FIDctx
+     */
+     fidCtx = storio_device_mapping_ctx_retrieve(msg->fidIdx);
+     if (fidCtx == NULL) {
+       ret.sp_write_ret_t_u.error = EIO;
+       severe("Bad FID ctx index %d",msg->fidIdx); 
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+       thread_ctx_p->stat.write_error++ ;   
+       storio_send_response(thread_ctx_p,msg,-1);
+       continue;
+     }  
+     /*
+     ** set the pointer to the bins: when the read is received over RDMA, we should
+     ** user the recv_buf field of the rpc context since the read request is given in a rpc buffer
+     ** that cannot carry the requested length for large read
+     **
+     */
+     if (rpcCtx->rdma)
+     {
+       pbuf = ruc_buf_getPayload(rpcCtx->recv_buf);
+     }
+     else
+     {
+       pbuf = ruc_buf_getPayload(rpcCtx->xmitBuf);  
+     }
+     pbuf += rpcCtx->position;
+     /*
+     ** check the status of the rdma operation
+     */
+     if (rdma_p->status < 0)
+     {
+       ret.status = SP_FAILURE;     
+       ret.sp_write_ret_t_u.error = rdma_p->error;
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);
+       thread_ctx_p->stat.rdma_write_error++;
+       storio_send_response(thread_ctx_p,msg,-1);
+       /*
+       ** need to check if there is some more pending RDMA read from remote
+       */
+       continue;       
+     }
+     /*
+     ** adjust the length of the xmit buffer to reflect that fact that now is contains
+     ** the data to write
+     */
+     {
+	size = ruc_buf_getPayloadLen(rpcCtx->xmitBuf);
+	size += args->remote_len;
+	ruc_buf_setPayloadLen(rpcCtx->xmitBuf,size);  
+     }
+
+     /*
+     ** Get start time for KPI statistics
+     ** These statistics do not encompass the frame receiving time  
+     ** but only the device writing
+     */
+     gettimeofday(&timeDay,(struct timezone *)0);  
+     timeBefore = MICROLONG(timeDay);
+      /*
+      ** Check that the received data length is consistent with the bins length
+      */
+      size = ruc_buf_getPayloadLen(rpcCtx->xmitBuf) - rpcCtx->position;
+      if (size != args->remote_len) {
+	severe("Inconsistent bins length %d > %d = payloadLen(%d) - position(%d)",
+        	args->remote_len, size, ruc_buf_getPayloadLen(rpcCtx->xmitBuf), rpcCtx->position);
+	ret.sp_write_ret_t_u.error = EPIPE;
+	storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+	thread_ctx_p->stat.write_error++; 
+	storio_send_response(thread_ctx_p,msg,-1); 
+	continue;;   
+      }
+      /*
+      ** Check number of projection is consistent with the bins length
+      */
+      {
+	 uint16_t proj_psize = rozofs_get_max_psize_in_msg(args->layout,args->bsize);  
+	 size =  args->nb_proj * proj_psize;
+
+	 if (size > args->remote_len) {
+	   severe("Inconsistent bins length %d < %d = nb_proj(%d) x proj_size(%d)",
+        	   args->remote_len, size, args->nb_proj, proj_psize);
+	   ret.sp_write_ret_t_u.error = EIO;
+	   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+	   thread_ctx_p->stat.write_error++; 
+	   storio_send_response(thread_ctx_p,msg,-1); 
+	   continue;         
+	 }	        
+      } 
+     // Get the storage for the couple (cid;sid)
+     if ((st = storaged_lookup(args->cid, args->sid)) == 0) {
+       ret.sp_write_ret_t_u.error = errno;
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+       thread_ctx_p->stat.write_badCidSid++ ;   
+       storio_send_response(thread_ctx_p,msg,-1);
+       continue;
+     }    
+
+     /* Write projections */
+     size =  storage_write(st, fidCtx, args->layout, args->bsize, (sid_t *) args->dist_set, args->spare,
+             (unsigned char *) args->fid, args->bid, args->nb_proj, version,
+             &ret.sp_write_ret_t_u.file_size,(bin_t *) pbuf, &is_fid_faulty);
+     if (size <= 0)  {
+       ret.sp_write_ret_t_u.error = errno;
+       if (errno == ENOSPC)
+	 thread_ctx_p->stat.write_nospace++;
+       else   
+	 thread_ctx_p->stat.write_error++; 
+       if (is_fid_faulty) {
+	 storio_register_faulty_fid(thread_ctx_p->thread_idx,
+				    args->cid,
+				    args->sid,
+				    (uint8_t*)args->fid);
+       }       
+       storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+       storio_send_response(thread_ctx_p,msg,-1);
+       continue;
+     }
+     msg->size = size;   
+
+     ret.status = SP_SUCCESS;  
+     ret.sp_write_ret_t_u.file_size = 0;
+
+     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
+     thread_ctx_p->stat.write_Byte_count += size;
+     storio_send_response(thread_ctx_p,msg,0);
+
+     /*
+     ** Update statistics
+     */
+     gettimeofday(&timeDay,(struct timezone *)0);  
+     timeAfter = MICROLONG(timeDay);
+     thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+     /*
+     ** Update KPI per device
+     */
+     {
+       int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+       int dev   = storio_get_dev(fidCtx, chunk); 
+       if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
+	 storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
+                                   thread_ctx_p->thread_idx, 
+                                   storage_device_kpi_write, 
+                                   size,
+                                   timeAfter-timeBefore); 
+       }  
+     }     
+  }
+}
+
+
 
 /*__________________________________________________________________________
 */
@@ -2183,26 +3065,25 @@ void *storio_disk_thread(void *arg) {
   uint64_t                   newval;
 
   uma_dbg_thread_add_self("Disk thread");
-#ifdef ROZOFS_RDMA
-  /*
-  ** RDMA: fill up the address of the semaphore in the ibv_post_send context of the thread
-  */
-  ctx_p->rdma_ibv_post_send_ctx.sem = &ctx_p->sema_rdma;
-#endif
-#if 1
+
+
     {
       struct sched_param my_priority;
       int policy=-1;
       int ret= 0;
-
+      /**
+      * The priority of the disk thread must be lower than the priority
+      * of the RDMA completion queue thread to avoid a dead lock on a QP spin_lock()
+      *
+      */
      pthread_getschedparam(pthread_self(),&policy,&my_priority);
           DEBUG("storio main thread Scheduling policy   = %s\n",
                     (policy == SCHED_OTHER) ? "SCHED_OTHER" :
                     (policy == SCHED_FIFO)  ? "SCHED_FIFO" :
                     (policy == SCHED_RR)    ? "SCHED_RR" :
                     "???");
- #if 1
-      my_priority.sched_priority= 98;
+
+      my_priority.sched_priority= 94;
       policy = SCHED_FIFO;
       ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
       if (ret < 0) 
@@ -2215,10 +3096,10 @@ void *storio_disk_thread(void *arg) {
                     (policy == SCHED_FIFO)  ? "SCHED_FIFO" :
                     (policy == SCHED_RR)    ? "SCHED_RR" :
                     "???");
- #endif        
+    
 
     }  
-#endif     
+   
 
   //info("Disk Thread %d Started !!\n",ctx_p->thread_idx);
   
@@ -2295,9 +3176,11 @@ void *storio_disk_thread(void *arg) {
         break;
 
       case STORIO_DISK_THREAD_WRITE_RDMA:
-        storio_disk_write_rdma(ctx_p,&msg);
+        storio_disk_write_rdma(ctx_p,&msg,NULL);
         break;
-
+      /*
+      ** case of the serialization: all the opcode are processed storio_disk_serial
+      */
       case STORIO_DISK_THREAD_FID:
         storio_disk_serial(ctx_p,&msg);
         break;	
@@ -2321,6 +3204,7 @@ void *storio_disk_thread(void *arg) {
 //    sched_yield();
   }
 }
+
 /*
 ** Create the threads that will handle all the disk requests
 
@@ -2376,8 +3260,16 @@ int storio_disk_thread_create(char * hostname, int nb_threads, int instance_id) 
      if (thread_ctx_p->sendSocket < 0) {
 	fatal("af_unix_disk_thread_create af_unix_disk_sock_create_internal(%s) %s",socketName, strerror(errno));
 	return -1;   
-     }   
-   
+     } 
+     /*
+     ** Init of the ring buffer used by RDMA write (to get response from the RDMA completion thread
+     */
+     if (rozofs_queue_init(&thread_ctx_p->ring4rdma,DISK_THREAD_QUEUE_RING_SZ) < 0)
+     {
+	fatal("cannot create ring buffer");
+	return -1;
+     }  
+          
      err = pthread_attr_init(&attr);
      if (err != 0) {
        fatal("af_unix_disk_thread_create pthread_attr_init(%d) %s",i,strerror(errno));
@@ -2405,6 +3297,90 @@ int storio_disk_thread_create(char * hostname, int nb_threads, int instance_id) 
   return 0;
 }
  
+#ifdef ROZOFS_RDMA
+
+/*
+** Create the RDMA write threads that will handle all the disk write requests after the RDMA transfer
+
+* @param hostname    storio hostname (for tests)
+* @param nb_threads  number of threads to create
+*  
+* @retval 0 on success -1 in case of error
+*/
+int storio_rdma_write_disk_thread_create(char * hostname, int nb_threads, int instance_id) {
+   int                        i;
+   int                        err;
+   pthread_attr_t             attr;
+   rozofs_disk_thread_ctx_t * thread_ctx_p;
+   char                       socketName[128];
+   char                     * pChar;
+
+   /*
+   ** clear the thread table
+   */
+   memset(rozofs_rdma_write_disk_thread_ctx_tb,0,sizeof(rozofs_disk_thread_ctx_tb));
+   /*
+   ** Now create the threads
+   */
+   thread_ctx_p = rozofs_disk_thread_ctx_tb;
+   for (i = 0; i < nb_threads ; i++) {
+   
+     thread_ctx_p->hostname = hostname;
+     /*
+     ** create the thread specific socket to send the response from 
+     */
+     pChar = socketName;
+     pChar += rozofs_string_append(pChar,ROZOFS_SOCK_FAMILY_DISK_NORTH);
+     *pChar++ = '_';
+     *pChar++ = 'R';
+     *pChar++ = 'D';     
+     *pChar++ = 'M';
+     *pChar++ = 'A';
+     *pChar++ = '_';
+     pChar += rozofs_u32_append(pChar,instance_id);
+     *pChar++ = '_';  
+     pChar += rozofs_string_append(pChar,hostname);
+     *pChar++ = '_'; 
+     pChar += rozofs_u32_append(pChar,i);
+     thread_ctx_p->sendSocket = af_unix_disk_sock_create_internal(socketName,1024*32);
+     if (thread_ctx_p->sendSocket < 0) {
+	fatal("storio_rdma_write_disk_thread_create af_unix_disk_sock_create_internal(%s) %s",socketName, strerror(errno));
+	return -1;   
+     } 
+     /*
+     ** Init of the common ring buffer used by RDMA write (to get response from the RDMA completion thread
+     */
+     if (rozofs_queue_init(&storio_rdma_write_ring,DISK_THREAD_QUEUE_RING_SZ*4) < 0)
+     {
+	fatal("cannot create ring buffer");
+	return -1;
+     }  
+          
+     err = pthread_attr_init(&attr);
+     if (err != 0) {
+       fatal("af_unix_disk_thread_create pthread_attr_init(%d) %s",i,strerror(errno));
+       return -1;
+     }  
+
+     thread_ctx_p->thread_idx = i;
+
+     
+     err = pthread_create(&thread_ctx_p->thrdId,&attr,storio_rdma_write_thread,thread_ctx_p);
+     if (err != 0) {
+       fatal("storio_rdma_write_disk_thread_create pthread_create(%d) %s",i, strerror(errno));
+       return -1;
+     }  
+     
+     thread_ctx_p++;
+  }
+  return 0;
+}
+#else
+int storio_rdma_write_disk_thread_create(char * hostname, int nb_threads, int instance_id) {
+  return 0;
+}
+#endif
+
  
 
 /*__________________________________________________________________________
@@ -2425,6 +3401,7 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
   rozorpc_srv_ctx_t      * rpcCtx;
   storio_disk_thread_msg_t   msg;  
   int fdl_count = 0;
+  int queue_empty;
   
   memcpy(&msg,msg_in,sizeof(storio_disk_thread_msg_t));
   /*
@@ -2435,6 +3412,7 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
     fatal("Bad FID ctx index %d",msg.fidIdx); 
     return;
   }
+  
   /*
   ** init of the local list
   */
@@ -2446,8 +3424,16 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
   {
      
      empty = storio_get_pending_request_list(fidCtx,&diskthread_list);
-     if (empty) break;
+     if (empty) 
+     {  
+       break;
+     }
      
+     if (list_empty(&diskthread_list))
+     {
+        fatal("FDL empty queue while not empty");     
+     
+     }
      rpcCtx = list_first_entry(&diskthread_list,rozorpc_srv_ctx_t,list);
      list_remove(&rpcCtx->list);
      fdl_count++;
@@ -2506,7 +3492,13 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
          break;
 
        case STORIO_DISK_THREAD_WRITE_RDMA:
-         storio_disk_write_rdma(ctx_p,&msg);
+	 /*
+	 ** need to check queue empty because when the queue becomes empty the main thread
+	 ** can post a message that will be processed by another thread
+	 ** so in that case we must exit for the serialization
+	 */
+         queue_empty = storio_disk_write_rdma(ctx_p,&msg,&diskthread_list);
+	 if (queue_empty) return;
          break;
 
 	 /*
@@ -2523,8 +3515,9 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
        default:
          fatal(" unexpected opcode : %d\n",msg.opcode);
          exit(0);       
-     }       
-  } 
+     } 
+ 
+  }    
 //  severe("FDL storio count %d for %p",fdl_count, fidCtx);  
 }
  

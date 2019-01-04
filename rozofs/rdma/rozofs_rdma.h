@@ -30,6 +30,8 @@
 #include <semaphore.h>
 #ifndef FDL_COMPIL_STANDALONE
 #include <rozofs/common/list.h>
+#include <rozofs/common/htable.h>
+#include <rozofs/common/xmalloc.h>
 #include <rozofs/core/uma_dbg_api.h>
 #else
 #include "list.h"
@@ -72,6 +74,8 @@ static const char *messages[] =
 
 #define ROZOFS_RDMA_BACKLOG_COUNT 64  /**< max RDMA listen backlog   */
 #define ROZOFS_RDMA_MAX_LISTENER 8    /**< max listening context     */
+#define ROZOFS_MAX_SRQ_WR 1024 /* Max of outstanding Work requests that can be posted on a shared queue */
+#define ROZOFS_RPC_RDMA_MSG_SZ 2048 /**< max size of a RPC message over RDMA */
 /**
 * Statistics of the RDMA signalling thread
 */
@@ -86,7 +90,8 @@ typedef struct rozofs_rdma_sig_th_statistics_t
 #define ROZOFS_MAX_RDMA_MEMREG 8
 #define ROZOFS_MAX_RDMA_ADAPTOR 8
 #define ROZOFS_RDMA_COMPQ_SIZE 512  /**< must be at least equal to the number of disk threads  */
-
+#define ROZOFS_RDMA_COMPQ_RPC_SIZE  512 /**< number of entry per completion queue              */
+#define ROZOFS_RDMA_BUF_SRQ_MAX_REFILL 2  /**< number of ruc_buffer that can be refill on the SRQ upon receiving one message */
 /*
 ** RDMA module statistics
 */
@@ -118,11 +123,13 @@ typedef struct _rozofs_rdma_mod_stats_t {
     uint64_t   ibv_alloc_pd[3];             /**< RDMA Policy descriptor allocation              */
     uint64_t   ibv_create_comp_channel[3];  /**< RDMA completion channel creation               */
     uint64_t   ibv_create_cq[3];            /**< RDMA completion queue creation                 */
-    uint64_t   rdma_create_id[3];            /**< cm_id context creation: rdma_create_id()      */
-    uint64_t   rdma_destroy_id[3];            /**< cm_id contextdeletion: rdma_destroy_id       */
-    uint64_t   signalling_sock_create[3];  /**<signalling socket creation               */
-    uint64_t   rdma_listen[3];            /**<number of RDMA listen                     */
-    uint64_t   rdma_reconnect[3];            /**<number of RDMA reconnect attempt               */
+    uint64_t   rdma_create_id[3];           /**< cm_id context creation: rdma_create_id()       */
+    uint64_t   rdma_destroy_id[3];          /**< cm_id contextdeletion: rdma_destroy_id         */
+    uint64_t   signalling_sock_create[3];   /**<signalling socket creation                      */
+    uint64_t   rdma_listen[3];              /**<number of RDMA listen                           */
+    uint64_t   rdma_reconnect[3];           /**<number of RDMA reconnect attempt                */
+    uint64_t   ibv_create_srq[3];           /**<number of RDMA share queue creating             */
+    uint64_t   ibv_post_srq_recv[3];        /**<number of RDMA post received on shared queue    */
 } rozofs_rdma_mod_stats_t;
 
 
@@ -147,25 +154,68 @@ typedef struct _rozofs_rmda_ibv_cxt_t {
   uint32_t  next_cq_idx; 
   struct ibv_context *ctx;   /**< ibv context provided by the adaptor: use as primary key  */
   struct ibv_pd *pd;         /**< policy descriptor  */
-  struct ibv_cq *cq[ROZOFS_CQ_THREAD_NUM];         /**< completion queue   */
-  struct ibv_comp_channel *comp_channel[ROZOFS_CQ_THREAD_NUM];   /**< completion channel  */
+  struct ibv_cq *cq[ROZOFS_CQ_THREAD_NUM];         /**< completion queue for RDMA READ,WRITE and ACK   */
+  struct ibv_cq *cq_rpc[ROZOFS_CQ_THREAD_NUM];         /**< completion queue for RPC message over RDMA   */
+  struct ibv_comp_channel *comp_channel[ROZOFS_CQ_THREAD_NUM];   /**< completion channel for RDMA READ,WRITE and ACK   */
+  struct ibv_comp_channel *comp_channel_rpc[ROZOFS_CQ_THREAD_NUM];   /**< completion channel for RPC over RDMA   */
   struct ibv_mr *memreg[ROZOFS_MAX_RDMA_MEMREG];
+  struct ibv_mr *memreg_rpc;                                        /**< memory region used form RPC messages      */
   pthread_t cq_poller_thread[ROZOFS_CQ_THREAD_NUM];
+  pthread_t cq_rpc_poller_thread[ROZOFS_CQ_THREAD_NUM];
+  struct ibv_srq *shared_queue4rpc;     /**< shared queue used for RPC over RDMA           */
+  uint64_t post_send_stat[ROZOFS_CQ_THREAD_NUM];  /**< number of ibv_post_send   */
+  uint64_t post_recv_stat[ROZOFS_CQ_THREAD_NUM];  /**< number of ibv_post_recv   */
+  void *rozofs_cq_th_post_send[ROZOFS_CQ_THREAD_NUM];  /**< thread context of the completion queue thread associated with post_send */
+  void *rozofs_cq_th_post_recv[ROZOFS_CQ_THREAD_NUM];  /**< thread context of the completion queue thread associated with post_recv */
+  void *rozofs_rdma_async_event_th;                    /**< context of the asynchronous RDMA event thread                           */
+  pthread_t rozofs_rdma_async_event_thread;
 } rozofs_rmda_ibv_cxt_t;
 
+/*
+** constant for selecting the buffer pool for ibv_post_srq_recv()
+*/
+#define ROZOFS_RDMA_CMD 0
+#define ROZOFS_RDMA_RSP 1
 /*
 ** signalling thread constant
 */
 #define ROZOFS_RDMA_SIG_RECONNECT_CREDIT_COUNT      100
 #define ROZOFS_RDMA_SIG_RECONNECT_CREDIT_PERIOD_SEC 10
+
+
+/**
+*  Statistics for the completion queue thread
+*/
+typedef struct _rozofs_cq_th_stat_t
+{
+   uint64_t ibv_wc_rdma_write_count ;  /**< number of RDMA_WRITE   */
+   uint64_t ibv_wc_rdma_read_count ;  /**< number of RDMA_READ   */
+   uint64_t ibv_wc_send_count ;       /**< Send operation of a WR that was posted to a Send Queue   */
+   uint64_t ibv_wc_recv_count ;       /**< Send data operation for a WR that was poster to a receive queue (of a QP or to an SRQ) */
+} rozofs_cq_th_stat_t;
 /**
 *  context of the completion queue thread
 */
 typedef struct _rozofs_qc_th_t
 {
   int thread_idx;  /**< index of the thread : need to index the right completion queue */
-  rozofs_rmda_ibv_cxt_t *ctx_p;  /**< pointer to the IBV context of the coupler      */
+  rozofs_rmda_ibv_cxt_t *ctx_p;  /**< pointer to the IBV context of the coupler        */
+  rozofs_cq_th_stat_t stats;   /**< statistics for the Completion Queue Thread         */
+  int rpc_buf_count2alloc;    /**< contains the number of RPC buffer that must be allocated : for SRQ management only  */
+  uint64_t comp_events_completed;
+  uint64_t async_events_completed;
+  int cqe;     /**< number of entries in the completion queue */
 } rozofs_qc_th_t;
+
+/**
+*  context of the asynchronous RDMA event thread
+*/
+typedef struct _rozofs_rdma_async_event_th_t
+{
+  int thread_idx;  /**< index of the thread : need to index the right completion queue */
+  rozofs_rmda_ibv_cxt_t *ctx_p;  /**< pointer to the IBV context of the coupler        */
+//  rozofs_cq_th_stat_t stats;   /**< statistics for the Completion Queue Thread         */
+} rozofs_rdma_async_event_th_t;
 
 /*
 ** RDMA connection state
@@ -255,11 +305,14 @@ typedef struct _rozofs_rdma_connection_t {
   list_t  list;                     /**< use to link the context on the deletion list                               */
   time_t  del_tv_sec;               /**< time at which deletion occured                                             */
   rozofs_rdma_cnx_state_e state;    /**< RDMA connection state */
-  struct rdma_cm_id *id;  
-  struct ibv_qp *qp;
+  struct rdma_cm_id *id; 
+  uint32_t qp_num;                  /**< unique id for that QP on the adaptor side                                  */ 
+  struct ibv_qp *qp;                /**< pointer to the QP context                                                  */
   rozofs_rmda_ibv_cxt_t *s_ctx;     /**< RDMA context of the adaptor to which the RDMA connection is associated     */
-  uint32_t   tcp_index;                /**< index of the TCP context to which the RDMA context is associated        */
-  rozofs_rdma_tcp_assoc_t assoc;       /**< RDMA/TCP connection identifier: only relevant for client connection     */
+  uint32_t   tcp_index;             /**< index of the TCP context to which the RDMA context is associated           */
+  uint32_t   cq_xmit_idx;            /**< index of the send completion queue                                        */              
+  uint32_t   cq_recv_idx;            /**< index of the receive completion queue                                        */              
+  rozofs_rdma_tcp_assoc_t assoc;    /**< RDMA/TCP connection identifier: only relevant for client connection        */
 } rozofs_rdma_connection_t;
 
 
@@ -283,10 +336,22 @@ typedef struct _rozofs_rdma_memory_reg_t {
    void *opaque;    /**< user reference  */
    int idx;         /**< memory region index */
 } rozofs_rdma_memory_reg_t;   
-  
+
+
+/*
+** Queue Pair lookup cache entry (need to perform a full RDMA interface rather that a TCP/RDMA mix)
+*/
+typedef struct _rozofs_qp_cache_entry_t
+{
+    hash_entry_t he;
+    uint32_t     qp_num; /*< qp key         */
+    uint32_t     cnx_idx;   /**< index of the connection   */ 
+    list_t list;   
+} rozofs_qp_cache_entry_t;
 /*
 ** structure used to fill up wr_id field of the ibv_send_wr structure
 */
+#if 0
 typedef struct _rozofs_wr_id_t {
     sem_t *sem;          /**< semaphore of the thread waiting fro the end of the RDMA read or write */
     void * thread_ctx_p; /**< pointer to the thread context                                         */
@@ -294,7 +359,7 @@ typedef struct _rozofs_wr_id_t {
     int    error;        /**< rmda error code                                                       */ 
     rozofs_rdma_connection_t *conn;  /**< RDMA connection for which the message is send             */
 } rozofs_wr_id_t;
-
+#endif
 typedef void (*rozofs_rdma_pf_cqe_done_t) (void *user_param,int status,int error);
 
 typedef struct _rozofs_wr_id2_t {
@@ -302,6 +367,10 @@ typedef struct _rozofs_wr_id2_t {
     void                       *user_param;
 } rozofs_wr_id2_t;
 
+/*
+** Callback used for RPC message received over RDMA from the completion queue thread   
+*/
+typedef void (*rozofs_rdma_pf_rpc_cqe_done_t) (int opcode,void *ruc_buf,uint32_t qp_num,void *rozofs_rmda_ibv_cxt_p,int status,int error);
 
 /**
 **  F O R     T E S T S
@@ -364,11 +433,14 @@ extern rozofs_rdma_mod_stats_t rozofs_rdma_mod_stats;
    
    @param nb_rmda_tcp_context : number of RDMA TCP contexts
    @param client_mode: assert to 1 for client; 0 for server mode
+   @param count : number of RPC context (for sending & receiving)
+   @param size: size of the RPC buffer
+   @param rpc_rdma_cbk: pointer to the callback used for RPC received over RDMA
    
    retval 0 on sucess
    retval -1 on error
 */   
-int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode);
+int rozofs_rdma_init(uint32_t nb_rmda_tcp_context,int client_mode,int count,int size,rozofs_rdma_pf_rpc_cqe_done_t rdma_rpc_recv_cbk);
 
 /*
 **__________________________________________________
@@ -582,9 +654,13 @@ static inline char *print_rozofs_rdma_cme_evt(int cma_evt)
 static inline void rozofs_print_rdma_fsm_state(int state,int evt,int evt_cma)
 {
    if (evt == ROZOFS_RDMA_EV_RDMA_EVT)
-      printf("RDMA: state %s evt:%s\n",print_rozofs_rdma_cnx_state(state),print_rozofs_rdma_cme_evt(evt_cma));
+   {
+      info("RDMA: state %s evt:%s\n",print_rozofs_rdma_cnx_state(state),print_rozofs_rdma_cme_evt(evt_cma));
+   }
    else
-      printf("RDMA: state %s evt:%s\n",print_rozofs_rdma_cnx_state(state),print_rozofs_rdma_internal_event(evt));
+   {
+      info("RDMA: state %s evt:%s\n",print_rozofs_rdma_cnx_state(state),print_rozofs_rdma_internal_event(evt));
+   }
 }
 
 static inline void  rozofs_print_tcp_fsm_state(int state,int evt)
@@ -665,14 +741,6 @@ int rozofs_rdma_srv_af_unix_receive_tcp();
    @retval -1 on error
    
 */
-int rozofs_rdma_post_send(rozofs_wr_id_t *wr_th_p,
-                          uint8_t opcode,
-			  rozofs_rdma_tcp_assoc_t *assoc_p,
-			  void *bufref,
-			  void *local_addr,
-			  int len,
-			  uint64_t remote_addr,
-			  uint32_t remote_key);
 
 int rozofs_rdma_post_send2(rozofs_wr_id2_t *wr_th_p,
                            uint8_t opcode,
@@ -683,6 +751,30 @@ int rozofs_rdma_post_send2(rozofs_wr_id2_t *wr_th_p,
 			   uint64_t remote_addr,
 			   uint32_t remote_key);
 
+
+
+/*
+**__________________________________________________
+*/
+/**
+*  Post either a RDMA message (RPC) with IBV_WR_SEND
+
+   @param wr_th_p: pointer to the RDMA thread context need to since it contains the semaphore of the thread
+   @param bufref: RUC buffer reference needed to find out the reference of the local RDMA key
+   @param tcp_cnx_idx: index of the TCP connection in the rozofs_rdma_tcp_table 
+   @param local_addr: local address of the first byte to transfer
+   @param len: length to transfer
+
+   
+   @retval 0 on success
+   @retval -1 on error
+   
+*/
+int rozofs_rdma_post_send_ibv_wr_send(rozofs_wr_id2_t *wr_th_p,
+			   uint16_t tcp_cnx_idx,
+			   void *bufref,
+			   void *local_addr,
+			   int len);
 /*
 **__________________________________________________
 */
@@ -722,5 +814,133 @@ void rozofs_rdma_on_completion_check_status_of_rdma_connection(int status,int er
 */ 
 void rozofs_rdma_tcp_cli_reconnect(rozofs_rdma_tcp_cnx_t *conn);
 
+/*
+**__________________________________________________
+*/
+/*
+** Create the pool user for sending request and response
+   The pool is common for request and response
+   
+   The buffers on that pool will be used by the shared received queue of the rdma
+   
+   @param count :number of buffer
+   @param length : length of a buffer
+   
+   
+   @retval 0 on success
+   @retval < 0 on error s(see errno for details )
+*/
+int rozofs_rdma_request_response_pool_create(int count,int size);
+
+
+/*
+**_________________________________________________________________________________________
+
+     R D M A   Q U E U E  P A I R   C A C H E 
+**_________________________________________________________________________________________
+*/
+/*
+**__________________________________________________
+*/
+/**
+   Init of the RDMA QP cache
+   That cache is needed to process message received on a queue pair for a SEND or RECV event 
+   since the CQ provides the QP as a number.
+   
+   @param none
+   
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+*/
+int rozofs_rdma_qp_cache_init();
+
+/*
+**__________________________________________________
+*/
+/**
+*   insert a qp from the cache entry
+
+    @param qp_num reference of the QP to lookup at (key)
+    @param cnx_idx: index of the rozofs_rdma_tcp context for that queue pair
+    
+    @retval>= 0 success
+    @retval < 0 error
+*/
+int rozofs_rdma_qp_cache_insert(uint32_t qp_num,uint32_t cnx_idx);
+/*
+**__________________________________________________
+*/
+/**
+*   lookup for a qp from the cache entry
+
+    @param qp_num reference of the QP to insert (key)
+    
+    @retval <> NULL:pointer to the cache entry that 
+    @retval NULL: error (see errno for details)
+*/
+rozofs_qp_cache_entry_t *rozofs_rdma_qp_cache_lookup(uint32_t qp);
+/*
+**__________________________________________________
+*/
+/**
+*   deletion of a qp from the cache entry
+
+    @param qp_num reference of the QP to delete (key)
+    
+    @retval none
+*/
+void rozofs_rdma_qp_cache_delete(uint32_t qp);
+
+
+/*
+**__________________________________________________
+*/
+/**
+*  Allocate a rdma RPC buffer
+
+   @param none
+   
+   @retval <> NULL pointer to the ruc_buffer
+   @retval NULL: out of buffer
+*/
+void *rozofs_rdma_allocate_rpc_buffer();
+/*
+**__________________________________________________
+*/
+/**
+* Release a rdma RPC buffer
+
+   @param buf: pointer to the ruc_buffer
+   
+   @retval 0 on success
+   @retval<0 on error
+*/
+void rozofs_rdma_release_rpc_buffer(void *buf);
+/*
+**__________________________________________________
+*/
+/**
+*check if the ruc_buffer belongs to the RPC RDMA pool
+
+   @param buf: pointer to the ruc_buffer
+   
+   @retval 1 yes
+   @retval 0 no
+*/
+int rozofs_is_rdma_rpc_buffer(void *buf);
+
+/*
+**__________________________________________________
+*/
+/**
+  That thread is associated with a RDMA adaptor.
+  Its role is to process asynchronous events received on that adaptor
+  
+  
+  @param ctx : pointer to the RDMA context associated with the thread
+  
+  retval NULL on error
+*/
+void * rozofs_poll_rdma_async_event_th(void *ctx);
 #endif // ROZOFS_RDMA
 #endif

@@ -56,6 +56,8 @@ extern int rozofs_small_tx_recv_count;
 extern int rozofs_small_tx_recv_size;
 extern int rozofs_large_tx_recv_count;
 extern int rozofs_large_tx_recv_size;
+extern ruc_pf_void_t rozofs_tx_rdma_recv_freeBuffer_cbk;
+extern ruc_pf_2uint32_t rozofs_tx_rdma_out_of_sequence_cbk;
 
 /**
 * Buffer Pools
@@ -566,5 +568,54 @@ static inline void rozofs_tx_clear_rdma_bufref(void *tx_p)
    rozofs_tx_ctx_t *p = (rozofs_tx_ctx_t*)tx_p;
    p->rdma_bufref =NULL;
 }
+
+
+/*
+**____________________________________________________
+*/
+/**
+   set the ruc buffer release callback to be used by RDMA
+   
+   @param callback : callback function
+   
+   @retval none
+*/
+static inline void rozofs_tx_set_rdma_buf_free_cbk(ruc_pf_void_t cbk)
+{
+   rozofs_tx_rdma_recv_freeBuffer_cbk = cbk;
+
+}
+
+/*
+**____________________________________________________
+*/
+/**
+   set the ruc buffer release callback to be used by RDMA
+   
+   @param callback : callback function
+   
+   @retval none
+*/
+static inline void rozofs_tx_set_rdma_out_of_sequence_cbk(ruc_pf_2uint32_t cbk)
+{
+   rozofs_tx_rdma_out_of_sequence_cbk = cbk;
+
+}
+
+/*
+ **____________________________________________________
+ */
+
+/**
+ *  transaction receive callback associated with the RPC protocol over RDMA
+  This corresponds to the callback that is call upon the
+  reception of the transaction reply from the remote end
+  
+  The input parameter is a receive buffer belonging to
+  the transaction egine module
+  
+  @param recv_buf: pointer to the receive buffer
+ */
+void rozofs_tx_recv_rdma_rpc_cbk(void *recv_buf);
 #endif
 

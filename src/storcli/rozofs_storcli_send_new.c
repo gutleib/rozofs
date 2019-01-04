@@ -234,7 +234,7 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
 						user_ctx_p);
 	     if (ret != -2) return ret;
 	     break;
-  #if 0
+  #if 1
 
 	   /*
 	   ** Check the the OPCODE is SP_WRITE , if RDMA is supported change the opcode in order to
@@ -264,7 +264,7 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
 					       msg2encode_p,
 	                                	xmit_buf,seqnum,
 						opaque_value_idx1,
-						0,
+						extra_len,
 						rozofs_storcli_write_rdma_req_processing_cbk,
 						user_ctx_p);
 	     if (ret != -2) return ret;
@@ -349,6 +349,10 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
        errno = EPROTO;
        goto error;
     }
+   /*
+    ** Set the reference of the lbg in the RPC message
+    */
+    rozofs_rpc_set_lbg_id_in_request(xmit_buf,lbg_id);   
     /*
     ** Now get the current length and fill the header of the message
     */
