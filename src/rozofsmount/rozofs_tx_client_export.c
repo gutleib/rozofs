@@ -2468,6 +2468,7 @@ int64_t write_buf_multiple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const c
     /* 
     **If file was empty at opening tell it to storcli at 1rts write
     */
+    args.flags = 0;
     storcli_flags = 0;
     if (f->file2create == 1) {
       storcli_flags |= STORCLI_FLAGS_EMPTY_FILE;
