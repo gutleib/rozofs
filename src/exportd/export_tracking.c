@@ -8021,8 +8021,7 @@ out:
   *p++=')'; \
   p += rozofs_eol(p);\
 }  
-   
-   
+     
 #define DISPLAY_ATTR_HEX(name,val) {\
   DISPLAY_ATTR_TITLE(name); \
   p += rozofs_x32_append(p,val); \
@@ -8152,6 +8151,8 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     backup_val = byte_sid0.s.backup;
     
     DISPLAY_ATTR_TXT("MODE", "DIRECTORY");
+    DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
+    
     switch (backup_val)
     {
        case 0:
@@ -8231,6 +8232,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 
   if (S_ISLNK(lv2->attributes.s.attrs.mode)) {
     DISPLAY_ATTR_TXT("MODE", "SYMBOLIC LINK");
+    DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);    
   }  
   else {
     DISPLAY_ATTR_TXT("MODE", "REGULAR FILE");
