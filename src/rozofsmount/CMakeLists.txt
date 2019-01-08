@@ -107,6 +107,12 @@ add_executable(rozo_mount_send_stats
 )
 target_link_libraries(rozo_mount_send_stats rozofs ${CONFIG_LIBRARY})
 
+
+add_executable(rozo_multifile 
+    rozofs_multiple_dir.c
+)
+target_link_libraries(rozo_multifile)
+
 # Install
 install(TARGETS rozofsmount
     RUNTIME DESTINATION bin
@@ -121,6 +127,14 @@ install(TARGETS rozo_locate_projections
     ARCHIVE DESTINATION lib
     COMPONENT mount
 )
+# Install
+install(TARGETS rozo_multifile
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT mount
+)
+
 # Install rozo_mount_send_stats
 install(TARGETS rozo_mount_send_stats
     RUNTIME DESTINATION bin
