@@ -192,7 +192,7 @@ void show_ioerr_wr_buffer_file(uint32_t tcpRef, void *bufRef,rozofs_io_data_t *c
 	  ** put code here
 	  */ 
 	  rozofs_uuid_unparse(entry_p->fid, str);
-	  ctime_r((const time_t *)&rozofs_ioerr_context_p->last_write_time,date);
+	  ctime_r((const time_t *)&entry_p->time,date);
 	  {
              int len;
 	     len = strlen(date);
@@ -297,7 +297,7 @@ void show_ioerr_wr_buffer(uint32_t tcpRef, void *bufRef,rozofs_io_data_t *ctx_p)
        ** put code here
        */ 
        rozofs_uuid_unparse(entry_p->fid, str);
-       ctime_r((const time_t *)&rozofs_ioerr_context_p->last_write_time,date);
+       ctime_r((const time_t *)&entry_p->time,date);
        {
           int len;
 	  len = strlen(date);
