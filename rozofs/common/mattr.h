@@ -274,7 +274,8 @@ typedef union
   } master;
   struct {
   uint8_t master:1; /**< assert to one for the master inode, 0 for the slaves */
-  uint8_t file_idx:7; /**<index of the inode in the multiple file  */
+  uint8_t slave:1;  /**< Always set to 1 to differentiate from non striped files */
+  uint8_t file_idx:6; /**<index of the inode in the multiple file  */
   } slave;
 } rozofs_multiple_desc_t;
 

@@ -3462,6 +3462,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
 	 */
 	 buf_slave_inode_work_p->s.multi_desc.byte = 0;
 	 buf_slave_inode_work_p->s.multi_desc.slave.master = 0;
+	 buf_slave_inode_work_p->s.multi_desc.slave.slave = 1;
 	 buf_slave_inode_work_p->s.multi_desc.slave.file_idx = k;
 	 fake_inode = (rozofs_inode_t*)buf_slave_inode_work_p->s.attrs.fid;
 	 /*
