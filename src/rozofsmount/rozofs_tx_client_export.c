@@ -1241,7 +1241,6 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
 **__________________________________________________________________
 */
 
-#define ROZOFS_MAX_MULTI_VECTORS 4
 typedef struct _rozofs_multi_vect_t
 {
   uint64_t off;    /**< offset in the slave file    */
@@ -1253,7 +1252,7 @@ typedef struct _rozofs_multi_vect_t
 typedef struct _rozofs_iov_multi_t
 {
    int nb_vectors;   /** number of vectors */
-   rozofs_multi_vect_t vectors[ROZOFS_MAX_MULTI_VECTORS];
+   rozofs_multi_vect_t vectors[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
 } rozofs_iov_multi_t;
 
 
