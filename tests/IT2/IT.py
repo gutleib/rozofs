@@ -2307,17 +2307,11 @@ def rebuild_fid() :
   if rebuildCheck == True: 
     gruyere()        
     
-  skip=0
-
-  list2rebuild = [ '1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','empty1','empty2','empty3','empty4','empty5','empty6','empty7' ]
+  list2rebuild = [ '1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','empty1','empty2','empty3','empty4']
   for f in list2rebuild:
   
-    skip=skip+1
-    if skip == 4:
-      skip=0  
-
     # Get the split of file on storages      
-    string="attr -g rozofs %s/rebuild/%s"%(mnt,f)
+    string="attr -q -g rozofs %s/rebuild/%s"%(mnt,f)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -2325,49 +2319,62 @@ def rebuild_fid() :
     # the storages for a rebuild of the file
     bins_list = []
     fid=""
-    cid=0
+    cid=int(0)
     storages=""
+    slice=""
     for line in cmd.stdout:
 	  
-      if "FID" in line:
+      if "FID_SP" in line:
+        if int(cid) == int(0): continue
         words=line.split();
-	if len(words) >= 2:
-          fid=words[2]
+	if len(words) < 3: continue
+        fid=words[2]
+        # A subfile can be rebuilt
+        # loop on the bins file constituting this file, and ask
+        # the storages for a rebuild of the file
+        line_nb=0
+        for sid in storages.split('-'):
+          sid=int(sid)
+          line_nb=line_nb+1
+
+          clean_rebuild_dir()
+          
+          string="./setup.py sid %s %s path"%(cid,sid)
+          parsed = shlex.split(string)
+          cmd1 = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          for line in cmd1.stdout:
+            path =  line.split()[0]
+            break
+          os.system("rm -f %s/*/bins_*/%s/%s-*"%(path,slice,fid))
+                    
+          backline("rebuild/%s cid %s sid %s FID %s"%(f,cid,sid,fid))
+
+          string="./setup.py sid %s %s rebuild --nolog -fg -f %s -o fid%s_cid%s_sid%s"%(cid,sid,fid,fid,cid,sid)
+          ret = cmd_returncode(string)
+
+          if ret != 0:
+            report("%s failed"%(string))
+	    return 1 	                 
 	  continue
-	  
+	continue
+          
       if "CLUSTER" in line:
         words=line.split();
 	if len(words) >= 2:
-          cid=words[2]
+          cid=int(words[2])
+	  continue
+          
+      if "ST.SLICE" in line:
+        words=line.split();
+	if len(words) >= 2:
+          slice=int(words[1])
 	  continue
 	  
       if "STORAGE" in line:
         words=line.split();
 	if len(words) >= 2:
           storages=words[2]
-	  continue	  	  	    
-      
-    # loop on the bins file constituting this file, and ask
-    # the storages for a rebuild of the file
-    line_nb=0
-
-    for sid in storages.split('-'):
-    
-      sid=int(sid)
-      line_nb=line_nb+1
-      if skip >= line_nb:
-	  continue;  
-
-      clean_rebuild_dir()
-      
-      backline("rebuild/%s cid %s sid %s FID %s"%(f,cid,sid,fid))
-	    	
-      string="./setup.py sid %s %s rebuild --nolog -fg -f %s -o fid%s_cid%s_sid%s"%(cid,sid,fid,fid,cid,sid)
-      ret = cmd_returncode(string)
-
-      if ret != 0:
-        report("%s failed"%(string))
-	return 1 	       
+	  continue	  	  	           
 
   if rebuildCheck == True:      
     ret = gruyere_reread()          
