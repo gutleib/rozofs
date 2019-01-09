@@ -198,6 +198,9 @@ static int get_job_list_index(sid_one_info_t * p) {
 */
 
 int key_table[] = {ROZOFS_PRIMARY_FID,ROZOFS_MOVER_FID,-1};
+static uint64_t master_size ;
+static uint64_t strip_size ;
+static uint64_t strip_factor ;
 
 int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   int i;
@@ -206,26 +209,75 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   int job;
   sid_tbl_t   * pCid;
   sid_info_t  * pSid;
-  char          name[64];
+  char          name[128];
+  char        * pname = name;
   sid_one_info_t *pOne;
   int key_index = 0;
   int key;
   int ret;
   cid_t cid;
   sid_t sid_tab[ROZOFS_SAFE_MAX_STORCLI];
+  uint64_t   rebuild_size;
+  
 
   if (debug) {
-     i = 0;
-     if (inode_p->s.fname.name_type == ROZOFS_FNAME_TYPE_DIRECT) {
-       for (i=0;i<inode_p->s.fname.len;i++) name[i] = inode_p->s.fname.name[i];
-     }
-     name[i] = 0;	
+     pname += rozofs_fid_append(pname, inode_p->s.attrs.fid);
   } 
   
   /*
   ** File of zero size need not to be rebuilt
   */
-  if (inode_p->s.attrs.size == 0) return 0;
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** Regular file without striping
+    */
+    rebuild_size = inode_p->s.attrs.size;
+    master_size  = 0;
+    strip_size   = 0;
+    strip_factor = 1;
+    pname += sprintf(pname," single");
+  }  
+  else if (inode_p->s.multi_desc.common.master == 1) {
+    master_size  = inode_p->s.attrs.size;
+    strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+    strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc);
+    /*
+    ** When not in hybrid mode 1st inode has no distribution
+    */
+    if (!(inode_p->s.multi_desc.master.hybrid)) {
+      return 0;
+    }  
+    /*
+    ** In hybrid mode, this inode is located on fast volume but is only one strip long
+    */
+    if (master_size < strip_size) {
+      rebuild_size = master_size;
+    }
+    else {
+      rebuild_size = strip_size;      
+    }      
+    /*
+    ** Left size to rebuild on this file
+    */
+    master_size -= rebuild_size;
+    pname += sprintf(pname," hybrid");    
+  }
+  else {
+    int slave_idx = inode_p->s.multi_desc.slave.file_idx;
+    pname += sprintf(pname," slave %d",slave_idx);   
+    if (master_size <= (slave_idx*strip_size)) {
+      rebuild_size = 0;
+    }
+    else {  
+      rebuild_size = master_size/strip_factor;
+    }   
+  }
+  
+    
+  if (rebuild_size == 0) {
+    TRACE("%s is empty and won't be rebuilt",name); 
+    return 0;
+  }
 
   /*
   ** Check whether this CID/SID is interresting
@@ -281,11 +333,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
 	severe("write(cid %d sid %d job %d) %s\n", cid+1, sid+1, job, strerror(errno));
       }
       else {
-	TRACE("-> added size %d to cid %d sid %d job %d : %s\n",entry_size, cid+1,sid+1,job,name);
-        pOne->job[job].size += inode_p->s.attrs.size;
+	TRACE("-> added size %llu to cid %d sid %d job %d : %s\n",(long long unsigned int)rebuild_size, cid+1,sid+1,job,name);
+        pOne->job[job].size += rebuild_size;
       }  
       pOne->count++;
-      pOne->size += inode_p->s.attrs.size;
+      pOne->size += rebuild_size;
       total++;
     }  
   }
