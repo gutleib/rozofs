@@ -244,15 +244,13 @@ def check_storcli_crc(expect):
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-  os.system("echo \"\" > /tmp/trace_crc")
   result = False    
   for line in cmd.stdout:
-    os.system("echo \"%s\" >> /tmp/trace_crc"%(line))
     if "read_blk_crc" in line:
       result = True
       break; 
   if expect != result:
-    os.system("cat /tmp/trace_crc")
+    os.system("%s"%(string))
   return result  
    
 #___________________________________________________
@@ -909,117 +907,134 @@ def reread():
   return 0
   
 #___________________________________________________
-def crc32():
+def get_1rst_header_and_bins(fname):
 #___________________________________________________
 
-  wait_until_all_sid_up()
-
-  backline("Create file %s/crc32"%(exepath))
-
-
-  crcfile="%s/crc32"%(exepath)
-  # Create a file
-  if os.path.exists(crcfile): os.remove(crcfile)      
-  os.system("cp ./ref %s"%(crcfile))  
-  
-  # Clear error counter
-  reset_storcli_counter()
-  # Check CRC errors 
-  if check_storcli_crc(False) == True:
-    report("CRC errors after counter reset")
-    return 1 
-    
-  # Get its localization  
-  os.system("./setup.py cou %s > /tmp/crc32loc"%(crcfile))
+  # Get fie loalization
+  os.system("./setup.py cou %s > /tmp/get_header_and_bins"%(fname))
      
   # Find the 1rst mapper file
   mapper = None
-  with open("/tmp/crc32loc","r") as f: 
+  bins   = None
+  cid    = int(0)
+  sid    = ""
+  
+  with open("/tmp/get_header_and_bins","r") as f: 
     for line in f.readlines():
+                 
       if "/hdr_0/" in line:
         mapper = line.split()[3]
-        break;
-  if mapper == None:
-    report("Fail to find mapper file name in /tmp/crc32loc")
-    return -1
-    
-  # Find the 1rst bins file
-  bins = None
-  with open("/tmp/crc32loc","r") as f: 
-    for line in f.readlines():
+        if bins != None: break    
+        continue
+        
       if "/bins_0/" in line:
         bins = line.split()[3]
-        break;
-  if bins == None:
-    report("Fail to find bins file name in /tmp/crc32loc")
-    return -1    
+        if mapper != None: break    
+        continue  
 
-  # Find the cid
-  cid = 0
-  sid = 0
-  with open("/tmp/crc32loc","r") as f: 
-    for line in f.readlines():
-      if "CLUSTER" in line:
-        cid = line.split()[2]
-        continue;
-      if "STORAGE" in line:
-        sid =  int(line.split()[2].split('-')[0])   
-        break;
- 
-  hid = get_hid(cid,sid)
-  device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
+  if mapper != None:       
+    cid = mapper.split('/')[4].split('_')[1]
+    sid = mapper.split('/')[4].split('_')[2]
+                  
+  os.system("rm -f /tmp/get_header_and_bins")
+  return cid,sid,mapper,bins
+
+#___________________________________________________
+def get_2nd_subfile_header_and_bins(fname):
+#___________________________________________________
+
+  # Get fie loalization
+  os.system("./setup.py cou %s > /tmp/get_header_and_bins"%(fname))
+     
+  # Find the 1rst mapper file
+  mapper = None
+  bins   = None
+  cid    = int(0)
+  sid    = ""
   
-  if int(mapper_redundancy) > 1: 
-      backline("Truncate mapper/header file %s"%(mapper))
+  go = False
+  
+  with open("/tmp/get_header_and_bins","r") as f: 
+    for line in f.readlines():
+      
+      if "S_INODE" in line and "#2" in line: go = True
+      if go == False: continue
+      
+      if "/hdr_0/" in line:
+        mapper = line.split()[3]
+        if bins != None: break    
+        continue
+        
+      if "/bins_0/" in line:
+        bins = line.split()[3]
+        if mapper != None: break    
+        continue  
 
-      # Truncate mapper file  
-      with open(mapper,"w") as f: f.truncate(0)
-      # Check file has been truncated
-      statinfo = os.stat(mapper)
-      if statinfo.st_size != 0:
-        report("%s has not been truncated"%(mapper))
-        return -1
+  if mapper != None:       
+    cid = mapper.split('/')[4].split('_')[1]
+    sid = mapper.split('/')[4].split('_')[2]
+                  
+  os.system("rm -f /tmp/get_header_and_bins")
+  return cid,sid,mapper,bins
+#___________________________________________________
+def run_mapper_corruption(cid,sid,mapper,crcfile):
+#___________________________________________________
 
-      # Reset storages
-      os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-      wait_until_all_sid_up()
+  backline("Truncate mapper/header file %s "%(mapper))
 
-      # Reread the file
-      os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+  # Truncate mapper file  
+  with open(mapper,"w") as f: f.truncate(0)
+  # Check file has been truncated
+  statinfo = os.stat(mapper)
+  if statinfo.st_size != 0:
+    report("%s has not been truncated"%(mapper))
+    return -1
 
-      # Check mapper file has been repaired
-      statinfo = os.stat(mapper)
-      if statinfo.st_size == 0:
-        report("%s has not been repaired"%(mapper))
-        return -1             
-      backline("mapper/header has been repaired ")
+  # Reset storages
+  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
+  wait_until_all_sid_up()
 
-      # Corrupt mapper file 
-      f = open(mapper, "w+")     
-      f.truncate(0)        
-      size = statinfo.st_size     
-      while size != 0:
-        f.write('a')
-        size=size-1
-      f.close()
+  # Reread the file
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
 
-      backline("Corrupt mapper/header file %s"%(mapper))
+  # Check mapper file has been repaired
+  statinfo = os.stat(mapper)
+  if statinfo.st_size == 0:
+    report("%s has not been repaired"%(mapper))
+    return -1             
+  backline("mapper/header has been repaired ")
 
-      # Reset storage
-      os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-      wait_until_all_sid_up()
+  # Corrupt mapper file 
+  f = open(mapper, "w+")     
+  f.truncate(0)        
+  size = statinfo.st_size     
+  while size != 0:
+    f.write('a')
+    size=size-1
+  f.close()
 
-      # Reread the file
-      os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
-      #if filecmp.cmp(crcfile,"./ref") == False: report("%s and %s differ"%(crcfile,"./ref"))
+  backline("Corrupt mapper/header file %s "%(mapper))
 
-      # Check file has been re written
-      f = open(mapper, "rb")      
-      char = f.read(1)     
-      if char == 'a':
-        report("%s has not been rewritten"%(mapper))
-        return -1      
-      backline("mapper/header has been repaired ")
+  # Reset storage
+  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
+  wait_until_all_sid_up()
+
+  # Reread the file
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
+  #if filecmp.cmp(crcfile,"./ref") == False: report("%s and %s differ"%(crcfile,"./ref"))
+
+  # Check file has been re written
+  f = open(mapper, "rb")      
+  char = f.read(1)     
+  if char == 'a':
+    report("%s has not been rewritten"%(mapper))
+    return -1      
+  backline("mapper/header has been repaired ")
+  return 0
+    
+#___________________________________________________
+def run_bins_corruption(cid,sid,bins,crcfile):
+#___________________________________________________
 
   # Corrupt the bins file
   f = open(bins, 'r+b')     
@@ -1043,14 +1058,17 @@ def crc32():
   f.seek(size-11);
   f.write("DDT")       
   f.close()
-  backline("Corrupt bins file %s"%(bins))
+  backline("Corrupt bins file %s "%(bins))
+
+  # Clear error counter
+  reset_storcli_counter()
 
   # Reset storages
   os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-  wait_until_all_sid_up()
- 
-  # Clear error counter
-  reset_storcli_counter()
+  wait_until_all_sid_up() 
+
+  # Reread the file
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
     
   # Reread the file
   if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
@@ -1092,6 +1110,65 @@ def crc32():
     return 1     
   backline("Bins file %s is repaired"%(bins))
   
+  return 0   
+  
+#___________________________________________________
+def crc32():
+#___________________________________________________
+
+  wait_until_all_sid_up()
+
+  backline("Create file %s/crc32"%(exepath))
+
+
+  crcfile="%s/crc32"%(exepath)
+  # Create a file
+  if os.path.exists(crcfile): os.remove(crcfile)      
+  os.system("cp ./ref %s"%(crcfile))  
+  
+  # Clear error counter
+  reset_storcli_counter()
+  # Check CRC errors 
+  if check_storcli_crc(False) == True:
+    report("CRC errors after counter reset")
+    return 1 
+    
+  # Get its localization  
+  cid,sid,mapper,bins = get_1rst_header_and_bins(crcfile)
+  log("cid/sid %s/%s bins %s mapper %s"%(cid, sid, bins,mapper))  
+             
+  if mapper == None or bins == None or int(cid) == int(0) or sid == "" :
+    report("Fail to find mapper/bins file name in /tmp/crc32loc")
+    return -1
+    
+  hid = get_hid(cid,sid)
+  device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
+  
+  if int(mapper_redundancy) > 1: 
+    ret = run_mapper_corruption(cid,sid,mapper,crcfile)
+    if ret != 0: return 1
+
+  ret = run_bins_corruption (cid,sid,bins,crcfile)   
+  if ret != 0: return 1
+
+    
+  # Get its localization  
+  cid,sid,mapper,bins = get_2nd_subfile_header_and_bins(crcfile)
+  log("cid/sid %s/%s bins %s mapper %s"%(cid, sid, bins,mapper))  
+  if mapper == None or bins == None or int(cid) == int(0) or sid == "" :
+    report("Fail to find mapper/bins file name in /tmp/crc32loc")
+    return -1
+    
+  hid = get_hid(cid,sid)
+  device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
+  
+  if int(mapper_redundancy) > 1: 
+    ret = run_mapper_corruption(cid,sid,mapper,crcfile)
+    if ret != 0: return 1
+
+  ret = run_bins_corruption (cid,sid,bins,crcfile)   
+  if ret != 0: return 1
+
   return 0 
  
 #___________________________________________________
