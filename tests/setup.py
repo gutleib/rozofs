@@ -214,7 +214,7 @@ class sid_class:
     self.host.append(h)
     h.add_sid(self)    
        
-  def get_root_path(self,host_number):
+  def get_root_path(self,host_number=0):
     if rozofs.device_automount == True:
       return "/srv/rozofs/storages/storage_%s_%s"%(self.cid.cid,self.sid)
     else:   
@@ -923,7 +923,9 @@ class exportd_class:
      
   def display_config (self):  
     global volumes
+    
     print "layout = 1;"
+    print "striping = { unit = %s; factor = %s; };"%(rozofs.multiple_unit,rozofs.multiple_factor)
     print "volumes ="
     print "("
     nextv=" "
@@ -1056,7 +1058,13 @@ class rozofs_class:
     self.min_metadata_inodes = None
     self.min_metadata_MB = None
     self.mkfscmd = None
+    self.multiple_unit = 0
+    self.multiple_factor = 0
     
+  def set_multiple(self,unit=0,factor=0):
+    self.multiple_unit = unit
+    self.multiple_factor = factor
+      
   def set_trashed_file_per_run(self,val): rozofs.trashed_file_per_run = val
   def set_min_metadata_inodes(self,val): self.min_metadata_inodes = val
   def set_min_metadata_MB(self,val): self.min_metadata_MB = val
@@ -1301,7 +1309,7 @@ class rozofs_class:
     display_config_string("device_selfhealing_mode",rozofs.device_selfhealing_mode)
     display_config_string("export_hosts",exportd.export_host)
     display_config_bool("client_xattr_cache",True)
-    display_config_bool("async_setattr",True)
+    #display_config_bool("async_setattr",True)
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
     if self.client_fast_reconnect != 0: display_config_bool("client_fast_reconnect",True)
@@ -1461,6 +1469,7 @@ class rozofs_class:
     if not os.path.exists(f):
       console( "%s does not exist"%(f))
       exit(1) 
+      
     string="attr -R -g rozofs %s"%(f)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1479,7 +1488,7 @@ class rozofs_class:
 	continue  
       if words[0] =="STORAGE": 
         dist = words[2]
-	continue  
+        continue  
       if words[0] =="CLUSTER": 
         cid = words[2]
 	continue  
@@ -1491,36 +1500,32 @@ class rozofs_class:
 	continue      	 
       if words[0] =="FID_SP": 
         st_name = words[2]
+        SID_LIST=dist.split('-')
+        c = get_cid(int(cid))
+        if int(cid) == int(0): continue
+        site = int(0)
+        sid_idx = int(0)
+        for sid in SID_LIST:
+          sid_idx = sid_idx + int(1)
+          if int(sid_idx) > int(fwd):
+            console("  ** %s"%(sid))
+          else:
+            console("  -- %s"%(sid) )         
+          s = c.sid[int(sid)-1]
+	  path = s.get_site_root_path(site)
+          string="find %s -name \"%s*\""%(path,st_name)
+	  parsed = shlex.split(string)
+	  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          for line in cmd.stdout: 
+	    fname=line.split('\n')[0]
+	    sz=os.path.getsize(fname) 
+            tm=datetime.datetime.fromtimestamp(os.path.getmtime(fname))
+            console("   %9s %-27s %s"%(sz,tm,fname))	        
+	  continue          
 	continue      	 
       if words[0] =="LAYOUT": 
         fwd = rozofs.layout(words[2]).split('_')[2]
 	continue      	 
-
-    SID_LIST=dist.split('-')
-    
-    c = get_cid(int(cid))
-    
-#    for site in range(0,2):
-    for site in range(0,1):
-    
-#      console("__________________Site %s"%(site)) 
-      sid_idx = int(0)
-      for sid in SID_LIST:
-        sid_idx = sid_idx + int(1)
-        if int(sid_idx) > int(fwd):
-          console("** %s"%(sid))
-        else:
-          console("-- %s"%(sid))          
-        s = c.sid[int(sid)-1]
-	path = s.get_site_root_path(site)
-        string="find %s -name \"%s*\""%(path,st_name)
-	parsed = shlex.split(string)
-	cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        for line in cmd.stdout: 
-	  fname=line.split('\n')[0]
-	  sz=os.path.getsize(fname) 
-          tm=datetime.datetime.fromtimestamp(os.path.getmtime(fname))
-          console(" %9s %-27s %s"%(sz,tm,fname))	
           
   def exe_from_core_dir(self,dir):
     if dir == "storio": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
@@ -2006,6 +2011,7 @@ def test_parse(command, argv):
        if argv[4] == "rebuild":
          s.rebuild(argv)         
        if argv[4] == "info"          : s.info()
+       if argv[4] == "path"          : print "%s"%(s.get_root_path(0))
 
               
   elif command == "get_vol_clusters"   : 
