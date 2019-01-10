@@ -851,17 +851,18 @@ void rozofs_storcli_write_repair_req_processing(rozofs_storcli_ctx_t *working_ct
   ** the control must take place only where here is the presence of a shared memory for the write
   */
   error  = 0;
-  if (working_ctx_p->shared_mem_p!= NULL)
+  if (working_ctx_p->shared_mem_req_p != NULL)
   {
-      uint32_t *xid_p = (uint32_t*)working_ctx_p->shared_mem_p;
-      if (*xid_p !=  working_ctx_p->src_transaction_id)
-      {
-        /*
-        ** the source has aborted the request
-        */
-        error = EPROTO;
-      }      
-  } 
+    rozofs_shmem_cmd_read_t *share_rd_p = (rozofs_shmem_cmd_read_t*)working_ctx_p->shared_mem_req_p;
+    if (share_rd_p->xid !=  working_ctx_p->src_transaction_id)
+    {
+      /*
+      ** the source has aborted the request
+      */
+      error = EPROTO;
+    }    
+  }   
+   
   /*
   ** send back the response of the read request towards rozofsmount
   */
