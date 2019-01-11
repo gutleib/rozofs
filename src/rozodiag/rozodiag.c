@@ -67,9 +67,10 @@ uint16_t            serverPort[MAX_TARGET];
 int                 socketArray[MAX_TARGET];
 uint32_t            period;
 int                 allCmd;
-const char      *   prgName;  
 int                 timeout=DEFAULT_TIMEOUT;
 char prompt[64];
+char                localPath[PATH_MAX+1];
+
 /*
 **_________________________________________________________________________________
 **
@@ -78,57 +79,7 @@ char prompt[64];
 **_________________________________________________________________________________
 */
 void syntax_display() {
-  printf("\n%s - RozoFS %s\n\n", prgName, VERSION);
-  printf("%s ([-i <nodes>] {-p <NPorts>|-T <LPorts>})... [-c <cmd|all>]... [-f <cmd file>]... [--period <seconds>] [-t <seconds>]\n\n",prgName);
-  printf("Several diagnostic targets can be specified ( [-i <nodes>] {-p <NPorts>|-T <LPorts>} )...\n");
-  printf("    -i <nodes>     IP address or hostname of the diagnostic targets.\n");
-  printf("                   When omitted in a target definition, the -i value of the previous target is used.\n");
-  printf("                   or 127.0.0.1 when no previous -i option is set.\n");
-  printf("                   A range or list of hostnames or IP addresses can be specified this way:\n");
-  printf("                   - range: localhost:1-4 or 172.20.10.:21-28\n");
-  printf("                   - list: localhost:1,3 or 172.20.10.:21,22,26\n");
-  printf("       <nodes> = { <hosts> | <IP@> }\n");
-  printf("       <hosts> = { <hostname> | <hostname>:<N>-<P> | <hostname>:<N>,..,<P> }\n");
-  printf("       <IP@>   = { <a>.<b>.<c>.<N> | <a>.<b>.<c>.:<N>-<P> | <a>.<b>.<c>.:<N>,..,<P> }\n");
-  printf("\n    -p <NPorts>    Numeric port number or list or range of numeric port values of the diagnostic targets.\n");
-  printf("       <NPorts> = { <port> | <port1>,..,<portN> | <port1>-<portN> }\n");
-  printf(" or\n");
-  printf("    -T <LPorts>    The logical ports are given in the format:\n");
-  printf("       export or export:0                for master export\n");
-  printf("       export:<i>                        for slave export <i>\n");
-  printf("       export:<i>,..,<j>                 for a list of export\n");
-  printf("       export:<i>-<j>                    for a range of export\n");
-  printf("       stspare                           for spare restorer\n");
-  printf("       storaged or storio:0              for storaged\n");
-  printf("       storio:<i>    or storio:<i>,..,<j>       or storio:<i>-<j>       for storios\n");
-  printf("       mount:<i>     or mount:<i>,..,<j>        or mount:<i>-<j>        for rozofsmounts\n");
-  printf("       mount:<i>:<j> or mount:<i>:<j>,..,<k>    or mount:<i>:<j>-<k>    for storclis\n");;
-  printf("       rebalancer[:<instance>]\n");    
-  printf("       rcmd\n");    
-  printf(" At least one -p or -T value must be given.\n");
-  printf("\nOptionnaly a list of command to run can be specified in command line mode:\n");
-  printf("  [-c <cmd|all>]...\n"); 
-  printf("         Every word after -c is interpreted as a word of a command until end of line or new option.\n");
-  printf("         Several -c options can be set.\n");                 
-  printf("         \"all\" is used to run all the commands the target knows.\n");    
-  printf("  [-f <cmd file>]...\n");  
-  printf("         The list of commands can be specified through some files.\n");
-  printf("  [--period, -P <seconds>]\n");       
-  printf("         Periodicity in seconds (floating value) when running commands using -c or/and -f options.\n");  
-  printf("\nMiscellaneous options:\n");
-  printf("  -t <seconds>     Timeout value to wait for a response (default %d seconds).\n",DEFAULT_TIMEOUT);
-  printf("  -reserved_ports  Displays model for port reservation\n");        
-  printf("\ne.g:\n");
-  printf("  Get the profiler counters of the 4 instances of storcli of RozoFS mountpoint 2.\n");
-  printf("    %s -i 192.168.1.1 -T mount:2:1-4 -c profiler\n",prgName) ;          
-  printf("  Get the profiler counters of the export slave 1 every 10 seconds and reset them.\n");
-  printf("    %s -T export:1 -c profiler reset -period 10\n",prgName) ;          
-  printf("  Get the throughput history of the 3 local storio .\n");
-  printf("    %s -T storio:1-3 -c throughput\n",prgName) ;          
-  printf("  Get the device statuses of the storio of some nodes.\n");
-  printf("    %s -i rozofs-node:1,3 -T storio:1-3 -c device\n",prgName) ;          
-  printf("  Speed sampling of the profiler information on rozofsmount instance 2\n");
-  printf("    %s -i 192.168.2.21 -T mount:2 -c prof reset -period 0.1\n",prgName) ; 
+  system("man rozodiag");
   exit(0);
 }
 /*
@@ -161,7 +112,7 @@ void stop_on_error(char *fmt, ... ) {
   ** Print out an error message
   */
   printf("\033[91m\033[40m\033[1m");
-
+  printf("\nrozodiag - RozoFS %s\n%s\n\n", VERSION, ROZO_GIT_REF);
   if (fmt != NULL) {
     /* Format the string */
     va_start(vaList,fmt);
@@ -169,8 +120,6 @@ void stop_on_error(char *fmt, ... ) {
     va_end(vaList);
   }
   printf("\033[0m");
-
-  printf("\nCheck syntax with: %s -h\n",prgName);
 
   /*
   ** Shutdown every connection
@@ -753,6 +702,103 @@ static inline int scan_ports(char * str, uint32_t * values) {
 /*
 **_________________________________________________________________________________
 **
+** Parse the input string to find out a path name and resolve the rozofsmount instance
+** handling this path
+**
+** @param path              Path name eventually follwoing by : and storcli instances
+** @param mount_instance    Instance of rozofsmount
+**
+** @retval    The pointer to the end of the rozosmount path 
+**            (i.e optionaly the storcli instance list)
+**_________________________________________________________________________________
+*/
+char * get_rozofsmount_instance_from_path( char * input_path , int * mount_instance) {
+  char * retval = input_path;
+  int    size;
+  char   xattr[128];
+  char  *pXattr;
+  char  *path;
+  
+  
+  while ((*retval != 0)&&(*retval != ':')) retval++;
+  if (*retval == ':') {
+    *retval = 0;
+    retval++;
+  }
+  
+  /*
+  ** Replace . by local directory path
+  */
+  if (strcmp(input_path,".")==0) {
+    path = localPath;
+  }
+  /*
+  ** Get input path
+  */
+  else {  
+    path = input_path;
+  }
+  
+  /*
+  ** Get rozofsmount point xattribute options
+  */   
+  size = getxattr(path,"trusted.rozofs.export",xattr,sizeof(xattr));
+  if (size == -1) {
+    stop_on_error ("!!! %s is not a rozofmount point !!!\n",path, strerror(errno));
+    return retval;
+  } 
+  
+  pXattr = xattr;
+  
+  /*
+  ** Skip starting ' '
+  */
+  while (*pXattr == ' ') pXattr++;
+  /*
+  ** Skip exportd addresses
+  */
+  while ((*pXattr != ' ') && (*pXattr != 0)) pXattr++;
+  if (*pXattr == 0) {
+    stop_on_error ("!!! Bad xattribute %s !!!\n",xattr);
+    return retval;  
+  }
+  /*
+  ** Skip ' '
+  */
+  while (*pXattr == ' ') pXattr++;  
+  /*
+  ** Skip export id
+  */
+  while ((*pXattr != ' ') && (*pXattr != 0)) pXattr++;
+  if (*pXattr == 0) {
+    stop_on_error ("!!! Bad xattribute %s !!!\n",xattr);
+    return retval;  
+  }
+  /*
+  ** Skip ' '
+  */
+  while (*pXattr == ' ') pXattr++;  
+  /*
+  ** Skip export name
+  */
+  while ((*pXattr != ' ') && (*pXattr != 0)) pXattr++;
+  if (*pXattr == 0) {
+    stop_on_error ("!!! Bad xattribute %s !!!\n",xattr);
+    return retval;  
+  }    
+  /*
+  ** Scan rozofsmount point instance
+  */
+  if (sscanf(pXattr,"%d",mount_instance) != 1) {
+    stop_on_error ("!!! Bad xattribute %s !!!\n",xattr);
+    return retval;  
+  }        
+   
+  return retval;
+}
+/*
+**_________________________________________________________________________________
+**
 ** Parse the input command line
 **
 ** @param argc         Number of parameter
@@ -774,7 +820,12 @@ char *argv[];
   int                 hostNb;
   int                 localIP;
   uint32_t            IPs[MAX_TARGET];
-
+  
+  /*
+  ** Get current path
+  */
+  getcwd(localPath,PATH_MAX);
+  
   /* Pre-initialize 1rst IP address */ 
   hostNb = scan_host("127.0.0.1",IPs); 
   
@@ -851,6 +902,46 @@ char *argv[];
       continue;
     }
     
+    if  (strcmp(argv[idx],"-M")==0) {
+      int mount_instance;
+      idx++;
+      if (idx == argc) {
+	stop_on_error ("%s option but missing value !!!\n",argv[idx-1]);
+      }
+      
+      /*
+      ** Extract path name and get rozofsmount instance
+      */
+      mount_instance = 0xFFFFFFFF;
+      pt = get_rozofsmount_instance_from_path(argv[idx], &mount_instance);
+      idx++;
+      
+      /*
+      ** No storcli list
+      */
+      if (*pt == 0) {
+        for (localIP=0;localIP<hostNb; localIP++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_fsmount_diag(mount_instance);
+          nbTarget++;
+        }         
+        continue;      
+      }
+      
+      nbPorts = scan_ports(pt,ports);
+      if (nbPorts <= 0) {
+	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-2],argv[idx-1]);
+      }
+      for (localIP=0;localIP<hostNb; localIP++) {
+        for (localPort=0; localPort < nbPorts; localPort++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_fsmount_storcli_diag(mount_instance,ports[localPort]);
+          nbTarget++;
+        }
+      }   
+      continue;                       
+    }    
+          
     /* 
     ** storaged               : -f storaged
     ** storio                 : -f storio[:<instance>]
@@ -1223,8 +1314,6 @@ int main(int argc, const char **argv) {
   int                 socketId; 
   uint32_t            ip;
    
-  prgName = argv[0];
-
   /* Read parameters */
   memset(serverPort,0,sizeof(serverPort)); 
   memset(ipAddr,0,sizeof(ipAddr));

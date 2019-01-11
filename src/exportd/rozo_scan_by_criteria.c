@@ -1752,6 +1752,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m-t,--trash\033[0m\t\tonly trashed files or directories.\n");
   printf("\t\033[1m-T,--notrash\033[0m\t\texclude trashed files and directories.\n");
   printf("\t\033[1m-j,--junk\033[0m\t\tScan junk files waiting for deletion process.\n");
+  printf("\t\033[1m-w,--wrerror\033[0m\t\tScan files having encountered a detected write error.\n");
   printf("\t\033[1m--U<x|w|r>\033[0m\t\tUser has <executable|write|read> priviledge.\n");
   printf("\t\033[1m--Un<x|w|r>\033[0m\t\tUser has not <executable|write|read> priviledge.\n");
   printf("\t\033[1m--G<x|w|r>\033[0m\t\tGroup has <executable|write|read> priviledge.\n");
@@ -1816,6 +1817,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution.\n");
   printf("\t\033[1mtrash\033[0m\t\t\tdisplay directory trash configuration.\n");
   printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
+  printf("\t\033[1merror\033[0m\t\t\tdisplay file write error detected.\n");
   printf("\t\033[1malls|allh\033[0m\t\tdisplay every field (time in seconds or human readable date).\n");
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
   printf("\t\033[1mjson\033[0m\t\t\toutput is in json format.\n");
