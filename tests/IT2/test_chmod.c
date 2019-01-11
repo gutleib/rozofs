@@ -110,10 +110,21 @@ int check_rights(char * file, mode_t mode) {
     printf("lstat(%s) %s\n",file,strerror(errno));
     return -1;
   }
-  if ((stats.st_mode & 0xFFF) != mode) {
-    printf("%s has mode %x while expecting %x\n",file,stats.st_mode,mode);
-    return -1;    
+  if ((stats.st_mode & 0x1FF) == mode) {
+    return 0;
+  }  
+  
+  printf("%s has mode %x while expecting %x\n",file,stats.st_mode,mode);
+  sleep(1);
+  ret = lstat(file,&stats);
+  if (ret < 0) {
+    printf("lstat(%s) %s\n",file,strerror(errno));
+    return -1;
   }
+  if ((stats.st_mode & 0x1FF) != mode) {
+    printf("!!! %s has mode %x while expecting %x\n",file,stats.st_mode,mode);
+    return -1;    
+  }  
   return 0;
 }
 
@@ -126,7 +137,7 @@ int do_one_test(char * d, char * f) {
   for (u=0; u<8; u++) {
     for  (g=0; g<8; g++) {
       for  (o=0; o<8; o++) {
-        mode = u<<8 | g << 4 | o; 
+        mode = u<<6 | g << 3 | o; 
         ret = chmod(d,mode);
 	if (ret < 0) {
 	  printf("Can not set mode of %s to 0x%x %s\n",d, mode, strerror(errno));
@@ -142,7 +153,7 @@ int do_one_test(char * d, char * f) {
   for (u=0; u<8; u++) {
     for  (g=0; g<8; g++) {
       for  (o=0; o<8; o++) {
-        mode = u<<8 | g << 4 | o; 
+        mode = u<<6 | g << 3 | o; 
         ret = chmod(f,mode);
 	if (ret < 0) {
 	  printf("Can not set mode of %s to 0x%x %s\n",f, mode, strerror(errno));

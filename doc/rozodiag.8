@@ -9,20 +9,22 @@ rozodiag \- RozoFS diagnostic tool
 .B
 .SH DESCRIPTION
 .B rozodiag
-is the diagnostic interface to the RozoFS processes.
+is the diagnostic interface to the RozoFS processes. 
+ It enables to:
+  - request various information (statistics, counters, gauges, statuses, configuration parameters, ...),
+  - set some configuration parameters in order to modify the processes behavior.
 .SH TARGET
 .P 
- Several diagnostic targets can be specified. 
+ Several diagnostic targets can be specified in a single rozodiag command. 
 .P
 .RS 
-.B TARGET = [ -i <nodes> ] { -p <NPorts> | -T <LPorts> }
+.B TARGET = [ -i <nodes> ] PORTS
 .RE
 .P
- Each target names one or several node (-i) and their numeric (-p) or logical (-T) diagnostic ports.
+ Each target names some nodes (-i <nodes>) and some diagnostics ports (PORTS).
  <nodes> can be a hostname or an IP address or a range or a list of hostnames or IP addresses.
- When the <nodes> is omitted in a TARGET, it takes the value of the previous TARGET. 
+ When <nodes> is omitted in a TARGET, it takes the value of the previous TARGET. 
  When no previous target, local address 127.0.0.1 is used as <nodes>.
- At least one -p or -T option must be set.
 .P
 .RS 
 .B <nodes> = { <hosts> | <IP@> }
@@ -33,12 +35,37 @@ is the diagnostic interface to the RozoFS processes.
 .RS
 .B <IP@> = { <a>.<b>.<c>.<N> | <a>.<b>.<c>.:<N>-<P> | <a>.<b>.<c>.:<N>,..,<P> } 
 .RE
+.P 
+ The variable part of a hostname after ":" to define a list or range of hostnames, can only be numeric values.
+ 
+ Examples for <nodes>
+   -i 192.168.10.1      (only one IP address)           
+   -i 192.168.10.:21-28 (a range of 8 IP addresses)     
+   -i 192.168.10.:21,25 (a list of 2 IP addresses)    
+   -i rozofs01          (only one host name)
+   -i rozofs0:1,4,8     (a list of 3 hostnames)
+   -i rozofs0:1-8       (a range of 8 hostnames)  
+.RS 
+
+.B PORTS = { -p <NPorts> | -T <LPorts> | -M <MPath>  }
+.RE
+.P
+ Diagnostic ports can be named either as
+   - numeric diagnostic ports (-p), 
+   - or logical diagnostic ports (-T), 
+   - or a RozoFS mount point path (-M).
+ At least one -p, -T or -M option must be set in a rozodiag command.
 .P
  The numeric port is either one single numeric value or a list of numeric values or a range of numeric values.
 .P
 .RS
 .B <NPorts> = { <port> | <firstPort>,..,<lastPort> | <firstPort>-<lastPort> }
 .RE
+.P 
+ Examples for numeric ports
+   -p 52000      (only one port of master exportd)    
+   -p 5000:4-7   (a range of 4 ports of the 4 storclis of rozofsmount 0)
+   -p 5000:3,8   (a list of 2 ports of rozofsmount 0 and 1)
 .P
  The logical port is a logical naming of the destination process diagnostic port.
 .P
@@ -107,7 +134,32 @@ is the diagnostic interface to the RozoFS processes.
 .RE
 .RS
 .B }
-.RE         
+.RE 
+.P 
+ Examples for logical ports
+   -T mount:0       (only one port of rozofsmount 0)    
+   -T mount:0:1-4   (a range of 4 ports of the 4 storclis of rozofsmount 0)
+   -T export:1,6    (a list of 2 ports of exportd slave 1 and 6)
+.P
+ The RozoFS mount point path is a way to identify a rozofsmount and/or its storcli thanks to a local node path.
+ A path value of "." can be used to specify a rozofsmount point servicing the current path.
+ The storcli instances can be one storcli instance, a list of storcli instances, or a range of storcli instances.
+ When targeting several nodes (-i <nodes>) it is assumed that the same rozofsmount instance serves the same path on every targeted node.
+.P
+.RS 
+.B <MPath> = { <path> | <path>:<instances> }  
+.RE
+.RS
+.B <instances> = { <s> | <s1>,...<sN> | <s1>-<sN> }
+.RE  
+.P 
+ Examples for mount path
+   -M /mnt/rfs      (rozofsmount instance servicing local path /mnt/rfs)    
+   -M /mnt/rfs:1    (storcli 1 of rozofsmount instance servicing local path /mnt/rfs)   
+   -M /mnt/rfs:1-4  (storcli 1 to 4 of rozofsmount instance servicing local path /mnt/rfs)   
+   -M .             (rozofsmount instance servicing local curent path)
+   -M .:1           (storcli 1 of rozofsmount instance servicing local curent path)
+   -M .:1,2         (storcli 1 and 2 of rozofsmount instance servicing local curent path)
 .SH OPTIONS
 .IP "-h, --help"
 .RS
@@ -129,36 +181,61 @@ rozodiag tool will run.
 When neither -c nor -f is set in the command, 
 the rozodiag tools connects to the target in interactive mode.
 .RE
-.IP "-period <seconds>"
+.IP "--period, -P <seconds>"
 .RS
 .I <seconds>
 gives the periodicity in seconds (floating) to run the diagnostic commands given either
 through the -c or the -f option. 
 .SH EXAMPLES
 .P
-Interrogating procedure statistics of export slave 1 on node 192.168.2.1 
+Targeting two local mount points /mnt/rfs1 and /mnt/rfs2
 .RS
-rozodiag -i 192.168.2.21 -T export:1 -c profiler
+rozodiag -M /mnt/rfs1 -M /mnt/rfs2 -c throughput col 6 --period 15
 .RE
 .P
-Getting disk statuses from the storaged of 4 nodes
+Targeting the current RozoFS mount point we are on
 .RS
-rozodiag -i 192.168.2.:21-24 -T storaged -c dstatus
+rozodiag -M . -c mount
 .RE
 .P
-Getting periodicaly storios throughput for the 6 clusters of one node
+Targeting the 4 storclis of the local RozoFS mount point we are on
 .RS
-rozodiag -i 192.168.2.21 -T storio:1-6 -c throughput -period 30
+rozodiag -M .:1-4 -c profiler
 .RE
 .P
-Getting the uptime of rozofsmount instance 2 and its 4 STORCLIs on 2 nodes
+Targeting RozoFS mount /mnt/rfs on several nodes (assuming the same instance is used on local node and remote nodes)
 .RS
-rozodiag -i 192.168.2.:21,23 -T mount:2:0-4 -c uptime
+rozodiag -i node:1-4 -M /mnt/rfs -c profiler reset
 .RE
 .P
-Speed sampling of the profiler information on rozofsmount instance 2
+Targeting the export slave 1 on node 192.168.2.1 
 .RS
-rozodiag -i 192.168.2.21 -T mount:2 -c prof reset -period 0.1
+rozodiag -i 192.168.2.21 -T export:1 -c trash json --period 30
+.RE
+.P
+Targeting all exportd including the master on node 192.168.2.1 
+.RS
+rozodiag -i 192.168.2.21 -T export:0-8 -c clients
+.RE
+.P
+Targeting the storaged of 8 nodes
+.RS
+rozodiag -i node:1-8 -T storaged -c dstatus
+.RE
+.P
+Targeting the storios of the 6 clusters of one node
+.RS
+rozodiag -i node5 -T storio:1-6 -c log
+.RE
+.P
+Targeting rozofsmount instance 2 and its 4 STORCLIs on one node
+.RS
+rozodiag -i node3 -T mount:2:0-4 -c lbg_entries 
+.RE
+.P
+Targeting rozofsmount instance 2 and its 4 STORCLIs on 2 nodes
+.RS
+rozodiag -i node:1,3 -T mount:2:0-4 -c repair
 .RE
 .\".SH ENVIRONMENT
 .\".SH DIAGNOSTICS
