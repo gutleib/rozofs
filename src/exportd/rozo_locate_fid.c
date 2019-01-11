@@ -68,6 +68,7 @@ extern econfig_t exportd_config;
 int rozofs_no_site_file = 0;
 char     * fidString = NULL;
 uint64_t total_sectors = 0;
+uint64_t slave_sectors = 0;
 
 
 #define BUFFER_SIZE 4096
@@ -148,13 +149,14 @@ int locate_request(char * host, rpcclt_t * rpcClient, cid_t cid, sid_t sid, fid_
         rozofs_time2string(dateString, pFile->modDate);
         if (first) first = 0;
         else printf(",");       
-        printf ("\n    { \"host\": \"%s\", \"size\": %11llu, \"sectors\": %6llu, \"date\": \"%s\",", 
+        printf ("\n        { \"host\": \"%s\", \"size\": %11llu, \"sectors\": %6llu, \"date\": \"%s\",", 
                 host,
                 (unsigned long long)pFile->sizeBytes, 
                 (unsigned long long)pFile->sectors, 
                 dateString);
-        printf ("\n      \"name\": \"%s\"}", pFile->file_name);
-        total_sectors += pFile->sectors;       
+        printf ("\n          \"name\": \"%s\"}", pFile->file_name);
+        total_sectors += pFile->sectors;  
+        slave_sectors += pFile->sectors;      
       }       
     }
     printf(ROZOFS_COLOR_BOLD);
@@ -164,13 +166,14 @@ int locate_request(char * host, rpcclt_t * rpcClient, cid_t cid, sid_t sid, fid_
         rozofs_time2string(dateString, pFile->modDate);
         if (first) first = 0;
         else printf(",");       
-        printf ("\n    { \"host\": \"%s\", \"size\": %11llu, \"sectors\": %6llu, \"date\": \"%s\",", 
+        printf ("\n        { \"host\": \"%s\", \"size\": %11llu, \"sectors\": %6llu, \"date\": \"%s\",", 
                 host,
                 (unsigned long long)pFile->sizeBytes, 
                 (unsigned long long)pFile->sectors,                 
                 dateString);
-        printf ("\n      \"name\": \"%s\"}", pFile->file_name);                
+        printf ("\n          \"name\": \"%s\"}", pFile->file_name);                
         total_sectors += pFile->sectors;                       
+        slave_sectors += pFile->sectors;      
       }       
     } 
     printf(ROZOFS_COLOR_NONE);
@@ -267,7 +270,6 @@ void usage(char * fmt, ...) {
   printf("\t    -c, --cid\tcluster identifier to search fid in.\n");
   printf("                \tcid 0 to search for fid in all clusters\n");    
   printf("\t    -f, --fid\tfid to search for.\n");    
-  printf("\t    -n, --name\tFile name to search for.\n");    
   printf ("  OPTIONS:\n");
   printf("\t    -h, --help  \tprint this message.\n");
   printf("\t    -k, --config\tconfiguration file to use (default: %s).\n",EXPORTD_DEFAULT_CONFIG);
@@ -279,7 +281,6 @@ void usage(char * fmt, ...) {
 int main(int argc, char *argv[]) {
     char exportd_config_file[256];
     int c;
-    char     * fname = NULL;
     uint32_t   cid = -1;        
     fid_t      fid;
     int        eid;
@@ -287,24 +288,30 @@ int main(int argc, char *argv[]) {
     export_config_t  *  econfig = NULL;
     volume_config_t  *  vconfig = NULL;  
     cluster_config_t *  cconfig = NULL;   
-    int size;
+    int econfigRead = 0;
+    int first=1;
+    int found;
+    int vid;
     
-    
+    /*
+    ** Change local directory to "/"
+    */
+    if (chdir("/")!=0) {}
+            
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"config", required_argument, 0, 'k'},
         {"fid", required_argument, 0, 'f'},
         {"cid", required_argument, 0, 'c'},
-        {"name", required_argument, 0, 'n'},
         {0, 0, 0, 0}
     };
     
     strcpy(exportd_config_file,EXPORTD_DEFAULT_CONFIG);
-
+    printf("  \"slaves\" : [");
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "hc:k:f:n:", long_options, &option_index);
+      c = getopt_long(argc, argv, "hc:k:f:", long_options, &option_index);
 
       if (c == -1) break;
 
@@ -332,32 +339,89 @@ int main(int argc, char *argv[]) {
            if (rozofs_uuid_parse(fidString, fid)) {
              usage("Bad FID value %s",fidString);
            }  
-           break; 
            
-        case 'n':
-           fname = optarg;
-           size = getxattr(fname,"user.rozofs",value,BUFFER_SIZE);
-           if (size <= 0) {
-             usage("%s is not a RozoFS file",fname);
+           if (!first) {
+             printf(",");
+           } 
+           first = 0; 
+
+           /*
+           ** Read export config if not yet done
+           */
+           if (econfigRead==0) {
+             econfigRead = 1;
+             if (econfig_initialize(&exportd_config) != 0) {
+                 usage( "can't initialize exportd config: %s.",
+                         strerror(errno));
+             }
+             if (econfig_read(&exportd_config, exportd_config_file) != 0) {
+                 usage( "failed to parse configuration file: %s.",
+                         strerror(errno));
+             }
+             if (econfig_validate(&exportd_config) != 0) {
+                 usage( "inconsistent configuration file: %s.",
+                         strerror(errno));
+             }
            }
-           pChar = strstr(value,"CLUSTER : ");
-           if (pChar == NULL) {
-             usage("Bad rozofs xattr CLUSTER %s",value);
+           
+           /*
+           ** Extract eid from FID 
+           */
+           eid = rozofs_get_eid_from_fid(fid);
+
+           /*
+           ** Find out this eid in config
+           */
+           list_for_each_forward(p, &exportd_config.exports) {
+               econfig = list_entry(p, export_config_t, list);
+               if (econfig->eid == eid) break;
+               econfig = NULL;
            }
-           if (sscanf(pChar,"CLUSTER : %d",&cid)!=1) {
-             usage("Bad rozofs xattr CLUSTER value %s",value);
-           }           
-           pChar = strstr(value,"FID_SP  : ");
-           if (pChar == NULL) {
-             usage("Bad rozofs xattr FID_SP %s",value);
+           if (econfig == NULL) {
+             usage( "No such eid %d.", eid);
            }
-           fidString = pChar;
-           fidString += strlen("FID_SP  : "); 
-           fidString[36] = 0;
-           if (rozofs_uuid_parse(fidString, fid)) {
-             usage("Bad FID value %s",fidString);
-           }             
-           break;                            
+
+           vid = econfig->vid;
+
+try_vid_fast:           
+           /*
+           ** Find out the volume of this eid
+           */
+           list_for_each_forward(p, &exportd_config.volumes) {
+               vconfig = list_entry(p, volume_config_t, list);
+               if (vconfig->vid == vid) break;
+               vconfig = NULL;
+           }
+           if (vconfig == NULL) {
+             usage( "No such vid %d.", vid);
+           }
+           
+           /*
+           ** Find out the cid in this volume
+           */
+           found = 0;
+           list_for_each_forward(p, &vconfig->clusters) {
+               cconfig = list_entry(p, cluster_config_t, list);
+               if (cconfig->cid == cid) {
+                 printf ("\n    { \"fid\" : \"%s\",\n", fidString);
+                 printf ("      \"eid\" : \"%d\",\n", eid);
+                 printf ("      \"vid\" : \"%d\",\n", vid);
+                 printf ("      \"cid\" : \"%d\",\n", cid);
+                 printf ("      \"files\" : [");
+                 slave_sectors = 0;
+                 locate_cluster(cconfig, fid);    
+                 printf ("\n      ],\n      \"slave sectors\" : %llu\n    }", (unsigned long long)slave_sectors);
+                 found = 1;
+                 break;               }
+           }
+           /*
+           ** CID not found in this volume ? Let's try the fast volume if any
+           */
+           if ((found == 0) && (vid == econfig->vid) && (econfig->vid_fast != -1)) {
+             vid = econfig->vid_fast;
+             goto  try_vid_fast;
+           }        
+           break;                         
                            
         case '?':
           usage(NULL);
@@ -368,70 +432,6 @@ int main(int argc, char *argv[]) {
           break;
       }
     }
-    
-    /*
-    ** Change local directory to "/"
-    */
-    if (chdir("/")!=0) {}
-        
-    if (cid == -1) {
-      usage("Missing CID value");
-    }  
-    
-    if (fidString == NULL) {
-      usage("Missing FID value");
-    }  
-
-    if (econfig_initialize(&exportd_config) != 0) {
-        usage( "can't initialize exportd config: %s.",
-                strerror(errno));
-    }
-    if (econfig_read(&exportd_config, exportd_config_file) != 0) {
-        usage( "failed to parse configuration file: %s.",
-                strerror(errno));
-    }
-    if (econfig_validate(&exportd_config) != 0) {
-        usage( "inconsistent configuration file: %s.",
-                strerror(errno));
-    }
-
-    eid = rozofs_get_eid_from_fid(fid);
-
-    // For each export
-
-    list_for_each_forward(p, &exportd_config.exports) {
-    
-        econfig = list_entry(p, export_config_t, list);
-        if (econfig->eid == eid) break;
-        econfig = NULL;
-    }
-    if (econfig == NULL) {
-      usage( "No such eid %d.", eid);
-    }
-
-
-    list_for_each_forward(p, &exportd_config.volumes) {
-        
-        vconfig = list_entry(p, volume_config_t, list);
-        if (vconfig->vid == econfig->vid) break;
-        vconfig = NULL;
-    }
-    if (vconfig == NULL) {
-      usage( "No such vid %d.", econfig->vid);
-    }
-    
-    
-    printf ("\n{ \"fid\" : \"%s\",\n", fidString);
-    printf ("  \"files\" : [");
-
-    list_for_each_forward(p, &vconfig->clusters) {
-    
-        cconfig = list_entry(p, cluster_config_t, list);
-        if ((cid == 0) || (cconfig->cid == cid)) {
-          locate_cluster(cconfig, fid);    
-        }
-    }
-
-   printf("  ],\n  \"total sectors\" : %llu\n}\n", (long long unsigned int)total_sectors);  
-   exit(EXIT_SUCCESS);   
+    printf("\n  ],\n  \"total sectors\" : %llu\n}\n", (long long unsigned int)total_sectors);  
+    exit(EXIT_SUCCESS);   
 }

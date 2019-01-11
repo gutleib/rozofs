@@ -55,6 +55,7 @@
 
 #define BUFFER_SIZE 4096
 char   value[BUFFER_SIZE];
+char   fidString[BUFFER_SIZE];
 char  *pChar;
 
 #define FNAME "rozofs_locate_prjections"
@@ -111,11 +112,8 @@ void usage(char * fmt, ...) {
   }
   printf("Rozofs file projection location utility - %s\n", VERSION);
   printf("Usage: rozo_locate_projections [OPTIONS] <MANDATORY>\n\n");
-  printf ("  MANDATORY: {--cid <cid> --fid <fid>|--name <name>}\n");
-  printf("\t    -c, --cid\tcluster identifier to search fid in.\n");
-  printf("                \tcid 0 to search for fid in all clusters\n");    
-  printf("\t    -f, --fid\tfid to search for.\n");    
-  printf("\t    -n, --name\tFile name to search for.\n");    
+  printf ("  MANDATORY: \n");
+  printf("\t    -n, --name\tFile name to locate pieces for.\n");    
   printf ("  OPTIONS:\n");
   printf("\t    -h, --help  \tprint this message.\n");
   printf("\t    -k, --config\tconfiguration file to use (default: %s).\n",EXPORTD_DEFAULT_CONFIG);
@@ -130,7 +128,6 @@ int main(int argc, char *argv[]) {
   char     * fname = NULL;
   uint32_t   cid = -1;        
   fid_t      fid;
-  char     * fidString;
   int        size;
   char * pMetaAddr      = NULL;
   char *pHost;
@@ -138,14 +135,15 @@ int main(int argc, char *argv[]) {
   int  socketId = -1;
   char remote_fname[128];
   char local_fname[128];
-  char param[256];  
+  char param[2048];  
+  
   int   res = rozofs_rcmd_status_success;
+  char *token;
+  
 
   static struct option long_options[] = {
       {"help", no_argument, 0, 'h'},
       {"config", required_argument, 0, 'k'},
-      {"fid", required_argument, 0, 'f'},
-      {"cid", required_argument, 0, 'c'},
       {"name", required_argument, 0, 'n'},
       {0, 0, 0, 0}
       };
@@ -153,7 +151,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = 0;
-    c = getopt_long(argc, argv, "hc:k:f:n:", long_options, &option_index);
+    c = getopt_long(argc, argv, "hk:n:", long_options, &option_index);
 
     if (c == -1) break;
 
@@ -168,42 +166,12 @@ int main(int argc, char *argv[]) {
         strcpy(exportd_config_file,optarg);
         break;
 
-      case 'c':
-        if (sscanf(optarg, "%u", &cid) != 1) {
-          usage("Bad CID value %s",optarg);
-        }  
-        break;
-
-      case 'f':
-         fidString = optarg;
-         if (rozofs_uuid_parse(fidString, fid)) {
-           usage("Bad FID value %s",fidString);
-         }  
-         break; 
-
       case 'n':
          fname = optarg;
          size = getxattr(fname,"user.rozofs",value,BUFFER_SIZE);
          if (size <= 0) {
            usage("%s is not a RozoFS file",fname);
-         }
-         pChar = strstr(value,"CLUSTER : ");
-         if (pChar == NULL) {
-           usage("Bad rozofs xattr CLUSTER %s",value);
-         }
-         if (sscanf(pChar,"CLUSTER : %d",&cid)!=1) {
-           usage("Bad rozofs xattr CLUSTER value %s",value);
-         }           
-         pChar = strstr(value,"FID_SP  : ");
-         if (pChar == NULL) {
-           usage("Bad rozofs xattr FID_SP %s",value);
-         }
-         fidString = pChar;
-         fidString += strlen("FID_SP  : "); 
-         fidString[36] = 0;
-         if (rozofs_uuid_parse(fidString, fid)) {
-           usage("Bad FID value %s",fidString);
-         }             
+         }      
          break;                            
 
       case '?':
@@ -216,6 +184,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (fname == NULL) {
+    usage("Missing file name");
+  }
+    
   /*
   ** Change local directory to "/"
   */
@@ -271,31 +243,99 @@ int main(int argc, char *argv[]) {
     fatal_exit(rozofs_rcmd_status_no_connection,"Can not connect to remote command server");
   }  
 
-  
   /*
-  ** Prepare command
-  */ 
+  ** Prepare local and remote file names to exchanges results 
+  ** between local node and export node
+  */
   sprintf(remote_fname,"/tmp/%s.%d",FNAME,getpid());
   sprintf(local_fname,"/tmp/%s.loc.%d",FNAME,getpid());
-  if (exportd_config_file[0] == 0) {
-    sprintf(param,"-c %d -f %s  > %s", cid, fidString, remote_fname);    
+
+  /*
+  ** Prepare rcmd command
+  */ 
+  pChar = param;
+  if (exportd_config_file[0] != 0) {
+    pChar += sprintf(pChar," -k %s ", exportd_config_file);
   }
-  else {
-    sprintf(param,"-c %d -f %s -k %s > %s", cid, fidString, exportd_config_file, remote_fname);    
-  }  
+  
+  cid = 0;
+  fidString[0] = 0;
+
+  token = strtok(value,"\n");
+  while ((token = strtok(NULL,"\n")) != 0) {
+         
+     /*
+     ** Scan cluster id
+     */
+     if (strncmp(token,"CLUSTER",strlen("CLUSTER")) == 0) {
+     
+       token += strlen("CLUSTER");
+       
+       if (sscanf(token," : %d", &cid) != 1) {
+         printf("Error parsing CLUSTER id in xattr %s",strerror(errno));
+         exit(1);
+       }
+       continue;
+     }  
+
+     /*
+     ** Scan FID
+     */     
+     if (strncmp(token,"FID_SP",strlen("FID_SP")) == 0) {
+     
+       if (cid == 0) continue;
+       
+       token += strlen("FID_SP");
+       
+       if (sscanf(token," : %s", fidString) != 1) {
+         printf("Error parsing FID_SP in xattr %s",strerror(errno));
+         exit(1);
+       }
+       if (rozofs_uuid_parse(fidString, fid)) {
+         printf("Bad FID value %s",fidString);
+         exit(1);  
+       } 
+       
+       pChar += sprintf(pChar, "-c %d -f %s ", cid, fidString);    
+       
+       /*
+       ** Reset and reloop
+       */
+       cid = 0;
+       fidString[0] = 0;      
+       continue;
+     }        
+  } 
+  
+  /*
+  ** Finalize the command
+  */
+  pChar += sprintf(pChar," > %s", remote_fname);    
+  printf("%s\n",param);
+
+
+  printf("\n{\n  \"fname\" : \"%s\",\n", fname);          
+
+  /*
+  ** Send the command
+  */
   res = rozofs_rcmd_locate_projections(socketId, param);
   if (res != rozofs_rcmd_status_success) {
     fatal_exit(res,"Error rozofs_rcmd_locate_projections %s", rozofs_rcmd_status_e2String(res));
   } 
-  
+
+  /*
+  ** Get the response
+  */
   res = rozofs_rcmd_getrmfile(socketId, remote_fname, local_fname, 1);
   if (res != rozofs_rcmd_status_success) {
     fatal_exit(res,"Error rozofs_rcmd_getrmfile %s", rozofs_rcmd_status_e2String(res));
   }   
+
   sprintf(param,"cat %s", local_fname);    
   if (system(param)) {};
-  unlink(local_fname);
-    
+  unlink(local_fname);     
+  
   rozofs_rcmd_disconnect_from_server(socketId);
   finish(EXIT_SUCCESS);
   return EXIT_SUCCESS;
