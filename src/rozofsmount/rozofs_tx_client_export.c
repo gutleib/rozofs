@@ -3932,7 +3932,13 @@ int truncate_buf_multitple_nb(void *fuse_ctx_p,ientry_t *ie, uint64_t size)
     **  The return vector indicates how many commands must be generated)
     **____________________________________________________________________
     */
-    rozofs_build_truncate_multiple_offset_vector(size,&vector,striping_unit_bytes,striping_factor);
+    if (ie->attrs.multi_desc.master.hybrid == 1) {
+      rozofs_build_truncate_multiple_offset_vector_hybrid(size,&vector,striping_unit_bytes,striping_factor);
+    }
+    else {
+      rozofs_build_truncate_multiple_offset_vector(size,&vector,striping_unit_bytes,striping_factor);
+    }
+      
 
 //    rozofs_print_multi_vector(&vector,bufall_debug);
 //    info("FDL \n%s",bufall_debug);
