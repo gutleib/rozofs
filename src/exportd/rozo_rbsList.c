@@ -792,9 +792,14 @@ int main(int argc, char *argv[]) {
 
     TRACE("export %d layout %d in volume %d path %s\n", econfig->eid, layout, econfig->vid, econfig->root);
 	
-    // Check whether the volume of this export is interresting
+    /*
+    ** Check whether this export uses a regular volume 
+    ** or a fast volume that owns some of the clusters 
+    ** to rebuild
+    */
     for (i=0; i < nb_requested_vid; i++) {
       if (requested_vid[i] == econfig->vid) break;
+      if (requested_vid[i] == econfig->vid_fast) break;
     }
     // No interest
     if (i==nb_requested_vid) continue;
