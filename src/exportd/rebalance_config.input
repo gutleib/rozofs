@@ -1,6 +1,6 @@
 #_______________________________________________________________________________________
 # 
-# Call ../../tools/rebalance_config.py to generate rebalance_config.h as well as rebalance_config.c
+# Call ../../tools/generate_all_config.py to generate rebalance_config.h as well as rebalance_config.c
 #
 #_______________________________________________________________________________________
 # Syntax is as follow:

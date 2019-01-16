@@ -60,18 +60,17 @@ class conf_obj:
     else:
       print "  int32_t     %s;"%(self.name)
 
-  def write_in_show(self,struct_name):  
-    print ""
-    print "  %s_IS_DEFAULT_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default) 
-    print "  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);"        
-    for comment in self.comment: print "  pChar += rozofs_string_append(pChar,\"%s\\n\");"%(comment)
+  def write_in_show(self,struct_name, alignment = "  "):  
+    print "%s%s_IS_DEFAULT_%s(%s,%s);"%(alignment,struct_name.upper(),self.genre,self.name,self.default) 
+    print "%sif (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);"%(alignment)        
+    for comment in self.comment: print "%spChar += rozofs_string_append(pChar,\"%s\\n\");"%(alignment,comment)
     if self.genre == "ENUM":
-      print "  %s_SHOW_ENUM(%s,\"%s\",\"%s\");"%(struct_name.upper(),self.name,self.default,self.values)      
+      print "%s%s_SHOW_ENUM(%s,\"%s\",\"%s\");"%(alignment,struct_name.upper(),self.name,self.default,self.values)      
     elif self.mini != None:
-      print "  %s_SHOW_%s_OPT(%s,%s,\"%s:%s\");"%(struct_name.upper(),self.genre,self.name,self.default,self.mini,self.maxi) 
+      print "%s%s_SHOW_%s_OPT(%s,%s,\"%s:%s\");"%(alignment,struct_name.upper(),self.genre,self.name,self.default,self.mini,self.maxi) 
     else:
-      print "  %s_SHOW_%s(%s,%s);"%(struct_name.upper(),self.genre,self.name,self.default) 
-    print "  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);"        
+      print "%s%s_SHOW_%s(%s,%s);"%(alignment,struct_name.upper(),self.genre,self.name,self.default) 
+    print "%sif (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);"%(alignment)         
 
   def write_in_save(self,struct_name):  
     print ""
@@ -105,6 +104,11 @@ class conf_obj:
       print "    %s_SET_%s_MINMAX(%s,value,%s,%s);"%(struct_name.upper(),self.genre,self.name,self.mini,self.maxi)                    
     print "  }"  
 
+  def search(self,struct_name):
+    print "  if (strcasestr(\"%s\",parameter) != NULL) {"%(self.name)  
+    print "    match++;"
+    self.write_in_show(struct_name,alignment="    ");
+    print "  }"  
 #_______________________________________________
 class conf_int(conf_obj):
 
@@ -732,6 +736,8 @@ def go_build_man(struct_name,command):
   print "  pChar += rozofs_string_append     (pChar,\"\\t\\tdisplays the whole %s configuration.\\n\");"%(struct_name)
   print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s <scope>\");"%(command)
   print "  pChar += rozofs_string_append     (pChar,\"\\tdisplays only the <scope> configuration part.\\n\");"
+  print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s search <parameter>\");"%(command)
+  print "  pChar += rozofs_string_append     (pChar,\"\\tdisplays parameters approximatively like <parameter>.\\n\");"
   print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s reload\");"%(command)
   print "  pChar += rozofs_string_append     (pChar,\"\\treloads and then displays the configuration.\\n\");"
   print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s set <param> <value>\");"%(command)
@@ -756,6 +762,7 @@ def build_show_module(module,struct_name):
   print "  pChar += rozofs_string_append_effect(pChar,\"     \\n#                                                            \\n\\n\", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
   for obj in objects:
     if obj.module == module:     
+      print ""
       obj.write_in_show(struct_name) 
   print "  return pChar;"
   print "}"
@@ -835,6 +842,17 @@ def go_build_show(struct_name):
   print "        return;"   
   print "      }"  
   print "      %s_generated_set(pChar, argv[2],argv[3]);"%(struct_name)
+  print "      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
+  print "      return;"           
+  print "    }" 
+  print ""
+  print "    if (strcmp(argv[1],\"search\")==0) {"
+  print "      if (argv[2] == NULL) {"
+  print "        pChar += rozofs_string_append_error(pChar, \"Missing <parameter>\\n\");"
+  print "        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
+  print "        return;"   
+  print "      }"  
+  print "      %s_generated_search(pChar, argv[2]);"%(struct_name)
   print "      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
   print "      return;"           
   print "    }" 
@@ -934,6 +952,29 @@ def go_build_set(file_name,struct_name):
   print "  return -1;"  
   print "}"  
 #_______________________________________________
+def go_build_search(file_name,struct_name):   
+  print "/*____________________________________________________________________________________________"
+  print "**"
+  print "** Search for parameters approximatively like a given string "
+  print "** "
+  print "** @param parameter   Approximative parameter name we are searching for"
+  print "** "
+  print "** @retval The number of parameters matching the input string"    
+  print "*/"
+  print "static inline int %s_generated_search(char * pChar, char *parameter) {"%(struct_name)
+  print "  int match = 0;"
+  
+  for obj in objects:
+    print ""
+    obj.search(struct_name) 
+  print "  if (match == 0) {"  
+  print "    pChar += rozofs_string_append_error(pChar,\"No such parameter like \");"
+  print "    pChar += rozofs_string_append_error(pChar,parameter);"
+  print "    pChar += rozofs_eol(pChar);\\"
+  print "  }"  
+  print "  return match;"  
+  print "}"    
+#_______________________________________________
 def go_build_save(file_name,struct_name):   
   print "/*____________________________________________________________________________________________"
   print "**"
@@ -1030,21 +1071,45 @@ def go_build_read(file_name,struct_name,command):
   print "}" 
   
 
-#_______________________________________________
+#_______________________________________________________________________________
 #
-# Generate read, show and rozodiag functions for a configuration file
+# config_generate : Generate code for one configuration file
 #
-# @param file_name   the name of the configuration fine
-#                    under /etc/rozof or /usr/local/etc/rozofs
-# @param struct_name the name of the global variable
-# @param cli_name    the name of the CLI
+# @param file_name           The config file name used on site by RozoFS software 
+#                            to save the configuration.
 #
-# ex: file_name    rozofs.conf
-#     struct_name  common_config
-#     cli_name     cconf
+# @param input_file_name     relative path from tool directory of input file 
+#                            (with .input suffix) describing the configuration
+#                            parameters (type, usage and possible values).
 #
-def config_generate(file_name,struct_name,cli_name):
+# @param cli_name            The CLI name to register in rozodiag interface
+#                            for managing the configuration.
+#_______________________________________________________________________________
+def config_generate(file_name, input_file_name, cli_name):
+  global objects
+  global modules
 
+  objects = []
+  modules = []
+
+  #
+  # Resolve path of the tools directory
+  #
+  TOOLS_DIR = os.path.dirname( os.path.realpath( __file__ ) )
+  
+  print "Re-generate code for %-20s from %s"%(file_name,os.path.abspath(TOOLS_DIR+'/'+input_file_name))
+  
+  #
+  # Split input file name in relative_path and file name
+  #
+  relative_path  = os.path.dirname(input_file_name)
+  struct_name    = os.path.basename(input_file_name)
+  struct_name    = struct_name.split('.')[0]
+  
+  string="%s/%s"%(TOOLS_DIR,relative_path)
+  os.chdir(string)
+    
+ 
   go_read_input_file("%s.input"%(struct_name))
 
   # Generate structure header file
@@ -1055,6 +1120,7 @@ def config_generate(file_name,struct_name,cli_name):
   # Generate read and show function
   start_header_file("%s_read_show"%(struct_name),struct_name)
   go_build_set(file_name,struct_name)
+  go_build_search(file_name,struct_name)
   go_build_man(struct_name,cli_name)
   go_build_show_modules(struct_name)
   go_build_save_modules(struct_name)
