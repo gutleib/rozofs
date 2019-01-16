@@ -1841,15 +1841,6 @@ static void on_start() {
     ep_expgw_init_configuration_message(exportd_config.exportd_vip);
 
     /*
-    ** create the array for storing storage configuration
-    */
-    if (exportd_init_storage_configuration_message()!=0)
-    {
-        fatal("can't allocate storage configuration array");
-
-    }
-
-    /*
     ** Send the exportd gateway configuration towards the non blocking thread
     */
     {

@@ -179,41 +179,6 @@ struct epgw_mount_msite_ret_t
   ep_mount_msite_ret_t    status_gw;
 };
 
-struct epgw_mount_ret_t
-{
-  struct ep_gateway_t hdr;
-  ep_mount_ret_t    status_gw;
-};
-
-
-struct ep_cnf_storage_node_t {
-    string       host<ROZOFS_HOSTNAME_MAX>;
-    uint8_t         sids_nb;
-    uint8_t         sids[STORAGES_MAX_BY_STORAGE_NODE];
-    uint16_t        cids[STORAGES_MAX_BY_STORAGE_NODE];
-};
-
-struct ep_conf_export_t {
-    uint32_t            hash_conf;
-    uint32_t            eid;
-    ep_md5_t            md5;
-    ep_uuid_t           rfid;   /*root fid*/
-    uint8_t             rl;     /* rozofs layout */
-    ep_cnf_storage_node_t   storage_nodes<>;
-};
-
-union ep_conf_ret_t switch (ep_status_t status) {
-    case EP_SUCCESS:    ep_conf_export_t export;
-    case EP_FAILURE:    int         error;
-    default:            void;
-};
-
-
-struct epgw_conf_ret_t
-{
-  struct ep_gateway_t hdr;
-  ep_conf_ret_t    status_gw;
-};
 
 
 struct ep_mattr_t {
@@ -831,12 +796,13 @@ struct  epgw_mount_arg_t
   ep_path_t          path;
 };
 
+/*
 struct  epgw_conf_stor_arg_t 
 {
   struct ep_gateway_t hdr;
   ep_path_t          path;
 };
-
+*/
 
 
 program EXPORT_PROGRAM {
@@ -845,9 +811,10 @@ program EXPORT_PROGRAM {
         void
         EP_NULL(void)                           = 0;
 
+/*
         epgw_mount_ret_t
         EP_MOUNT(epgw_mount_arg_t)               = 1;
-
+*/
         epgw_status_ret_t
         EP_UMOUNT(uint32_t)                     = 2;
 
@@ -910,10 +877,10 @@ program EXPORT_PROGRAM {
 
         epgw_cluster_ret_t
         EP_LIST_CLUSTER(epgw_cluster_arg_t)       = 23;
-
+/*
         epgw_conf_ret_t
         EP_CONF_STORAGE(epgw_conf_stor_arg_t)      = 24;
-               
+*/               
         epgw_status_ret_t
         EP_POLL_CONF(ep_gateway_t)                        = 25;
 

@@ -61,9 +61,6 @@ DECLARE_PROFILING(epp_profiler_t);
     rozorpc_srv_forward_reply_with_extra_len(req_ctx_p,(char*)&ret,len); \
     rozorpc_srv_release_context(req_ctx_p);
     
-ep_cnf_storage_node_t exportd_storage_host_table[STORAGE_NODES_MAX]; /**< configuration for each storage */
-epgw_conf_ret_t export_storage_conf; /**< preallocated area to build storage configuration message */
-
 /*
  *_______________________________________________________________________
  */
@@ -138,162 +135,6 @@ void ep_poll_conf_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p)
     }
     EXPORTS_SEND_REPLY(req_ctx_p);
     STOP_PROFILING_0(ep_poll);
-    return ;
-}
-/*
-**______________________________________________________________________________
-*/
-/**
-*   exportd: Get the configuration of the storaged for a given eid
-
-  : returns to the rozofsmount the list of the
-*   volume,clusters and storages
-*/
-void ep_conf_storage_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
-    static epgw_conf_ret_t ret;
-    epgw_conf_stor_arg_t * arg = (epgw_conf_stor_arg_t *)pt; 
-    
-    epgw_conf_ret_t *ret_cnf_p = &export_storage_conf;
-    epgw_conf_ret_t *ret_out = NULL;
-    list_t *p, *q, *r;
-    eid_t *eid = NULL;
-    export_t *exp;
-    int i = 0;
-    int stor_idx = 0;
-    int exist = 0;
-    ep_cnf_storage_node_t *storage_cnf_p;
-    
-
-    DEBUG_FUNCTION;
-
-    // XXX exportd_lookup_id could return export_t *
-    eid = exports_lookup_id(arg->path);	
-
-    // XXX exportd_lookup_id could return export_t *
-    if (eid) export_profiler_eid = *eid;
-    else     export_profiler_eid = 0;
-	
-    START_PROFILING(ep_configuration);
-    if (!eid) goto error;
-        
-    /*
-    ** extract the site id from the request (gateway rank)
-    */
-    int requested_site = arg->hdr.gateway_rank;
-    	
-    exportd_reinit_storage_configuration_message();
-#if 0
-#warning fake xdrmem_create
-    XDR               xdrs; 
-    int total_len = -1 ;
-    int size = 1024*64;
-    char *pchar = malloc(size);
-    xdrmem_create(&xdrs,(char*)pchar,size,XDR_ENCODE);    
-#endif
-    // XXX exportd_lookup_id could return export_t *
-    if (!(eid = exports_lookup_id(arg->path)))
-        goto error;
-    if (!(exp = exports_lookup_export(*eid)))
-        goto error;
-
-    /* Get lock on config */
-    if ((errno = pthread_rwlock_rdlock(&config_lock)) != 0) {
-        goto error;
-    }
-
-    /* For each volume */
-    list_for_each_forward(p, &exportd_config.volumes) {
-
-        volume_config_t *vc = list_entry(p, volume_config_t, list);
-
-        /* Get volume with this vid */
-        if (vc->vid == exp->volume->vid) {
-            /*
-	    	** check if the geo-replication is supported fro the volume. If it is not
-	    	** the case the requested_site is set to 0
-	    	*/
-	    	if (vc->georep == 0) requested_site = 0;
-    		if (requested_site  >= ROZOFS_GEOREP_MAX_SITE)
-    		{
-    		  severe("site number is out of range (%d) max %d",requested_site,ROZOFS_GEOREP_MAX_SITE-1);
-    		  errno = EINVAL;
-    		  goto error;
-    		}		
-		
-            stor_idx = 0;
-            ret_cnf_p->status_gw.ep_conf_ret_t_u.export.storage_nodes.storage_nodes_len = 0;
-            storage_cnf_p = &exportd_storage_host_table[stor_idx];
-//            memset(ret_cnf_p->status_gw.ep_conf_ret_t_u.export.storage_nodes, 0, sizeof (ep_cnf_storage_node_t) * STORAGE_NODES_MAX);
-
-            /* For each cluster */
-            list_for_each_forward(q, &vc->clusters) {
-
-                cluster_config_t *cc = list_entry(q, cluster_config_t, list);
-
-                /* For each sid */
-                list_for_each_forward(r, (&cc->storages[requested_site])) {
-
-                    storage_node_config_t *s = list_entry(r, storage_node_config_t, list);
-
-                    /* Verify that this hostname does not already exist
-                     * in the list of physical storage nodes. */
-                    ep_cnf_storage_node_t *storage_cmp_p = &exportd_storage_host_table[0];
-                    for (i = 0; i < stor_idx; i++,storage_cmp_p++) {
-
-                        if (strcmp(s->host, storage_cmp_p->host) == 0) {
-
-                            /* This physical storage node exist
-                             *  but we add this SID*/
-                            uint8_t sids_nb = storage_cmp_p->sids_nb;
-                            storage_cmp_p->sids[sids_nb] = s->sid;
-                            storage_cmp_p->cids[sids_nb] = cc->cid;
-                            storage_cmp_p->sids_nb++;
-                            exist = 1;
-                            break;
-                        }
-                    }
-
-                    /* This physical storage node doesn't exist*/
-                    if (exist == 0) {
-
-                        /* Add this storage node to the list */
-                        strncpy(storage_cnf_p->host, s->host, ROZOFS_HOSTNAME_MAX);
-                        /* Add this sid */
-                        storage_cnf_p->sids[0] = s->sid;
-                        storage_cnf_p->cids[0] = cc->cid;
-                        storage_cnf_p->sids_nb++;
-
-                        /* Increments the nb. of physical storage nodes */
-                        stor_idx++;
-                        storage_cnf_p++;
-                    }
-                    exist = 0;
-                }
-            }
-        }
-    }
-    ret_cnf_p->status_gw.ep_conf_ret_t_u.export.storage_nodes.storage_nodes_len = stor_idx;
-    ret_cnf_p->status_gw.ep_conf_ret_t_u.export.eid = *eid;
-    ret_cnf_p->status_gw.ep_conf_ret_t_u.export.hash_conf = export_configuration_file_hash;
-    memcpy(ret_cnf_p->status_gw.ep_conf_ret_t_u.export.md5, exp->md5, ROZOFS_MD5_SIZE);
-    ret_cnf_p->status_gw.ep_conf_ret_t_u.export.rl = exp->layout;
-    memcpy(ret_cnf_p->status_gw.ep_conf_ret_t_u.export.rfid, exp->rfid, sizeof (fid_t));
-
-    if ((errno = pthread_rwlock_unlock(&config_lock)) != 0) {
-        goto error;
-    }
-
-    ret_cnf_p->status_gw.status = EP_SUCCESS;
-    ret_out = ret_cnf_p;
-    goto out;
-error:
-    ret.status_gw.status = EP_FAILURE;
-    ret.status_gw.ep_conf_ret_t_u.error = errno;
-    ret_out = &ret;
-
-out:
-    EXPORTS_SEND_REPLY_WITH_RET(req_ctx_p,ret_out);
-    STOP_PROFILING(ep_mount);
     return ;
 }
 
@@ -424,7 +265,6 @@ out:
     return ;
 }
 
-
 /*
 **______________________________________________________________________________
 */
@@ -432,40 +272,18 @@ out:
 *   exportd mount file systems: returns to the rozofsmount the list of the
 *   volume,clusters and storages
 */
-void ep_mount_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
-    static epgw_mount_ret_t ret;
+void ep_mount_msite_internal(epgw_mount_msite_ret_t * ret, 
+                             epgw_mount_arg_t       * arg, 
+                              uint32_t                ip) {
+    list_t     * p, * q, * r;
+    eid_t      * eid = NULL;
+    export_t   * exp;
+    int          i = 0;
+    int          stor_idx = 0;
+    int          exist = 0;
+    int          requested_site =0;        
 
-    /*
-    ** No more support for mount
-    ** Just mount msite is supported
-    */
-    memset(&ret,0,sizeof(ret));
-    ret.status_gw.status = EP_FAILURE;
-    ret.status_gw.ep_mount_ret_t_u.error = ENOTSUP;
-    EXPORTS_SEND_REPLY(req_ctx_p);
-    return ;
-}
-/*
-**______________________________________________________________________________
-*/
-/**
-*   exportd mount file systems: returns to the rozofsmount the list of the
-*   volume,clusters and storages
-*/
-void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
-    static epgw_mount_msite_ret_t ret;
-    epgw_mount_arg_t * arg= (epgw_mount_arg_t *)pt; 
-    list_t *p, *q, *r;
-    eid_t *eid = NULL;
-    export_t *exp;
-    int i = 0;
-    int stor_idx = 0;
-    int exist = 0;
-    int requested_site =0;        
-
-    DEBUG_FUNCTION;
-
-	memset(&ret,0,sizeof(ret));
+    memset(ret,0,sizeof(epgw_mount_msite_ret_t));
 	
     // XXX exportd_lookup_id could return export_t *
     eid = exports_lookup_id(arg->path);    
@@ -480,27 +298,25 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     if (!(exp = exports_lookup_export(*eid)))
         goto error;
     
-    ret.status_gw.ep_mount_msite_ret_t_u.export.msite = 0;
+    ret->status_gw.ep_mount_msite_ret_t_u.export.msite = 0;
     
     /*
     ** Always tell that thin provisionning is configured
     ** Since the export always fill the field in the attributes toward the 
     ** rozofsmount either from thin provisionning polling or computation from the size
     */
-    ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_THIN_PROVISIONNING_BIT;
+    ret->status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_THIN_PROVISIONNING_BIT;
          
     /*
     ** Check whether this client is allowed
     */
-    uint32_t ip = af_unix_get_remote_ip(req_ctx_p->socketRef);
-    if (rozofs_ip4_filter_check(exp->filter_tree, ip)) {
-      info("%u.%u.%u.%u mounting export %d on path %s : allowed",IP2FOURU8(ip), *eid, arg->path);
-    }
-    else {
-      warning("%u.%u.%u.%u mounting export %d on path %s : forbiden !!!",IP2FOURU8(ip), *eid, arg->path);
-      errno = EPERM;
-      goto error;
-    }
+    if (ip != 0) {
+      if (!rozofs_ip4_filter_check(exp->filter_tree, ip)) {
+        warning("%u.%u.%u.%u mounting export %d on path %s : forbiden !!!",IP2FOURU8(ip), *eid, arg->path);
+        errno = EPERM;
+        goto error;
+      }
+    }      
     
     /* Get lock on config */
     if ((errno = pthread_rwlock_rdlock(&config_lock)) != 0) {
@@ -510,8 +326,9 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ** init of the working variables: it has been moved here because one export might be associated with 2 volumes
     */
     stor_idx = 0;
-    ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes_nb = 0;
-    memset(ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes, 0, sizeof (ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes));
+    ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes_nb = 0;
+    memset(ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes, 0, sizeof (ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes));
+
     /* For each volume */
     list_for_each_forward(p, &exportd_config.volumes) {
 
@@ -520,31 +337,28 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         /* Get volume with this vid */
         if ((vc->vid == exp->volume->vid) || ((exp->volume_fast != NULL) && (vc->vid == exp->volume_fast->vid))) {
 		
-		    /*
-			** Volume is declared as multi site
-			*/
-			if (vc->multi_site) {
-			   ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_MSITE_BIT; 
-			}	
+	        /*
+		** Volume is declared as multi site
+		*/
+		if (vc->multi_site) {
+		   ret->status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_MSITE_BIT; 
+		}	
 							
-            /*
+                /*
 	    	** check if the geo-replication is supported fro the volume. If it is not
 	    	** the case the requested_site is set to 0
 	    	*/
 	    	if (vc->georep == 0) requested_site = 0;
     		if (requested_site  >= ROZOFS_GEOREP_MAX_SITE)
     		{
+                  pthread_rwlock_unlock(&config_lock);  
     		  severe("site number is out of range (%d) max %d",requested_site,ROZOFS_GEOREP_MAX_SITE-1);
     		  errno = EINVAL;
     		  goto error;
     		}			
-#if 0			
-            stor_idx = 0;
-            ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes_nb = 0;
-            memset(ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes, 0, sizeof (ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes));
-#endif
-            /* For each cluster */
-            list_for_each_forward(q, &vc->clusters) {
+
+                /* For each cluster */
+                list_for_each_forward(q, &vc->clusters) {
 
                 cluster_config_t *cc = list_entry(q, cluster_config_t, list);
 
@@ -557,14 +371,14 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
                      * in the list of physical storage nodes. */
                     for (i = 0; i < stor_idx; i++) {
 
-                        if (strcmp(s->host, ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].host) == 0) {
+                        if (strcmp(s->host, ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].host) == 0) {
 
                             /* This physical storage node exist
                              *  but we add this SID*/
-                            uint8_t sids_nb = ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].sids_nb;
-                            ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].sids[sids_nb] = s->sid;
-                            ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].cids[sids_nb] = cc->cid;
-                            ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].sids_nb++;
+                            uint8_t sids_nb = ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].sids_nb;
+                            ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].sids[sids_nb] = s->sid;
+                            ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].cids[sids_nb] = cc->cid;
+                            ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[i].sids_nb++;
                             exist = 1;
                             break;
                         }
@@ -574,12 +388,12 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
                     if (exist == 0) {
 
                         /* Add this storage node to the list */
-                        strncpy(ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].host, s->host, ROZOFS_HOSTNAME_MAX);
+                        strncpy(ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].host, s->host, ROZOFS_HOSTNAME_MAX);
                         /* Add this sid */
-                        ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].site    = s->siteNum;						
-                        ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].sids[0] = s->sid;
-                        ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].cids[0] = cc->cid;
-                        ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].sids_nb++;
+                        ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].site    = s->siteNum;						
+                        ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].sids[0] = s->sid;
+                        ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].cids[0] = cc->cid;
+                        ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes[stor_idx].sids_nb++;
 
                         /* Increments the nb. of physical storage nodes */
                         stor_idx++;
@@ -590,32 +404,58 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         }
     }
 
-    ret.status_gw.ep_mount_msite_ret_t_u.export.storage_nodes_nb = stor_idx;
-    ret.status_gw.ep_mount_msite_ret_t_u.export.eid = *eid;
-    ret.status_gw.ep_mount_msite_ret_t_u.export.hash_conf = export_configuration_file_hash;
-    ret.status_gw.ep_mount_msite_ret_t_u.export.bs = exp->bsize;
+    ret->status_gw.ep_mount_msite_ret_t_u.export.storage_nodes_nb = stor_idx;
+    ret->status_gw.ep_mount_msite_ret_t_u.export.eid = *eid;
+    ret->status_gw.ep_mount_msite_ret_t_u.export.hash_conf = export_configuration_file_hash;
+    ret->status_gw.ep_mount_msite_ret_t_u.export.bs = exp->bsize;
 
-    int eid_slice = (ret.status_gw.ep_mount_msite_ret_t_u.export.eid-1)%EXPORT_SLICE_PROCESS_NB + 1;
+    int eid_slice = (ret->status_gw.ep_mount_msite_ret_t_u.export.eid-1)%EXPORT_SLICE_PROCESS_NB + 1;
     uint32_t port = rozofs_get_service_port_export_slave_eproto(eid_slice);
-    ret.status_gw.ep_mount_msite_ret_t_u.export.listen_port = port;
+    ret->status_gw.ep_mount_msite_ret_t_u.export.listen_port = port;
     
-    memcpy(ret.status_gw.ep_mount_msite_ret_t_u.export.md5, exp->md5, ROZOFS_MD5_SIZE);
-    ret.status_gw.ep_mount_msite_ret_t_u.export.rl = exp->layout;
-    memcpy(ret.status_gw.ep_mount_msite_ret_t_u.export.rfid, exp->rfid, sizeof (fid_t));
+    memcpy(ret->status_gw.ep_mount_msite_ret_t_u.export.md5, exp->md5, ROZOFS_MD5_SIZE);
+    ret->status_gw.ep_mount_msite_ret_t_u.export.rl = exp->layout;
+    memcpy(ret->status_gw.ep_mount_msite_ret_t_u.export.rfid, exp->rfid, sizeof (fid_t));
+
 
     if ((errno = pthread_rwlock_unlock(&config_lock)) != 0) {
         goto error;
     }
-
-    ret.status_gw.status = EP_SUCCESS;
+    
+    info("%u.%u.%u.%u mounting export %d on path %s : allowed",IP2FOURU8(ip), *eid, arg->path);
+    ret->status_gw.status = EP_SUCCESS;
     
     goto out;
+    
 error:
-    ret.status_gw.status = EP_FAILURE;
-    ret.status_gw.ep_mount_msite_ret_t_u.error = errno;
+    ret->status_gw.status = EP_FAILURE;
+    ret->status_gw.ep_mount_msite_ret_t_u.error = errno;
+    
 out:
-    EXPORTS_SEND_REPLY(req_ctx_p);
     STOP_PROFILING(ep_mount);
+    return ;
+}
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd mount file systems: returns to the rozofsmount the list of the
+*   volume,clusters and storages
+*/
+void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static epgw_mount_msite_ret_t   ret;
+    epgw_mount_arg_t              * arg = (epgw_mount_arg_t *)pt; 
+    uint32_t                        ip;
+
+    /*
+    ** Retireve client IP address 
+    */
+    ip = af_unix_get_remote_ip(req_ctx_p->socketRef);
+    info("Nblocking mount %u.%u.%u.%u",IP2FOURU8(ip));
+    
+    ep_mount_msite_internal(&ret, arg, ip);
+
+    EXPORTS_SEND_REPLY(req_ctx_p);
     return ;
 }
 

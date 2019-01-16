@@ -107,14 +107,6 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_void;
 	     local =  ep_geo_poll_1_svc_nb;
 	     break;
-
-     case EP_MOUNT:
-	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_mount_arg_t;
-	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_mount_ret_t;
-	     local =  ep_mount_1_svc_nb;
-	     size = sizeof(epgw_mount_arg_t);
-	     break;
-
 		 
      case EP_MOUNT_MSITE:
 	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_mount_arg_t;
@@ -291,13 +283,6 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_cluster2_ret_t;
 	     local =  ep_list_cluster2_1_svc_nb;
 	     size = sizeof(epgw_cluster_arg_t);
-	     break;
-
-     case EP_CONF_STORAGE:
-	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_conf_stor_arg_t;
-	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_conf_ret_t;
-	     local =  ep_conf_storage_1_svc_nb;
-	     size = sizeof(epgw_conf_stor_arg_t);
 	     break;
 
      case EP_POLL_CONF:

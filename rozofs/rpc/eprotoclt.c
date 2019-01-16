@@ -26,21 +26,6 @@ ep_null_1(void *argp, CLIENT *clnt)
 	return ((void *)&clnt_res);
 }
 
-epgw_mount_ret_t *
-ep_mount_1(epgw_mount_arg_t *argp, CLIENT *clnt)
-{
-	static epgw_mount_ret_t clnt_res;
-
-	memset((char *)&clnt_res, 0, sizeof(clnt_res));
-	if (clnt_call (clnt, EP_MOUNT,
-		(xdrproc_t) xdr_epgw_mount_arg_t, (caddr_t) argp,
-		(xdrproc_t) xdr_epgw_mount_ret_t, (caddr_t) &clnt_res,
-		TIMEOUT) != RPC_SUCCESS) {
-		return (NULL);
-	}
-	return (&clnt_res);
-}
-
 epgw_status_ret_t *
 ep_umount_1(uint32_t *argp, CLIENT *clnt)
 {
@@ -335,21 +320,6 @@ ep_list_cluster_1(epgw_cluster_arg_t *argp, CLIENT *clnt)
 	if (clnt_call (clnt, EP_LIST_CLUSTER,
 		(xdrproc_t) xdr_epgw_cluster_arg_t, (caddr_t) argp,
 		(xdrproc_t) xdr_epgw_cluster_ret_t, (caddr_t) &clnt_res,
-		TIMEOUT) != RPC_SUCCESS) {
-		return (NULL);
-	}
-	return (&clnt_res);
-}
-
-epgw_conf_ret_t *
-ep_conf_storage_1(epgw_conf_stor_arg_t *argp, CLIENT *clnt)
-{
-	static epgw_conf_ret_t clnt_res;
-
-	memset((char *)&clnt_res, 0, sizeof(clnt_res));
-	if (clnt_call (clnt, EP_CONF_STORAGE,
-		(xdrproc_t) xdr_epgw_conf_stor_arg_t, (caddr_t) argp,
-		(xdrproc_t) xdr_epgw_conf_ret_t, (caddr_t) &clnt_res,
 		TIMEOUT) != RPC_SUCCESS) {
 		return (NULL);
 	}

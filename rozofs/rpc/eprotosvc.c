@@ -22,7 +22,6 @@ void
 export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 {
 	union {
-		epgw_mount_arg_t ep_mount_1_arg;
 		uint32_t ep_umount_1_arg;
 		uint32_t ep_statfs_1_arg;
 		epgw_lookup_arg_t ep_lookup_1_arg;
@@ -43,7 +42,6 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		epgw_removexattr_arg_t ep_removexattr_1_arg;
 		epgw_listxattr_arg_t ep_listxattr_1_arg;
 		epgw_cluster_arg_t ep_list_cluster_1_arg;
-		epgw_conf_stor_arg_t ep_conf_storage_1_arg;
 		ep_gateway_t ep_poll_conf_1_arg;
 		ep_path_t ep_conf_expgw_1_arg;
 		epgw_lock_arg_t ep_set_file_lock_1_arg;
@@ -67,12 +65,6 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_argument = (xdrproc_t) xdr_void;
 		_xdr_result = (xdrproc_t) xdr_void;
 		local = (char *(*)(char *, struct svc_req *)) ep_null_1_svc;
-		break;
-
-	case EP_MOUNT:
-		_xdr_argument = (xdrproc_t) xdr_epgw_mount_arg_t;
-		_xdr_result = (xdrproc_t) xdr_epgw_mount_ret_t;
-		local = (char *(*)(char *, struct svc_req *)) ep_mount_1_svc;
 		break;
 
 	case EP_UMOUNT:
@@ -193,12 +185,6 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_argument = (xdrproc_t) xdr_epgw_cluster_arg_t;
 		_xdr_result = (xdrproc_t) xdr_epgw_cluster_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) ep_list_cluster_1_svc;
-		break;
-
-	case EP_CONF_STORAGE:
-		_xdr_argument = (xdrproc_t) xdr_epgw_conf_stor_arg_t;
-		_xdr_result = (xdrproc_t) xdr_epgw_conf_ret_t;
-		local = (char *(*)(char *, struct svc_req *)) ep_conf_storage_1_svc;
 		break;
 
 	case EP_POLL_CONF:

@@ -235,7 +235,7 @@ out:
     if (md5pass)
         free(md5pass);
     if (ret)
-        xdr_free((xdrproc_t) xdr_epgw_mount_ret_t, (char *) ret);
+        xdr_free((xdrproc_t) xdr_epgw_mount_msite_ret_t, (char *) ret);
     rpcclt_release(&clt->rpcclt);
 
 	errno = xerrno;  
@@ -247,107 +247,19 @@ int exportclt_initialize(exportclt_t * clt, const char *host, char *root,int sit
         const char *passwd, uint32_t bufsize, uint32_t min_read_size,
         uint32_t retries, struct timeval timeout) {
     int status = -1;
-    epgw_mount_ret_t *ret = 0;
+    epgw_mount_msite_ret_t *ret = 0;
     char *md5pass = 0;
-    int i = 0;
-    epgw_mount_arg_t args;
 	int xerrno = 0;
     DEBUG_FUNCTION;
 	
 
     /*
-	** Try a multi site mount 1rst
-	*/
-	status = exportclt_msite_initialize(clt, host, root,site_number,passwd, 
-	                                  bufsize, min_read_size,retries, timeout);		
-	if (status == 0) goto out;
-        if (errno == EPERM) {
-          xerrno = errno;
-          goto error;
-        }  									
-
-    /*
-	** Multi site mount failed. Let's try the old mount.
-	*/
-
-    	
-    /* Prepare mount request */
-    strncpy(clt->host, host, ROZOFS_HOSTNAME_MAX);
-    clt->root = strdup(root);
-    clt->passwd = strdup(passwd);
-    clt->retries = retries;
-    clt->bufsize = bufsize;
-    clt->min_read_size  = min_read_size;
-    clt->timeout = timeout;
-
-    args.hdr.gateway_rank = site_number;
-    args.path = clt->root ;
-
-    rpcclt_release(&clt->rpcclt);
-    //init_rpcctl_ctx(&clt->rpcclt);    
-	
-    /* Initialize connection with export server */
-    uint16_t export_nb_port = rozofs_get_service_port_export_master_eproto();
-    if (rpcclt_initialize
-            (&clt->rpcclt, host, EXPORT_PROGRAM, EXPORT_VERSION,
-            ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, export_nb_port,
-            clt->timeout) != 0) {
-		xerrno = errno;	
-        goto error;
-    }
-	
-    /* Send mount request */
-    ret = ep_mount_1(&args, clt->rpcclt.client);
-    if (ret == 0) {
-        xerrno = EPROTO;
-        goto error;
-    }
-    if (ret->status_gw.status == EP_FAILURE) {
-        xerrno = ret->status_gw.ep_mount_ret_t_u.error;
-        goto error;
-    }
-
-    /* Check password */
-    if (memcmp(ret->status_gw.ep_mount_ret_t_u.export.md5, ROZOFS_MD5_NONE, ROZOFS_MD5_SIZE) != 0) {
-        md5pass = crypt(passwd, "$1$rozofs$");
-        if (memcmp(md5pass + 10, ret->status_gw.ep_mount_ret_t_u.export.md5, ROZOFS_MD5_SIZE) != 0) {
-            xerrno = EACCES;
-            goto error;
-        }
-    }
-
-    /* Copy eid, layout, root fid */
-    clt->eid = ret->status_gw.ep_mount_ret_t_u.export.eid;
-    clt->layout = ret->status_gw.ep_mount_ret_t_u.export.rl;
-    clt->listen_port = ret->status_gw.ep_mount_ret_t_u.export.listen_port;
-    clt->bsize = ret->status_gw.ep_mount_ret_t_u.export.bs;
-    memcpy(clt->rfid, ret->status_gw.ep_mount_ret_t_u.export.rfid, sizeof (fid_t));
-
-    /* Initialize the list of physical storage nodes */
-    list_init(&clt->storages);
-
-    /* For each storage node */
-    for (i = 0; i < ret->status_gw.ep_mount_ret_t_u.export.storage_nodes_nb; i++) {
-
-        ep_storage_node_t stor_node = ret->status_gw.ep_mount_ret_t_u.export.storage_nodes[i];
-
-        /* Prepare storage node */
-        mstorage_t *mstor = (mstorage_t *) xmalloc(sizeof (mstorage_t));
-        memset(mstor, 0, sizeof (mstorage_t));
-        strncpy(mstor->host, stor_node.host, ROZOFS_HOSTNAME_MAX);
-        mstor->sids_nb = stor_node.sids_nb;
-        memcpy(mstor->sids, stor_node.sids, sizeof (sid_t) * stor_node.sids_nb);
-        memcpy(mstor->cids, stor_node.cids, sizeof (cid_t) * stor_node.sids_nb);
-	    memset(mstor->lbg_id,-1,sizeof(mstor->lbg_id));
-
-        /* Add to the list */
-        list_push_back(&clt->storages, &mstor->list);
-    }
-
-    status = 0;
-    goto out;
+    ** Try a multi site mount 1rst
+    */
+    status = exportclt_msite_initialize(clt, host, root,site_number,passwd, 
+	                              bufsize, min_read_size,retries, timeout);		
+    if (status == 0) goto out;								
     
-error:
     if (clt->root) free(clt->root);
     clt->root = NULL;
     if (clt->passwd) free(clt->passwd);
@@ -356,7 +268,7 @@ out:
     if (md5pass)
         free(md5pass);
     if (ret)
-        xdr_free((xdrproc_t) xdr_epgw_mount_ret_t, (char *) ret);
+        xdr_free((xdrproc_t) xdr_epgw_mount_msite_ret_t, (char *) ret);
     rpcclt_release(&clt->rpcclt);
 	
 	errno = xerrno;   
