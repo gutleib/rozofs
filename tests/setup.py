@@ -96,7 +96,7 @@ class host_class:
       my_vols = []
       string=""
       for s in h.sid:
-        string+="%s/%s "%(s.cid.cid,s.sid)
+        string+="%s/%-2s "%(s.cid.cid,s.sid)
 	if s.cid.volume not in my_vols: my_vols.append(s.cid.volume)
       d.set_column(5,"%s"%(string))
       string=""
@@ -498,6 +498,8 @@ class mount_point_class:
     print "instance = %s"%(self.instance)
     print "eid = %s"%(self.eid.eid)
     print "vid = %s"%(self.eid.volume.vid)
+    if self.eid.vid_fast != None: 
+      print "vid_fast = %s"%(self.eid.vid_fast.vid)
     print "site = %s"%(self.site)
     print "path = %s"%(self.get_mount_path())
     l=self.layout.split('_')
@@ -510,7 +512,12 @@ class mount_point_class:
         if s.cid.volume.vid == self.eid.volume.vid:
           if not h in list:
 	    list.append(h)
-	    string += " %s"%(h.number)	    	
+	    string += " %s"%(h.number)	    
+        if self.eid.vid_fast != None:
+          if s.cid.volume.vid == self.eid.vid_fast:
+            if not h in list:
+	      list.append(h)
+	      string += " %s"%(h.number)	                 	
     print "hosts = %s"%(string)	        
     list=[]
     string=""
@@ -518,6 +525,10 @@ class mount_point_class:
       for s in h.sid:
         if s.cid.volume.vid == self.eid.volume.vid:
 	  string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
+        if self.eid.vid_fast != None:
+          if s.cid.volume.vid == self.eid.vid_fast.vid:
+	    string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
+
     print "sids = %s"%(string)	    
 
     string="ps -o pid=,cmd= -C rozofsmount"
@@ -699,7 +710,7 @@ class export_class:
     if eid == None:
       # Find the 1Rst available eid
       eid = find_free_export_id()  
-
+    self.vid_fast = None
     self.eid   = eid
     self.bsize = bsize
     self.volume= volume
@@ -715,6 +726,9 @@ class export_class:
       self.failures = rozofs.failures(layout)   
     else:
       self.failures = volume.get_failures()
+
+  def set_vid_fast(self,vid):
+    self.vid_fast = vid
     
   def set_hquota(self,quota):
     self.hquota= quota
@@ -993,7 +1007,11 @@ class exportd_class:
         else             : hquota="hquota=\"%s\";"%(e.hquota)
         if e.thin == True: thin = "; thin-provisioning = True;"
         else             : thin=";"
-	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s %s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout),thin)
+        if e.vid_fast != None:
+          vid_fast = "vid_fast = %s;"%(e.vid_fast.vid)
+        else:
+          vid_fast = "" 
+	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s %s %s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout),thin,vid_fast)
 	nexte=","	
     print ");"
 
@@ -1037,7 +1055,7 @@ class rozofs_class:
     self.read_mojette_threads = False
     self.write_mojette_threads = True
     self.mojette_threads_threshold = None
-    self.nb_storcli = 1
+    self.nb_storcli = 4
     self.disk_size_mb = None
     self.trace = False
     self.storio_slice = 8
@@ -1222,8 +1240,8 @@ class rozofs_class:
     if size == None: 
       console("Missing device size for %s:%s:%s"%(cid,sid,dev))
       return   
-    nbDev = 2  
-    #if int(dev) == int(0): nbDev = 2
+    nbDev = 1  
+    #nbDev = 2
       
     loop = self.findout_loopback_device(path,size,nbDev)    
     os.system("./setup.py cmd rozo_device --format %s/%s/%s %s"%(cid,sid,dev,loop))
@@ -1352,7 +1370,13 @@ class rozofs_class:
     os.system("umount -f %s > /dev/null 2>&1"%(mount))  
     for h in hosts: h.delete_config()
       
-
+  def log(self):
+    f = subprocess.Popen(['tail','-f','/var/log/syslog'], stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    while True:
+      line = f.stdout.readline()
+      if "RozoTests" in line or "setup.py" in line:
+        print line[:-1]
+    
   def display(self):
     exportd.display()
     console("STORCLI:") 
@@ -1726,7 +1750,8 @@ def clean_build() :
 #_____________________________________________  
 def clean() :
   rozofs.stop() 
-  clean_build()   
+  clean_build()  
+  if os.path.exists("SIMU") :    shutil.rmtree("SIMU") 
 
 #_____________________________________________  
 def build() :
@@ -1799,6 +1824,7 @@ def test_parse(command, argv):
       
 
   if   command == "display"            : rozofs.display()  
+  elif command == "log"                : rozofs.log()
   elif command == "ddd"                : 
     if len(argv) < 3 : syntax("Missing Target","ddd")
     target=""
