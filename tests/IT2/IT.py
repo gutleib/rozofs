@@ -34,6 +34,7 @@ instance=None
 site=None
 eid=None
 vid=None
+vid_fast=None
 mnt=None
 exepath=None
 inverse=None
@@ -43,6 +44,7 @@ nb_failures=None
 sids=[]
 hosts=[]
 verbose=False
+corrupt_offsets = [ 1211, 3111, 4444, 1024*112, 1024*114, 1024*115, 1024*118, 1024*120 ];
 
 #___________________________________________________
 # Messages and logs
@@ -161,7 +163,7 @@ def get_device_numbers(hid,cid):
 
   storio_name="storio:0"
   
-  string="./build/src/rozodiag/rozodiag -i localhost%s -T storaged -c storio"%(hid)
+  string="rozodiag -i localhost%s -T storaged -c storio"%(hid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -170,7 +172,7 @@ def get_device_numbers(hid,cid):
         storio_name="storio:%s"%(cid)
       break; 
      
-  string="./build/src/rozodiag/rozodiag -i localhost%s -T %s -c device 1> /dev/null"%(hid,storio_name)
+  string="rozodiag -i localhost%s -T %s -c device 1> /dev/null"%(hid,storio_name)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -201,8 +203,10 @@ def get_if_nb():
 def get_sid_nb():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
-
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
+  global vid
+  global vid_fast
+  
+  string="rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -211,14 +215,16 @@ def get_sid_nb():
     if "UP" in line or "DOWN" in line:
       storcli_sid=storcli_sid+1
           
-  string="./build/src/rozodiag/rozodiag -T export -c vfstat_stor"
+  string="rozodiag -T export -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
   export_sid=int(0)
   for line in cmd.stdout:
     if len(line.split()) == 0: continue
-    if line.split()[0] != vid: continue;
+    if line.split()[0] != vid: 
+      if vid_fast == None: continue
+      if line.split()[0] != vid_fast: continue;
     if "UP" in line or "DOWN" in line:export_sid=export_sid+1
 
   return export_sid,storcli_sid    
@@ -227,7 +233,7 @@ def reset_storcli_counter():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)       
+  string="rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   
@@ -240,7 +246,7 @@ def check_storcli_crc(expect):
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1-4 -c profiler"%(instance)       
+  string="rozodiag -T mount:%s:1-4 -c profiler"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -259,8 +265,9 @@ def export_count_sid_up ():
 # seen from the export. 
 #___________________________________________________
   global vid
+  global vid_fast
   
-  string="./build/src/rozodiag/rozodiag -T export:1 -t 12 -c vfstat_stor"
+  string="rozodiag -T export:1 -t 12 -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -269,7 +276,8 @@ def export_count_sid_up ():
     if len(line.split()) == 0:
       continue
     if line.split()[0] != vid:
-      continue
+      if vid_fast == None: continue
+      if line.split()[0] != vid_fast:  continue
     if "UP" in line:
       match=match+1
 
@@ -279,8 +287,9 @@ def export_all_sid_available (total):
 # Use debug interface to check all SID are seen UP
 #___________________________________________________
   global vid
+  global vid_fast
   
-  string="./build/src/rozodiag/rozodiag -T export:1 -t 12 -c vfstat_stor"
+  string="rozodiag -T export:1 -t 12 -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -289,7 +298,8 @@ def export_all_sid_available (total):
     if len(line.split()) == 0:
       continue
     if line.split()[0] != vid:
-      continue
+      if vid_fast == None: continue
+      if line.split()[0] != vid_fast:  continue
     if "UP" in line:
       match=match+1
       
@@ -320,7 +330,7 @@ def storcli_all_sid_available (total):
 # Use debug interface to check all SID are seen UP
 #___________________________________________________
   
-  string="./build/src/rozodiag/rozodiag -T mount:%s -c stc"%(instance)       
+  string="rozodiag -T mount:%s -c stc"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   
@@ -334,7 +344,7 @@ def storcli_all_sid_available (total):
   nbstorcli = nbstorcli + 1
   for storcli in range(1,nbstorcli):
   
-    string="./build/src/rozodiag/rozodiag -T mount:%s:%d -c storaged_status"%(instance,storcli)       
+    string="rozodiag -T mount:%s:%d -c storaged_status"%(instance,storcli)       
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -375,7 +385,7 @@ def storcli_count_sid_available ():
 # available seen from the storcli. 
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
+  string="rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -952,13 +962,17 @@ def get_2nd_subfile_header_and_bins(fname):
   cid    = int(0)
   sid    = ""
   
-  go = False
-  
+  markfound = False
+  mark2find = ""
   with open("/tmp/get_header_and_bins","r") as f: 
     for line in f.readlines():
-      
-      if "S_INODE" in line and "#2" in line: go = True
-      if go == False: continue
+
+      if "HYBRID" in line and "Yes" in line: mark2find = "#1"        
+      if "HYBRID" in line and "No" in line:  mark2find = "#2"
+      if mark2find == "": continue
+                  
+      if "S_INODE" in line and mark2find in line: markfound = True
+      if markfound == False: continue
       
       if "/hdr_0/" in line:
         mapper = line.split()[3]
@@ -1031,34 +1045,50 @@ def run_mapper_corruption(cid,sid,mapper,crcfile):
     return -1      
   backline("mapper/header has been repaired ")
   return 0
-    
+
+
+#___________________________________________________
+def check_corrupt(fname):
+  global corrupt_offsets
+  repaired = int(0)
+  corrupted = int(0)
+  result=""
+
+  f = open(fname, 'r')       
+  for offset in corrupt_offsets:
+    f.seek(offset) 
+    data = f.read(3) 
+    if data == "DDT":
+      corrupted = int(corrupted) + int(1)
+      result = result + " %s"%(offset)
+    else:
+      repaired = int(repaired) + int(1)
+  f.close()      
+  log("REPAIRED=%s / CORRUPTED=%s%s"%(repaired,corrupted,result))  
+
+  return int(corrupted)
+      
+#___________________________________________________
+def do_corrupt(fname):
+  global corrupt_offsets
+
+  f = open(fname, 'r+b')       
+  for offset in corrupt_offsets:
+    f.seek(offset) 
+    f.write("DDT")
+  f.close()      
+ 
+  
 #___________________________________________________
 def run_bins_corruption(cid,sid,bins,crcfile):
 #___________________________________________________
-
-  # Corrupt the bins file
-  f = open(bins, 'r+b')     
-  f.seek(1211) 
-  f.write("DDT")
-  f.seek(3111) 
-  f.write("DDT")
-  f.seek(4444) 
-  f.write("DDT")    
-  f.seek(1024*112) 
-  f.write("DDT")    
-  f.seek(1024*114) 
-  f.write("DDT")    
-  f.seek(1024*115) 
-  f.write("DDT")    
-  f.seek(1024*118) 
-  f.write("DDT")    
-  f.seek(1024*120) 
-  f.write("DDT")    
-  size = os.path.getsize(bins)
-  f.seek(size-11);
-  f.write("DDT")       
-  f.close()
   backline("Corrupt bins file %s "%(bins))
+
+  # Corrupt the bins file, 
+  do_corrupt(bins)
+  if check_corrupt(bins) == int(0) :
+    report("Can not corrupt %s"%(bins))
+    return 1     
 
   # Clear error counter
   reset_storcli_counter()
@@ -1089,25 +1119,12 @@ def run_bins_corruption(cid,sid,bins,crcfile):
     backline("Repair procedure has been run ")
   else:     
     report("No CRC errors after file reread")
-    return 1 
-      
-
-  # Reset storages
-  os.system("./setup.py storage all reset")
-  wait_until_all_sid_up()
- 
-  # Clear error counter
-  reset_storcli_counter()
-  
-  # Reread the file
-  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
-    report("5 !!! %s and %s differ"%(crcfile,"./ref"))
-    return 1  
- 
-  # Checl for CRC32 errors
-  if check_storcli_crc(False) == True:
-    report("Bins file %s still has errors"%(bins))
     return 1     
+    
+  if check_corrupt(bins) != int(0) :
+    report("Bins file %s is still corrupted"%(bins))
+    return 1     
+      
   backline("Bins file %s is repaired"%(bins))
   
   return 0   
@@ -1135,7 +1152,6 @@ def crc32():
     
   # Get its localization  
   cid,sid,mapper,bins = get_1rst_header_and_bins(crcfile)
-  log("cid/sid %s/%s bins %s mapper %s"%(cid, sid, bins,mapper))  
              
   if mapper == None or bins == None or int(cid) == int(0) or sid == "" :
     report("Fail to find mapper/bins file name in /tmp/crc32loc")
@@ -1154,10 +1170,8 @@ def crc32():
     
   # Get its localization  
   cid,sid,mapper,bins = get_2nd_subfile_header_and_bins(crcfile)
-  log("cid/sid %s/%s bins %s mapper %s"%(cid, sid, bins,mapper))  
   if mapper == None or bins == None or int(cid) == int(0) or sid == "" :
-    report("Fail to find mapper/bins file name in /tmp/crc32loc")
-    return -1
+    return 0
     
   hid = get_hid(cid,sid)
   device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
@@ -1698,7 +1712,8 @@ def mmap():
 #___________________________________________________  
 def resize(): 
 #___________________________________________________
-
+  report(red + bold + "   !!! resize service is not yet supported !!!" + endeffect )
+  return 0
   realSizeMB = 15
   
   # Create a 1M file
@@ -1734,7 +1749,7 @@ def resize():
 #___________________________________________________   
 def crash_process(process,main):
 
-  string="./build/src/rozodiag/rozodiag %s -c ps"%(process)
+  string="rozodiag %s -c ps"%(process)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   pid="?"
@@ -1757,7 +1772,7 @@ def check_core_process(process,cores):
 
   time.sleep(8)
   
-  string="./build/src/rozodiag/rozodiag %s -c core"%(process)
+  string="rozodiag %s -c core"%(process)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   nb=0
@@ -1872,9 +1887,8 @@ def trash_release(trash_dir):
 # Definitively delete every thing in trash test directory
 #___________________________________________________ 
   backline("Trash remove test directory %s"%(trash_dir))    
-  os.system("rozo_trash root disable %s > /dev/null"%(trash_dir))
-  os.system("rozo_trash disable %s > /dev/null"%(trash_dir))
   os.system("rm -rf %s"%(trash_dir))
+  os.system("rm -rf %s/@rozofs-trash@/*"%(mnt))
 #___________________________________________________
 def trash_get_delete_dir(trash_dir):
 # Get the name of the del dir in trash
@@ -1950,7 +1964,8 @@ def trashNrestore():
   for loop in range(3):
     if trash_delete(trash_dir,nb) != 0:  return 1
     if trash_restore(trash_dir,nb) != 0: return 1
-              
+    
+  trash_release(trash_dir)           
   return 0  
 #___________________________________________________
 def trashNrebuild():
@@ -1969,6 +1984,8 @@ def trashNrebuild():
   if rebuild_1node() != 0:  return 1
   # Restore files
   if trash_restore(trash_dir,nb) != 0: return 1
+
+  trash_release(trash_dir)               
   return 0
  
 #___________________________________________________
@@ -2031,17 +2048,20 @@ def rebuild_1dev() :
     
     dev=int(hid)%int(mapper_modulo)
     clean_rebuild_dir()    
+
+    backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
+    os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))    
     string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s"%(cid,sid,dev,cid,sid,dev)
-    os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
     ret = cmd_returncode(string)
     if ret != 0:
       return ret
       
     if int(mapper_modulo) > 1:
       dev=(dev+1)%int(mapper_modulo)
-      os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
       backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
-      ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev))
+      os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
+      string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev)
+      ret = cmd_returncode(string)
       if ret != 0:
 	return ret
 	
@@ -2059,7 +2079,7 @@ def rebuild_1dev() :
 def get_device_state(hid, cid, sid, dev) :
 
   # Check The status of the device
-  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
+  string="rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   curcid=0
@@ -2117,7 +2137,7 @@ def loop_on_waiting_device_status(hid, cid, sid, dev, expected_status) :
 def selfhealing_spare(hid, cid, sid, dev) :
 
   # Check wether automount is configured
-  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode spareOnly"%(hid,cid)
+  string="rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode spareOnly"%(hid,cid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -2131,10 +2151,10 @@ def selfhealing_spare(hid, cid, sid, dev) :
   return 0
 #___________________________________________________
 def selfhealing_resecure(hid, cid, sid, dev) :
-  log("Wait resecure %s:%s:%s"%(cid,sid,dev))	          
+  log("Wait resecure host %s cid %s sid %s device %s"%(hid,cid,sid,dev))	          
   
   # Check wether automount is configured
-  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode resecure"%(hid,cid)
+  string="rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode resecure"%(hid,cid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -2160,7 +2180,8 @@ def get_hid(cid,sid) :
     if int(zsid) != int(sid): continue
    
     return hid
-  return -1  
+  report("get_hid( cid=%s, sid=%s) No such cid/sid"%(cid,hid))
+  sys.exit(1) 
      
 #___________________________________________________
 def selfhealing() :
@@ -2170,7 +2191,7 @@ def selfhealing() :
   clean_rebuild_dir()
 
   # Create reference file
-  dir="%s/selHealing"%(mnt)
+  dir="%s/selfHealing"%(mnt)
   os.system("rm -rf %s; mkdir -p %s"%(dir,dir))
   for i in range(60):
     zefile="%s/ref%s"%(dir,i)
@@ -2199,18 +2220,22 @@ def selfhealing() :
 
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid0) in line:
       dev0 = line.split()[3].split('/')[5]
+      log("cid %s sid %s dev %s %s"%(cid,sid0,dev0,line))
       continue
           	  	  
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid1) in line:
       dev1 = line.split()[3].split('/')[5]
+      log("id %s sid %s dev %s %s"%(cid,sid1,dev1,line))
       continue
           	  	  
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid2) in line:
       dev2 = line.split()[3].split('/')[5]
+      log("id %s sid %s dev %s %s"%(cid,sid2,dev2,line))
       continue
       
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid3) in line:
       dev3 = line.split()[3].split('/')[5]
+      log("id %s sid %s dev %s %s"%(cid,sid3,dev3,line))
       break
 
   hid0 = get_hid(cid,sid0)
@@ -2234,6 +2259,7 @@ def selfhealing() :
     return 1 
 
   # Create 2 spare device
+  log("Create spare devices")
   os.system("./setup.py spare; ./setup.py spare; ./setup.py spare; ./setup.py spare")
 
   ret = selfhealing_spare(hid0,cid,sid0,dev0)
@@ -2258,6 +2284,7 @@ def selfhealing() :
 def rebuild_all_dev() :
 # test re-building all devices of a sid
 #___________________________________________________
+  global sids
 
   if rebuildCheck == True: 
     gruyere()        
@@ -2707,6 +2734,7 @@ def resolve_mnt(inst):
   global site
   global eid
   global vid
+  global vid_fast
   global mnt
   global exp
   global inverse
@@ -2717,8 +2745,9 @@ def resolve_mnt(inst):
   global sids
   global hosts
     
-  vid="A"
-  pid=None  
+  vid      = "A"
+  vid_fast = None
+  pid      = None  
   instance = inst
         
   string="%s/setup.py mount %s info"%(os.getcwd(),instance)
@@ -2729,7 +2758,8 @@ def resolve_mnt(inst):
     if len(words)<3: continue
     if words[0] == "site": site=words[2]
     if words[0] == "eid" : eid=words[2]
-    if words[0] == "vid" : vid=words[2]
+    if words[0] == "vid"      : vid      = words[2]
+    if words[0] == "vid_fast" : vid_fast = words[2]
     if words[0] == "failures": nb_failures=int(words[2])
     if words[0] == "hosts": hosts=line.split("=")[1].split()
     if words[0] == "sids": sids=line.split("=")[1].split()
@@ -2754,7 +2784,10 @@ def cmd_returncode (string):
   if verbose: console(string)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+#  for line in cmd.stdout:
+#    print line
   cmd.wait()
+  
   return cmd.returncode
 #___________________________________________  
 def cmd_system (string):
