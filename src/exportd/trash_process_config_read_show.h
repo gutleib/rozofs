@@ -21,6 +21,7 @@
 #ifndef _TRASH_PROCESS_CONFIG_READ_SHOW_H
 #define _TRASH_PROCESS_CONFIG_READ_SHOW_H
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
@@ -28,6 +29,107 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <dirent.h>
+/*____________________________________________________________________________________________
+**
+** Set a value to a common configuration parameter
+** 
+** @param param   Parameter name
+** @param value   New value to set
+** 
+** @retval 1 on success, 0 else
+*/
+static inline int trash_process_config_generated_set(char * pChar, char *parameter, char *value) {
+  if (strcmp(parameter,"frequency")==0) {
+    TRASH_PROCESS_CONFIG_SET_INT(frequency,value);
+  }
+  if (strcmp(parameter,"older")==0) {
+    TRASH_PROCESS_CONFIG_SET_LONG(older,value);
+  }
+  if (strcmp(parameter,"deletion_rate")==0) {
+    TRASH_PROCESS_CONFIG_SET_INT(deletion_rate,value);
+  }
+  if (strcmp(parameter,"scan_rate")==0) {
+    TRASH_PROCESS_CONFIG_SET_INT(scan_rate,value);
+  }
+  if (strcmp(parameter,"verbose")==0) {
+    TRASH_PROCESS_CONFIG_SET_BOOL(verbose,value);
+  }
+  pChar += rozofs_string_append_error(pChar,"No such parameter ");
+  pChar += rozofs_string_append_error(pChar,parameter);
+  pChar += rozofs_eol(pChar);\
+  return -1;
+}
+/*____________________________________________________________________________________________
+**
+** Search for parameters approximatively like a given string 
+** 
+** @param parameter   Approximative parameter name we are searching for
+** 
+** @retval The number of parameters matching the input string
+*/
+static inline int trash_process_config_generated_search(char * pChar, char *parameter) {
+  int match = 0;
+
+  if (strcasestr("frequency",parameter) != NULL) {
+    match++;
+    TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(frequency,12);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// This option defines the scanning frequency in hours of the trash \n");
+    pChar += rozofs_string_append(pChar,"// process.\n");
+    pChar += rozofs_string_append(pChar,"// See the --frequency parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(frequency,12);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("older",parameter) != NULL) {
+    match++;
+    TRASH_PROCESS_CONFIG_IS_DEFAULT_LONG(older,7);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// Exclude files that are more recent than the specified delay. \n");
+    pChar += rozofs_string_append(pChar,"// The delay is defined in days.\n");
+    pChar += rozofs_string_append(pChar,"// See the --older parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_LONG(older,7);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("deletion_rate",parameter) != NULL) {
+    match++;
+    TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(deletion_rate,10);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// That option defines the maximun rate in msg/s allocated for\n");
+    pChar += rozofs_string_append(pChar,"// files/directories deletion.\n");
+    pChar += rozofs_string_append(pChar,"// See the --rate parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(deletion_rate,10);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("scan_rate",parameter) != NULL) {
+    match++;
+    TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(scan_rate,-1);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// That option defines the maximun rate in msg/s allocated for inode scanning\n");
+    pChar += rozofs_string_append(pChar,"// See the --scan parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(scan_rate,-1);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("verbose",parameter) != NULL) {
+    match++;
+    TRASH_PROCESS_CONFIG_IS_DEFAULT_BOOL(verbose,False);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// That option when asserted sets the process in verbose mode\n");
+    pChar += rozofs_string_append(pChar,"// See --verbose parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_BOOL(verbose,False);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+  if (match == 0) {
+    pChar += rozofs_string_append_error(pChar,"No such parameter like ");
+    pChar += rozofs_string_append_error(pChar,parameter);
+    pChar += rozofs_eol(pChar);\
+  }
+  return match;
+}
 /*____________________________________________________________________________________________
 **
 ** trash_process_config man function
@@ -35,12 +137,20 @@
 */
 void man_trash_process_config(char * pChar) {
   pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
-  pChar += rozofs_string_append_bold(pChar,"\ttrashconf");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config");
   pChar += rozofs_string_append     (pChar,"\t\tdisplays the whole trash_process_config configuration.\n");
-  pChar += rozofs_string_append_bold(pChar,"\ttrashconf <scope>");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config <scope>");
   pChar += rozofs_string_append     (pChar,"\tdisplays only the <scope> configuration part.\n");
-  pChar += rozofs_string_append_bold(pChar,"\ttrashconf reload");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config search <parameter>");
+  pChar += rozofs_string_append     (pChar,"\tdisplays parameters approximatively like <parameter>.\n");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config reload");
   pChar += rozofs_string_append     (pChar,"\treloads and then displays the configuration.\n");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config set <param> <value>");
+  pChar += rozofs_string_append     (pChar,"\tmodifies a configuration parameter in memory.\n");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config save");
+  pChar += rozofs_string_append     (pChar,"\tsaves configuration from memory to disk.\n");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config files");
+  pChar += rozofs_string_append     (pChar,"\tReturns the name of the configuration file and the saved ones.\n");
 }
 /*____________________________________________________________________________________________
 **
@@ -49,11 +159,9 @@ void man_trash_process_config(char * pChar) {
 */
 char * show_trash_process_config_module_global(char * pChar) {
 
-  pChar += rozofs_string_append_bold(pChar,"#\n");
-  pChar += rozofs_string_append_bold(pChar,"# ");
-  pChar += rozofs_string_append_bold(pChar,"global");
-  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    GLOBAL SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
   TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(frequency,12);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
@@ -96,37 +204,221 @@ char * show_trash_process_config_module_global(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
+** global scope configuration parameters
+**
+*/
+char * save_trash_process_config_module_global(char * pChar) {
+
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
+  pChar += rozofs_string_append(pChar,"# ");
+  pChar += rozofs_string_append(pChar,"global");
+  pChar += rozofs_string_append(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(frequency,12);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// This option defines the scanning frequency in hours of the trash \n");
+    pChar += rozofs_string_append(pChar,"// process.\n");
+    pChar += rozofs_string_append(pChar,"// See the --frequency parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(frequency,12);
+  }
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_LONG(older,7);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Exclude files that are more recent than the specified delay. \n");
+    pChar += rozofs_string_append(pChar,"// The delay is defined in days.\n");
+    pChar += rozofs_string_append(pChar,"// See the --older parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_LONG(older,7);
+  }
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(deletion_rate,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option defines the maximun rate in msg/s allocated for\n");
+    pChar += rozofs_string_append(pChar,"// files/directories deletion.\n");
+    pChar += rozofs_string_append(pChar,"// See the --rate parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(deletion_rate,10);
+  }
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(scan_rate,-1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option defines the maximun rate in msg/s allocated for inode scanning\n");
+    pChar += rozofs_string_append(pChar,"// See the --scan parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(scan_rate,-1);
+  }
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_BOOL(verbose,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option when asserted sets the process in verbose mode\n");
+    pChar += rozofs_string_append(pChar,"// See --verbose parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_BOOL(verbose,False);
+  }
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** Save configuration parameter on disk
+** 
+** @param pChar   Parameter name
+** @param value   New value to set
+** 
+** @retval 1 on success, 0 else
+*/
+static inline int trash_process_config_generated_save(char * pChar) {
+  char *pBuff;
+  int   fd;
+  char  saved_file[256];
+
+  /*
+  ** Save previous file
+  */
+  time_t t = time(NULL);
+  struct tm tm = *localtime(&t);
+  sprintf(saved_file,"%s_%2.2d-%2.2d-%2.2d_%2.2d:%2.2d:%2.2d", trash_process_config_file_name,tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+  rename(trash_process_config_file_name,saved_file);
+
+  /*
+  ** Creat a new file
+  */
+  fd = open(trash_process_config_file_name,O_CREAT|O_TRUNC|O_APPEND|O_WRONLY,0777);
+  if (fd < 0) {
+    pChar += rozofs_string_append_error(pChar,"Can not open ");
+    pChar += rozofs_string_append_error(pChar,trash_process_config_file_name);
+    return -1;
+  }
+  pBuff = save_trash_process_config_module_global(myBigBuffer);
+  if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,trash_process_config_file_name);
+    close(fd);
+    return -1;
+  }
+  pChar += rozofs_string_append(pChar,"Saved in ");
+  pChar += rozofs_string_append(pChar,trash_process_config_file_name);
+  pChar += rozofs_eol(pChar);
+  close(fd);
+  return 0;
+}
+/*____________________________________________________________________________________________
+**
+** trash_process_config diagnostic function
+**
+*/
+char * trash_process_config_generated_show_all_files(char * pChar) {
+  char            cmd[256];
+
+  if (trash_process_config_file_is_read==0) {
+    pChar += rozofs_string_append_error(pChar,"Can not read configuration file ");
+    return pChar;
+  }
+  sprintf(cmd,"ls -lisa %s*",trash_process_config_file_name);
+  uma_dbg_run_system_cmd(cmd, pChar, uma_dbg_get_buffer_len()); 
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
 ** trash_process_config diagnostic function
 **
 */
 void trash_process_config_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 char *pChar = uma_dbg_get_buffer();
+char *pHead;
 
   if (argv[1] != NULL) {
+
     if (strcmp(argv[1],"reload")==0) {
       trash_process_config_read(NULL);
+      pChar += rozofs_string_append(pChar, "File reloaded\n");
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    }
+
+    if (strcmp(argv[1],"set")==0) {
+      if ((argv[2] == NULL)||(argv[3] == NULL)) {
+        pChar += rozofs_string_append_error(pChar, "Missing <parameter> and/or <value>\n");
+        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+        return;
+      }
+      trash_process_config_generated_set(pChar, argv[2],argv[3]);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    }
+
+    if (strcmp(argv[1],"search")==0) {
+      if (argv[2] == NULL) {
+        pChar += rozofs_string_append_error(pChar, "Missing <parameter>\n");
+        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+        return;
+      }
+      trash_process_config_generated_search(pChar, argv[2]);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    }
+
+    if (strcmp(argv[1],"save")==0) {
+      trash_process_config_generated_save(pChar);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    }
+
+    if (strcmp(argv[1],"files")==0) {
+      trash_process_config_generated_show_all_files(pChar);
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    }
+
+    if (strcmp("global",argv[1])==0) {
+      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+        severe( "ruc_buf_getPayload(%p)", bufRef );
+        return;
+      }
+      /*
+      ** Set the command recall string
+      */
+      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+      pChar = show_trash_process_config_module_global(pChar);
+      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+      return;
     }
     else {
-      if (strcmp("global",argv[1])==0) {
-        pChar = show_trash_process_config_module_global(pChar);
-      }
-      else {
-        pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
-      }
+      pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
       return;
     }
   }
- 
-  if (trash_process_config_file_is_read==0) {
-    pChar += rozofs_string_append(pChar,"Can not read configuration file ");
-  }
-  pChar += rozofs_string_append(pChar,trash_process_config_file_name);
-  pChar += rozofs_eol(pChar);
-  pChar += rozofs_eol(pChar);
-  pChar = show_trash_process_config_module_global(pChar);
 
-  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return;
+  }
+  /*
+  ** Set the command recall string
+  */
+  pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+  if (trash_process_config_file_is_read==0) {
+    pChar += rozofs_string_append_error(pChar,"Can not read configuration file ");
+  }
+  
+  
+  pChar = show_trash_process_config_module_global(pChar);
+  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
+  
+  bufRef = uma_dbg_get_new_buffer(tcpRef);
+  if (bufRef == NULL) {
+    warning( "uma_dbg_get_new_buffer() Buffer depletion");
+    return;
+  }
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return;
+  }
+  pChar = pHead+sizeof(UMA_MSGHEADER_S);
+  *pChar = 0;
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
+  pChar += rozofs_string_append(pChar,"# ");
+  pChar += rozofs_string_append(pChar," trash_process_config file is ");
+  pChar += rozofs_string_append(pChar,trash_process_config_file_name);
+  pChar += rozofs_string_append(pChar,"\n#____________________________________________________________\n\n");
+  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
   return;
 }
 /*____________________________________________________________________________________________
@@ -137,7 +429,7 @@ static inline void trash_process_config_generated_read(char * fname) {
   config_t          cfg; 
 
   if (trash_process_config_file_is_read == 0) {
-    uma_dbg_addTopicAndMan("trashconf",show_trash_process_config, man_trash_process_config, 0);
+    uma_dbg_addTopicAndMan("trash_process_config",show_trash_process_config, man_trash_process_config, 0);
     if (fname == NULL) {
       strcpy(trash_process_config_file_name,ROZOFS_CONFIG_DIR"/trash.conf");
     }

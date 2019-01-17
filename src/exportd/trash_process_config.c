@@ -30,16 +30,21 @@ trash_process_config_t trash_process_config;
 void show_trash_process_config(char * argv[], uint32_t tcpRef, void *bufRef);
 void trash_process_config_read(char * fname) ;
 
-
+char   myBigBuffer[1024*1024];
 static int isDefaultValue;
-#define TRASH_PROCESS_CONFIG_SHOW_NAME(val) {\
+#define TRASH_PROCESS_CONFIG_SHOW_NAME(val,def) {\
   if (isDefaultValue) {\
     pChar += rozofs_string_append(pChar,"// ");\
+    pChar += rozofs_string_padded_append(pChar, 50, rozofs_left_alignment, #val);\
+    pChar += rozofs_string_append(pChar, " = ");\
   } else {\
+    pChar += rozofs_string_append(pChar,"// default is ");\
+    pChar += rozofs_string_append(pChar, #def);\
+    pChar += rozofs_eol(pChar);\
     pChar += rozofs_string_append(pChar,"   ");\
+    pChar += rozofs_string_padded_append(pChar, 50, rozofs_left_alignment, #val);\
+    pChar += rozofs_string_append(pChar, " = ");\
   }\
-  pChar += rozofs_string_padded_append(pChar, 50, rozofs_left_alignment, #val);\
-  pChar += rozofs_string_append(pChar, " = ");\
 }
 
 #define  TRASH_PROCESS_CONFIG_SHOW_NEXT \
@@ -62,7 +67,7 @@ static int isDefaultValue;
     isDefaultValue = 1;
 
 #define TRASH_PROCESS_CONFIG_SHOW_BOOL(val,def)  {\
-  TRASH_PROCESS_CONFIG_SHOW_NAME(val)\
+  TRASH_PROCESS_CONFIG_SHOW_NAME(val,def)\
   if (trash_process_config.val) pChar += rozofs_string_append(pChar, "True");\
   else        pChar += rozofs_string_append(pChar, "False");\
   TRASH_PROCESS_CONFIG_SHOW_END\
@@ -73,11 +78,23 @@ static int isDefaultValue;
   if (strcmp(trash_process_config.val,def)==0) isDefaultValue = 1;
 
 #define TRASH_PROCESS_CONFIG_SHOW_STRING(val,def)  {\
-  TRASH_PROCESS_CONFIG_SHOW_NAME(val)\
+  TRASH_PROCESS_CONFIG_SHOW_NAME(val,def)\
   *pChar++ = '\"';\
   if (trash_process_config.val!=NULL) pChar += rozofs_string_append(pChar, trash_process_config.val);\
   *pChar++ = '\"';\
   TRASH_PROCESS_CONFIG_SHOW_END\
+}
+
+#define TRASH_PROCESS_CONFIG_IS_DEFAULT_ENUM(val,def) \
+  isDefaultValue = 0; \
+  if (trash_process_config.val == string2trash_process_config_ ## val (def)) isDefaultValue = 1;
+
+#define TRASH_PROCESS_CONFIG_SHOW_ENUM(val,def,opt)  {\
+  TRASH_PROCESS_CONFIG_SHOW_NAME(val,def)\
+  *pChar++ = '\"';\
+  pChar += rozofs_string_append(pChar, trash_process_config_ ## val ## 2String(trash_process_config.val));\
+  *pChar++ = '\"';\
+  TRASH_PROCESS_CONFIG_SHOW_END_OPT(opt)\
 }
 
 #define TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(val,def) \
@@ -85,28 +102,28 @@ static int isDefaultValue;
   if (trash_process_config.val == def) isDefaultValue = 1;
 
 #define TRASH_PROCESS_CONFIG_SHOW_INT(val,def)  {\
-  TRASH_PROCESS_CONFIG_SHOW_NAME(val)\
+  TRASH_PROCESS_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i32_append(pChar, trash_process_config.val);\
   TRASH_PROCESS_CONFIG_SHOW_END\
 }
 
 #define TRASH_PROCESS_CONFIG_IS_DEFAULT_INT_OPT(val,def)  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(val,def)
 #define TRASH_PROCESS_CONFIG_SHOW_INT_OPT(val,def,opt)  {\
-  TRASH_PROCESS_CONFIG_SHOW_NAME(val)\
+  TRASH_PROCESS_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i32_append(pChar, trash_process_config.val);\
   TRASH_PROCESS_CONFIG_SHOW_END_OPT(opt)\
 }
 
 #define TRASH_PROCESS_CONFIG_IS_DEFAULT_LONG(val,def)  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(val,def)
 #define TRASH_PROCESS_CONFIG_SHOW_LONG(val,def)  {\
-  TRASH_PROCESS_CONFIG_SHOW_NAME(val)\
+  TRASH_PROCESS_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i64_append(pChar, trash_process_config.val);\
   TRASH_PROCESS_CONFIG_SHOW_END\
 }
 
 #define TRASH_PROCESS_CONFIG_IS_DEFAULT_LONG_OPT(val,def)  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(val,def)
 #define TRASH_PROCESS_CONFIG_SHOW_LONG_OPT(val,def,opt)  {\
-  TRASH_PROCESS_CONFIG_SHOW_NAME(val)\
+  TRASH_PROCESS_CONFIG_SHOW_NAME(val,def)\
   pChar += rozofs_i64_append(pChar, trash_process_config.val);\
   TRASH_PROCESS_CONFIG_SHOW_END_OPT(opt)\
 }
@@ -118,9 +135,29 @@ static int isDefaultValue;
   } else {\
     trash_process_config.val = 0;\
   }\
-  if (config_lookup_bool(&cfg, #val, &boolval)) { \
+  if (config_lookup_bool(&cfg, #val, &boolval) == CONFIG_TRUE) { \
     trash_process_config.val = boolval;\
   }\
+}
+#define TRASH_PROCESS_CONFIG_SET_BOOL(val,def)  {\
+  if (strcmp(def,"True")==0) {\
+    trash_process_config.val = 1;\
+    pChar += rozofs_string_append(pChar,#val);\
+    pChar += rozofs_string_append(pChar," set to value ");\
+    pChar += rozofs_string_append(pChar,def);\
+    pChar += rozofs_eol(pChar);\
+    return 0;\
+  }\
+  if (strcmp(def,"False")==0) {\
+    trash_process_config.val = 0;\
+    pChar += rozofs_string_append(pChar,#val);\
+    pChar += rozofs_string_append(pChar," set to value ");\
+    pChar += rozofs_string_append(pChar,def);\
+    pChar += rozofs_eol(pChar);\
+    return 0;\
+  }\
+  pChar += rozofs_string_append_error(pChar,"True or False value expected.\n" );\
+  return -1;\
 }
 
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
@@ -132,7 +169,7 @@ static long int          intval;
 
 #define TRASH_PROCESS_CONFIG_READ_INT_MINMAX(val,def,mini,maxi)  {\
   trash_process_config.val = def;\
-  if (config_lookup_int(&cfg, #val, &intval)) { \
+  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \
     if (intval<mini) {\
       trash_process_config.val = mini;\
     }\
@@ -145,26 +182,76 @@ static long int          intval;
   }\
 }
 
+#define TRASH_PROCESS_CONFIG_SET_INT_MINMAX(val,def,mini,maxi)  {\
+  int valint;\
+  if (sscanf(def,"%d",&valint) != 1) {\
+    pChar += rozofs_string_append_error(pChar,"integer value expected.\n");\
+    return -1;\
+  }\
+  if (valint<mini) {\
+    pChar += rozofs_string_append_error(pChar,"value lower than minimum.\n");\
+    return -1;\
+  }\
+  if (valint>maxi) { \
+    pChar += rozofs_string_append_error(pChar,"value bigger than maximum.\n");\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  trash_process_config.val = valint;\
+  return 0;\
+}
+
 #define TRASH_PROCESS_CONFIG_READ_INT(val,def) {\
   trash_process_config.val = def;\
-  if (config_lookup_int(&cfg, #val, &intval)) { \
+  if (config_lookup_int(&cfg, #val, &intval) == CONFIG_TRUE) { \
     trash_process_config.val = intval;\
   }\
+}
+
+#define TRASH_PROCESS_CONFIG_SET_INT(val,def)  {\
+  int valint;\
+  if (sscanf(def,"%d",&valint) != 1) {\
+    pChar += rozofs_string_append_error(pChar,"integer value expected.\n");\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar, #val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  trash_process_config.val = valint;\
+  return 0;\
 }
 
 #define TRASH_PROCESS_CONFIG_READ_LONG(val,def) {\
   long long         longval;\
   trash_process_config.val = def;\
-  if (config_lookup_int64(&cfg, #val, &longval)) { \
+  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \
     trash_process_config.val = longval;\
   }\
+}
+
+#define TRASH_PROCESS_CONFIG_SET_LONG(val,def) {\
+  long long         longval;\
+  if (sscanf(def,"%lld",&longval) != 1) {\
+    pChar += rozofs_string_append_error(pChar,"long long integer value expected.\n");\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  trash_process_config.val = longval;\
+  return 0;\
 }
 
 
 #define TRASH_PROCESS_CONFIG_READ_LONG_MINMAX(val,def,mini,maxi)  {\
   long long         longval;\
   trash_process_config.val = def;\
-  if (config_lookup_int64(&cfg, #val, &longval)) { \
+  if (config_lookup_int64(&cfg, #val, &longval) == CONFIG_TRUE) { \
     if (longval<mini) {\
       trash_process_config.val = mini;\
     }\
@@ -177,14 +264,46 @@ static long int          intval;
   }\
 }
 
+
+#define TRASH_PROCESS_CONFIG_SET_LONG_MINMAX(val,def,mini,maxi)  {\
+  long long         longval;\
+  if (sscanf(def,"%lld",&longval) != 1) {\
+    pChar += rozofs_string_append_error(pChar,"long long integer value expected.\n"));\
+    return -1;\
+  }\
+  if (longval<mini) {\
+    pChar += rozofs_string_append_error(pChar,"value lower than minimum.\n"));\
+    return -1;\
+  }\
+  if (longval>maxi) { \
+    pChar += rozofs_string_append_error(pChar,"value bigger than maximum.\n"));\
+    return -1;\
+  }\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  trash_process_config.val = longval;\
+  return 0;\
+}
 #define TRASH_PROCESS_CONFIG_READ_STRING(val,def)  {\
   const char * charval;\
   if (trash_process_config.val) free(trash_process_config.val);\
-  if (config_lookup_string(&cfg, #val, &charval)) {\
+  if (config_lookup_string(&cfg, #val, &charval) == CONFIG_TRUE) {\
     trash_process_config.val = strdup(charval);\
   } else {\
     trash_process_config.val = strdup(def);\
   }\
+}
+
+#define TRASH_PROCESS_CONFIG_SET_STRING(val,def)  {\
+  if (trash_process_config.val) free(trash_process_config.val);\
+  trash_process_config.val = strdup(def);\
+  pChar += rozofs_string_append(pChar,#val);\
+  pChar += rozofs_string_append(pChar," set to value ");\
+  pChar += rozofs_string_append(pChar,def);\
+  pChar += rozofs_eol(pChar);\
+  return 0;\
 }
 
 

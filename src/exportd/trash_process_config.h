@@ -21,6 +21,7 @@
 #ifndef _TRASH_PROCESS_CONFIG_H
 #define _TRASH_PROCESS_CONFIG_H
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
@@ -28,8 +29,17 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <dirent.h>
 void trash_process_config_read(char * fname);
 
+
+/*_______________________________
+** ENUM definion
+*/
+
+/*_______________________________
+** trash_process_config structure
+*/
 typedef struct _trash_process_config_t {
 
   /*
@@ -57,4 +67,8 @@ typedef struct _trash_process_config_t {
 } trash_process_config_t;
 
 extern trash_process_config_t trash_process_config;
+
+/*_______________________________
+** ENUM macro
+*/
 #endif
