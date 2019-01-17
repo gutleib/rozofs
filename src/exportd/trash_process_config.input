@@ -1,6 +1,6 @@
 #_______________________________________________________________________________________
 # 
-# Call ../../tools/trash_process_config.py to generate trash_process_config.h as well as trash_process_config.c
+# Call  ../../tools/generate_all_config.py to generate trash_process_config.h as well as trash_process_config.c
 #
 #_______________________________________________________________________________________
 # Syntax is as follow:

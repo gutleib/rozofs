@@ -37,6 +37,7 @@
 #include <netinet/tcp.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+ #include <attr/xattr.h>
 
 #include <rozofs/core/uma_dbg_msgHeader.h>
 #include <rozofs/core/rozofs_ip_utilities.h>
@@ -79,7 +80,7 @@ char                localPath[PATH_MAX+1];
 **_________________________________________________________________________________
 */
 void syntax_display() {
-  system("man rozodiag");
+  if (system("man rozodiag")==0) {}
   exit(0);
 }
 /*
@@ -824,7 +825,9 @@ char *argv[];
   /*
   ** Get current path
   */
-  getcwd(localPath,PATH_MAX);
+  if (getcwd(localPath,PATH_MAX) == NULL) {
+    localPath[0] = 0;
+  }  
   
   /* Pre-initialize 1rst IP address */ 
   hostNb = scan_host("127.0.0.1",IPs); 
