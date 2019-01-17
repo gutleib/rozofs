@@ -1,6 +1,6 @@
 #_______________________________________________________________________________________
 # 
-# Call ../../tools/common_config.py to generate common_config.h as well as common_config.c
+# Call  ../../tools/generate_all_config.py to generate common_config.h as well as common_config.c
 #
 #_______________________________________________________________________________________
 #
