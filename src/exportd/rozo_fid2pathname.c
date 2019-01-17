@@ -483,6 +483,22 @@ int main(int argc, char *argv[]) {
        TRACEFIDERR("No such file or directory");
        continue;
      }
+          
+     /*
+     ** Case of multifile mode
+     */
+     if (plv2->attributes.s.multi_desc.byte != 0) { 
+        /*
+        ** Slave inode case. get the master inode
+        */
+        if (plv2->attributes.s.multi_desc.common.master == 0) {
+          inode_val_p->s.idx -= (plv2->attributes.s.multi_desc.slave.file_idx+1);
+          if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,&cache, fid))) {
+            TRACEFIDERR("No such file or directory");
+            continue;
+          }          
+        }
+     }
      /*
      ** Get the full pathname
      */
