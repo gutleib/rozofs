@@ -22,6 +22,8 @@
 #include <syslog.h>
 #include <libgen.h>
 
+extern int rozofs_in_syslog;
+
 #define EDEBUG      0
 #define EINFO       1
 #define EWARNING    2
@@ -50,7 +52,9 @@ static const int priorities[] = {
 }
 #else
 #define logmsg(level, fmt, ...) {\
+    __atomic_fetch_add(&rozofs_in_syslog, 1, __ATOMIC_SEQ_CST);\
     syslog(priorities[level], "%s - %d - %s: " fmt, basename(__FILE__), __LINE__, messages[level], ##__VA_ARGS__); \
+    __atomic_fetch_sub(&rozofs_in_syslog, 1, __ATOMIC_SEQ_CST);\
 }
 #endif          
 
