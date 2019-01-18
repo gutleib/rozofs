@@ -33,11 +33,12 @@ char * configFileName = EXPORTD_DEFAULT_CONFIG;
    @param export : pointer to the export structure
    @param inode_attr_p : pointer to the inode attribute
    @param buf: output buffer
+   @param fidType: the type of the fid
    
    @retval buf: pointer to the beginning of the outbuffer
 */
 
-char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
+char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax, char * fidType)
 {
    lv2_entry_t *plv2;
    char name[1024];
@@ -142,8 +143,9 @@ char * get_export_root_path(uint8_t eid) {
     @param inode_p: pointer to the inode
     @param buf : pointer to the output buffer
     @param lenmax: max length of the output buffer
+    @param fidType: the type of the fid
 */
-char *rozo_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax)
+char *rozo_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax,char * fidType)
 {
    char name[1024];
    char *pbuf = buf;
@@ -192,14 +194,14 @@ char *rozo_get_relative_path(void *exportd,void *inode_p,char *buf,int lenmax)
        TRACEOUT(",\n");\
      } \
      first = 0;\
-     TRACEOUT("    {\"FID\" : \"@rozofs_uuid@%s\", \"eid\" : %d, \"path\" : \"%s\"}",fid_buf,current_eid,path);\
+     TRACEOUT("    {\"FID\" : \"@rozofs_uuid@%s\", \"eid\" : %d, \"type\" : \"%s\", \"path\" : \"%s\"}",fid_buf,current_eid,fidType,path);\
 }
 #define TRACEFIDERR(fmt, ...) { \
      if (!first) {\
        TRACEOUT(",\n");\
      } \
      first = 0;\
-     TRACEOUT("    {\"FID\" : \"@rozofs_uuid@%s\", \"eid\" : %d, \"path\" : \"\", \"error\" : \"",fid_buf,current_eid);\
+     TRACEOUT("    {\"FID\" : \"@rozofs_uuid@%s\", \"eid\" : %d, \"type\" : \"%s\", \"path\" : \"\", \"error\" : \"",fid_buf,current_eid,fidType);\
      TRACEOUT(fmt,##__VA_ARGS__);\
      TRACEOUT("\" }");\
 }
@@ -245,6 +247,7 @@ int main(int argc, char *argv[]) {
     int       more;
     int       current_eid;
     int       first=1;
+    char      fidType[128];
       
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -484,29 +487,55 @@ int main(int argc, char *argv[]) {
        continue;
      }
           
-     /*
-     ** Case of multifile mode
-     */
-     if (plv2->attributes.s.multi_desc.byte != 0) { 
-        /*
-        ** Slave inode case. get the master inode
-        */
-        if (plv2->attributes.s.multi_desc.common.master == 0) {
-          inode_val_p->s.idx -= (plv2->attributes.s.multi_desc.slave.file_idx+1);
-          if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,&cache, fid))) {
-            TRACEFIDERR("No such file or directory");
-            continue;
-          }          
-        }
+     switch(plv2->attributes.s.attrs.mode & S_IFMT) {
+       case S_IFLNK:
+         sprintf(fidType,"symlink");
+         break;
+       case S_IFDIR:
+         sprintf(fidType,"directory");
+         break;
+       case S_IFREG:
+         /*
+         ** Case of multifile mode
+         */
+         if (plv2->attributes.s.multi_desc.byte == 0) {
+           sprintf(fidType,"single file");
+         }
+         else {
+            if (plv2->attributes.s.multi_desc.common.master == 1) {
+              if (plv2->attributes.s.multi_desc.master.hybrid == 1) {
+                sprintf(fidType,"master hybrid file");
+              }
+              else {
+                sprintf(fidType,"master inode file");                
+              }  
+            }
+            /*
+            ** Slave inode case. get the master inode
+            */
+            else {
+              inode_val_p->s.idx -= (plv2->attributes.s.multi_desc.slave.file_idx+1);
+              sprintf(fidType,"slave inode %d", plv2->attributes.s.multi_desc.slave.file_idx+1);                
+              if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,&cache, fid))) {
+                TRACEFIDERR("No such file or directory");
+                continue;
+              }          
+            }
+         }       
+         break;
+       default:
+         sprintf(fidType,"?? 0x%x ??",plv2->attributes.s.attrs.mode & S_IFMT);  
      }
+         
+
      /*
      ** Get the full pathname
      */
      count++;
      if (relative)
-       pbuf = rozo_get_relative_path(rozofs_export_p,&plv2->attributes,name,4096);
+       pbuf = rozo_get_relative_path(rozofs_export_p,&plv2->attributes,name,4096, fidType);
      else
-       pbuf = rozo_get_full_path(rozofs_export_p,&plv2->attributes,name,4096);
+       pbuf = rozo_get_full_path(rozofs_export_p,&plv2->attributes,name,4096,fidType);
      TRACEFIDPATH(pbuf);  	
   }
   TRACEOUT("\n  ]\n}\n");   
