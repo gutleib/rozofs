@@ -16,6 +16,7 @@ set (librozofs_sources
     common/htable.c
     common/list.h
     common/log.h
+    common/log.c
     common/mattr.h
     common/mattr.c
     common/transform.h

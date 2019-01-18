@@ -305,7 +305,7 @@ void rozofs_die(int sig){
 void rozofs_catch_error(int sig){
   int   idx;
   pid_t pid = getpid();
-  
+  char * sigString = rozofs_signal(sig);  
   /*
   ** Already processing a signal.
   ** We may have crashed within execution of a crash call back !
@@ -342,8 +342,12 @@ void rozofs_catch_error(int sig){
     rozofs_crash_cbk[idx](sig);
   }
 
-  syslog(LOG_INFO, "SIG %s", rozofs_signal(sig)); 
-
+  /*
+  ** Log signal if not yet in syslog
+  */
+  if (!rozofs_in_syslog) {
+    syslog(LOG_INFO, sigString,NULL); 
+  }
 
   /* 
   ** Adios crual world !
