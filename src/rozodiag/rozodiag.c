@@ -37,7 +37,7 @@
 #include <netinet/tcp.h>
 #include <readline/readline.h>
 #include <readline/history.h>
- #include <attr/xattr.h>
+#include <attr/xattr.h>
 
 #include <rozofs/core/uma_dbg_msgHeader.h>
 #include <rozofs/core/rozofs_ip_utilities.h>
@@ -531,6 +531,7 @@ void debug_run_command_list(int socketId) {
 ** or <hostname>:N-P 
 ** or <hostname>:N,...,P
 ** or x.y.z.:N-P
+** or x.y.z.:N..P
 ** or x.y.z.:N,...,P
 **
 ** @param str      The string that contains the host
@@ -575,7 +576,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   ret = sscanf(str,"%u",&val1);
   if (ret != 1) return 0;
 
-  while ((*str != '-')&&(*str != ',')&&(*str != 0)) str++;
+  while ((*str != '-')&&(*str != '.')&&(*str != ',')&&(*str != 0)) str++;
   if (*str == 0) {
     sprintf(hostname,"%s%d",hostStr,val1);
     if (rozofs_host2ip_netw(hostname,ip)<0) {
@@ -618,7 +619,9 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   /*
   ** Range
   */  
-  str++;
+  if ((str[0]=='.')&&(str[1]=='.')) str +=2;
+  else str++;
+  
   if (*str == 0) return 0;
   ret = sscanf(str,"%u",&val2);
   if (ret != 1) return 0;
@@ -643,7 +646,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
 **
 ** scan the port string that can either be
 ** - a single port : <p>
-** - a range of port : <p1>-<p2>
+** - a range of port : <p1>-<p2> or <p1>..<p2>
 ** - a list of ports : <p1>,<p2>,...
 **
 ** @param str         The sgtring to parse
@@ -661,15 +664,18 @@ static inline int scan_ports(char * str, uint32_t * values) {
   while (*str == ' ') str++;
   
   ret = sscanf(str,"%u",values);
-  if (ret != 1) return 0;
+  if (ret != 1) return 0; 
   nbValues = 1;
 
-  while ((*str != 0) && (*str != ',') && (*str != '-') && (*str != ':')) str++;
+  while ((*str != 0) && (*str != ',') && (*str != '-') && (*str != ':')&& (*str != '.')) str++;
   if (*str == 0) return 1;
   if (*str == ':') return nbValues;
 
-  if (*str == '-') {
-    str++;
+  if ((*str == '-') || (*str == '.')) {
+
+    if ((str[0]=='.')&&(str[1]=='.')) str +=2;
+    else str++;
+
     if (*str == 0) return 0;
     
     ret = sscanf(str,"%u",&val2);

@@ -23,6 +23,8 @@ add_executable(rozodiag
     rozodiag.c
     ../../rozofs/rozofs_service_ports.c
     ../../rozofs/rozofs_service_ports.h    
+    ../../rozofs/common/log.h 
+    ../../rozofs/common/log.c    
 )
 target_link_libraries(rozodiag ${READLINE_LIBRARY})
 

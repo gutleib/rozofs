@@ -22,7 +22,7 @@ is the diagnostic interface to the RozoFS processes.
 .RE
 .P
  Each target names some nodes (-i <nodes>) and some diagnostics ports (PORTS).
- <nodes> can be a hostname or an IP address or a range or a list of hostnames or IP addresses.
+ <nodes> can be a hostname or an IP address or a range (with - or ..) or a list (with ,) of hostnames or IP addresses.
  When <nodes> is omitted in a TARGET, it takes the value of the previous TARGET. 
  When no previous target, local address 127.0.0.1 is used as <nodes>.
 .P
@@ -30,21 +30,23 @@ is the diagnostic interface to the RozoFS processes.
 .B <nodes> = { <hosts> | <IP@> }
 .RE
 .RS
-.B <hosts> = { <hostname> | <hostname>:<N>-<P> | <hostname>:<N>,..,<P> }
+.B <hosts> = { <hostname> | <hostname>:<N>-<P> | <hostname>:<N>..<P> |<hostname>:<N>,..,<P> }
 .RE
 .RS
-.B <IP@> = { <a>.<b>.<c>.<N> | <a>.<b>.<c>.:<N>-<P> | <a>.<b>.<c>.:<N>,..,<P> } 
+.B <IP@> = { <a>.<b>.<c>.<N> | <a>.<b>.<c>.:<N>-<P> | <a>.<b>.<c>.:<N>..<P> | <a>.<b>.<c>.:<N>,..,<P> } 
 .RE
 .P 
- The variable part of a hostname after ":" to define a list or range of hostnames, can only be numeric values.
+ One can only use numeric values in the variable part of a hostname after ":" to define a list (with ,) or range (with - or ..) of hostnames.
  
  Examples for <nodes>
-   -i 192.168.10.1      (only one IP address)           
-   -i 192.168.10.:21-28 (a range of 8 IP addresses)     
-   -i 192.168.10.:21,25 (a list of 2 IP addresses)    
-   -i rozofs01          (only one host name)
-   -i rozofs0:1,4,8     (a list of 3 hostnames)
-   -i rozofs0:1-8       (a range of 8 hostnames)  
+   -i 192.168.10.1       (only one IP address)           
+   -i 192.168.10.:21-28  (a range of 8 IP addresses)     
+   -i 192.168.10.:21..28 (a range of 8 IP addresses)     
+   -i 192.168.10.:21,25  (a list of 2 IP addresses)    
+   -i rozofs01           (only one host name)
+   -i rozofs0:1,4,8      (a list of 3 hostnames)
+   -i rozofs0:1-8        (a range of 8 hostnames)  
+   -i rozofs0:1..8       (a range of 8 hostnames)  
 .RS 
 
 .B PORTS = { -p <NPorts> | -T <LPorts> | -M <MPath>  }
@@ -56,16 +58,17 @@ is the diagnostic interface to the RozoFS processes.
    - or a RozoFS mount point path (-M).
  At least one -p, -T or -M option must be set in a rozodiag command.
 .P
- The numeric port is either one single numeric value or a list of numeric values or a range of numeric values.
+ The numeric port is either one single numeric value or a list (with ,) of numeric values or a range (with - or ..) of numeric values.
 .P
 .RS
-.B <NPorts> = { <port> | <firstPort>,..,<lastPort> | <firstPort>-<lastPort> }
+.B <NPorts> = { <port> | <firstPort>,..,<lastPort> | <firstPort>-<lastPort> | <firstPort>..<lastPort> }
 .RE
 .P 
  Examples for numeric ports
-   -p 52000      (only one port of master exportd)    
-   -p 5000:4-7   (a range of 4 ports of the 4 storclis of rozofsmount 0)
-   -p 5000:3,8   (a list of 2 ports of rozofsmount 0 and 1)
+   -p 52000         (only one port of master exportd)    
+   -p 50004-50007   (a range of 4 ports of the 4 storclis of rozofsmount 0)
+   -p 50004..50007  (a range of 4 ports of the 4 storclis of rozofsmount 0)
+   -p 50003,50008   (a list of 2 ports of rozofsmount 0 and 1)
 .P
  The logical port is a logical naming of the destination process diagnostic port.
 .P
@@ -85,7 +88,7 @@ is the diagnostic interface to the RozoFS processes.
 (a list of slave exportd)
 .RE
 .RS
-.B | export:<slave1>-<slaveN>         
+.B | export:<slave1>-<slaveN> | export:<slave1>..<slaveN>         
 (a range of slave exportd)
 .RE
 .RS
@@ -101,7 +104,7 @@ is the diagnostic interface to the RozoFS processes.
 (storios of a list of cluster)
 .RE
 .RS
-.B | storio:<cid1>-<cidN>             
+.B | storio:<cid1>-<cidN> | storio:<cid1>..<cidN>            
 (storios of a range of cluster)
 .RE
 .RS
@@ -113,7 +116,7 @@ is the diagnostic interface to the RozoFS processes.
 (a list of rozofsmount instances)
 .RE
 .RS
-.B | mount:<m1>-<mN>                  
+.B | mount:<m1>-<mN> | mount:<m1>..<mN>                  
 (a range of rozofsmount instances)
 .RE
 .RS
@@ -125,7 +128,7 @@ is the diagnostic interface to the RozoFS processes.
 (a list of instances of storcli of rozofsmount instance <m>)
 .RE
 .RS
-.B | mount:<m>:<s1>-<sN>              
+.B | mount:<m>:<s1>-<sN>  | mount:<m>:<s1>..<sN>               
 (a range of instances of storcli of rozofsmount instance <m>)
 .RE
 .RS
@@ -139,24 +142,26 @@ is the diagnostic interface to the RozoFS processes.
  Examples for logical ports
    -T mount:0       (only one port of rozofsmount 0)    
    -T mount:0:1-4   (a range of 4 ports of the 4 storclis of rozofsmount 0)
+   -T mount:0:1..4  (a range of 4 ports of the 4 storclis of rozofsmount 0)
    -T export:1,6    (a list of 2 ports of exportd slave 1 and 6)
 .P
  The RozoFS mount point path is a way to identify a rozofsmount and/or its storcli thanks to a local node path.
  A path value of "." can be used to specify a rozofsmount point servicing the current path.
- The storcli instances can be one storcli instance, a list of storcli instances, or a range of storcli instances.
+ The storcli instances can be one storcli instance, a list (with ,) of storcli instances, or a range (with - or ..) of storcli instances.
  When targeting several nodes (-i <nodes>) it is assumed that the same rozofsmount instance serves the same path on every targeted node.
 .P
 .RS 
 .B <MPath> = { <path> | <path>:<instances> }  
 .RE
 .RS
-.B <instances> = { <s> | <s1>,...<sN> | <s1>-<sN> }
+.B <instances> = { <s> | <s1>,...<sN> | <s1>-<sN> | <s1>..<sN>}
 .RE  
 .P 
  Examples for mount path
    -M /mnt/rfs      (rozofsmount instance servicing local path /mnt/rfs)    
    -M /mnt/rfs:1    (storcli 1 of rozofsmount instance servicing local path /mnt/rfs)   
    -M /mnt/rfs:1-4  (storcli 1 to 4 of rozofsmount instance servicing local path /mnt/rfs)   
+   -M /mnt/rfs:1..4 (storcli 1 to 4 of rozofsmount instance servicing local path /mnt/rfs)   
    -M .             (rozofsmount instance servicing local curent path)
    -M .:1           (storcli 1 of rozofsmount instance servicing local curent path)
    -M .:1,2         (storcli 1 and 2 of rozofsmount instance servicing local curent path)
@@ -200,7 +205,7 @@ rozodiag -M . -c mount
 .P
 Targeting the 4 storclis of the local RozoFS mount point we are on
 .RS
-rozodiag -M .:1-4 -c profiler
+rozodiag -M .:1..4 -c profiler
 .RE
 .P
 Targeting RozoFS mount /mnt/rfs on several nodes (assuming the same instance is used on local node and remote nodes)
@@ -220,7 +225,7 @@ rozodiag -i 192.168.2.21 -T export:0-8 -c clients
 .P
 Targeting the storaged of 8 nodes
 .RS
-rozodiag -i node:1-8 -T storaged -c dstatus
+rozodiag -i node:1..8 -T storaged -c dstatus
 .RE
 .P
 Targeting the storios of the 6 clusters of one node
@@ -230,7 +235,7 @@ rozodiag -i node5 -T storio:1-6 -c log
 .P
 Targeting rozofsmount instance 2 and its 4 STORCLIs on one node
 .RS
-rozodiag -i node3 -T mount:2:0-4 -c lbg_entries 
+rozodiag -i node3 -T mount:2:0..4 -c lbg_entries 
 .RE
 .P
 Targeting rozofsmount instance 2 and its 4 STORCLIs on 2 nodes
