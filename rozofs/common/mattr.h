@@ -296,7 +296,7 @@ typedef union
      uint8_t i_extra_isize;  /**< array reserved for extended attributes */
      uint8_t bitfield1;  /**< reserve fot future use */
      rozofs_multiple_desc_t multi_desc;  /**< used for rozofs multiple file see rozofs_multiple_desc_t */
-     uint8_t hybrid_sz;  /**<size of the first block in megabytes (0: follow the striping unit) */
+     uint8_t filler3;  /**<size of the first block in megabytes (0: follow the striping unit) */
      uint8_t i_state;     /**< inode state               */
      uint8_t filler4;  /**< reserve fot future use */
      uint8_t filler5;  /**< reserved for future use */
