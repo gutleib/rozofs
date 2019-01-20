@@ -947,7 +947,7 @@ int rozofs_export_slave_inode_copy(rozofs_slave_inode_t *slave_buf_p,lv2_entry_t
   */
   if (lv2->attributes.s.multi_desc.common.master == 0) return 0;
   
-  nb_slaves = 1 << (lv2->attributes.s.multi_desc.master.striping_factor);
+  nb_slaves = lv2->attributes.s.multi_desc.master.striping_factor+1;
   slave_inode_p = lv2->slave_inode_p;
   /*
   ** The buffer MUST not be NULL
@@ -3312,7 +3312,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       /*
       ** get the number of inode to create according to the striping factor
       */
-      inode_count = 1 << striping_factor;
+      inode_count = striping_factor+1;
       /*
       ** allocate the buffer
       */
@@ -4453,7 +4453,7 @@ int exp_delete_file(export_t * e, lv2_entry_t *lvl2)
        /*
        ** multiple file case
        */
-       exp_attr_delete_multiple(trk_tb_p,rozofs_attr_p->s.attrs.fid,(int) (1<<rozofs_attr_p->s.multi_desc.master.striping_factor));
+       exp_attr_delete_multiple(trk_tb_p,rozofs_attr_p->s.attrs.fid,(int) (rozofs_attr_p->s.multi_desc.master.striping_factor+1));
     }
     return 0;        
 }  
@@ -4856,7 +4856,7 @@ int export_unlink_multiple2(export_t * e,lv2_entry_t *master,fid_t parent,char *
    ** find out the number of files to delete according to the striping
    ** factor of the master inode
    */
-   nb_files = 1 << master->attributes.s.multi_desc.master.striping_factor;
+   nb_files = master->attributes.s.multi_desc.master.striping_factor+1;
 
    buf_slave_inode_p = master->slave_inode_p;
    /*
@@ -8223,7 +8223,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
       }
       else
       {
-      DISPLAY_ATTR_UINT("S_FACTOR",1<< lv2->attributes.s.multi_desc.master.striping_factor);     
+      DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
       DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
       DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
       }
@@ -8346,9 +8346,9 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   {
     ext_mattr_t *slave_p;
     int i;
-    int file_count = 1<< lv2->attributes.s.multi_desc.master.striping_factor;
+    int file_count =  lv2->attributes.s.multi_desc.master.striping_factor+1;
     slave_p = lv2->slave_inode_p;
-    DISPLAY_ATTR_UINT("S_FACTOR",1<< lv2->attributes.s.multi_desc.master.striping_factor);     
+    DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
     DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
     DISPLAY_ATTR_TXT ("HYBRID",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
     if (lv2->slave_inode_p == NULL)
@@ -8867,7 +8867,7 @@ striping:
 	  errno = ENOTDIR;
 	  return -1;
 	}
-	if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR_POWEROF2)
+	if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR)
 	{
 	  errno = ERANGE;
 	  return -1;        

@@ -687,7 +687,7 @@ out:
 void ep_lookup_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
     
-    rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
+    rozofs_slave_inode_t slave_inode[ROZOFS_MAX_STRIPING_FACTOR+1];
     
     epgw_lookup_arg_t * arg = (epgw_lookup_arg_t*)pt; 
     export_t *exp;
@@ -739,7 +739,7 @@ out:
 void ep_getattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
     epgw_mfile_arg_t * arg = (epgw_mfile_arg_t*)pt; 
-    rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
+    rozofs_slave_inode_t slave_inode[ROZOFS_MAX_STRIPING_FACTOR+1];
     export_t *exp;
     DEBUG_FUNCTION;
 
@@ -791,7 +791,7 @@ out:
 void ep_setattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
     epgw_setattr_arg_t * arg = (epgw_setattr_arg_t*)pt; 
-    rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
+    rozofs_slave_inode_t slave_inode[ROZOFS_MAX_STRIPING_FACTOR+1];
     
     export_t *exp;
     DEBUG_FUNCTION;
@@ -939,7 +939,7 @@ out:
 */
 void ep_mknod_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static epgw_mattr_ret_t ret;
-    static rozofs_slave_inode_t slave_inode[1<<ROZOFS_MAX_STRIPING_FACTOR_POWEROF2];
+    static rozofs_slave_inode_t slave_inode[ROZOFS_MAX_STRIPING_FACTOR+1];
     epgw_mknod_arg_t * arg = (epgw_mknod_arg_t*)pt; 
     export_t *exp;
     DEBUG_FUNCTION;

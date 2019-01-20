@@ -33,16 +33,28 @@ printf (" Set configuration : rozo_multifile -s -f <striping_factor>  [-u <strip
 printf (" Get configuration : rozo_multifile -g path_1..path_n\n");
 printf("\nParameters:\n");
 printf("  -s                   : To set the multiple configuration of a directory. The striping unit might be omitted if the striping factor is 0.\n");
-printf("  -r <striping_factor> : The striping factor is given in power of 2 [0..4]. It defines the number of files that will be allocated\n");
-printf("                         at the file creation time.\n");
+printf("  -r <striping_factor> : The striping factor must be in the range of [0..7]. It defines the number of files that will be allocated\n");
+printf("                         at the file creation time:\n");
+printf("                           - 0: no striping\n");
+printf("                           - 1: 2 files striping\n");
+printf("                           - 2: 3 files striping\n");
+printf("                           - 3: 4 files striping\n");
+printf("                           - 4: 5 files striping\n");
+printf("                           - 5: 6 files striping\n");
+printf("                           - 6: 7 files striping\n");
+printf("                           - 7: 8 files striping\n");
 printf("                         A striping factor of 0, indicates that there will not be not file striping. It has precedence over the\n"); 
 printf("                         striping configured at either volume or exportd level.\n");
-printf(" -u <striping_unit>    : The value is given in power of 2 [0..3]. The default unit is 256KB. It permits to configure the maximum unit\n");
+printf(" -u <striping_unit>    : The value is given in power of 2 [0..7]. The default unit is 256KB. It permits to configure the maximum unit\n");
 printf("                         size before using the next file according to the striping factor. The value are:\n");
-printf("                           - 0:256KB\n");
-printf("                           - 1:512KB\n");
-printf("                           - 2:1MB\n");
-printf("                           - 3:2MB\n");
+printf("                           - 0: 256KB\n");
+printf("                           - 1: 512KB\n");
+printf("                           - 2: 1MB\n");
+printf("                           - 3: 2MB\n");
+printf("                           - 4: 4MB\n");
+printf("                           - 5: 8MB\n");
+printf("                           - 6: 16MB\n");
+printf("                           - 7: 32MB\n");
 printf("                          The striping unit might be omitted when the striping_factor is 0.\n");
 printf(" -r                     : When provided, it indicates that the child directory will inherit of the configuration of the parent directory\n");
 printf(" -g                     : To get the current multifile configuration of either a directory or regular file\n");
@@ -147,13 +159,7 @@ int get_multifile(char *dirpath)
            }
 	   else
 	   {
-	     striping_factor = 0;
-	     int count = factor_value;
-	     while(count > 1)
-	     {
-	        striping_factor++;
-		count = count/2;
-             }
+	     striping_factor = factor_value-1;
 //	     printf("striping factor :%d (%lld Files)\n",striping_factor,factor_value);
 	   }
 	   break;
@@ -337,9 +343,9 @@ int main(int argc, char **argv) {
               usage();
               exit(EXIT_FAILURE);			  
             }  
-	    if ((striping_unit < 0) || (striping_unit > 3))
+	    if ((striping_unit < 0) || (striping_unit > 7))
 	    {
-              printf("Out of range striping unit: %s (must be in the [0..3] range)\n",optarg);	
+              printf("Out of range striping unit: %s (must be in the [0..7] range)\n",optarg);	
               usage();
               exit(EXIT_FAILURE);			  
             }  	      	                

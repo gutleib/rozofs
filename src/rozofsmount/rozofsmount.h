@@ -1229,7 +1229,7 @@ static inline int rozofs_build_fake_slave_inode(ientry_t *ie,int striping_factor
   p = &inode_p->multi_desc;
   p->byte = 0;
   
-  if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR_POWEROF2)
+  if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR)
   {
      errno = EINVAL;
      return -1;

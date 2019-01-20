@@ -399,7 +399,7 @@ static int read_stripping_config(struct config_setting_t * stripping_set, estrip
     ** Get the stripping factor
     */
     if (config_setting_lookup_int(stripping_set, ESTRIPFACTOR, &factor) != CONFIG_FALSE) {
-        if ((factor<0) || (factor>ROZOFS_MAX_STRIPING_FACTOR_POWEROF2)) {
+        if ((factor<0) || (factor>ROZOFS_MAX_STRIPING_FACTOR)) {
           severe("Bad stripping factor %d", factor);
           goto out;
         }

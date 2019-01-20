@@ -296,7 +296,7 @@ int exp_meta_get_object_attributes(export_tracking_table_t *trk_tb_p,fid_t fid,l
       ** Get the striping factor of the master inode in order to find out how many slave inodes need
       ** to be read
       */
-      attr_sz = sizeof(ext_mattr_t)*(1<<entry_p->attributes.s.multi_desc.master.striping_factor);
+      attr_sz = sizeof(ext_mattr_t)*(entry_p->attributes.s.multi_desc.master.striping_factor+1);
       /*
       ** allocate the memory array for the slave inodes
       */

@@ -256,8 +256,10 @@ typedef struct _inode_fname_t
 */
 
 #define ROZOFS_STRIPING_UNIT_BASE (1024*256)
-#define ROZOFS_MAX_STRIPING_FACTOR_POWEROF2 4
-#define ROZOFS_MAX_STRIPING_UNIT_POWEROF2 3
+#define ROZOFS_MAX_STRIPING_FACTOR  7
+#define ROZOFS_MAX_STRIPING_UNIT_POWEROF2 7
+#define ROZOFS_STRIPING_MAX_HYBRID_BYTES ((1024*1024)*2)
+#define ROZOFS_STRIPING_DEF_HYBRID_BYTES ((1024*1024))
 typedef union
 {
   uint8_t byte;
@@ -294,7 +296,7 @@ typedef union
      uint8_t i_extra_isize;  /**< array reserved for extended attributes */
      uint8_t bitfield1;  /**< reserve fot future use */
      rozofs_multiple_desc_t multi_desc;  /**< used for rozofs multiple file see rozofs_multiple_desc_t */
-     uint8_t filler3;  /**<reserve for future use */
+     uint8_t hybrid_sz;  /**<size of the first block in megabytes (0: follow the striping unit) */
      uint8_t i_state;     /**< inode state               */
      uint8_t filler4;  /**< reserve fot future use */
      uint8_t filler5;  /**< reserved for future use */
@@ -538,7 +540,7 @@ static inline int rozofs_get_striping_size(rozofs_multiple_desc_t *p)
 static inline int rozofs_get_striping_factor(rozofs_multiple_desc_t *p)
 {
   if (p->common.master == 0) return -1;
-  return 1 << (p->master.striping_factor);;
+  return p->master.striping_factor+1;
 
 }
 #endif
