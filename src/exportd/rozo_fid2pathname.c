@@ -503,7 +503,7 @@ int main(int argc, char *argv[]) {
          }
          else {
             if (plv2->attributes.s.multi_desc.common.master == 1) {
-              if (plv2->attributes.s.multi_desc.master.hybrid == 1) {
+              if (plv2->attributes.s.hybrid_desc.s.no_hybrid == 0) {
                 sprintf(fidType,"master hybrid file");
               }
               else {

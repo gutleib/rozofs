@@ -974,6 +974,32 @@ static inline int rozofs_get_striping_size_from_ie(ientry_t *ie)
 
   return rozofs_get_striping_size(p);
 }
+
+
+/*
+**__________________________________________________________________
+*/
+/** That function returns the hybrid size portion of a file
+    That information is found in one attributes of the main inode
+    
+    @param ie: pointer to the inode information
+    
+    @retval  0: the file in not hybrid
+    @retval > 0: value of the hybrid size in byte
+    @retval < 0 : error (see errno for details)
+ */
+static inline int rozofs_get_hybrid_size_from_ie(ientry_t *ie)
+{
+  rozofs_multiple_desc_t *p;  
+  rozofs_hybrid_desc_t *q;  
+  struct inode_internal_t *inode_p = &ie->attrs;  
+  
+  p = &inode_p->multi_desc;
+  q = &inode_p->hybrid_desc;
+
+  return rozofs_get_hybrid_size(p,q);
+}
+
 /*
 **__________________________________________________________________
 */

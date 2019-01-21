@@ -1347,11 +1347,12 @@ int rozofs_build_multiple_offset_vector(uint64_t off, uint32_t len,rozofs_iov_mu
    @param striping_unit: striping unit in bytes 
    @param striping_factor:max  number of slave files
    @param alignment: alignment in bytes on the first block (needed to be 128 aligned for Mojette)
+   @param hybrid_size: size of the hybrid section
 
    @retval 0 on success
    @retval < 0 on error (see errno for details)
 */
-int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint32_t len,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes_in, uint32_t striping_factor,uint32_t alignment)
+int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint32_t len,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes, uint32_t striping_factor,uint32_t alignment,uint32_t hybrid_size_bytes)
 {
    int i = 0;
    rozofs_multi_vect_t *p;
@@ -1359,24 +1360,21 @@ int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint32_t len,rozofs
    uint64_t offset_in_block;
    uint64_t file_idx;
    uint32_t byte_offset_in_shared_buf = alignment;
-   uint32_t striping_unit_bytes;
    
    
    vector_p->nb_vectors = 0;
    p = &vector_p->vectors[0];
 
-   if (striping_unit_bytes_in > (ROZOFS_STRIPING_MAX_HYBRID_BYTES)) striping_unit_bytes = ROZOFS_STRIPING_DEF_HYBRID_BYTES;
-   else striping_unit_bytes = striping_unit_bytes_in;
    
-   if (off < striping_unit_bytes_in)
+   if (off < hybrid_size_bytes)
    {
-        offset_in_block = off%striping_unit_bytes_in;
+        offset_in_block = off%hybrid_size_bytes;
         p->file_idx = 0;
 	p->off = off;	
 	p->byte_offset_in_shared_buf = byte_offset_in_shared_buf;   
-	if ((offset_in_block +len) > striping_unit_bytes_in)
+	if ((offset_in_block +len) > hybrid_size_bytes)
 	{
-	   p->len = striping_unit_bytes_in - offset_in_block;
+	   p->len = hybrid_size_bytes - offset_in_block;
 	   len -= p->len;
 	   off +=p->len;
 	}
@@ -1385,13 +1383,14 @@ int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint32_t len,rozofs
 	   p->len = len;
 	   len = 0;
 	}
-	off = off -  striping_unit_bytes_in + striping_unit_bytes;
+	off = off -  hybrid_size_bytes + striping_unit_bytes;
+        byte_offset_in_shared_buf +=p->len;
 	p++;
 	i++;      
    }
    else
    {
-	off = off -  striping_unit_bytes_in + striping_unit_bytes;   
+	off = off -  hybrid_size_bytes + striping_unit_bytes;   
    }
    
    /*
@@ -2054,13 +2053,15 @@ int64_t write_buf_multiple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const c
     **  The return vector indicates how many commands must be generated)
     **____________________________________________________________________
     */
-    if (ie->attrs.multi_desc.master.hybrid==0)
+    if (ie->attrs.hybrid_desc.s.no_hybrid==1)
     {
       rozofs_build_multiple_offset_vector(off, len,&vector,striping_unit_bytes,striping_factor,alignment);
     }
     else
     {
-      rozofs_build_multiple_offset_vector_hybrid(off, len,&vector,striping_unit_bytes,striping_factor,alignment);    
+      uint32_t hybrid_size;
+      hybrid_size = rozofs_get_hybrid_size_from_ie(ie);
+      rozofs_build_multiple_offset_vector_hybrid(off, len,&vector,striping_unit_bytes,striping_factor,alignment,hybrid_size);    
     }
 
 //    rozofs_print_multi_vector(&vector,bufall_debug);
@@ -2737,13 +2738,15 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
     **  The return vector indicates how many commands must be generated)
     **____________________________________________________________________
     */
-    if (ie->attrs.multi_desc.master.hybrid==0)
+    if (ie->attrs.hybrid_desc.s.no_hybrid==1)
     {
       rozofs_build_multiple_offset_vector(off, len,&vector,striping_unit_bytes,striping_factor,0);
     }
     else
     {
-      rozofs_build_multiple_offset_vector_hybrid(off, len,&vector,striping_unit_bytes,striping_factor,0);    
+      uint32_t hybrid_size;
+      hybrid_size = rozofs_get_hybrid_size_from_ie(ie);
+      rozofs_build_multiple_offset_vector_hybrid(off, len,&vector,striping_unit_bytes,striping_factor,0,hybrid_size);    
     }
 
 //    rozofs_print_multi_vector(&vector,bufall_debug);
@@ -3074,34 +3077,32 @@ int rozofs_build_truncate_multiple_offset_vector(uint64_t off,rozofs_iov_multi_t
    @param vector_p : pointer to the vector that will contains the result
    @param striping_unit: striping unit in bytes 
    @param striping_factor:max  number of slave files
+   @param hybrid_sz_bytes: size of the hybrid section
    
 
    @retval 0 on success
    @retval < 0 on error (see errno for details)
 */
-int rozofs_build_truncate_multiple_offset_vector_hybrid(uint64_t off,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes_in, uint32_t striping_factor)
+int rozofs_build_truncate_multiple_offset_vector_hybrid(uint64_t off,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes, uint32_t striping_factor,uint32_t hybrid_sz_bytes)
 {
    int i = 0;
    rozofs_multi_vect_t *p;
    uint64_t block_number;
    uint64_t offset_in_block;
    uint64_t file_idx;
-   uint32_t striping_unit_bytes;
    
    vector_p->nb_vectors = 0;
    p = &vector_p->vectors[0];
-   if (striping_unit_bytes_in > (ROZOFS_STRIPING_MAX_HYBRID_BYTES)) striping_unit_bytes = ROZOFS_STRIPING_DEF_HYBRID_BYTES;
-   else striping_unit_bytes = striping_unit_bytes_in;
    
-   if (off < striping_unit_bytes_in)
+   if (off < hybrid_sz_bytes)
    {
      /*
      ** compute the block idx, the offset in the block the file index
      */
      block_number = 0;
-     offset_in_block = off%striping_unit_bytes_in;
-     file_idx = block_number%striping_unit_bytes_in;
-     p->off = (block_number/striping_factor)*striping_unit_bytes_in + offset_in_block;
+     offset_in_block = off%hybrid_sz_bytes;
+     file_idx = block_number%hybrid_sz_bytes;
+     p->off = (block_number/striping_factor)*hybrid_sz_bytes + offset_in_block;
      if (block_number == 0)
      {
 	p->file_idx = 0;
@@ -3121,7 +3122,7 @@ int rozofs_build_truncate_multiple_offset_vector_hybrid(uint64_t off,rozofs_iov_
    }
    else
    {
-     off= off - striping_unit_bytes_in + striping_unit_bytes;
+     off= off - hybrid_sz_bytes + striping_unit_bytes;
    }
    off = off-striping_unit_bytes;
    block_number = off/striping_unit_bytes;
@@ -3406,11 +3407,14 @@ int truncate_buf_multitple_nb(void *fuse_ctx_p,ientry_t *ie, uint64_t size)
     **  The return vector indicates how many commands must be generated)
     **____________________________________________________________________
     */
-    if (ie->attrs.multi_desc.master.hybrid == 1) {
-      rozofs_build_truncate_multiple_offset_vector_hybrid(size,&vector,striping_unit_bytes,striping_factor);
-    }
-    else {
+    if (ie->attrs.hybrid_desc.s.no_hybrid==1) {
       rozofs_build_truncate_multiple_offset_vector(size,&vector,striping_unit_bytes,striping_factor);
+    }
+    else 
+    {
+      uint32_t hybrid_size;
+      hybrid_size = rozofs_get_hybrid_size_from_ie(ie);
+      rozofs_build_truncate_multiple_offset_vector_hybrid(size,&vector,striping_unit_bytes,striping_factor,hybrid_size);
     }
       
 

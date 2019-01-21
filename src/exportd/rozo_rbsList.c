@@ -244,7 +244,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     /*
     ** When not in hybrid mode 1st inode has no distribution
     */
-    if (!(inode_p->s.multi_desc.master.hybrid)) {
+    if ((inode_p->s.hybrid_desc.s.no_hybrid)) {
       return 0;
     }  
     /*

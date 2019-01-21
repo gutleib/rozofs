@@ -649,7 +649,7 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
 	  pChar += sprintf(pChar,"i_extra_isize  =%u\n",    (unsigned int)((void*) &fake_inode.s.i_extra_isize - (void*) &fake_inode));
 	  pChar += sprintf(pChar,"bitfield1      =%u\n",    (unsigned int)((void*) &fake_inode.s.bitfield1 - (void*) &fake_inode));
 	  pChar += sprintf(pChar,"multiple_desc  =%u\n",    (unsigned int)((void*) &fake_inode.s.multi_desc.byte - (void*) &fake_inode)); 
-	  pChar += sprintf(pChar,"filler3        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler3 - (void*) &fake_inode));
+	  pChar += sprintf(pChar,"hybrid_desc    =%u\n",    (unsigned int)((void*) &fake_inode.s.hybrid_desc.byte - (void*) &fake_inode));
 	  pChar += sprintf(pChar,"i_state        =%u\n",    (unsigned int)((void*) &fake_inode.s.i_state - (void*) &fake_inode));
 	  pChar += sprintf(pChar,"filler4        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler4 - (void*) &fake_inode)); 
 	  pChar += sprintf(pChar,"filler5        =%u\n",    (unsigned int)((void*) &fake_inode.s.filler5 - (void*) &fake_inode)); 

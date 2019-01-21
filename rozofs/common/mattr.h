@@ -256,10 +256,11 @@ typedef struct _inode_fname_t
 */
 
 #define ROZOFS_STRIPING_UNIT_BASE (1024*256)
+#define ROZOFS_HYBRID_UNIT_BASE (1024*512)
 #define ROZOFS_MAX_STRIPING_FACTOR  7
 #define ROZOFS_MAX_STRIPING_UNIT_POWEROF2 7
-#define ROZOFS_STRIPING_MAX_HYBRID_BYTES ((1024*1024)*2)
-#define ROZOFS_STRIPING_DEF_HYBRID_BYTES ((1024*1024))
+//#define ROZOFS_STRIPING_MAX_HYBRID_BYTES ((1024*1024)*2)
+//#define ROZOFS_STRIPING_DEF_HYBRID_BYTES ((1024*1024))
 typedef union
 {
   uint8_t byte;
@@ -271,7 +272,7 @@ typedef union
   uint8_t master:1; /**< assert to one for the master inode, 0 for the slaves */
   uint8_t striping_unit:3; /**<0: 512KB, 1:1024KB, 2: 2038KB, 3:4096KB  */
   uint8_t striping_factor:3; /**< striping factor is given in power of 2: 0:1; 1:2; 2:4.... */
-  uint8_t hybrid:1;  /**< when asserted it indicates that the first file index is used on the striping_unit size only one time */
+  uint8_t inherit:1;  /**< for directory usage only: when assert the child directory inherits of the parent striping configuration */
 
   } master;
   struct {
@@ -280,6 +281,17 @@ typedef union
   uint8_t file_idx:6; /**<index of the inode in the multiple file  */
   } slave;
 } rozofs_multiple_desc_t;
+
+
+typedef union
+{
+  uint8_t byte;
+
+  struct  {
+  uint8_t no_hybrid:1; /**<assert to 1 when hybrid mode MUST not be used: for directory usage only. Not significant for regular file, use hybrid field of  rozofs_multiple_desc_t instead */
+  uint8_t hybrid_sz:7; /**<number of 512 KB unit used for the hybrid mode : when it is 0 rozofs use the striping unit defined in rozofs_multiple_desc*/
+  } s;
+} rozofs_hybrid_desc_t;
 
 /*___________________________________
 **   RozoFS inode structure
@@ -296,7 +308,7 @@ typedef union
      uint8_t i_extra_isize;  /**< array reserved for extended attributes */
      uint8_t bitfield1;  /**< reserve fot future use */
      rozofs_multiple_desc_t multi_desc;  /**< used for rozofs multiple file see rozofs_multiple_desc_t */
-     uint8_t filler3;  /**<size of the first block in megabytes (0: follow the striping unit) */
+     rozofs_hybrid_desc_t hybrid_desc;  /**<indicates in hybrid mode is in used and the max size of the hybrid section */
      uint8_t i_state;     /**< inode state               */
      uint8_t filler4;  /**< reserve fot future use */
      uint8_t filler5;  /**< reserved for future use */
@@ -518,6 +530,35 @@ static inline int rozofs_get_striping_size(rozofs_multiple_desc_t *p)
 {
   if (p->common.master == 0) return -1;
   return ROZOFS_STRIPING_UNIT_BASE << (p->master.striping_unit);
+}
+
+
+/*
+**__________________________________________________________________
+*/
+/** That function returns the hybrid size of the file
+    That information is found in one attributes of the main inode
+    
+    @param ie: pointer to the inode information
+    
+    @retval > 0: value of the striping size in byte
+    @retval < 0 : error (see errno for details)
+ */
+static inline int rozofs_get_hybrid_size(rozofs_multiple_desc_t *p,rozofs_hybrid_desc_t *q)
+{
+  if (p->common.master == 0) return -1;
+  /*
+  ** Check if hybrid mode is defined for that file
+  */
+  if (q->s.no_hybrid == 1) return 0;
+  /*
+  ** Check if the number of blocks have been defined for the hybrid array, otherwise use the 
+  ** striping unit
+  */
+  if (q->s.hybrid_sz == 0) {
+    return ROZOFS_STRIPING_UNIT_BASE << (p->master.striping_unit);
+  }
+  return(q->s.hybrid_sz*ROZOFS_HYBRID_UNIT_BASE);
 }
 
 /*

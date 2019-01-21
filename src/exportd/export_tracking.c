@@ -3288,6 +3288,7 @@ void fdl_debug_print_storage(export_t *e,ext_mattr_t *q,int master,int fileid)
     @param striping_factor: number of slave inode to create
     @param striping_unit : striping unit in power of 2
     @param hybrid: assert to one if the first striping_unit must be allocated in fast volume
+    @param hybrid_nb_blocks: number of block of SSD section when the file is configured to be hybrid
     
     @retval attr_p: pointer to the attributes of the master inode (NULL in case of error)
     @retval slave_attr_p: pointer to the context of the first slave inoode (NULL in case of error)
@@ -3295,7 +3296,7 @@ void fdl_debug_print_storage(export_t *e,ext_mattr_t *q,int master,int fileid)
 
 int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
                            uint32_t gid, mode_t mode, ext_mattr_t  *ext_attrs_p,lv2_entry_t *plv2,uint32_t pslice,ext_mattr_t **attr_slave_p,
-			   uint32_t striping_factor,uint32_t striping_unit,int hybrid)
+			   uint32_t striping_factor,uint32_t striping_unit,int hybrid,uint32_t hybrid_nb_blocks)
 {
       int inode_count;
       ext_mattr_t *buf_slave_inode_p = NULL;
@@ -3337,10 +3338,13 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       ** For the case of the hybrid mode, we try to allocate the distribution of the master inode in the 
       ** fast volume: the max size that could be written is found in striping_unit_byte
       */
+      if (e->volume_fast == NULL) hybrid = 0;
+#if 0
       if (e->volume_fast != NULL) 
       {
         hybrid = 1;
       }
+#endif
       if (hybrid)
       {
 	/*
@@ -3417,7 +3421,14 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       ext_attrs_p->s.multi_desc.master.master = 1;
       ext_attrs_p->s.multi_desc.master.striping_unit = striping_unit;
       ext_attrs_p->s.multi_desc.master.striping_factor = striping_factor;
-      ext_attrs_p->s.multi_desc.master.hybrid = hybrid;
+      ext_attrs_p->s.multi_desc.master.inherit = 0;
+      /*
+      ** fill up the hybrid section
+      */
+       if (hybrid) ext_attrs_p->s.hybrid_desc.s.no_hybrid = 0;
+       else ext_attrs_p->s.hybrid_desc.s.no_hybrid = 1;
+      ext_attrs_p->s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;
+      
 
      /*
      ** set atime,ctime and mtime
@@ -3525,17 +3536,17 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
     
     @param e : pointer to the exportd context
     @param plv2: pointer to the attributes of the parent directory
-    @param name: name of the file
     @param striping_factor : pointer to the striping_factor value (return)
     @param striping_unit: pointer to the striping unit (return)
     
     @retval none
 */
-void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,char *name,uint32_t *striping_factor,uint32_t *striping_unit,int *hybrid)
+void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,uint32_t *striping_factor,uint32_t *striping_unit,int *hybrid,uint32_t *hybrid_nb_blocks)
 {
    /*
    ** Check if the striping is configured at directory level
    */
+   *hybrid_nb_blocks = 0;
    if (plv2->attributes.s.multi_desc.byte == 0)
    {
      /*
@@ -3543,12 +3554,23 @@ void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,char *nam
      */   
      *striping_factor = e->stripping.factor;
      *striping_unit =  e->stripping.unit;
-     *hybrid = 0;
+     /*
+     ** set the hybrid mode by default
+     */
+     *hybrid = 1;
      return;
    }
+   /*
+   ** get the information from the directory
+   */
    *striping_factor = plv2->attributes.s.multi_desc.master.striping_factor;
    *striping_unit= plv2->attributes.s.multi_desc.master.striping_unit;
-   *hybrid = 0;
+   if (plv2->attributes.s.hybrid_desc.s.no_hybrid != 0) *hybrid = 0;
+   else 
+   {
+     *hybrid = 1;
+     *hybrid_nb_blocks = plv2->attributes.s.hybrid_desc.s.hybrid_sz;
+   }
 }
 
 
@@ -3593,6 +3615,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     lv2_entry_t *lv2_recycle=NULL;
     uint32_t striping_factor = 0;
     uint32_t striping_unit = 0;
+    uint32_t hybrid_nb_blocks = 0;
     int hybrid = 0;
     int ret;
     ext_mattr_t *attr_slave_p = NULL;
@@ -3753,14 +3776,14 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     ** Check if the file must be created with slave inodes: it will depends on the directory , the way the
     ** export has been configured and the suffix of the file to create
     */
-    rozofs_get_striping_factor_and_unit(e,plv2,name,&striping_factor,&striping_unit,&hybrid);
+    rozofs_get_striping_factor_and_unit(e,plv2,&striping_factor,&striping_unit,&hybrid,&hybrid_nb_blocks);
     if (striping_factor != 0)
     {
        ret = export_mknod_multiple2(e,site_number,
                                     pfid,name,uid,gid, mode,
 				    &ext_attrs,
 				    plv2,pslice,&attr_slave_p,
-			            striping_factor,striping_unit,hybrid);
+			            striping_factor,striping_unit,hybrid,hybrid_nb_blocks);
        if (ret < 0) goto error;
        /*
        ** Indicate that the inodes have been allocated (master and slaves)
@@ -4210,7 +4233,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
          ((rozofs_dir0_sids_t*)&ext_attrs.s.attrs.sids[0])->s.trash = ROZOFS_DIR_TRASH_RECURSIVE;
     }
     /*
-    ** Check the case of the striping: new to kno if the child inherits from parent striping configuration
+    ** Check the case of the striping: need to know if the child inherits from parent striping configuration
     */
     if (plv2->attributes.s.multi_desc.byte != 0)
     {
@@ -4218,9 +4241,10 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       ** check the hybrid bit that is used at directory level to indicate that the children inherit from striping configuration
       ** of the parent
       */
-      if (plv2->attributes.s.multi_desc.master.hybrid != 0) 
+      if (plv2->attributes.s.multi_desc.master.inherit != 0) 
       {
         ext_attrs.s.multi_desc.byte = plv2->attributes.s.multi_desc.byte;
+	ext_attrs.s.hybrid_desc.byte = plv2->attributes.s.hybrid_desc.byte;
       }
     }
     ext_attrs.s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;
@@ -5310,7 +5334,7 @@ duplicate_deleted_file:
 		   /*
 		   ** check the case of the hybrid mode (in that case the master has a distribution within the fast volume
 		   */
-		   if (lv2->attributes.s.multi_desc.master.hybrid == 0) no_master_distribution = 1;
+		   if (lv2->attributes.s.hybrid_desc.s.no_hybrid == 1) no_master_distribution = 1;
 		   /*
 		   ** delete the projections associated with the slave inodes
 		   */
@@ -8212,20 +8236,42 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     */
     if (lv2->attributes.s.multi_desc.byte == 0)
     {
-      DISPLAY_ATTR_TXT ("STRIPING","Not configured (follow either volume or export striping)");
+      uint32_t striping_factor,striping_unit;
+      int hybrid;
+      uint32_t hybrid_nb_blocks; 
+      DISPLAY_ATTR_TXT ("MULTI_F","Not configured (follow either volume or export striping)");
+      rozofs_get_striping_factor_and_unit(e,lv2,&striping_factor,&striping_unit,&hybrid,&hybrid_nb_blocks);
+      if (striping_factor == 0)
+      {
+	DISPLAY_ATTR_TXT ("STRIPING","no striping forced");                
+      }
+      else
+      {
+	DISPLAY_ATTR_UINT("S_FACTOR",striping_factor+1);     
+	DISPLAY_ATTR_UINT("S_UNIT",ROZOFS_STRIPING_UNIT_BASE <<striping_unit); 
+        DISPLAY_ATTR_TXT("S_HYBRID",(e->volume_fast!=NULL)?"Yes":"No");	   
+        if (e->volume_fast!=NULL) DISPLAY_ATTR_UINT("S_HSIZE",ROZOFS_STRIPING_UNIT_BASE <<striping_unit);      
+      }      
     }
     else
     {
+      DISPLAY_ATTR_TXT ("MULTI_F","Configured");
       if (lv2->attributes.s.multi_desc.master.striping_factor == 0)
       {
 	DISPLAY_ATTR_TXT ("STRIPING","no striping forced");    
-	DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
+	DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.inherit==0?"No":"Yes");
       }
       else
       {
       DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
       DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
-      DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
+      DISPLAY_ATTR_TXT("S_HYBRID",lv2->attributes.s.hybrid_desc.s.no_hybrid==1?"No":"Yes");
+      if (lv2->attributes.s.hybrid_desc.s.no_hybrid == 0)
+      {
+         uint32_t hsize = (uint32_t) rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc, &lv2->attributes.s.hybrid_desc);
+         DISPLAY_ATTR_UINT("S_HSIZE",hsize);     
+      }
+      DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.inherit==0?"No":"Yes");
       }
     }
    return (p-value);  
@@ -8350,7 +8396,12 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     slave_p = lv2->slave_inode_p;
     DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
     DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
-    DISPLAY_ATTR_TXT ("HYBRID",lv2->attributes.s.multi_desc.master.hybrid==0?"No":"Yes");
+    DISPLAY_ATTR_TXT ("S_HYBRID",(lv2->attributes.s.hybrid_desc.s.no_hybrid==1)?"No":"Yes");
+    if (lv2->attributes.s.hybrid_desc.s.no_hybrid==0)
+    {
+       uint32_t hsize = (uint32_t) rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc, &lv2->attributes.s.hybrid_desc);
+       DISPLAY_ATTR_UINT("S_HSIZE",hsize);     
+    }
     if (lv2->slave_inode_p == NULL)
     {
       DISPLAY_ATTR_TXT ("STATUS","Corrupted");
@@ -8691,6 +8742,8 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   uint64_t     striping_factor;
   uint64_t     striping_unit;
   uint64_t     striping_follow;
+  uint64_t       hybrid_enable;
+  uint64_t       hybrid_nb_blocks;
   char * value=buf_xattr;
   int ret;
   
@@ -8848,69 +8901,95 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     return 0;
   }
   /*
-  ** case of the striping: striping_factor,striping_unit,follow
-  */
+  ** case of the striping: striping_factor,striping_unit,follow,hybrid,hybrid_sz
+  */ 
+  striping_factor = 0xAA55;
+  striping_unit = 0xAA55;
   striping_follow = 0xAA55;
-  ret = sscanf(p," striping = %llu,%llu,%llu", 
+  hybrid_enable = 0xAA55;
+  hybrid_nb_blocks = 0xAA55;
+  ret = sscanf(p," striping = %llu,%llu,%llu,%llu,%llu", 
   		(long long unsigned int *)&striping_factor,
 		(long long unsigned int *)&striping_unit,
-		(long long unsigned int *)&striping_follow
-		);
- 
-  switch (ret)
+		(long long unsigned int *)&striping_follow,
+		(long long unsigned int *)&hybrid_enable,
+		(long long unsigned int *)&hybrid_nb_blocks);
+  if (ret != 0)
   {
-    case 3: 
+    if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
+      errno = ENOTDIR;
+      return -1;
+    }
+    if ((striping_factor == 0xAA55) || (striping_unit == 0xAA55) || (hybrid_enable == 0xAA55))
+    {
+      errno = EINVAL;
+      return -1;
+
+    }
+    if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR)
+    {
+      errno = ERANGE;
+      return -1;        
+    }
+    if (striping_unit > ROZOFS_MAX_STRIPING_UNIT_POWEROF2)
+    {
+      errno = ERANGE;
+      return -1;        
+    }  
+    if (striping_follow == 0xAA55) striping_follow = 0;
+    if (hybrid_enable > 1)
+    {
+      errno = EINVAL;
+      return -1;        
+    } 
+    if ( hybrid_enable == 1)
+    {
+      /*
+      ** check the size of the hybrid section
+      */
+      if (hybrid_nb_blocks == 0xAA55)
       {
-striping:
-
-	if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
-	  errno = ENOTDIR;
-	  return -1;
-	}
-	if (striping_factor > ROZOFS_MAX_STRIPING_FACTOR)
-	{
-	  errno = ERANGE;
-	  return -1;        
-	}
-	if (striping_unit > ROZOFS_MAX_STRIPING_UNIT_POWEROF2)
-	{
-	  errno = ERANGE;
-	  return -1;        
-	}
-	/*
-	**  use he master bit to figure out if the children directory will inherit the striping configuration
-	**  of the parent directory. When striping_follow is different from 0 , the master bit is asserted
-	**
-	**  It is legal to configure a striping_factor of 0 for the case of the directory. It clearly indicates
-	**  that the files created under that directory will not use the striping even if it has been configured at
-	**  ether export or volume level.
-	*/
-	lv2->attributes.s.multi_desc.master.master = 1;
-	if (striping_follow != 0) lv2->attributes.s.multi_desc.master.hybrid = 1;
-	else lv2->attributes.s.multi_desc.master.hybrid = 0;
-	lv2->attributes.s.multi_desc.master.striping_factor = striping_factor;
-	lv2->attributes.s.multi_desc.master.striping_unit = striping_unit;
-	/*
-	** Save the striping configuration  on disk
-	*/
-	return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+	errno = EINVAL;
+	return -1;        
       }
-
-    case 2:
-       if (striping_follow == 0xAA55) 
-       {
-	 striping_follow = 0;
-	 goto striping;  
-       } 
-       errno = EINVAL;
-       return -1;
-
-    case 1:
-       errno = EINVAL;
-       return -1;
-    default:
-       break;
+      if (hybrid_nb_blocks > 127) {
+	errno = ERANGE;
+	return -1;          
+      }  
+    }
+    else
+    {
+      hybrid_nb_blocks = 0;  
+    }
+    /*
+    **  use he master bit to figure out if the children directory will inherit the striping configuration
+    **  of the parent directory. When striping_follow is different from 0 , the master bit is asserted
+    **
+    **  It is legal to configure a striping_factor of 0 for the case of the directory. It clearly indicates
+    **  that the files created under that directory will not use the striping even if it has been configured at
+    **  ether export or volume level.
+    */
+    lv2->attributes.s.multi_desc.master.master = 1;
+    if (striping_follow != 0) lv2->attributes.s.multi_desc.master.inherit = 1;
+    else lv2->attributes.s.multi_desc.master.inherit = 0;
+    lv2->attributes.s.multi_desc.master.striping_factor = striping_factor;
+    lv2->attributes.s.multi_desc.master.striping_unit = striping_unit;
+    /*
+    ** configure the hybrid section
+    */
+    if (hybrid_enable)
+    {
+      lv2->attributes.s.hybrid_desc.s.no_hybrid = 0;
+      lv2->attributes.s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;	
+    }
+    else
+    {
+      lv2->attributes.s.hybrid_desc.s.no_hybrid = 1;
+      lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;		
+    }
+    return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);  
   }
+
 
   /*
   ** Is this an uid change 
