@@ -70,6 +70,12 @@ typedef struct _sid_info_t {
   sid_one_info_t spare;
 } sid_info_t;
 
+typedef enum _INODE_TYPE_E {
+  INODE_TYPE_SINGLE,
+  INODE_TYPE_HYBRID_MASTER,
+  INODE_TYPE_HYBRID_SLAVE,
+  INODE_TYPE_SLAVE,
+} INODE_TYPE_E;
 /*
 ** Array of pointers toward logical storage information
 ** within a given cluster. It is index by the sid number minus 1.
@@ -198,13 +204,8 @@ static int get_job_list_index(sid_one_info_t * p) {
 */
 
 int key_table[] = {ROZOFS_PRIMARY_FID,ROZOFS_MOVER_FID,-1};
-static uint64_t master_size ;
-static uint64_t strip_size ;
-static uint64_t strip_factor ;
-
-int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
+int rozofs_do_visit(INODE_TYPE_E inode_type,ext_mattr_t *inode_p,ext_mattr_t * slave_p) {
   int i;
-  ext_mattr_t *inode_p = inode_attr_p;
   int sid;
   int job;
   sid_tbl_t   * pCid;
@@ -218,59 +219,65 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   cid_t cid;
   sid_t sid_tab[ROZOFS_SAFE_MAX_STORCLI];
   uint64_t   rebuild_size;
-  
+  uint64_t   master_size;
+  uint64_t   strip_size;
+  uint64_t   strip_factor;
+  int        slave_idx ; 
 
   if (debug) {
-     pname += rozofs_fid_append(pname, inode_p->s.attrs.fid);
+     pname += rozofs_fid_append(pname, slave_p->s.attrs.fid);
   } 
   
   /*
   ** File of zero size need not to be rebuilt
   */
-  if (inode_p->s.multi_desc.byte == 0) {
-    /*
-    ** Regular file without striping
-    */
-    rebuild_size = inode_p->s.attrs.size;
-    master_size  = 0;
-    strip_size   = 0;
-    strip_factor = 1;
-    pname += sprintf(pname," single");
-  }  
-  else if (inode_p->s.multi_desc.common.master == 1) {
-    master_size  = inode_p->s.attrs.size;
-    strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc);
-    strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc);
-    /*
-    ** When not in hybrid mode 1st inode has no distribution
-    */
-    if ((inode_p->s.hybrid_desc.s.no_hybrid)) {
-      return 0;
-    }  
-    /*
-    ** In hybrid mode, this inode is located on fast volume but is only one strip long
-    */
-    if (master_size < strip_size) {
-      rebuild_size = master_size;
-    }
-    else {
-      rebuild_size = strip_size;      
-    }      
-    /*
-    ** Left size to rebuild on this file
-    */
-    master_size -= rebuild_size;
-    pname += sprintf(pname," hybrid");    
-  }
-  else {
-    int slave_idx = inode_p->s.multi_desc.slave.file_idx;
-    pname += sprintf(pname," slave %d",slave_idx);   
-    if (master_size <= (slave_idx*strip_size)) {
-      rebuild_size = 0;
-    }
-    else {  
-      rebuild_size = master_size/strip_factor;
-    }   
+  switch(inode_type) {
+  
+    case INODE_TYPE_SINGLE:
+      /*
+      ** Regular file without striping
+      */
+      rebuild_size = inode_p->s.attrs.size;
+      pname += sprintf(pname," single");
+      break;
+      
+    case INODE_TYPE_HYBRID_MASTER:
+      master_size  = inode_p->s.attrs.size;
+      strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc);
+      /*
+      ** In hybrid mode, this inode is located on fast volume but is only one strip long
+      */
+      if (master_size < strip_size) {
+        rebuild_size = master_size;
+      }
+      else {
+        rebuild_size = strip_size;      
+      }      
+      pname += sprintf(pname," hybrid");
+      break;    
+      
+    case INODE_TYPE_HYBRID_SLAVE:
+    case INODE_TYPE_SLAVE:
+      slave_idx    = slave_p->s.multi_desc.slave.file_idx+1;
+      master_size  = inode_p->s.attrs.size;
+      strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc);
+      strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+      if (inode_type == INODE_TYPE_HYBRID_SLAVE) {
+        if (master_size < strip_size) {
+          rebuild_size = 0;
+        }
+        else {
+          rebuild_size = master_size - strip_size;      
+        } 
+      }    
+      if (rebuild_size < (slave_idx*strip_size)) {
+        rebuild_size = 0;
+      }
+      else {  
+        rebuild_size = rebuild_size/strip_factor;
+      }           
+      pname += sprintf(pname," slave %d",slave_idx);   
+      break;    
   }
   
     
@@ -285,7 +292,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   
   while ((key = key_table[key_index++])!= -1)
   {
-    ret = rozofs_fill_storage_info_from_mattr(&inode_p->s.attrs,&cid,sid_tab,inode_p->s.attrs.fid,key);
+    ret = rozofs_fill_storage_info_from_mattr(&slave_p->s.attrs,&cid,sid_tab,slave_p->s.attrs.fid,key);
     if (ret != 0) continue;
     cid--;
     pCid = cid_tbl[cid];
@@ -302,7 +309,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
       if (pSid == NULL) continue;
 
       memset(&entry,0,entry_size);
-      memcpy(entry.fid,inode_p->s.attrs.fid,sizeof(fid_t));
+      memcpy(entry.fid,slave_p->s.attrs.fid,sizeof(fid_t));
       entry.todo      = 1;
       entry.block_end = -1;
       entry.layout    = layout;
@@ -343,7 +350,60 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   }
   return 0;
 }
+/*
+**_______________________________________________________________________
+*/
+/**
+*   RozoFS specific function for visiting
 
+   @param inode_attr_p: pointer to the inode data
+   @param exportd : pointer to exporthd data structure
+   @param p: always NULL
+   
+   @retval 0 no match
+   @retval 1 match
+*/
+
+int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
+  ext_mattr_t *inode_p = inode_attr_p;
+  ext_mattr_t *slave_p = inode_p;  
+  int          idx;
+  int          nb_slave;
+  int          match = 0;
+  
+  /*
+  ** File of zero size need not to be rebuilt
+  */
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** Regular file without striping
+    */
+    match += rozofs_do_visit(INODE_TYPE_SINGLE,inode_attr_p,slave_p);
+  }  
+  else if (inode_p->s.multi_desc.common.master == 1) {
+    /*
+    ** When not in hybrid mode 1st inode has no distribution
+    */
+    if (inode_p->s.multi_desc.master.hybrid) {
+      match += rozofs_do_visit(INODE_TYPE_HYBRID_MASTER,inode_attr_p,slave_p);
+    }  
+    /*
+    ** Check every slave
+    */
+    slave_p ++;
+    nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+    for (idx=0; idx<nb_slave; idx++,slave_p++) {
+      if (inode_p->s.multi_desc.master.hybrid) {
+         match += rozofs_do_visit(INODE_TYPE_HYBRID_SLAVE,inode_attr_p,slave_p);
+      }  
+      else{
+         match += rozofs_do_visit(INODE_TYPE_SLAVE,inode_attr_p,slave_p);
+      }  
+    }  
+  }
+  if(match) return 1;
+  return 0;
+}  
 /*
 **_______________________________________________________________________
 */

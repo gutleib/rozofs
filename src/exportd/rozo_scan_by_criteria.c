@@ -89,6 +89,7 @@ int display_trash_cfg = 0;
 int display_all = 0;
 int display_json = 0;
 int display_error = 0;
+int display_striping = 0;
 int first_entry = 1;
 #define DO_DISPLAY           1
 #define DO_HUMAN_DISPLAY     2
@@ -98,16 +99,105 @@ int first_entry = 1;
 
 char separator[128] = {0};
 
-#define NEW_FIELD(field) {\
+int first_array_element = 1;
+
+#define NEW_NAME(field) {\
   if (display_json) {\
-    if (strlen(#field) < 6) printf(",\n       \""#field"\" \t\t: ");\
-    else                    printf(",\n       \""#field"\" \t: ");\
+    pDisplay += rozofs_string_append(pDisplay,", \""#field"\" : ");\
   }\
   else {\
-    if (separator[0]) printf(" %s "#field"=",separator);\
-    else printf(" "#field"=");\
+    pDisplay += rozofs_string_append(pDisplay," "#field"=");\
+  }\
+}  
+
+#define NEW_QUOTED_NAME(field) {\
+  if (display_json) {\
+    pDisplay += rozofs_string_append(pDisplay,", \""#field"\" : \"");\
+  }\
+  else {\
+    pDisplay += rozofs_string_append(pDisplay," "#field"=\"");\
+  }\
+}  
+#define FIRST_QUOTED_NAME(field) {\
+  if (display_json) {\
+    pDisplay += rozofs_string_append(pDisplay,"\""#field"\" : \"");\
+  }\
+  else {\
+    pDisplay += rozofs_string_append(pDisplay," "#field"=\"");\
+  }\
+}  
+#define NEW_FIELD(field) {\
+  if (display_json) {\
+    if (strlen(#field) < 6) {\
+      pDisplay += rozofs_string_append(pDisplay,",\n       \""#field"\" \t\t: ");\
+    }\
+    else {\
+      pDisplay += rozofs_string_append(pDisplay,",\n       \""#field"\" \t: ");\
+    }\
+  }\
+  else {\
+    if (separator[0]) {\
+      pDisplay += rozofs_string_append(pDisplay," ");\
+      pDisplay += rozofs_string_append(pDisplay,separator);\
+    }\
+    pDisplay += rozofs_string_append(pDisplay," "#field"=");\
   } \
 }
+#define NEW_QUOTED_FIELD(field) {\
+  if (display_json) {\
+    if (strlen(#field) < 6) {\
+      pDisplay += rozofs_string_append(pDisplay,",\n       \""#field"\" \t\t: \"");\
+    }\
+    else {\
+      pDisplay += rozofs_string_append(pDisplay,",\n       \""#field"\" \t: \"");\
+    }\
+  }\
+  else {\
+    if (separator[0]) {\
+      pDisplay += rozofs_string_append(pDisplay," ");\
+      pDisplay += rozofs_string_append(pDisplay,separator);\
+    }\
+    pDisplay += rozofs_string_append(pDisplay," "#field"=\"");\
+  } \
+}
+#define START_SUBARRAY(field) {\
+  first_array_element = 1;\
+  if (display_json) {\
+    if (strlen(#field) < 6) {\
+      pDisplay += rozofs_string_append(pDisplay,",\n       \""#field"\" \t\t: [ ");\
+    }\
+    else {\
+      pDisplay += rozofs_string_append(pDisplay,",\n       \""#field"\" \t: [ ");\
+    }\
+  }\
+}  
+#define SUBARRAY_START_ELEMENT()  {\
+  if (display_json) {\
+    if (first_array_element) {\
+      pDisplay += rozofs_string_append(pDisplay,"\n            {");\
+      first_array_element = 0;\
+    }\
+    else {\
+      pDisplay += rozofs_string_append(pDisplay,",\n            {");\
+    }\
+  }\
+}
+#define SUBARRAY_STOP_ELEMENT()  {\
+  if (display_json) {\
+    pDisplay += rozofs_string_append(pDisplay,"}");\
+  }\
+}
+
+#define STOP_SUBARRAY() {\
+  if (display_json) {\
+    pDisplay += rozofs_string_append(pDisplay,"\n       ]");\
+  }\
+}
+
+
+char   display_buffer[4096*4];
+char * pDisplay;
+
 /*
 ** Privileges
 */
@@ -259,6 +349,11 @@ int         only_wrerror=0;
 */
 int scan_all_tracking_files = 0; // Only those matching research criteria
 
+
+
+int highlight;
+#define HIGHLIGHT(x) if (x) {highlight = 1; pDisplay += rozofs_string_append(pDisplay,ROZOFS_COLOR_CYAN);}else{highlight = 0;}
+#define NORMAL()     if(highlight) {pDisplay += rozofs_string_append(pDisplay,ROZOFS_COLOR_NONE);}
 /*
 **__________________________________________________________________
 **
@@ -570,7 +665,212 @@ char *rozo_get_path(void *exportd,void *inode_p,char *buf,int lenmax, int relati
 
     return pbuf;
 }
+/*
+**_______________________________________________________________________
+*/
+/**
+*   Check the presence of a sid in a list of sid 
 
+   @param sids    : the list of sids
+   @param sid     : the sid to search for
+   
+   @retval 0 sid not in sid list
+   @retval 1 sid in sid list 
+*/
+int rozofs_check_sid_in_list(sid_t * sids, sid_t sid) {
+  int   sid_idx;
+  
+  for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++,sids++) {
+    if (*sids == 0) return 0;
+    if (*sids == sid) return 1;
+  }
+  return 0;
+}    
+/*
+**_______________________________________________________________________
+*/
+/**
+*   Check the presence of a cdi and sid 
+
+   @param inode_p    : the pointer to the inode
+   @param cid        : cid to match
+   @param sid        : sid to match
+   
+   @retval 0 sid not in sid list
+   @retval 1 sid in sid list 
+*/
+int rozofs_check_cid_and_sid(ext_mattr_t *inode_p, cid_t cid_equal, sid_t sid_equal) {
+  int           idx; 
+  int           nbSlaves; 
+  ext_mattr_t * slave_p;;
+  
+  /*
+  ** hybrid as well as non multifile mode have a distribution in 1rst inde
+  */
+  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)) { 
+    if (inode_p->s.attrs.cid == cid_equal) {
+      /*
+      ** Master inode matches
+      */
+      if (rozofs_check_sid_in_list(inode_p->s.attrs.sids, sid_equal)) {
+        /*
+        ** Master inode matches cid & sid
+        */
+        return 1;
+      }
+    }   
+  } 
+  
+  /*
+  ** Slave inodes for multifile mode
+  */ 
+  
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** No other distribution
+    */
+    return 0;
+  } 
+   
+  nbSlaves = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+  for (idx=1; idx <= nbSlaves;  idx++) {
+
+    slave_p = inode_p + idx;
+    if (slave_p->s.attrs.cid == cid_equal) {
+      /*
+      ** Slave inode matches
+      */   
+      if (rozofs_check_sid_in_list(slave_p->s.attrs.sids, sid_equal)) {
+        /*
+        ** Slave inode matches cid & sid
+        */
+        return 1;
+      }
+    }
+  }
+  return 0;
+}  
+/*
+**_______________________________________________________________________
+*/
+/**
+*   Check the presence of a cid but not sid 
+
+   @param inode_p    : the pointer to the inode
+   @param cid_equal  : cid to match
+   @param sid_diff   : sid not to match
+   
+   @retval 0 sid not in sid list
+   @retval 1 sid in sid list 
+*/
+int rozofs_check_cid_and_not_sid(ext_mattr_t *inode_p, cid_t cid_equal, sid_t sid_diff) {
+  int           idx; 
+  int           nbSlaves; 
+  ext_mattr_t * slave_p;;
+  int           cid_match = 0;
+  
+  /*
+  ** hybrid as well as non multifile mode have a distribution in 1rst inde
+  */
+  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)) { 
+    if (inode_p->s.attrs.cid == cid_equal) {
+      /*
+      ** Master inode matches
+      */
+      cid_match = 1;
+      if (rozofs_check_sid_in_list(inode_p->s.attrs.sids, sid_diff)) {
+        /*
+        ** Master inode matches cid & sid
+        */
+        return 0;
+      }
+    }   
+  } 
+  
+  /*
+  ** Slave inodes for multifile mode
+  */ 
+  
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** No other distribution
+    */
+    return cid_match;
+  } 
+   
+  nbSlaves = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+  for (idx=1; idx <= nbSlaves;  idx++) {
+
+    slave_p = inode_p + idx;
+    if (slave_p->s.attrs.cid == cid_equal) {
+      /*
+      ** Slave inode matches
+      */   
+      cid_match = 1;
+      if (rozofs_check_sid_in_list(slave_p->s.attrs.sids, sid_equal)) {
+        /*
+        ** Slave inode matches cid & sid
+        */
+        return 0;
+      }
+    }
+  }
+  return cid_match;
+}  
+
+/*
+**_______________________________________________________________________
+*/
+/**
+*   Check the presence of a cid 
+
+   @param inode_p    : the pointer to the inode
+   @param cid        : cid to match
+   
+   @retval 0 cid is not present
+   @retval 1 cid is present
+*/
+int rozofs_check_cid(ext_mattr_t *inode_p, cid_t cid_equal) {
+  int           idx; 
+  int           nbSlaves; 
+  ext_mattr_t * slave_p;;
+  
+  /*
+  ** hybrid as well as non multifile mode have a distribution in 1rst inde
+  */
+  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)) { 
+    if (inode_p->s.attrs.cid == cid_equal) {
+      /*
+      ** Master inode matches
+      */
+      return 1;
+    }   
+  } 
+  
+  /*
+  ** Slave inodes for multifile mode
+  */ 
+  
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** No other distribution
+    */
+    return 0;
+  } 
+   
+  nbSlaves = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+  for (idx=1; idx <= nbSlaves;  idx++) {
+
+    slave_p = inode_p + idx;
+    if (slave_p->s.attrs.cid == cid_equal) {
+      /*
+      ** Slave inode matches
+      */   
+      return 1;
+    }
+  }
+  return 0;
+}  
 /*
 **_______________________________________________________________________
 */
@@ -592,7 +892,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   int          nameLen;
   char       * pName;
   export_t   * e = exportd;
-
+  ext_mattr_t *slave_p;;
+  
   nb_scanned_entries++;
   
   if (search_dir==0) {
@@ -1064,50 +1365,61 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a cid equal to cid_equal
     */    
-    if (cid_equal != -1) {
-      if (inode_p->s.attrs.cid != cid_equal) {
+    while (cid_equal != -1) {
+    
+      /*
+      ** Check the cid and sid are present in one distribution
+      */
+      if (sid_equal != -1) {        
+        if (rozofs_check_cid_and_sid(inode_p,cid_equal,sid_equal) == 0) {
+          return 0;
+        }
+        break;  
+      } 
+      
+      /*
+      ** Check the cid is present but not the sid
+      */      
+      if (sid_diff != -1) {        
+        if (rozofs_check_cid_and_not_sid(inode_p,cid_equal,sid_diff) == 0) {
+          return 0;
+        }
+        break;  
+      }  
+      
+      /*
+      ** Just check the CID presence 
+      */  
+      if (rozofs_check_cid(inode_p,cid_equal) == 0) {
         return 0;
-      }
+      }   
+      break;
     }
 
     /*
     ** Must have an cid different from cid_diff
     */    
-    if (cid_diff != -1) {
-      if (inode_p->s.attrs.cid == cid_diff) {
+    while (cid_diff != -1) {    
+      
+      /*
+      ** Check the cid and sid ar not present
+      */      
+      if (sid_diff != -1) {        
+        if (rozofs_check_cid_and_sid(inode_p,cid_diff,sid_diff)) {
+          return 0;
+        }
+        break;  
+      }
+      
+      /*
+      ** Just check the CID presence 
+      */  
+      if (rozofs_check_cid(inode_p,cid_diff)) {
         return 0;
-      }
+      }   
+      break;
     }
-    
-    /*
-    ** Must have a sid equal to sid_equal
-    */    
-    if (sid_equal != -1) {
-      int   sid_idx;
-      sid_t sid;
-      for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
-        sid = inode_p->s.attrs.sids[sid_idx];
-        if ((sid == 0) || (sid_equal == sid)) break;
-      }
-      if (sid_equal != sid) {
-        return 0;
-      }
-    }
-    
-    /*
-    ** Must not have a sid equal to sid_diff
-    */    
-    if (sid_diff != -1) {
-      int   sid_idx;
-      sid_t sid;
-      for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
-        sid = inode_p->s.attrs.sids[sid_idx];
-        if ((sid == 0) || (sid_diff == sid)) break;
-      }
-      if (sid_diff == sid) {
-        return 0;
-      }
-    }
+
     
     /*
     ** Must have a nlink bigger than nlink_bigger
@@ -1292,16 +1604,6 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     case name_format_relative:
       pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),1);
       break;
-      pChar = fullName;    
-      pChar += sprintf(pChar,"./@rozofs_uuid@");
-      pChar += rozofs_fid_append(pChar,inode_p->s.pfid);
-      if (exp_metadata_inode_is_del_pending(inode_p->s.attrs.fid)) {
-        pChar += sprintf(pChar,"/@rozofs-trash@");  
-      }
-      pName = exp_read_fname_from_inode(e->root,inode_p,&nameLen);        
-      pChar += sprintf(pChar,"/%s",pName);        
-      pChar  = fullName;    
-      break;
 
     default:        
       pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),0);
@@ -1314,18 +1616,22 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     return 0;
   }  
 
+  pDisplay  = display_buffer;
+  *pDisplay = 0;
   
   if (display_json) {
     if (first_entry) {
       first_entry = 0;
-      printf("\n    {  \"name\" : \"%s\"",pChar);
     }
     else {
-      printf(",\n    {  \"name\" : \"%s\"",pChar);
+      pDisplay += rozofs_string_append(pDisplay,",");
     }   
+    pDisplay += rozofs_string_append(pDisplay,"\n    {  \"name\" : \"");
+    pDisplay += rozofs_string_append(pDisplay,pChar);
+    pDisplay += rozofs_string_append(pDisplay,"\"");
   }
   else {  
-    printf("%s",pChar);
+    pDisplay += rozofs_string_append(pDisplay,pChar);
   }
 
   /*
@@ -1333,7 +1639,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   */  
   IF_DISPLAY(display_uid) {
     NEW_FIELD(uid); 
-    printf("%d", inode_p->s.attrs.uid);
+    pDisplay += rozofs_u32_append(pDisplay,inode_p->s.attrs.uid);
   }
 
   /*
@@ -1341,7 +1647,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   */  
   IF_DISPLAY(display_gid) {
     NEW_FIELD(gid);   
-    printf("%d", inode_p->s.attrs.gid);
+    pDisplay += rozofs_u32_append(pDisplay,inode_p->s.attrs.gid);
   }
   
   /*
@@ -1350,10 +1656,12 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   IF_DISPLAY(display_priv) {
     NEW_FIELD(priv);  
     if (display_json) {
-      printf("\"%4.4o\"", inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+      pDisplay += rozofs_string_append(pDisplay,"\"");
+      pDisplay += rozofs_mode2String(pDisplay, inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+      pDisplay += rozofs_string_append(pDisplay,"\"");
     }
     else {
-      printf("%4.4o", inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+      pDisplay += rozofs_u32_append(pDisplay, inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
     }  
   }
   
@@ -1363,10 +1671,10 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   IF_DISPLAY(display_xattr) {
     NEW_FIELD(xattr);  
     if (rozofs_has_xattr(inode_p->s.attrs.mode)) {
-      printf("\"YES\"");
+      pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
     }
     else {
-      printf("\"NO\"");
+      pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
     }
   }
 
@@ -1378,48 +1686,47 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 
     IF_DISPLAY(display_size) {
       NEW_FIELD(size); 
-      printf("%llu",(long long unsigned)ext_dir_mattr_p->s.nb_bytes);        
+      pDisplay += rozofs_u64_append(pDisplay,ext_dir_mattr_p->s.nb_bytes);        
     }
     IF_DISPLAY(display_children) {       
       NEW_FIELD(children); 
-      printf("%llu",(long long unsigned)inode_p->s.attrs.children);                
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.children);                
     }
     IF_DISPLAY(display_deleted) {       
       uint64_t deleted = inode_p->s.hpc_reserved.dir.nb_deleted_files;
       NEW_FIELD(deleted); 
-      printf("%llu",(long long unsigned)deleted);                
+      pDisplay += rozofs_u64_append(pDisplay,deleted);                
     }
     IF_DISPLAY(display_project) {
       NEW_FIELD(project);       
-      printf("%d", inode_p->s.attrs.cid);
+      pDisplay += rozofs_u32_append(pDisplay, inode_p->s.attrs.cid);
     }
     IF_DISPLAY(display_trash_cfg) {
       uint8_t trash = ((rozofs_dir0_sids_t*)&inode_p->s.attrs.sids[0])->s.trash;
       NEW_FIELD(trash);
       if (trash) {
         if (trash == ROZOFS_DIR_TRASH_RECURSIVE) {
-          printf("\"RECURSIVE\"");
+          pDisplay += rozofs_string_append(pDisplay,"\"RECURSIVE\"");
         }
         else {
-          printf("\"ENABLED\"");
+          pDisplay += rozofs_string_append(pDisplay,"\"ENABLED\"");
         }   
       }  
       else {
-        printf("\"DISABLED\"");      
+        pDisplay += rozofs_string_append(pDisplay,"\"DISABLED\"");      
       }
     }    
     IF_DISPLAY(display_update) {
       ext_dir_mattr_t * stats_attr_p = (ext_dir_mattr_t *)&inode_p->s.attrs.sids[0];
       if (stats_attr_p->s.version >=  ROZOFS_DIR_VERSION_1) {
         IF_DISPLAY_HUMAN(display_update) {
-          char buftime[512];
-          NEW_FIELD(hupdate);
-          rozofs_time2string(buftime,stats_attr_p->s.update_time);            
-          printf("\"%s\"", buftime);
+          NEW_QUOTED_FIELD(hupdate);
+          pDisplay += rozofs_time2string(pDisplay,stats_attr_p->s.update_time);            
+          pDisplay += rozofs_string_append(pDisplay,"\"");   
         }
         else {
           NEW_FIELD(supdate);
-          printf("%llu",(long long unsigned int)stats_attr_p->s.update_time);  
+          pDisplay += rozofs_u64_append(pDisplay,stats_attr_p->s.update_time);  
         }  
       }
     }
@@ -1431,112 +1738,205 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   else {  
     IF_DISPLAY(display_size) {
       NEW_FIELD(size);       
-      printf("%llu",(long long unsigned)inode_p->s.attrs.size);        
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.size);        
     }  
     IF_DISPLAY(display_nlink) {       
       NEW_FIELD(nlink); 
-      printf("%llu",(long long unsigned)inode_p->s.attrs.nlink);                
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.nlink);                
     }
     IF_DISPLAY(display_project) {
       NEW_FIELD(project);       
-      printf("%d", inode_p->s.hpc_reserved.reg.share_id);
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.hpc_reserved.reg.share_id);
     }
     IF_DISPLAY(display_error) {
       NEW_FIELD(wrerror);       
       if (rozofs_is_wrerror((lv2_entry_t*)inode_p)) {
-        printf("YES");
+        pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
       }
       else {
-        printf("NO");
+        pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
       }
     }
-    IF_DISPLAY(display_distrib) {
-      NEW_FIELD(cid); 
-      printf("%u",inode_p->s.attrs.cid);
-      NEW_FIELD(sid); 
-        
-      printf("[%u", inode_p->s.attrs.sids[0]);
-      int sid_idx;
-      for (sid_idx=1; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
-        if (inode_p->s.attrs.sids[sid_idx] == 0) break;
-        printf(",%u",inode_p->s.attrs.sids[sid_idx]);
+
+    IF_DISPLAY(display_id) {
+      NEW_QUOTED_FIELD(fid);  
+      pDisplay += rozofs_fid_append(pDisplay,inode_p->s.attrs.fid);
+      pDisplay += rozofs_string_append(pDisplay,"\"");   
+    }     
+       
+    IF_DISPLAY(display_striping) {
+      int strip_factor;
+      int strip_size;
+      strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+      strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc); 
+      NEW_FIELD(hybdrid); 
+      if (inode_p->s.multi_desc.master.hybrid) {
+        pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
       }
-      printf("]");
+      else {
+        pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
+      }
+      NEW_FIELD(slaves); 
+      pDisplay += rozofs_u32_append(pDisplay,strip_factor);   
+      NEW_FIELD(strip_size);       
+      pDisplay += rozofs_u32_append(pDisplay,strip_size);   
+    }    
+    
+    IF_DISPLAY(display_distrib) {
+
+      START_SUBARRAY(distribution);
+      /*
+      ** Display distribution in inode for hybrid as well as non multifile mode
+      */
+      if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)){
+        slave_p = inode_p;
+        SUBARRAY_START_ELEMENT();
+        FIRST_QUOTED_NAME(storage_fid);
+        pDisplay += rozofs_fid_append(pDisplay,slave_p->s.attrs.fid);
+        pDisplay += rozofs_string_append(pDisplay,"\"");   
+
+        HIGHLIGHT (cid_equal == slave_p->s.attrs.cid) ;  
+        NEW_NAME(cid)
+        pDisplay += rozofs_u32_append(pDisplay,slave_p->s.attrs.cid);
+        NORMAL();
+
+        NEW_NAME(sid)
+        pDisplay += rozofs_string_append(pDisplay,"[");
+        int sid_idx;
+        for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+          if (slave_p->s.attrs.sids[sid_idx] == 0) break;
+          if (sid_idx != 0) pDisplay += rozofs_string_append(pDisplay,",");
+          HIGHLIGHT ((cid_equal == slave_p->s.attrs.cid)&&(sid_equal == slave_p->s.attrs.sids[sid_idx])) 
+          pDisplay += rozofs_u32_append(pDisplay,slave_p->s.attrs.sids[sid_idx]);
+          NORMAL();
+        }
+        pDisplay += rozofs_string_append(pDisplay,"]");
+        SUBARRAY_STOP_ELEMENT();   
+      } 
+      /*
+      ** Display distribution of slave inodes for multifile mode
+      */ 
+      if (inode_p->s.multi_desc.byte != 0) {
+        int idx; 
+        int nbSlaves = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+        for (idx=1; idx <= nbSlaves;  idx++) {
+          slave_p = inode_p + idx;
+          SUBARRAY_START_ELEMENT();
+          FIRST_QUOTED_NAME(storage_fid)
+          pDisplay += rozofs_fid_append(pDisplay,slave_p->s.attrs.fid);
+          pDisplay += rozofs_string_append(pDisplay,"\"");   
+
+          HIGHLIGHT (cid_equal == slave_p->s.attrs.cid) ;  
+          NEW_NAME(cid)
+          pDisplay += rozofs_u32_append(pDisplay,slave_p->s.attrs.cid);
+          NORMAL();
+
+          NEW_NAME(sid)
+          pDisplay += rozofs_string_append(pDisplay,"[");
+          int sid_idx;
+          for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+            if (slave_p->s.attrs.sids[sid_idx] == 0) break;
+            if (sid_idx != 0) pDisplay += rozofs_string_append(pDisplay,",");
+            HIGHLIGHT ((cid_equal == slave_p->s.attrs.cid)&&(sid_equal == slave_p->s.attrs.sids[sid_idx])) 
+            pDisplay += rozofs_u32_append(pDisplay,slave_p->s.attrs.sids[sid_idx]);
+            NORMAL();
+          }
+          pDisplay += rozofs_string_append(pDisplay,"]");
+          SUBARRAY_STOP_ELEMENT();   
+        }  
+      }
+      STOP_SUBARRAY();
     }     
   } 
   
-  IF_DISPLAY(display_id) {
-    char fidString[40];
-    NEW_FIELD(fid);  
-    rozofs_fid_append(fidString,inode_p->s.attrs.fid);
-    printf("\"%s\"", fidString);       
-  }     
-   
   IF_DISPLAY(display_cr8) {
     IF_DISPLAY_HUMAN(display_cr8) {
-      char buftime[512];
-      rozofs_time2string(buftime,inode_p->s.cr8time);  
       NEW_FIELD(hcr8); 
-      printf("\"%s\"", buftime); 
+      if (display_json) {
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.cr8time);  
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+      }
+      else {
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.cr8time);        
+      }  
     }  
     else {
       NEW_FIELD(scr8);
-      printf("%llu",(long long unsigned int)inode_p->s.cr8time);  
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.cr8time);  
     }  
   }
   
   IF_DISPLAY(display_mod) {
     IF_DISPLAY_HUMAN(display_mod) {
-      char buftime[512];
-      rozofs_time2string(buftime,inode_p->s.attrs.mtime);  
       NEW_FIELD(hmod); 
-      printf("\"%s\"", buftime);
+      if (display_json) {
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.attrs.mtime);  
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+      }
+      else {
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.attrs.mtime);        
+      }        
     }        
     else {
       NEW_FIELD(smod);
-      printf("%llu",(long long unsigned int)inode_p->s.attrs.mtime);  
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.mtime);  
     }  
   }
-  
+
   IF_DISPLAY(display_ctime) {
     IF_DISPLAY_HUMAN(display_ctime) {
-      char buftime[512];
-      rozofs_time2string(buftime,inode_p->s.attrs.ctime);  
       NEW_FIELD(hctime); 
-      printf("\"%s\"", buftime);
+      if (display_json) {
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.attrs.ctime);  
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+      }
+      else {
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.attrs.ctime);        
+      }        
     }        
     else {
       NEW_FIELD(sctime);
-      printf("%llu",(long long unsigned int)inode_p->s.attrs.ctime);  
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.ctime);  
     }  
-  }   
+  }  
 
   IF_DISPLAY(display_atime) {
     IF_DISPLAY_HUMAN(display_atime) {
-      char buftime[512];
-      rozofs_time2string(buftime,inode_p->s.attrs.atime);  
       NEW_FIELD(hatime); 
-      printf("\"%s\"", buftime);
+      if (display_json) {
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.attrs.atime);  
+        pDisplay += rozofs_string_append(pDisplay,"\"");
+      }
+      else {
+        pDisplay += rozofs_time2string(pDisplay,inode_p->s.attrs.atime);        
+      }        
     }        
     else {
       NEW_FIELD(satime);
-      printf("%llu",(long long unsigned int)inode_p->s.attrs.atime);  
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.atime);  
     }  
-  }   
+  }  
 
   if (display_json) {
-    printf("  }");    
+    pDisplay += rozofs_string_append(pDisplay,"  }");    
   }
   else {   
     cur_entry_per_line++;
     if (cur_entry_per_line >= entry_per_line) {
       cur_entry_per_line = 0;
-      printf("\n");
+      pDisplay += rozofs_string_append(pDisplay,"\n");
     }
     else {
-      printf("  %s ", separator);
+      pDisplay += rozofs_string_append(pDisplay," ");
+      pDisplay += rozofs_string_append(pDisplay,separator);
     } 
   } 
+  
+  printf("%s",display_buffer);
   
   if (nb_matched_entries >= max_display) {
     rozo_lib_stop_var = 1;
@@ -1560,7 +1960,6 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
 {
   rmfentry_disk_t *rmentry = inode_attr_p;
 //  export_t   * e = exportd;
-  char         fullName[64];
 
   nb_scanned_entries++;
 
@@ -1607,109 +2006,117 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
     if (rmentry->cid != cid_equal) {
       return 0;
     }
+
+    /*
+    ** Must have a sid equal to sid_equal
+    */
+    if (sid_equal != -1) {
+      if (!rozofs_check_sid_in_list(rmentry->current_dist_set, sid_equal)) {
+        return 0;
+      }
+    }
+    /*
+    ** Must not have a sid equal to sid_diff
+    */        
+    if (sid_diff != -1) {
+      if (rozofs_check_sid_in_list(rmentry->current_dist_set, sid_diff)) {
+        return 0;
+      }
+    }        
   }
 
   /*
   ** Must have an cid different from cid_diff
   */    
   if (cid_diff != -1) {
+  
     if (rmentry->cid == cid_diff) {
-      return 0;
-    }
+    
+      /*
+      ** Must not have a have cid equal to cid_diff and sid equal to sid_diff
+      */        
+      if (sid_diff != -1) {
+        if (rozofs_check_sid_in_list(rmentry->current_dist_set, sid_diff)) {
+          return 0;
+        }
+      }
+      /*
+      ** Must not have cid equal to cid_diff 
+      */
+      else {
+        return 0;
+      }
+    }     
   }
-
-  /*
-  ** Must have a sid equal to sid_equal
-  */    
-  if (sid_equal != -1) {
-    int   sid_idx;
-    sid_t sid;
-    for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
-      sid = rmentry->current_dist_set[sid_idx];
-      if ((sid == 0) || (sid_equal == sid)) break;
-    }
-    if (sid_equal != sid) {
-      return 0;
-    }
-  }
-
-  /*
-  ** Must not have a sid equal to sid_diff
-  */    
-  if (sid_diff != -1) {
-    int   sid_idx;
-    sid_t sid;
-    for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
-      sid = rmentry->current_dist_set[sid_idx];
-      if ((sid == 0) || (sid_diff == sid)) break;
-    }
-    if (sid_diff == sid) {
-      return 0;
-    }
-  }
+  
              
   /*
   ** This inode is valid
   */
   nb_matched_entries++;
-   
-  rozofs_fid_append(fullName,rmentry->trash_inode);
+  pDisplay = display_buffer;
 
   
   if (display_json) {
     if (first_entry) {
       first_entry = 0;
-      printf("\n    {  \"name\" : \"%s\"",fullName);
     }
     else {
-      printf(",\n    {  \"name\" : \"%s\"",fullName);
+      pDisplay += rozofs_string_append(pDisplay,",");
     }   
+    pDisplay += rozofs_string_append(pDisplay,"\n    {  \"name\" : \"");
+    pDisplay += rozofs_fid_append(pDisplay,rmentry->trash_inode);
+    pDisplay += rozofs_string_append(pDisplay,"\"");
   }
   else {  
-    printf("%s",fullName);
+    pDisplay += rozofs_fid_append(pDisplay,rmentry->trash_inode);
   }
 
   IF_DISPLAY(display_size) {
     NEW_FIELD(size);       
-    printf("%llu",(long long unsigned)rmentry->size);        
+    pDisplay += rozofs_u64_append(pDisplay,rmentry->size);        
   }  
 
   IF_DISPLAY(display_distrib) {
     NEW_FIELD(cid); 
-    printf("%u",rmentry->cid);
+    pDisplay += rozofs_u32_append(pDisplay,rmentry->cid);
     NEW_FIELD(sid); 
 
-    printf("[%u", rmentry->current_dist_set[0]);
+    pDisplay += rozofs_string_append(pDisplay,"[");
     int sid_idx;
-    for (sid_idx=1; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
-      printf(",%u",rmentry->current_dist_set[sid_idx]);
-    }
-    printf("]");
+    for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+      if (rmentry->current_dist_set[sid_idx] == 0) break;
+      if (sid_idx != 0) pDisplay += rozofs_string_append(pDisplay,",");
+      pDisplay += rozofs_u32_append(pDisplay,rmentry->current_dist_set[sid_idx]);
+    }          
+    pDisplay += rozofs_string_append(pDisplay,"]");
   }     
   
   IF_DISPLAY(display_id) {
-    NEW_FIELD(fid);  
-    rozofs_fid_append(fullName,rmentry->fid);
-    printf("\"%s\"", fullName);       
+    NEW_QUOTED_FIELD(fid);  
+    pDisplay += rozofs_fid_append(pDisplay,rmentry->fid);    
+    pDisplay += rozofs_string_append(pDisplay,"\"");   
   }        
 
   if (display_json) {
-    printf("  }");    
+     pDisplay += rozofs_string_append(pDisplay,"  }");    
   }
   else {   
     cur_entry_per_line++;
     if (cur_entry_per_line >= entry_per_line) {
       cur_entry_per_line = 0;
-      printf("\n");
+       pDisplay += rozofs_string_append(pDisplay,"\n");
     }
     else {
-      printf("  %s ", separator);
+      pDisplay += rozofs_string_append(pDisplay," ");
+      pDisplay += rozofs_string_append(pDisplay,separator);
     } 
   } 
   
   if (nb_matched_entries >= max_display) {
     rozo_lib_stop_var = 1;
   }    
+  printf("%s",display_buffer);
   return 1;
 }
 /*
@@ -1726,11 +2133,12 @@ static void usage(char * fmt, ...) {
     va_start(args,fmt);
     vsprintf(error_buffer, fmt, args);
     va_end(args);   
-    printf("\n\033[1m!!!  %s !!!\033[0m\n",error_buffer);
+    printf("\n"ROZOFS_COLOR_BOLD""ROZOFS_COLOR_RED"!!!  %s !!! "ROZOFS_COLOR_NONE"\n",error_buffer);
+    exit(EXIT_FAILURE);      
   }
 
-  printf("\n\033[1mRozoFS File system scanning utility - %s\033[0m\n", VERSION);
-  printf("This RozoFS utility enables to scan for files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
+  printf("\n"ROZOFS_COLOR_BOLD"RozoFS File system scanning utility - %s"ROZOFS_COLOR_NONE"\n", VERSION);
+  printf("This RozoFS utility enables to scan files or (exclusive) directories in a RozoFS file system\naccording to one or several criteria and conditions.\n");
   printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan [FILESYSTEM] [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } [OUTPUT]\033[0m\n\n");
   printf("\n\033[1mFILESYSTEM:\033[0m\n");
   printf("\tThe FILESYSTEM can be omitted when current path is a RozoFS mountpoint on the file system one want to scan.\n");
@@ -1818,6 +2226,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1mtrash\033[0m\t\t\tdisplay directory trash configuration.\n");
   printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
   printf("\t\033[1merror\033[0m\t\t\tdisplay file write error detected.\n");
+  printf("\t\033[1mstrip\033[0m\t\t\tdisplay file stripping information.\n");
   printf("\t\033[1malls|allh\033[0m\t\tdisplay every field (time in seconds or human readable date).\n");
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
   printf("\t\033[1mjson\033[0m\t\t\toutput is in json format.\n");
@@ -1849,7 +2258,7 @@ static void usage(char * fmt, ...) {
     printf("Searching non writable files being executable by its group but not by the others.\n");
     printf("  \033[1mrozo_scan --Unw --Gx --Onx -o priv,gid,uid\033[0m\n");
   }
-  exit(EXIT_FAILURE);     
+  exit(EXIT_SUCCESS);     
 };
 /*
 **_______________________________________________________________________
@@ -2285,6 +2694,11 @@ int rozofs_parse_output_format(char * fmt) {
       
     if (strncmp(p, "xattr", 3)==0) {
       display_xattr = DO_DISPLAY;
+      NEXT(p);
+    }     
+      
+    if (strncmp(p, "strip", 3)==0) {
+      display_striping = DO_DISPLAY;
       NEXT(p);
     }     
                
@@ -3478,7 +3892,19 @@ int main(int argc, char *argv[]) {
   {
     usage("Missing root_path(-p) or export identifier (-e)");
   }
-
+  
+  /*
+  ** sid_equal can only be set with cid equal
+  */
+  if ((sid_equal != -1) && (cid_equal==-1)) {
+    usage("--sid --eq can only be set along with --cid --eq to find out files having this cid and sid in its distribution.");
+  }
+  /*
+  ** sid_diff can only be set with cid_equal or cid_diff
+  */
+  if ((sid_diff != -1) && (cid_equal==-1) && (cid_diff==-1)) {
+    usage("--sid --ne can only be set along with\n   --cid --eq to find out files having this cid but not this sid in its distribution\nor --cid --ne to find out files not having this cid and sid in its distribution.");
+  }
   /*
   ** init of the RozoFS data structure on export
   ** in order to permit the scanning of the exportd
