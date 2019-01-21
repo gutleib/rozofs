@@ -1858,24 +1858,20 @@ int exp_metadata_read_all_attributes(exp_trck_top_header_t *top_hdr_p,int usr_id
     
     @param buffer: buffer where the content of the tracking file has been loaded
     @param index: index of the inode in the array
-    @param attr_p: pointer to the attribute array (returned)
     @param attr_sz: size of the attributes
 
     
-    @retval 0 on success
-    @retval -1 on error (see errno for details
+    @retval The address of the inode in the buffer 
     
 */
-int exp_trck_read_attributes_from_buffer(char *buffer,int index,void *attr_p,int attr_sz)
+void * exp_trck_read_attributes_from_buffer(char *buffer,int index,int attr_sz)
 {
       
    /*
    ** get the real index of the inode within the tracking file
    */
    int attr_offset = index*attr_sz;
-   memcpy(attr_p,&buffer[attr_offset],attr_sz);
-
-   return 0; 
+   return &buffer[attr_offset]; 
 }
 
 static inline void stat_to_mattr(struct stat *st, mattr_t * attr) 
@@ -1926,6 +1922,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
    rozofs_inode_t inode;
    int i;
    ext_mattr_t  ext_attr;
+   ext_mattr_t *ext_attr_p;
    exp_trck_top_header_t *inode_metadata_p; 
    struct perf start, stop;  /* statistics */
    int   file_count = 0;
@@ -2047,17 +2044,12 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
                         (int)tracking_buffer.inode_idx_table[i]);
                 continue;        
               }
-	      ret = exp_trck_read_attributes_from_buffer((char*)metadata_buf_p,tracking_buffer.inode_idx_table[i],&ext_attr,inode_metadata_p->entry_p[user_id]->max_attributes_sz);
-	      if (ret < 0)
-	      {
-		printf("error while reading attributes %d:%llu:%d\n",inode.s.usr_id,
-	        	(long long unsigned int)inode.s.file_id,inode.s.idx);
-	      }
+	      ext_attr_p = (ext_mattr_t*) exp_trck_read_attributes_from_buffer((char*)metadata_buf_p,tracking_buffer.inode_idx_table[i],inode_metadata_p->entry_p[user_id]->max_attributes_sz);
 #if 0
 	      sprintf(parent_name,".");
-              if (uuid_compare(e->rfid,ext_attr.s.pfid)!= 0)
+              if (uuid_compare(e->rfid,ext_attr_p->.s.pfid)!= 0)
 	      {
-	        uuid_unparse(ext_attr.s.pfid,bufout);
+	        uuid_unparse(ext_attr->s.pfid,bufout);
 	        sprintf(parent_name,"./@rozofs_uuid@%s",bufout);
 	      }
 #endif
@@ -2073,11 +2065,20 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
               /*
 	      ** check if the fid has been recycled
 	      */
-              if ((type != ROZOFS_TRASH) && (ext_attr.s.cr8time == 0)) continue;
+              if ((type != ROZOFS_TRASH) && (ext_attr_p->s.cr8time == 0)) continue;
               match = 0;
+              /*
+              ** Check this is not a slave inode in multifile mode 
+              */
+              if ((S_ISREG(ext_attr_p->s.attrs.mode)) && (ext_attr_p->s.multi_desc.byte != 0)) {
+                if (ext_attr_p->s.multi_desc.common.master == 0) {
+                  continue;
+                }  
+              }
+              
               if (callback_fct != NULL) 
 	      {
-	         match = (*callback_fct)(e,&ext_attr,param);
+	         match = (*callback_fct)(e,ext_attr_p,param);
 	         if (match) 
 		 {
 		   match_count++;
