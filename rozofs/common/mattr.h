@@ -514,6 +514,21 @@ typedef struct _rozofs_slave_inode_t
 } rozofs_slave_inode_t;
 
 
+typedef struct _rozofs_multi_vect_t
+{
+  uint64_t off;    /**< offset in the slave file    */
+  uint64_t len;    /**< size in bytes to transfer   */
+  uint32_t byte_offset_in_shared_buf;   /**< offset where data must be copy in/out in the rozofsmount shared buffer */
+  uint8_t  file_idx;  /**< index of the slave file   */
+} rozofs_multi_vect_t;  
+
+typedef struct _rozofs_iov_multi_t
+{
+   int nb_vectors;   /** number of vectors */
+   rozofs_multi_vect_t vectors[ ROZOFS_MAX_STRIPING_FACTOR+1];
+} rozofs_iov_multi_t;
+
+
 
 /*
 **__________________________________________________________________
@@ -546,7 +561,7 @@ static inline int rozofs_get_striping_size(rozofs_multiple_desc_t *p)
  */
 static inline int rozofs_get_hybrid_size(rozofs_multiple_desc_t *p,rozofs_hybrid_desc_t *q)
 {
-  if (p->common.master == 0) return -1;
+  if (p->common.master == 0) return 0;
   /*
   ** Check if hybrid mode is defined for that file
   */
@@ -582,6 +597,378 @@ static inline int rozofs_get_striping_factor(rozofs_multiple_desc_t *p)
 {
   if (p->common.master == 0) return -1;
   return p->master.striping_factor+1;
+
+}
+
+/*
+**__________________________________________________________________
+*/
+static inline void rozofs_print_multi_vector(rozofs_iov_multi_t *vector_p,char *pbuf)
+{
+   int i;
+   rozofs_multi_vect_t *p;   
+
+
+   p = &vector_p->vectors[0];
+   pbuf +=sprintf(pbuf,"+---------------+---------------+----------+--------+\n");
+   pbuf +=sprintf(pbuf,"|     offset    |     length    | buf. off | f_idx  |\n");
+   pbuf +=sprintf(pbuf,"+---------------+---------------+----------+--------+\n");
+   for (i = 0; i < vector_p->nb_vectors; i++,p++)   
+   {
+     pbuf +=sprintf(pbuf,"|  %12.12llu | %12.12llu  | %8.8u |   %2.2u   |\n",
+                   (long long unsigned int)p->off,(long long unsigned int)p->len,p->byte_offset_in_shared_buf,p->file_idx);
+   }
+   pbuf +=sprintf(pbuf,"+---------------+---------------+----------+--------+\n");
+}
+
+/*
+**__________________________________________________________________
+*/
+/**
+   Build the vector for a multi file access
+   
+   @param off: file offset (starts on a 4KB boundary)
+   @param len: length in byte to read or write
+   @param vector_p : pointer to the vector that will contains the result
+   @param striping_unit: striping unit in bytes 
+   @param striping_factor:max  number of slave files
+   @param alignment: alignment in bytes on the first block (needed to be 128 aligned for Mojette
+   
+
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+*/
+static inline int rozofs_build_multiple_offset_vector(uint64_t off, uint64_t len,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes, uint32_t striping_factor,uint32_t alignment)
+{
+   int i = 0;
+   rozofs_multi_vect_t *p;
+   uint64_t block_number;
+   uint64_t offset_in_block;
+   uint64_t file_idx;
+   uint32_t byte_offset_in_shared_buf = alignment;
+   
+   vector_p->nb_vectors = 0;
+   p = &vector_p->vectors[0];
+   
+   /*
+   ** Get the number of entries to create: it depends on the striping_size 
+   */
+   while (len != 0)
+   {
+     block_number = off/striping_unit_bytes;
+     offset_in_block = off%striping_unit_bytes;
+     file_idx = block_number%striping_factor;
+     p->off = (block_number/striping_factor)*striping_unit_bytes + offset_in_block;
+     p->file_idx = file_idx+1;
+     p->byte_offset_in_shared_buf = byte_offset_in_shared_buf;
+     {
+       if ((offset_in_block +len) > striping_unit_bytes)
+       {
+	  p->len = striping_unit_bytes - offset_in_block;
+	  len -= p->len;
+	  off +=p->len;
+       }
+       else
+       {
+	  p->len = len;
+	  len = 0;
+       }
+       byte_offset_in_shared_buf +=p->len;
+       p++;
+       i++;
+     }
+   }
+   vector_p->nb_vectors = i;
+   return 0;  
+}   
+
+/*
+**__________________________________________________________________
+*/
+/**
+   Build the vector for a multi file access
+   
+   @param off: file offset (starts on a 4KB boundary)
+   @param len: length in byte to read or write
+   @param vector_p : pointer to the vector that will contains the result
+   @param striping_unit: striping unit in bytes 
+   @param striping_factor:max  number of slave files
+   @param alignment: alignment in bytes on the first block (needed to be 128 aligned for Mojette)
+   @param hybrid_size: size of the hybrid section
+
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+*/
+static inline int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint64_t len,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes, uint32_t striping_factor,uint32_t alignment,uint32_t hybrid_size_bytes)
+{
+   int i = 0;
+   rozofs_multi_vect_t *p;
+   uint64_t block_number;
+   uint64_t offset_in_block;
+   uint64_t file_idx;
+   uint32_t byte_offset_in_shared_buf = alignment;
+   
+   
+   vector_p->nb_vectors = 0;
+   p = &vector_p->vectors[0];
+
+   
+   if (off < hybrid_size_bytes)
+   {
+        offset_in_block = off%hybrid_size_bytes;
+        p->file_idx = 0;
+	p->off = off;	
+	p->byte_offset_in_shared_buf = byte_offset_in_shared_buf;   
+	if ((offset_in_block +len) > hybrid_size_bytes)
+	{
+	   p->len = hybrid_size_bytes - offset_in_block;
+	   len -= p->len;
+	   off +=p->len;
+	}
+	else
+	{
+	   p->len = len;
+	   len = 0;
+	}
+	off = off -  hybrid_size_bytes + striping_unit_bytes;
+        byte_offset_in_shared_buf +=p->len;
+	p++;
+	i++;      
+   }
+   else
+   {
+	off = off -  hybrid_size_bytes + striping_unit_bytes;   
+   }
+   
+   /*
+   ** Get the number of entries to create: it depends on the striping_size 
+   */
+   while (len != 0)
+   {
+     block_number = off/striping_unit_bytes;
+     offset_in_block = off%striping_unit_bytes;
+     if (block_number == 0)
+     {
+        p->file_idx = 0;
+	p->off = off;	
+	p->byte_offset_in_shared_buf = byte_offset_in_shared_buf;
+	
+	if ((offset_in_block +len) > striping_unit_bytes)
+	{
+	   p->len = striping_unit_bytes - offset_in_block;
+	   len -= p->len;
+	   off +=p->len;
+	}
+	else
+	{
+	   p->len = len;
+	   len = 0;
+	}
+     }
+     else
+     {
+       block_number -=1; // (off-striping_unit_bytes)/striping_unit_bytes;
+       file_idx = block_number%(striping_factor);
+       file_idx +=1;
+       p->off = (block_number/(striping_factor))*striping_unit_bytes + offset_in_block;
+       p->file_idx = file_idx;
+       p->byte_offset_in_shared_buf = byte_offset_in_shared_buf;
+       {
+	 if ((offset_in_block +len) > striping_unit_bytes)
+	 {
+	    p->len = striping_unit_bytes - offset_in_block;
+	    len -= p->len;
+	    off +=p->len;
+	 }
+	 else
+	 {
+	    p->len = len;
+	    len = 0;
+	 }
+       }
+     }
+     byte_offset_in_shared_buf +=p->len;
+     p++;
+     i++;
+   }
+   vector_p->nb_vectors = i;
+   return 0;  
+}  
+
+
+/*
+**__________________________________________________________________
+*/
+/**
+   Build the vector size for a multi file access in non hybrid mode
+   
+   @param len: total file size 
+   @param vector_p : pointer to the vector that will contains the result
+   @param striping_unit: striping unit in bytes 
+   @param striping_factor:max  number of slave files
+   
+
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+*/
+static int rozofs_build_multiple_size_vector(uint64_t len,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes, uint32_t striping_factor)
+{
+   int i = 0;
+   rozofs_multi_vect_t *p;
+   uint64_t block_number;
+   uint64_t nb_blocks;
+   uint64_t offset_in_block;
+   uint64_t file_idx;
+   uint64_t remainder = 0;
+   
+   vector_p->nb_vectors = 0;
+   p = &vector_p->vectors[0];
+
+   /*
+   ** compute the number of blocks per slave files
+   */
+   nb_blocks = len/(striping_unit_bytes*striping_factor);
+   for (i = 0 ; i < striping_factor; i++,p++)
+   {
+     p->len = nb_blocks*striping_unit_bytes;
+     p->file_idx = i+1;
+     p->off = 0;
+   } 
+   remainder = len -  nb_blocks*striping_unit_bytes*striping_factor;
+   
+   p = &vector_p->vectors[0];
+   while (remainder!= 0)
+   {
+     if (striping_unit_bytes > remainder )
+     {
+       p->len +=remainder;
+       remainder = 0;
+     }
+     else
+     {
+       p->len +=striping_unit_bytes;
+       remainder -= striping_unit_bytes;
+       p++;
+     }    
+   }   
+   vector_p->nb_vectors = striping_factor;
+   return 0;  
+}   
+
+/*
+**__________________________________________________________________
+*/
+/**
+   Build the vector size for a multi file access in  hybrid mode
+   
+   @param len: total file size 
+   @param vector_p : pointer to the vector that will contains the result
+   @param striping_unit: striping unit in bytes 
+   @param striping_factor:max  number of slave files
+   @param hybrid_size_bytes: size of the hybrid section
+   
+
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+*/
+static int rozofs_build_multiple_size_vector_hybrid(uint64_t len,rozofs_iov_multi_t *vector_p,uint32_t striping_unit_bytes, uint32_t striping_factor,uint32_t hybrid_size_bytes)
+{
+   int i = 0;
+   rozofs_multi_vect_t *p;
+   uint64_t block_number;
+   uint64_t nb_blocks;
+   uint64_t offset_in_block;
+   uint64_t file_idx;
+   uint64_t remainder = 0;
+   
+   vector_p->nb_vectors = 0;
+   p = &vector_p->vectors[0];
+   if (len <= hybrid_size_bytes)
+   {
+     p->len = len;
+     p->file_idx = 0;
+     p->off = 0;      
+   }
+   else
+   {
+     p->len = hybrid_size_bytes;
+     p->file_idx = 0;
+     p->off = 0;          
+   }
+   if (len <= hybrid_size_bytes) len = 0;
+   else len = len -hybrid_size_bytes;
+   /*
+   ** compute the number of blocks per slave files
+   */
+   nb_blocks = len/(striping_unit_bytes*striping_factor);
+   p = &vector_p->vectors[1];
+   for (i = 0 ; i < striping_factor; i++,p++)
+   {
+     p->len = nb_blocks*striping_unit_bytes;
+     p->file_idx = i+1;
+     p->off = 0;
+   } 
+   remainder = len -  nb_blocks*striping_unit_bytes*striping_factor;
+   
+   p = &vector_p->vectors[1];
+   while (remainder!= 0)
+   {
+     if (striping_unit_bytes > remainder )
+     {
+       p->len +=remainder;
+       remainder = 0;
+     }
+     else
+     {
+       p->len +=striping_unit_bytes;
+       remainder -= striping_unit_bytes;
+       p++;
+     }    
+   }   
+   vector_p->nb_vectors = striping_factor+1;
+   return 0;  
+}   
+
+/*
+**__________________________________________________________________
+*/
+/*
+** Get the size of the different slave files including the hybrid case
+
+   @param inode_p: pointer to the inode context
+   @param vector_p: pointer to the vector that will contain the result
+   
+   note: file_idx 0 is reserved from the hybrid file (distributation of the master inode
+ 
+  @retval 0 on success
+  @retval -1 on error  
+*/
+static inline int rozofs_get_multiple_file_sizes(ext_mattr_t *inode_p,rozofs_iov_multi_t *vector_p)
+{
+   int ret;
+   uint32_t striping_unit_bytes;
+   uint32_t striping_factor;
+   
+   striping_unit_bytes = rozofs_get_striping_size(&inode_p->s.multi_desc);
+   striping_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc);   
+
+    /*
+    **___________________________________________________________________
+    **         build the  write vector
+    **  The return vector indicates how many commands must be generated)
+    **____________________________________________________________________
+    */
+    if (inode_p->s.hybrid_desc.s.no_hybrid==1)
+    {
+      rozofs_build_multiple_size_vector(inode_p->s.attrs.size,vector_p,striping_unit_bytes,striping_factor);
+    }
+    else
+    {
+      uint32_t hybrid_size;
+      hybrid_size = rozofs_get_hybrid_size(&inode_p->s.multi_desc,&inode_p->s.hybrid_desc);
+      rozofs_build_multiple_size_vector_hybrid(inode_p->s.attrs.size,vector_p,striping_unit_bytes,striping_factor,hybrid_size);    
+    }
+    return 0;
 
 }
 #endif

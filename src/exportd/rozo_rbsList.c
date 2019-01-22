@@ -384,7 +384,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     /*
     ** When not in hybrid mode 1st inode has no distribution
     */
-    if (inode_p->s.multi_desc.master.hybrid) {
+    if (inode_p->s.hybrid_desc.s.no_hybrid== 0) {
       match += rozofs_do_visit(INODE_TYPE_HYBRID_MASTER,inode_attr_p,slave_p);
     }  
     /*
@@ -393,7 +393,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     slave_p ++;
     nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
     for (idx=0; idx<nb_slave; idx++,slave_p++) {
-      if (inode_p->s.multi_desc.master.hybrid) {
+      if (inode_p->s.hybrid_desc.s.no_hybrid==0) {
          match += rozofs_do_visit(INODE_TYPE_HYBRID_SLAVE,inode_attr_p,slave_p);
       }  
       else{

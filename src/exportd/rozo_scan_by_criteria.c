@@ -707,7 +707,7 @@ int rozofs_check_cid_and_sid(ext_mattr_t *inode_p, cid_t cid_equal, sid_t sid_eq
   /*
   ** hybrid as well as non multifile mode have a distribution in 1rst inde
   */
-  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)) { 
+  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.hybrid_desc.s.no_hybrid == 0)) { 
     if (inode_p->s.attrs.cid == cid_equal) {
       /*
       ** Master inode matches
@@ -772,7 +772,7 @@ int rozofs_check_cid_and_not_sid(ext_mattr_t *inode_p, cid_t cid_equal, sid_t si
   /*
   ** hybrid as well as non multifile mode have a distribution in 1rst inde
   */
-  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)) { 
+  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.hybrid_desc.s.no_hybrid == 0)) { 
     if (inode_p->s.attrs.cid == cid_equal) {
       /*
       ** Master inode matches
@@ -838,7 +838,7 @@ int rozofs_check_cid(ext_mattr_t *inode_p, cid_t cid_equal) {
   /*
   ** hybrid as well as non multifile mode have a distribution in 1rst inde
   */
-  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)) { 
+  if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.hybrid_desc.s.no_hybrid == 0)) { 
     if (inode_p->s.attrs.cid == cid_equal) {
       /*
       ** Master inode matches
@@ -1770,7 +1770,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
       strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc); 
       NEW_FIELD(hybdrid); 
-      if (inode_p->s.multi_desc.master.hybrid) {
+      if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
         pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
       }
       else {
@@ -1788,7 +1788,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       /*
       ** Display distribution in inode for hybrid as well as non multifile mode
       */
-      if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.multi_desc.master.hybrid == 1)){
+      if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.hybrid_desc.s.no_hybrid == 0)){
         slave_p = inode_p;
         SUBARRAY_START_ELEMENT();
         FIRST_QUOTED_NAME(storage_fid);

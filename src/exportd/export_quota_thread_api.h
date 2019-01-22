@@ -74,15 +74,16 @@ int export_fstat_delete_files(uint16_t eid, uint32_t n,uint8_t vid_fast);
 */
 /** update the number of blocks in file system
  *
- * @param eid: the export to update
- * @param newblocks: new number of blocks
- * @param oldblocks: old number of blocks
-   @param thin_provisioning: assert to 1 if export is configured with thin provisioning
+  @param eid: the export to update
+  @param newblocks: new number of blocks
+  @param oldblocks: old number of blocks
+  @param thin_provisioning: assert to 1 if export is configured with thin provisioning
    @param vid_fast: reference of a fast volume (0 is not significant)
- *
+   @param hybrid_size_block: size of the hybrid section given in blocks
+
  * @return 0 on success -1 otherwise
  */
-int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning,uint8_t vid_fast);
+int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning,uint8_t vid_fast,uint32_t hybrid_size_block);
 
 /*
 **_______________________________________________________________

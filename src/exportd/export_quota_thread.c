@@ -121,7 +121,7 @@ char *show_export_fstat_entry(char *pChar,export_fstat_ctx_t *tab_p,uint16_t eid
    pChar += sprintf(pChar,"file statistics for eid %d(%p) :%s\n",eid,tab_p,tab_p->pathname);
    export_fstat_t *p;
    p = &tab_p->memory;
-   pChar += sprintf(pChar," number of blocks (max/allocated) (mem) : %llu/%llu\n",(unsigned long long int) p->blocks,(unsigned long long int) p->blocks_thin);
+   pChar += sprintf(pChar," number of blocks (def/thin)      (mem) : %llu/%llu\n",(unsigned long long int) p->blocks,(unsigned long long int) p->blocks_thin);
    pChar += sprintf(pChar," number of files                  (mem) : %llu\n",(unsigned long long int) p->files);
    int i;
    pChar += sprintf(pChar,"   nb files per number of block\n");
@@ -479,14 +479,16 @@ int export_fstat_create_files(uint16_t eid, uint32_t n,uint8_t vid_fast) {
   @param oldblocks: old number of blocks
   @param thin_provisioning: assert to 1 if export is configured with thin provisioning
    @param vid_fast: reference of a fast volume (0 is not significant)
+   @param hybrid_size_block: size of the hybrid section given in blocks
 
  * @return 0 on success -1 otherwise
  */
-int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning,uint8_t vid_fast) {
+int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning,uint8_t vid_fast,uint32_t hybrid_size_block) {
     int status = -1;
     export_fstat_ctx_t *tab_p;
     time_t timecur;
     long long int n = newblocks - oldblocks;
+    long long int n_fast;
 
    if (n == 0) return 0;   
     
@@ -494,6 +496,56 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
    {
       return 0;
    }
+   while (1)
+   {
+     if ( n < 0 )
+     {
+	if (oldblocks <= hybrid_size_block)
+	{
+	  /*
+	  **  New-----Old-----Hybrid_sz
+	  */
+          n_fast = n;
+	  break;
+	}
+	if (newblocks > hybrid_size_block)
+	{
+	  /*
+	  ** Hybrid_sz----- New-----Old
+	  */
+          n_fast = 0;
+	  break;
+	}
+       /*
+       ** New-----Hybrid_sz----- Old
+       */
+	n_fast = newblocks - hybrid_size_block;
+	break;
+      }
+      if (oldblocks >= hybrid_size_block)
+      {
+	/*
+	** Hybrid_sz----- Old-----New
+	*/
+	n_fast = 0;
+	break;
+      }
+      if (newblocks <= hybrid_size_block)
+      {
+       /*
+       **  Old-----New-----Hybrid_sz
+       */
+	n_fast = n;
+	break;
+      }
+     /*
+     **  Old-----Hybrid_sz--------New
+     */
+      n_fast = hybrid_size_block -oldblocks;
+      break;
+   
+   }
+
    /*
    ** check the index of the eid
    */
@@ -531,6 +583,7 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
     if (n<0) {
     
       n = -n;
+      n_fast= -n_fast;
 
       /*
       ** Releasing more blocks than allocated !!!
@@ -547,13 +600,13 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
       */
       if (vid_fast)
       {
-	if (n > tab_p->memory.blocks) {
+	if (n_fast > tab_p->memory.blocks) {
           severe("export %s blocks %"PRIu64" files %"PRIu64". Releasing %lld blocks for fast volume",
-		tab_p->pathname, tab_p->memory.blocks_fast, tab_p->memory.files_fast, n); 
-          n = tab_p->memory.blocks_fast;
+		tab_p->pathname, tab_p->memory.blocks_fast, tab_p->memory.files_fast, n_fast); 
+          n_fast = tab_p->memory.blocks_fast;
 	}
 
-	tab_p->memory.blocks_fast -= n;            
+	tab_p->memory.blocks_fast -= n_fast;            
       }
     }
     else 
@@ -565,21 +618,16 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
       {
 	if (tab_p->hquota > 0 && tab_p->memory.blocks + n > tab_p->hquota) 
 	{
-           if (tab_p->quota_exceeded_flag == 0)
-	   {
-	     tab_p->quota_exceeded_time = time(NULL); 
-	   }
+	   tab_p->quota_exceeded_flag = 1;
 	   /*
 	   ** send a warning if is time to do it
 	   */
 	   timecur = time(NULL);
-	   if (( tab_p->quota_exceeded_flag == 1) || 
-	      ((timecur -tab_p->quota_exceeded_time ) > export_fstat_quota_delay))
+	   if ((timecur -tab_p->quota_exceeded_time ) > export_fstat_quota_delay)
 	   {
               warning("quota exceed: %llu over %llu", tab_p->memory.blocks + n,
                        (long long unsigned int)tab_p->hquota);
   	      tab_p->quota_exceeded_time = time(NULL); 
-	      tab_p->quota_exceeded_flag = 1;
            }
            errno = EDQUOT;
            goto out;
@@ -597,26 +645,21 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
       {
 	if (thin_provisioning == 0)
 	{
-	  if (tab_p->hquota_fast > 0 && tab_p->memory.blocks_fast + n > tab_p->hquota_fast) 
+	  if (tab_p->hquota_fast > 0 && tab_p->memory.blocks_fast + n_fast > tab_p->hquota_fast) 
 	  {
-             if (tab_p->quota_exceeded_flag_fast == 0)
-	     {
-	       tab_p->quota_exceeded_time_fast = time(NULL); 
-	     }
+             tab_p->quota_exceeded_flag_fast = 1;
 	     /*
 	     ** send a warning if is time to do it
 	     */
 	     timecur = time(NULL);
-	     if (( tab_p->quota_exceeded_flag_fast == 1) || 
-		((timecur -tab_p->quota_exceeded_time_fast ) > export_fstat_quota_delay))
+	     if (((timecur -tab_p->quota_exceeded_time_fast ) > export_fstat_quota_delay))
 	     {
-        	warning("quota exceed for fast volume: %llu over %llu", tab_p->memory.blocks_fast + n,
+        	warning("quota exceed for fast volume: %llu over %llu", tab_p->memory.blocks_fast + n_fast,
                 	 (long long unsigned int)tab_p->hquota_fast);
   		tab_p->quota_exceeded_time_fast = time(NULL); 
-		tab_p->quota_exceeded_flag_fast = 1;
              }
              /*
-	     ** do report quota error: the control is done at creation file only
+	     ** do not report quota error: the control is done at creation file only
 	     */
 	  }
 	  else
@@ -624,7 +667,7 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
             tab_p->quota_exceeded_flag_fast = 0;
 	  }
 	}
-	tab_p->memory.blocks_fast += n;       
+	tab_p->memory.blocks_fast += n_fast;       
       }           
     }
     status = 0;

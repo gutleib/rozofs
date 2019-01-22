@@ -1416,15 +1416,21 @@ static int export_update_files(export_t *e, int32_t n,uint32_t children) {
  
  * @return 0 on success -1 otherwise
  */
-static int export_update_blocks(export_t * e, uint64_t newblocks, uint64_t oldblocks,uint32_t children) {
+static int export_update_blocks(export_t * e,lv2_entry_t *lv2, uint64_t newblocks, uint64_t oldblocks,uint32_t children) {
     int status = -1;
     rozofs_mover_children_t vid_fast;
+    uint32_t hybrid_size_bytes = 0;
+    
 
     if (oldblocks == newblocks) return 0;
     
     START_PROFILING(export_update_blocks);
+    /*
+    ** get the size of the hybrid section
+    */
+    hybrid_size_bytes = rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc,&lv2->attributes.s.hybrid_desc);
     vid_fast.u32 = children;
-     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin,vid_fast.fid_st_idx.vid_fast);
+     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin,vid_fast.fid_st_idx.vid_fast,hybrid_size_bytes/ROZOFS_BSIZE_BYTES(e->bsize));
     STOP_PROFILING(export_update_blocks);
     return status;
 }
@@ -2646,7 +2652,7 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	/*
 	** provides the children field since it contains the indication on which volume the file has been allocated
 	*/    		
-        if (export_update_blocks(e, nrb_new, nrb_old,lv2->attributes.s.attrs.children)!= 0)
+        if (export_update_blocks(e,lv2, nrb_new, nrb_old,lv2->attributes.s.attrs.children)!= 0)
             goto out;
 
         lv2->attributes.s.attrs.size = attrs->size;
@@ -4687,7 +4693,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,str
 	  // Best effort
       }
       // Update the nb. of blocks
-      if (export_update_blocks(e,0,
+      if (export_update_blocks(e,lv2,0,
               (((int64_t) lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)/ ROZOFS_BSIZE_BYTES(e->bsize)),lv2->attributes.s.attrs.children) != 0) {
 	  severe("export_update_blocks failed: %s", strerror(errno));
 	  // Best effort
@@ -5114,7 +5120,7 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
    /*
    ** Update the nb. of blocks
    */
-   if (export_update_blocks(e,0,
+   if (export_update_blocks(e,lv2,0,
            (((int64_t) lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)
            / ROZOFS_BSIZE_BYTES(e->bsize)),lv2->attributes.s.attrs.children) != 0) {
        severe("export_update_blocks failed: %s", strerror(errno));
@@ -5452,7 +5458,7 @@ duplicate_deleted_file:
 	    */
 	    if (rename == 0)
 	    {
-              if (export_update_blocks(e,0,
+              if (export_update_blocks(e,lv2,0,
                       (((int64_t) lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)
                       / ROZOFS_BSIZE_BYTES(e->bsize)),lv2->attributes.s.attrs.children) != 0) {
                   severe("export_update_blocks failed: %s", strerror(errno));
@@ -7722,7 +7728,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	  */	  
 	  if (plv2) export_dir_adjust_child_size(plv2,(nbnew-nbold)*ROZOFS_BSIZE_BYTES(e->bsize),1,ROZOFS_BSIZE_BYTES(e->bsize));
 #endif
-        if (export_update_blocks(e, nbnew, nbold,lv2->attributes.s.attrs.children) != 0)
+        if (export_update_blocks(e,lv2, nbnew, nbold,lv2->attributes.s.attrs.children) != 0)
             goto out;
 
         lv2->attributes.s.attrs.size = off + len;
@@ -8392,7 +8398,15 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   {
     ext_mattr_t *slave_p;
     int i;
+    rozofs_iov_multi_t vector;
+    int vector_idx = 0;
+
     int file_count =  lv2->attributes.s.multi_desc.master.striping_factor+1;
+    /*
+    ** get the size of each section
+    */
+    rozofs_get_multiple_file_sizes(&lv2->attributes,&vector);
+    
     slave_p = lv2->slave_inode_p;
     DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
     DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
@@ -8400,7 +8414,20 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     if (lv2->attributes.s.hybrid_desc.s.no_hybrid==0)
     {
        uint32_t hsize = (uint32_t) rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc, &lv2->attributes.s.hybrid_desc);
-       DISPLAY_ATTR_UINT("S_HSIZE",hsize);     
+       DISPLAY_ATTR_UINT("S_HSIZE",hsize);  
+       /*
+       ** display the master size
+       */
+       {
+          uint64_t size = 0;
+	  if (vector.nb_vectors != 0) 
+	  {
+	    size = vector.vectors[0].len;
+	    vector_idx++;         
+	  }
+          DISPLAY_ATTR_ULONG("S_MSIZE",size); 	
+       }
+          
     }
     if (lv2->slave_inode_p == NULL)
     {
@@ -8416,6 +8443,19 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 	  */
 	  sprintf(bufall," -- slave inode #%d --",i+1);
 	  DISPLAY_ATTR_TXT("S_INODE",bufall);
+	  /*
+	  ** display the slave size
+	  */
+	  {
+             uint64_t size = 0;
+	     if (vector_idx < vector.nb_vectors ) 
+	     {
+	       size = vector.vectors[vector_idx].len;
+	       vector_idx++;     
+	     }
+             DISPLAY_ATTR_ULONG("S_SIZE",size); 	
+	        
+	  }
 	  DISPLAY_ATTR_UINT("CLUSTER",slave_p->s.attrs.cid);
 	  DISPLAY_ATTR_TITLE("STORAGE");
 	  p += rozofs_u32_padded_append(p,3, rozofs_zero,slave_p->s.attrs.sids[0]); 
