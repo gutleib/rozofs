@@ -1404,6 +1404,18 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
     goto out;
     
 error:
+    if (file != NULL)
+    {
+       int save_errno = errno;
+       
+       file->wr_error = errno; 
+      /*
+      ** log the I/O error return upon the failure while attempting to submit the write request towards a storcli
+      */      
+      rozofs_iowr_err_log(file->fid,off,size,errno,ie);    
+      errno = save_errno;
+    }
+
     rozofs_trc_rsp(srv_rozofs_ll_write,(fuse_ino_t)file,file->fid,(errno==0)?0:1,trc_idx);
     fuse_reply_err(req, errno);
 out:
