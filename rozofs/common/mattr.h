@@ -815,10 +815,7 @@ static int rozofs_build_multiple_size_vector(uint64_t len,rozofs_iov_multi_t *ve
 {
    int i = 0;
    rozofs_multi_vect_t *p;
-   uint64_t block_number;
    uint64_t nb_blocks;
-   uint64_t offset_in_block;
-   uint64_t file_idx;
    uint64_t remainder = 0;
    
    vector_p->nb_vectors = 0;
@@ -875,10 +872,7 @@ static int rozofs_build_multiple_size_vector_hybrid(uint64_t len,rozofs_iov_mult
 {
    int i = 0;
    rozofs_multi_vect_t *p;
-   uint64_t block_number;
    uint64_t nb_blocks;
-   uint64_t offset_in_block;
-   uint64_t file_idx;
    uint64_t remainder = 0;
    
    vector_p->nb_vectors = 0;
@@ -945,7 +939,6 @@ static int rozofs_build_multiple_size_vector_hybrid(uint64_t len,rozofs_iov_mult
 */
 static inline int rozofs_get_multiple_file_sizes(ext_mattr_t *inode_p,rozofs_iov_multi_t *vector_p)
 {
-   int ret;
    uint32_t striping_unit_bytes;
    uint32_t striping_factor;
    
