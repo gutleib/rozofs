@@ -820,6 +820,14 @@ static int rozofs_build_multiple_size_vector(uint64_t len,rozofs_iov_multi_t *ve
    
    vector_p->nb_vectors = 0;
    p = &vector_p->vectors[0];
+   
+   /*
+   ** In no hybrid mode the master inode is empty
+   */
+   p->len      = 0;
+   p->file_idx = 0;
+   p->off      = 0;
+   p++;
 
    /*
    ** compute the number of blocks per slave files
@@ -833,7 +841,7 @@ static int rozofs_build_multiple_size_vector(uint64_t len,rozofs_iov_multi_t *ve
    } 
    remainder = len -  nb_blocks*striping_unit_bytes*striping_factor;
    
-   p = &vector_p->vectors[0];
+   p = &vector_p->vectors[1];
    while (remainder!= 0)
    {
      if (striping_unit_bytes > remainder )
@@ -848,7 +856,7 @@ static int rozofs_build_multiple_size_vector(uint64_t len,rozofs_iov_multi_t *ve
        p++;
      }    
    }   
-   vector_p->nb_vectors = striping_factor;
+   vector_p->nb_vectors = striping_factor+2;
    return 0;  
 }   
 
@@ -919,7 +927,7 @@ static int rozofs_build_multiple_size_vector_hybrid(uint64_t len,rozofs_iov_mult
        p++;
      }    
    }   
-   vector_p->nb_vectors = striping_factor+1;
+   vector_p->nb_vectors = striping_factor+2;
    return 0;  
 }   
 
@@ -951,6 +959,15 @@ static inline int rozofs_get_multiple_file_sizes(ext_mattr_t *inode_p,rozofs_iov
     **  The return vector indicates how many commands must be generated)
     **____________________________________________________________________
     */
+    
+    if (inode_p->s.multi_desc.byte == 0) {
+      vector_p->vectors[0].len = inode_p->s.attrs.size;
+      vector_p->vectors[0].file_idx = 0;
+      vector_p->vectors[0].off = 0; 
+      vector_p->nb_vectors = 1; 
+      return 0;   
+    }
+    
     if (inode_p->s.hybrid_desc.s.no_hybrid==1)
     {
       rozofs_build_multiple_size_vector(inode_p->s.attrs.size,vector_p,striping_unit_bytes,striping_factor);

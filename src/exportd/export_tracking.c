@@ -8399,7 +8399,6 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     ext_mattr_t *slave_p;
     int i;
     rozofs_iov_multi_t vector;
-    int vector_idx = 0;
 
     int file_count =  lv2->attributes.s.multi_desc.master.striping_factor+1;
     /*
@@ -8423,7 +8422,6 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 	  if (vector.nb_vectors != 0) 
 	  {
 	    size = vector.vectors[0].len;
-	    vector_idx++;         
 	  }
           DISPLAY_ATTR_ULONG("S_MSIZE",size); 	
        }
@@ -8448,10 +8446,9 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 	  */
 	  {
              uint64_t size = 0;
-	     if (vector_idx < vector.nb_vectors ) 
+	     if (i+1 < vector.nb_vectors ) 
 	     {
-	       size = vector.vectors[vector_idx].len;
-	       vector_idx++;     
+	       size = vector.vectors[i+1].len;
 	     }
              DISPLAY_ATTR_ULONG("S_SIZE",size); 	
 	        
