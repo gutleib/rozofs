@@ -204,7 +204,7 @@ static int get_job_list_index(sid_one_info_t * p) {
 */
 
 int key_table[] = {ROZOFS_PRIMARY_FID,ROZOFS_MOVER_FID,-1};
-int rozofs_do_visit(INODE_TYPE_E inode_type,ext_mattr_t *inode_p,ext_mattr_t * slave_p, uint32_t rebuild_size) {
+int rozofs_do_visit(INODE_TYPE_E inode_type,ext_mattr_t *inode_p,ext_mattr_t * slave_p, uint64_t rebuild_size) {
   int i;
   int sid;
   int job;
