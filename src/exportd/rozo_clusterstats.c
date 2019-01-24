@@ -9,11 +9,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <stdarg.h>
 #include <rozofs/rozofs.h>
 #include <rozofs/common/mattr.h>
+#include "rozofs/rozofs_srv.h"
 #include "export.h"
 #include "rozo_inode_lib.h"
 #include "exp_cache.h"
+
+int rozofs_no_site_file = 0;
 
 #define RZ_FILE_128K  (1024*128)
 #define RZ_FILE_1M  (1024*1024)
@@ -50,6 +54,12 @@ typedef struct _rz_cids_stats_t
 lv2_cache_t cache;
 
 rz_cids_stats_t *cids_tab_p[ROZOFS_CLUSTERS_MAX];
+
+econfig_t       exportd_config;
+char *          configFileName = EXPORTD_DEFAULT_CONFIG;
+int             eid = -1;
+rozofs_layout_t layout = -1;
+uint8_t         rozofs_inv, rozofs_fwd, rozofs_safe;
 /*
 **_______________________________________________________________________
 */
@@ -210,53 +220,16 @@ char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax)
    @retval 1 match
 */
 char rzofs_path_bid[]="rozofs";
-int rozofs_fwd = -1;
-int divider;
+int eblocksize = 0;
 int blocksize= 4096;
-int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
-{
+
+int rozofs_do_visit(ext_mattr_t *inode_p, uint64_t file_size) {
    int ret= 0;
    int i;
-   ext_mattr_t *inode_p = inode_attr_p;
    rz_cids_stats_t  *cid_p;
    rz_sids_stats_t  *sid_p;
+   uint64_t size2;
    
-   /*
-   ** Do not process symlink
-   */
-   if (!S_ISREG(inode_p->s.attrs.mode)) {
-     return 0;
-   }   
-
-   if (rozofs_fwd < 0) 
-   {
-      /*
-      ** compute the layout on the first file
-      */
-      rozofs_fwd = 0;
-      for (i=0; i < ROZOFS_SAFE_MAX; i++,rozofs_fwd++)
-      {
-         if (inode_p->s.attrs.sids[i]==0) break;
-      }
-      switch (rozofs_fwd)
-      {
-         case 4:
-	   rozofs_fwd -=1;
-	   divider = 2;
-	   break;
-	 case 8:
-	   rozofs_fwd -=2;
-	   divider = 4;
-	   break;
-	 case 16:
-	   rozofs_fwd -=4;
-	   divider = 8;
-	   break;
-	 default:
-	   exit(-1);
-      }
-      blocksize = blocksize/divider;
-    }
     /*
     ** Get the cluster pointer
     */
@@ -272,9 +245,15 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }
     cid_p = cids_tab_p[inode_p->s.attrs.cid];
     uint64_t size;
-    uint64_t size2 = inode_p->s.attrs.size;
-    size2 = size2/divider;
-    if (size2/blocksize == 0) size2 = blocksize;
+    
+    if (file_size == 0) {
+      size2 = 0;
+    }
+    else {  
+      size2 = file_size/rozofs_inv;
+      if (size2/blocksize == 0) size2 = blocksize;
+    }  
+    
     for (i = 0; i < rozofs_fwd; i++)
     {
        sid_p = &cid_p->sid_tab[inode_p->s.attrs.sids[i]];
@@ -282,12 +261,12 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
        sid_p->byte_size+=size2;
        while(1)
        {
-	 if (inode_p->s.attrs.size/RZ_FILE_128K == 0)
+	 if (file_size/RZ_FILE_128K == 0)
 	 {
            sid_p->tab_size[FILE_128K_E]++;
 	   break;
 	 }
-	 size = inode_p->s.attrs.size;
+	 size = file_size;
 	 size = size/RZ_FILE_1M;
 	 if (size == 0)
 	 {
@@ -336,17 +315,78 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   }
   return ret;
 }
+int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
+  ext_mattr_t *inode_p = (ext_mattr_t *)inode_attr_p;
+  ext_mattr_t *slave_p = inode_p;  
+  int          idx;
+  int          nb_slave;
+  int          match = 0;
+  rozofs_iov_multi_t vector; 
 
+   if (!S_ISREG(inode_p->s.attrs.mode)) {
+     return 0;
+   }   
+  /*
+  ** get the size of each section
+  */
+  rozofs_get_multiple_file_sizes(inode_p,&vector);
+   
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** Regular file without striping
+    */
+    match += rozofs_do_visit(inode_p, vector.vectors[0].len);
+  }  
+  else if (inode_p->s.multi_desc.common.master == 1) {
+    /*
+    ** When not in hybrid mode 1st inode has no distribution
+    */
+    if (inode_p->s.hybrid_desc.s.no_hybrid== 0) {
+      match += rozofs_do_visit(inode_p, vector.vectors[0].len);
+    }  
+    /*
+    ** Check every slave
+    */
+    slave_p ++;
+    nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+    for (idx=0; idx<nb_slave; idx++,slave_p++) {
+      match += rozofs_do_visit(slave_p, vector.vectors[idx+1].len);
+    }  
+  }
+  if(match) return 1;
+  return 0;
+} 
 
 /*
  *_______________________________________________________________________
  */
-static void usage() {
-    printf("Usage: ./rzsave [OPTIONS]\n\n");
-    printf("\t-h, --help\tprint this message.\n");
-    printf("\t-p,--path <export_root_path>\t\texportd root path \n");
-    printf("\t-v,--verbose                \t\tDisplay some execution statistics\n");
+char * utility_name=NULL; 
+static void usage(char * fmt, ...) {
+  va_list   args;
+  char      error_buffer[512];
+  /*
+  ** Display optionnal error message if any
+  */
+  if (fmt) {
+    va_start(args,fmt);
+    vsprintf(error_buffer, fmt, args);
+    va_end(args);   
+    severe("%s",error_buffer);
+    printf("%s\n",error_buffer);
+  }
+  
+  printf("RozoFS cluster statistics utility - %s\n", VERSION);
+  printf("Usage: %s [OPTIONS] -e <eid>\n\n",utility_name);
+  printf("Mandatory parameters:\n");
+  printf("\t-e,--eid        <eid>        mandatory export identifier.\n");
+  printf("Optionnal parameters:\n");  
+  printf("\t-h, --help                   print this message.\n");
+  printf("\t-c,--config     <cfgFile>    optionnal configuration file name.\n");
+  printf("\t-v,--verbose                 Display some execution statistics\n");
 
+
+  if (fmt) exit(EXIT_FAILURE);
+  exit(EXIT_SUCCESS); 
 };
 
 
@@ -356,21 +396,28 @@ int main(int argc, char *argv[]) {
     int c;
     void *rozofs_export_p;
     int i;
-    char *root_path=NULL;
     int verbose = 0;
+    export_config_t * econfig;
+    list_t          * p;
     
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
-        {"path", required_argument, 0, 'p'},
+        {"eid", required_argument, 0, 'e'},
+        {"config", required_argument, 0, 'c'},
         {"verbose", required_argument, 0, 'v'},
         {0, 0, 0, 0}
     };
     
-  
+    /*
+    ** Get utility name
+    */
+    utility_name = basename(argv[0]); 
+       
+     
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "hvlrc:p:", long_options, &option_index);
+      c = getopt_long(argc, argv, "hvc:e:", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -378,29 +425,30 @@ int main(int argc, char *argv[]) {
       switch (c) {
 
           case 'h':
-              usage();
+              usage(NULL);
               exit(EXIT_SUCCESS);
               break;
-          case 'p':
-              root_path = optarg;
-              break;
+          case 'e':
+              if (sscanf(optarg,"%d",&eid) != 1) {
+                usage("Bad export identifier value \"%s\"",optarg);
+              }  
+              break;                        
           case 'v':
               verbose = 1;
               break;    
           case '?':
-              usage();
+              usage(NULL);
               exit(EXIT_SUCCESS);
               break;
           default:
-              usage();
+              usage(NULL);
               exit(EXIT_FAILURE);
               break;
       }
   }
-  if (root_path == NULL) 
+  if (eid == -1) 
   {
-       usage();
-       exit(EXIT_FAILURE);  
+       usage("Missing mandatory export identifier");
   }
   /*
   ** clear the cluster table
@@ -411,14 +459,46 @@ int main(int argc, char *argv[]) {
   }
 
   /*
+  ** Read configuration file
+  */
+  if (econfig_initialize(&exportd_config) != 0) {
+       usage("can't initialize exportd config %s.\n",strerror(errno));
+  }    
+  if (econfig_read(&exportd_config, configFileName) != 0) {
+        usage("failed to parse configuration file %s %s.\n",
+            configFileName,strerror(errno));
+  }   
+  if (econfig_validate(&exportd_config) != 0) {
+       usage("inconsistent configuration file %s %s.\n",
+            configFileName, strerror(errno)); 
+  } 
+  rozofs_layout_initialize();
+
+  /*
+  ** Loop on configured export
+  */
+  layout = -1;
+  list_for_each_forward(p, &exportd_config.exports) {
+
+    econfig = list_entry(p, export_config_t, list);
+    
+    if (econfig->eid != eid) continue;
+    layout = econfig->layout;  
+    rozofs_get_rozofs_invers_forward_safe(econfig->layout, &rozofs_inv, &rozofs_fwd, &rozofs_safe);
+    blocksize = ROZOFS_BSIZE_BYTES(econfig->bsize)/rozofs_inv;
+  }
+  if (layout == -1) {  
+    usage("No such eid %d configured",econfig->layout);
+  }  
+  
+  /*
   ** init of the RozoFS data structure on export
   ** in order to permit the scanning of the exportd
   */
-  rozofs_export_p = rz_inode_lib_init(root_path);
+  rozofs_export_p = rz_inode_lib_init(econfig->root);
   if (rozofs_export_p == NULL)
   {
-    printf("RozoFS: error while reading %s\n",root_path);
-    exit(EXIT_FAILURE);  
+    usage("RozoFS: error while reading %s\n",econfig->root);
   }
   /*
   ** init of the lv2 cache
