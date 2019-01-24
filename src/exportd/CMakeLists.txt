@@ -262,6 +262,10 @@ target_link_libraries(rozo_fid2pathname rozofs_inode rozofs ${PTHREAD_LIBRARY} $
 #________________________________________________________
 add_executable(rozo_clusterstats
     rozo_clusterstats.c  
+    econfig.c      
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h  
+        
 )
 target_link_libraries(rozo_clusterstats rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 #________________________________________________________
