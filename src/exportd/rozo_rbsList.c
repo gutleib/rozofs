@@ -204,7 +204,7 @@ static int get_job_list_index(sid_one_info_t * p) {
 */
 
 int key_table[] = {ROZOFS_PRIMARY_FID,ROZOFS_MOVER_FID,-1};
-int rozofs_do_visit(INODE_TYPE_E inode_type,ext_mattr_t *inode_p,ext_mattr_t * slave_p) {
+int rozofs_do_visit(INODE_TYPE_E inode_type,ext_mattr_t *inode_p,ext_mattr_t * slave_p, uint32_t rebuild_size) {
   int i;
   int sid;
   int job;
@@ -218,68 +218,10 @@ int rozofs_do_visit(INODE_TYPE_E inode_type,ext_mattr_t *inode_p,ext_mattr_t * s
   int ret;
   cid_t cid;
   sid_t sid_tab[ROZOFS_SAFE_MAX_STORCLI];
-  uint64_t   rebuild_size;
-  uint64_t   master_size;
-  uint64_t   strip_size;
-  uint64_t   strip_factor;
-  int        slave_idx ; 
 
   if (debug) {
      pname += rozofs_fid_append(pname, slave_p->s.attrs.fid);
   } 
-  
-  /*
-  ** File of zero size need not to be rebuilt
-  */
-  switch(inode_type) {
-  
-    case INODE_TYPE_SINGLE:
-      /*
-      ** Regular file without striping
-      */
-      rebuild_size = inode_p->s.attrs.size;
-      pname += sprintf(pname," single");
-      break;
-      
-    case INODE_TYPE_HYBRID_MASTER:
-      master_size  = inode_p->s.attrs.size;
-      strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc);
-      /*
-      ** In hybrid mode, this inode is located on fast volume but is only one strip long
-      */
-      if (master_size < strip_size) {
-        rebuild_size = master_size;
-      }
-      else {
-        rebuild_size = strip_size;      
-      }      
-      pname += sprintf(pname," hybrid");
-      break;    
-      
-    case INODE_TYPE_HYBRID_SLAVE:
-    case INODE_TYPE_SLAVE:
-      slave_idx    = slave_p->s.multi_desc.slave.file_idx+1;
-      master_size  = inode_p->s.attrs.size;
-      strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc);
-      strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc);
-      if (inode_type == INODE_TYPE_HYBRID_SLAVE) {
-        if (master_size < strip_size) {
-          rebuild_size = 0;
-        }
-        else {
-          rebuild_size = master_size - strip_size;      
-        } 
-      }    
-      if (rebuild_size < (slave_idx*strip_size)) {
-        rebuild_size = 0;
-      }
-      else {  
-        rebuild_size = rebuild_size/strip_factor;
-      }           
-      pname += sprintf(pname," slave %d",slave_idx);   
-      break;    
-  }
-  
     
   if (rebuild_size == 0) {
     TRACE("%s is empty and won't be rebuilt",name); 
@@ -370,7 +312,13 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   int          idx;
   int          nb_slave;
   int          match = 0;
-  
+  rozofs_iov_multi_t vector; 
+
+  /*
+  ** get the size of each section
+  */
+  rozofs_get_multiple_file_sizes(inode_p,&vector);
+   
   /*
   ** File of zero size need not to be rebuilt
   */
@@ -378,14 +326,14 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     /*
     ** Regular file without striping
     */
-    match += rozofs_do_visit(INODE_TYPE_SINGLE,inode_attr_p,slave_p);
+    match += rozofs_do_visit(INODE_TYPE_SINGLE,inode_attr_p,slave_p, vector.vectors[0].len);
   }  
   else if (inode_p->s.multi_desc.common.master == 1) {
     /*
     ** When not in hybrid mode 1st inode has no distribution
     */
     if (inode_p->s.hybrid_desc.s.no_hybrid== 0) {
-      match += rozofs_do_visit(INODE_TYPE_HYBRID_MASTER,inode_attr_p,slave_p);
+      match += rozofs_do_visit(INODE_TYPE_HYBRID_MASTER,inode_attr_p,slave_p, vector.vectors[0].len);
     }  
     /*
     ** Check every slave
@@ -394,10 +342,10 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
     for (idx=0; idx<nb_slave; idx++,slave_p++) {
       if (inode_p->s.hybrid_desc.s.no_hybrid==0) {
-         match += rozofs_do_visit(INODE_TYPE_HYBRID_SLAVE,inode_attr_p,slave_p);
+         match += rozofs_do_visit(INODE_TYPE_HYBRID_SLAVE,inode_attr_p,slave_p, vector.vectors[idx+1].len);
       }  
       else{
-         match += rozofs_do_visit(INODE_TYPE_SLAVE,inode_attr_p,slave_p);
+         match += rozofs_do_visit(INODE_TYPE_SLAVE,inode_attr_p,slave_p,vector.vectors[idx+1].len);
       }  
     }  
   }
