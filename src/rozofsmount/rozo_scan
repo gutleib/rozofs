@@ -33,9 +33,13 @@ active=""
 eid=""
 local="NO"
 parameters=''
+help_requested="NO"
 while [ ! -z $1 ]
 do
+  
+  #
   # Debug mode
+  #
   if [ "$1" == "--debug" ]
   then
     set -x
@@ -43,7 +47,9 @@ do
     continue
   fi
   
-  # local mode : no crm
+  #
+  # local mode : use local host name as active export
+  
   if [ "$1" == "--local" ]
   then
     local="YES"
@@ -51,7 +57,9 @@ do
     continue
   fi
 
-  # Extract eid parameter  
+  #
+  # Extract eid parameter if set
+  #
   if [ "$1" == "-e" ]
   then
 
@@ -66,11 +74,28 @@ do
     shift 1      
     continue 
   fi
+  
+  #
+  # Check whether help is requested 
+  #
+  if [ "$1" == "-h" -o "$1" == "--help" ];
+  then
+    help_requested="YES"
+  fi
 
   parameters="${parameters} $1"
   shift 1        
   
 done
+
+#
+# When no parameter is set, request help
+#
+if [ "${parameters}" == "" ]
+then
+  parameters="-h"
+  help_requested="YES"
+fi
 
 #
 # Find out the current RozoFS exportd from the current path
@@ -91,11 +116,11 @@ then
     eid="-e "`echo ${res} | awk '{print $2}'`
   fi  
 else
-  if [ "${eid}" == "" ]
+  if [ "${eid}" == "" -a "${help_requested}" == "NO" ];
   then
     echo ""
     echo "\"${PWD}\" is not a RozoFS mountpoint,"
-    echo "and neither -e nor -p option is not set to tell the targeted RozoFS file system."
+    echo "and --eid is not set to tell the targeted RozoFS file system."
     exit 1
   fi  
   #
@@ -113,33 +138,28 @@ else
 fi
  
 # 
-# Find out which of these exports is the active one asking crm
+# Find out which of these exports is the active one using rozodiag
 #
 if [ "${local}" == "YES" ]
 then
   active="$HOSTNAME"
 else
-  for export in `echo $exports | tr \/ ' '`
+  for active in `echo $exports | tr \/ ' '`
   do
-    active=`ssh ${export} "crm_resource --resource p-fs-exportd --locate -Q"`
-    if [ $? -ne 0 ];
-    then
-      active=""
-      continue
-    fi 
-    break
+    rozodiag -i ${active} -T export:0 -c up | grep uptime >> /dev/null
+    case "$?" in
+      "0") break;;
+      *)   active="";;
+    esac      
   done
+  case "${active}" in
+    "") {
+      echo "Active exportd not found within ${exports}"
+      exit 1
+    };;
+   esac   
 fi
-#
-# At least one parameter should be provided 
-#
-if [ "${parameters}" == "" ]
-then
-  echo 
-  echo "At least one parameter must be given."
-  echo "Request help with -h option."
-   exit
-fi
+
 
 # 
 # Is the current node the active export
