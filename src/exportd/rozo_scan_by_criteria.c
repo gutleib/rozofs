@@ -29,31 +29,185 @@ uint64_t nb_scanned_entries = 0;
 uint64_t nb_matched_entries = 0;
 uint64_t max_display = -1;
 
-typedef enum _scan_criterie_e {
-  SCAN_CRITERIA_NONE=0,
-  SCAN_CRITERIA_HCR8,
-  SCAN_CRITERIA_SCR8,
-  SCAN_CRITERIA_HMOD,
-  SCAN_CRITERIA_SMOD,
-  SCAN_CRITERIA_HCTIME,
-  SCAN_CRITERIA_SCTIME,
-  SCAN_CRITERIA_SIZE,  
-  SCAN_CRITERIA_UID,    
-  SCAN_CRITERIA_GID,  
-  SCAN_CRITERIA_CID,   
-  SCAN_CRITERIA_SID,   
-  SCAN_CRITERIA_PROJECT,      
-  SCAN_CRITERIA_NLINK, 
-  SCAN_CRITERIA_CHILDREN, 
-  SCAN_CRITERIA_PFID,
-  SCAN_CRITERIA_FNAME,       
-  SCAN_CRITERIA_HUPDATE,     /**< directory update time */      
-  SCAN_CRITERIA_SUPDATE,     /**< directory update time */      
-  SCAN_CRITERIA_DELETED, 
-  SCAN_CRITERIA_TRASH, 
-} SCAN_CRITERIA_E;
 
-SCAN_CRITERIA_E scan_criteria = SCAN_CRITERIA_NONE;
+/*
+**---------------------------------------------------------------
+**
+** L O N G    O P T I O N S
+**
+**---------------------------------------------------------------
+*/
+/*
+** Define an integer value for a long input string option
+** to be used in enum INT_VALUE_FOR_STRING_ENUM
+*/
+#define DEFINE_INT_FOR_INPUT_STRING(s) INT_VALUE_FOR_STRING_ ## s ,
+
+/*
+** Declare a string to translate to an integer by the parser
+** To be used in long_options[]
+*/
+#define INPUT_STRING_NO_ARG_TO_INT(s)   {#s, no_argument,       0, INT_VALUE_FOR_STRING_ ## s},
+#define INPUT_STRING_WITH_ARG_TO_INT(s) {#s, required_argument, 0, INT_VALUE_FOR_STRING_ ## s},
+
+
+/*
+** String to integer value
+*/
+typedef enum _INT_VALUE_FOR_STRING_ENUM {   
+  INT_VALUE_FOR_STRING_START=1000,
+  
+  DEFINE_INT_FOR_INPUT_STRING(config)
+  DEFINE_INT_FOR_INPUT_STRING(eid)
+  DEFINE_INT_FOR_INPUT_STRING(out)
+  DEFINE_INT_FOR_INPUT_STRING(path)
+  DEFINE_INT_FOR_INPUT_STRING(Ux)
+  DEFINE_INT_FOR_INPUT_STRING(Unx)
+  DEFINE_INT_FOR_INPUT_STRING(Ur)
+  DEFINE_INT_FOR_INPUT_STRING(Unr)
+  DEFINE_INT_FOR_INPUT_STRING(Uw)
+  DEFINE_INT_FOR_INPUT_STRING(Unw)
+  DEFINE_INT_FOR_INPUT_STRING(Gx)
+  DEFINE_INT_FOR_INPUT_STRING(Gnx)
+  DEFINE_INT_FOR_INPUT_STRING(Gr)
+  DEFINE_INT_FOR_INPUT_STRING(Gnr)
+  DEFINE_INT_FOR_INPUT_STRING(Gw)
+  DEFINE_INT_FOR_INPUT_STRING(Gnw)
+  DEFINE_INT_FOR_INPUT_STRING(Ox)
+  DEFINE_INT_FOR_INPUT_STRING(Onx)
+  DEFINE_INT_FOR_INPUT_STRING(Or)
+  DEFINE_INT_FOR_INPUT_STRING(Onr)
+  DEFINE_INT_FOR_INPUT_STRING(Ow)
+  DEFINE_INT_FOR_INPUT_STRING(Onw)
+  DEFINE_INT_FOR_INPUT_STRING(hybrid) 
+  DEFINE_INT_FOR_INPUT_STRING(nohybrid) 
+  DEFINE_INT_FOR_INPUT_STRING(slave)    
+  DEFINE_INT_FOR_INPUT_STRING(wrerror)
+  DEFINE_INT_FOR_INPUT_STRING(size)
+  DEFINE_INT_FOR_INPUT_STRING(junk)
+  DEFINE_INT_FOR_INPUT_STRING(sctime)
+  DEFINE_INT_FOR_INPUT_STRING(hctime)
+  DEFINE_INT_FOR_INPUT_STRING(ctime)
+  DEFINE_INT_FOR_INPUT_STRING(smod)
+  DEFINE_INT_FOR_INPUT_STRING(hmod)
+  DEFINE_INT_FOR_INPUT_STRING(mod)
+  DEFINE_INT_FOR_INPUT_STRING(scr8)
+  DEFINE_INT_FOR_INPUT_STRING(hcr8)
+  DEFINE_INT_FOR_INPUT_STRING(cr8)
+  DEFINE_INT_FOR_INPUT_STRING(uid)
+  DEFINE_INT_FOR_INPUT_STRING(gid)
+  DEFINE_INT_FOR_INPUT_STRING(cid)
+  DEFINE_INT_FOR_INPUT_STRING(sid)
+  DEFINE_INT_FOR_INPUT_STRING(project)
+  DEFINE_INT_FOR_INPUT_STRING(link)
+  DEFINE_INT_FOR_INPUT_STRING(children)
+  DEFINE_INT_FOR_INPUT_STRING(deleted)
+  DEFINE_INT_FOR_INPUT_STRING(pfid)
+  DEFINE_INT_FOR_INPUT_STRING(name)
+  DEFINE_INT_FOR_INPUT_STRING(xattr)
+  DEFINE_INT_FOR_INPUT_STRING(noxattr)
+  DEFINE_INT_FOR_INPUT_STRING(slink)
+  DEFINE_INT_FOR_INPUT_STRING(noreg)
+  DEFINE_INT_FOR_INPUT_STRING(lt)
+  DEFINE_INT_FOR_INPUT_STRING(le)
+  DEFINE_INT_FOR_INPUT_STRING(eq)
+  DEFINE_INT_FOR_INPUT_STRING(ne)
+  DEFINE_INT_FOR_INPUT_STRING(ge)
+  DEFINE_INT_FOR_INPUT_STRING(gt)
+  DEFINE_INT_FOR_INPUT_STRING(regex)
+  DEFINE_INT_FOR_INPUT_STRING(dir)
+  DEFINE_INT_FOR_INPUT_STRING(all)
+  DEFINE_INT_FOR_INPUT_STRING(trash)
+  DEFINE_INT_FOR_INPUT_STRING(notrash)
+  DEFINE_INT_FOR_INPUT_STRING(help)
+  DEFINE_INT_FOR_INPUT_STRING(update)
+  DEFINE_INT_FOR_INPUT_STRING(hupdate)
+  DEFINE_INT_FOR_INPUT_STRING(supdate)
+  
+  DEFINE_INT_FOR_INPUT_STRING(MAX)
+} INT_VALUE_FOR_STRING_ENUM;              
+
+
+/*
+** Declare long string option to integer translation
+*/
+static struct option long_options[] = {
+
+    INPUT_STRING_WITH_ARG_TO_INT(path)
+    INPUT_STRING_WITH_ARG_TO_INT(eid)
+    INPUT_STRING_WITH_ARG_TO_INT(config)
+    INPUT_STRING_WITH_ARG_TO_INT(out)
+    INPUT_STRING_NO_ARG_TO_INT(help)
+    INPUT_STRING_NO_ARG_TO_INT(cr8)
+    INPUT_STRING_NO_ARG_TO_INT(hcr8)
+    INPUT_STRING_NO_ARG_TO_INT(scr8)
+    INPUT_STRING_NO_ARG_TO_INT(mod)
+    INPUT_STRING_NO_ARG_TO_INT(hmod)
+    INPUT_STRING_NO_ARG_TO_INT(smod)
+    INPUT_STRING_NO_ARG_TO_INT(ctime)
+    INPUT_STRING_NO_ARG_TO_INT(hctime)
+    INPUT_STRING_NO_ARG_TO_INT(sctime)
+    INPUT_STRING_NO_ARG_TO_INT(size)
+    INPUT_STRING_NO_ARG_TO_INT(uid)
+    INPUT_STRING_NO_ARG_TO_INT(gid)       
+    INPUT_STRING_NO_ARG_TO_INT(cid)        
+    INPUT_STRING_NO_ARG_TO_INT(sid)      
+    INPUT_STRING_NO_ARG_TO_INT(project)       
+    INPUT_STRING_NO_ARG_TO_INT(link)       
+    INPUT_STRING_NO_ARG_TO_INT(children)      
+    INPUT_STRING_NO_ARG_TO_INT(deleted)
+    INPUT_STRING_NO_ARG_TO_INT(pfid)  
+    INPUT_STRING_NO_ARG_TO_INT(name)        
+    INPUT_STRING_NO_ARG_TO_INT(xattr)
+    INPUT_STRING_NO_ARG_TO_INT(noxattr)  
+    INPUT_STRING_NO_ARG_TO_INT(slink)
+    INPUT_STRING_NO_ARG_TO_INT(noreg)  
+    INPUT_STRING_WITH_ARG_TO_INT(lt)
+    INPUT_STRING_WITH_ARG_TO_INT(le)
+    INPUT_STRING_WITH_ARG_TO_INT(gt)
+    INPUT_STRING_WITH_ARG_TO_INT(ge)
+    INPUT_STRING_WITH_ARG_TO_INT(eq)
+    INPUT_STRING_WITH_ARG_TO_INT(regex)
+    INPUT_STRING_WITH_ARG_TO_INT(ne)
+    INPUT_STRING_NO_ARG_TO_INT(dir)
+    INPUT_STRING_NO_ARG_TO_INT(all)
+    INPUT_STRING_NO_ARG_TO_INT(trash)
+    INPUT_STRING_NO_ARG_TO_INT(notrash)
+    INPUT_STRING_NO_ARG_TO_INT(update)
+    INPUT_STRING_NO_ARG_TO_INT(hupdate)
+    INPUT_STRING_NO_ARG_TO_INT(supdate)
+    INPUT_STRING_NO_ARG_TO_INT(junk)
+    INPUT_STRING_NO_ARG_TO_INT(wrerror)
+    INPUT_STRING_NO_ARG_TO_INT(Ux)
+    INPUT_STRING_NO_ARG_TO_INT(Unx)
+    INPUT_STRING_NO_ARG_TO_INT(Ur)
+    INPUT_STRING_NO_ARG_TO_INT(Unr)
+    INPUT_STRING_NO_ARG_TO_INT(Uw)
+    INPUT_STRING_NO_ARG_TO_INT(Unw)
+    INPUT_STRING_NO_ARG_TO_INT(Gx)
+    INPUT_STRING_NO_ARG_TO_INT(Gnx)
+    INPUT_STRING_NO_ARG_TO_INT(Gr)
+    INPUT_STRING_NO_ARG_TO_INT(Gnr)
+    INPUT_STRING_NO_ARG_TO_INT(Gw)
+    INPUT_STRING_NO_ARG_TO_INT(Gnw)
+    INPUT_STRING_NO_ARG_TO_INT(Ox)
+    INPUT_STRING_NO_ARG_TO_INT(Onx)
+    INPUT_STRING_NO_ARG_TO_INT(Or)
+    INPUT_STRING_NO_ARG_TO_INT(Onr)
+    INPUT_STRING_NO_ARG_TO_INT(Ow)
+    INPUT_STRING_NO_ARG_TO_INT(Onw)
+    INPUT_STRING_NO_ARG_TO_INT(hybrid)
+    INPUT_STRING_NO_ARG_TO_INT(nohybrid) 
+    INPUT_STRING_NO_ARG_TO_INT(slave)
+
+    {0, 0, 0, 0}
+};
+
+
+export_config_t   * export_config = NULL;
+
+INT_VALUE_FOR_STRING_ENUM scan_criteria = INT_VALUE_FOR_STRING_START;
+
 /*
 ** Ouput format
 */
@@ -198,109 +352,129 @@ int first_array_element = 1;
 char   display_buffer[4096*4];
 char * pDisplay;
 
+
+#define LONG_VALUE_UNDEF  -1LLU
+
+
+/*
+** Multiple file factor
+*/
+uint64_t    slave_lower  = LONG_VALUE_UNDEF;
+uint64_t    slave_bigger = LONG_VALUE_UNDEF;
+uint64_t    slave_equal  = LONG_VALUE_UNDEF;
+uint64_t    slave_diff  = LONG_VALUE_UNDEF;
+
 /*
 ** Privileges
 */
-int Ux  = -1;
-int Ur  = -1;
-int Uw  = -1;
-int Gx  = -1;
-int Gr  = -1;
-int Gw  = -1;
-int Ox  = -1;
-int Or  = -1;
-int Ow  = -1;
+uint64_t Ux  = LONG_VALUE_UNDEF;
+uint64_t Ur  = LONG_VALUE_UNDEF;
+uint64_t Uw  = LONG_VALUE_UNDEF;
+uint64_t Gx  = LONG_VALUE_UNDEF;
+uint64_t Gr  = LONG_VALUE_UNDEF;
+uint64_t Gw  = LONG_VALUE_UNDEF;
+uint64_t Ox  = LONG_VALUE_UNDEF;
+uint64_t Or  = LONG_VALUE_UNDEF;
+uint64_t Ow  = LONG_VALUE_UNDEF;
+
+/*
+** Hybrid or not hybrid
+*/
+#define HYBRID        1
+#define NOHYBRID      0
+uint64_t hybrid = LONG_VALUE_UNDEF;
+
 /*
 ** Modification time 
 */
-uint64_t    mod_lower  = -1;
-uint64_t    mod_bigger = -1;
-uint64_t    mod_equal  = -1;
-uint64_t    mod_diff   = -1;
+uint64_t    mod_lower  = LONG_VALUE_UNDEF;
+uint64_t    mod_bigger = LONG_VALUE_UNDEF;
+uint64_t    mod_equal  = LONG_VALUE_UNDEF;
+uint64_t    mod_diff   = LONG_VALUE_UNDEF;
 /*
 ** change time 
 */
-uint64_t    ctime_lower  = -1;
-uint64_t    ctime_bigger = -1;
-uint64_t    ctime_equal  = -1;
-uint64_t    ctime_diff   = -1;
+uint64_t    ctime_lower  = LONG_VALUE_UNDEF;
+uint64_t    ctime_bigger = LONG_VALUE_UNDEF;
+uint64_t    ctime_equal  = LONG_VALUE_UNDEF;
+uint64_t    ctime_diff   = LONG_VALUE_UNDEF;
 /*
 ** creation time 
 */
-uint64_t    cr8_lower  = -1;
-uint64_t    cr8_bigger = -1;
-uint64_t    cr8_equal  = -1;
-uint64_t    cr8_diff  = -1;
+uint64_t    cr8_lower  = LONG_VALUE_UNDEF;
+uint64_t    cr8_bigger = LONG_VALUE_UNDEF;
+uint64_t    cr8_equal  = LONG_VALUE_UNDEF;
+uint64_t    cr8_diff  = LONG_VALUE_UNDEF;
 
 /*
 ** directory update time 
 */
-uint64_t    update_lower  = -1;
-uint64_t    update_bigger = -1;
-uint64_t    update_equal  = -1;
-uint64_t    update_diff  = -1;
+uint64_t    update_lower  = LONG_VALUE_UNDEF;
+uint64_t    update_bigger = LONG_VALUE_UNDEF;
+uint64_t    update_equal  = LONG_VALUE_UNDEF;
+uint64_t    update_diff  = LONG_VALUE_UNDEF;
 
 /*
 ** Size
 */
-uint64_t    size_lower  = -1;
-uint64_t    size_bigger = -1;
-uint64_t    size_equal  = -1;
-uint64_t    size_diff  = -1;
+uint64_t    size_lower  = LONG_VALUE_UNDEF;
+uint64_t    size_bigger = LONG_VALUE_UNDEF;
+uint64_t    size_equal  = LONG_VALUE_UNDEF;
+uint64_t    size_diff  = LONG_VALUE_UNDEF;
 
 /*
 ** UID
 */
-uint64_t    uid_equal  = -1;
-uint64_t    uid_diff   = -1;
+uint64_t    uid_equal  = LONG_VALUE_UNDEF;
+uint64_t    uid_diff   = LONG_VALUE_UNDEF;
 
 /*
 ** GID
 */
-uint64_t    gid_equal  = -1;
-uint64_t    gid_diff  = -1;
+uint64_t    gid_equal  = LONG_VALUE_UNDEF;
+uint64_t    gid_diff  = LONG_VALUE_UNDEF;
 
 /*
 ** Project
 */
-uint64_t    project_equal  = -1;
-uint64_t    project_diff   = -1;
+uint64_t    project_equal  = LONG_VALUE_UNDEF;
+uint64_t    project_diff   = LONG_VALUE_UNDEF;
 
 /*
 ** CID
 */
-uint64_t    cid_equal  = -1;
-uint64_t    cid_diff   = -1;
+uint64_t    cid_equal  = LONG_VALUE_UNDEF;
+uint64_t    cid_diff   = LONG_VALUE_UNDEF;
 
 /*
 ** SID
 */
-uint64_t    sid_equal  = -1;
-uint64_t    sid_diff   = -1;
+uint64_t    sid_equal  = LONG_VALUE_UNDEF;
+uint64_t    sid_diff   = LONG_VALUE_UNDEF;
 
 /*
 ** NLINK
 */
-uint64_t    nlink_lower  = -1;
-uint64_t    nlink_bigger = -1;
-uint64_t    nlink_equal  = -1;
-uint64_t    nlink_diff  = -1;
+uint64_t    nlink_lower  = LONG_VALUE_UNDEF;
+uint64_t    nlink_bigger = LONG_VALUE_UNDEF;
+uint64_t    nlink_equal  = LONG_VALUE_UNDEF;
+uint64_t    nlink_diff  = LONG_VALUE_UNDEF;
 
 /*
 ** Children
 */
-uint64_t    children_lower  = -1;
-uint64_t    children_bigger = -1;
-uint64_t    children_equal  = -1;
-uint64_t    children_diff  = -1;
+uint64_t    children_lower  = LONG_VALUE_UNDEF;
+uint64_t    children_bigger = LONG_VALUE_UNDEF;
+uint64_t    children_equal  = LONG_VALUE_UNDEF;
+uint64_t    children_diff  = LONG_VALUE_UNDEF;
 
 /*
 ** Delcount
 */
-uint64_t    deleted_lower  = -1;
-uint64_t    deleted_bigger = -1;
-uint64_t    deleted_equal  = -1;
-uint64_t    deleted_diff  = -1;
+uint64_t    deleted_lower  = LONG_VALUE_UNDEF;
+uint64_t    deleted_bigger = LONG_VALUE_UNDEF;
+uint64_t    deleted_equal  = LONG_VALUE_UNDEF;
+uint64_t    deleted_diff  = LONG_VALUE_UNDEF;
 
 
 /*
@@ -321,7 +495,7 @@ int         search_dir=0;
 /*
 ** xatrr or not
 */
-int         has_xattr=-1;
+uint64_t     has_xattr=LONG_VALUE_UNDEF;
 /*
 ** slink ? regular files ?
 */
@@ -985,7 +1159,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a creation time bigger than cr8_bigger
   */ 
-  if (cr8_bigger != -1) {
+  if (cr8_bigger != LONG_VALUE_UNDEF) {
     if (inode_p->s.cr8time < cr8_bigger) {
       return 0;
     }
@@ -994,7 +1168,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a creation time lower than cr8_lower
   */    
-  if (cr8_lower != -1) {
+  if (cr8_lower != LONG_VALUE_UNDEF) {
     if (inode_p->s.cr8time > cr8_lower) {
       return 0;
     }
@@ -1003,7 +1177,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a creation time equal to cr8_equal
   */    
-  if (cr8_equal != -1) {
+  if (cr8_equal != LONG_VALUE_UNDEF) {
     if (inode_p->s.cr8time != cr8_equal) {
       return 0;
     }
@@ -1012,7 +1186,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a creation time different from cr8_equal
   */    
-  if (cr8_diff != -1) {
+  if (cr8_diff != LONG_VALUE_UNDEF) {
     if (inode_p->s.cr8time == cr8_diff) {
       return 0;
     }
@@ -1021,7 +1195,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a modification time bigger than mod_bigger
   */ 
-  if (mod_bigger != -1) {
+  if (mod_bigger != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mtime < mod_bigger) {
       return 0;
     }
@@ -1030,7 +1204,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a modification time lower than mod_lower
   */    
-  if (mod_lower != -1) {
+  if (mod_lower != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mtime > mod_lower) {
       return 0;
     }
@@ -1039,7 +1213,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a modification time equal to mod_equal
   */    
-  if (mod_equal != -1) {
+  if (mod_equal != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mtime != mod_equal) {
       return 0;
     }
@@ -1048,7 +1222,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a modification time different from mod_diff
   */    
-  if (mod_diff != -1) {
+  if (mod_diff != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mtime == mod_diff) {
       return 0;
     }
@@ -1057,7 +1231,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a change time bigger than ctime_bigger
   */ 
-  if (ctime_bigger != -1) {
+  if (ctime_bigger != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.ctime < ctime_bigger) {
       return 0;
     }
@@ -1066,7 +1240,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a change time lower than ctime_lower
   */    
-  if (ctime_lower != -1) {
+  if (ctime_lower != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.ctime > ctime_lower) {
       return 0;
     }
@@ -1075,7 +1249,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a change time equal to ctime_equal
   */    
-  if (ctime_equal != -1) {
+  if (ctime_equal != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.ctime != ctime_equal) {
       return 0;
     }
@@ -1084,7 +1258,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a change time different from ctime_diff
   */    
-  if (ctime_diff != -1) {
+  if (ctime_diff != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.ctime == ctime_diff) {
       return 0;
     }
@@ -1094,7 +1268,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   */
   
   /* User privileges */
-  if (Ux != -1) {
+  if (Ux != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IXUSR) {
       if (!Ux) {
         return 0; 
@@ -1106,7 +1280,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       } 
     }
   }
-  if (Uw != -1) {
+  if (Uw != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IWUSR) {
       if (!Uw) {
         return 0; 
@@ -1118,7 +1292,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       } 
     }
   }   
-  if (Ur != -1) {
+  if (Ur != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IRUSR) {
       if (!Ur) {
         return 0; 
@@ -1131,7 +1305,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }
   } 
   /* Group privileges */
-  if (Gx != -1) {
+  if (Gx != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IXGRP) {
       if (!Gx) {
         return 0; 
@@ -1143,7 +1317,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       } 
     }
   }
-  if (Gw != -1) {
+  if (Gw != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IWGRP) {
       if (!Gw) {
         return 0; 
@@ -1155,7 +1329,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       } 
     }
   }   
-  if (Gr != -1) {
+  if (Gr != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IRGRP) {
       if (!Gr) {
         return 0; 
@@ -1168,7 +1342,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }
   }       
   /* Others privileges */
-  if (Ox != -1) {
+  if (Ox != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IXOTH) {
       if (!Ox) {
         return 0; 
@@ -1180,7 +1354,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       } 
     }
   }
-  if (Ow != -1) {
+  if (Ow != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IWOTH) {
       if (!Ow) {
         return 0; 
@@ -1192,7 +1366,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       } 
     }
   }   
-  if (Or != -1) {
+  if (Or != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.mode & S_IROTH) {
       if (!Or) {
         return 0; 
@@ -1215,7 +1389,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       /*
       ** Must have a modification time bigger than update_bigger
       */ 
-      if (update_bigger != -1) {
+      if (update_bigger != LONG_VALUE_UNDEF) {
 	if (stats_attr_p->s.update_time < update_bigger) {
 	  return 0;
 	}
@@ -1224,7 +1398,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       /*
       ** Must have a modification time lower than update_lower
       */    
-      if (update_lower != -1) {
+      if (update_lower != LONG_VALUE_UNDEF) {
 	if (stats_attr_p->s.update_time > update_lower) {
 	  return 0;
 	}
@@ -1233,7 +1407,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       /*
       ** Must have a modification time equal to update_equal
       */    
-      if (update_equal != -1) {
+      if (update_equal != LONG_VALUE_UNDEF) {
 	if (stats_attr_p->s.update_time != update_equal) {
 	  return 0;
 	}
@@ -1242,7 +1416,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       /*
       ** Must have a modification time different from update_diff
       */    
-      if (update_diff != -1) {
+      if (update_diff != LONG_VALUE_UNDEF) {
 	if (stats_attr_p->s.update_time == update_diff) {
 	  return 0;
 	}
@@ -1251,7 +1425,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a size bigger than size_bigger
     */ 
-    if (size_bigger != -1) {
+    if (size_bigger != LONG_VALUE_UNDEF) {
       if (stats_attr_p->s.nb_bytes < size_bigger) {
         return 0;
       }
@@ -1260,7 +1434,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a size lower than size_lower
     */    
-    if (size_lower != -1) {
+    if (size_lower != LONG_VALUE_UNDEF) {
       if (stats_attr_p->s.nb_bytes  > size_lower) {
         return 0;
       }
@@ -1269,7 +1443,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a size equal to size_equal
     */    
-    if (size_equal != -1) {
+    if (size_equal != LONG_VALUE_UNDEF) {
       if (stats_attr_p->s.nb_bytes  != size_equal) {
         return 0;
       }
@@ -1278,7 +1452,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a size time different from size_diff
     */    
-    if (size_diff != -1) {
+    if (size_diff != LONG_VALUE_UNDEF) {
       if (stats_attr_p->s.nb_bytes  == size_diff) {
         return 0;
       }
@@ -1288,7 +1462,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have an uid equal to size_equal
   */    
-  if (uid_equal != -1) {
+  if (uid_equal != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.uid != uid_equal) {
       return 0;
     }
@@ -1297,7 +1471,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have an uid different from uid_diff
   */    
-  if (uid_diff != -1) {
+  if (uid_diff != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.uid == uid_diff) {
       return 0;
     }
@@ -1306,7 +1480,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have an gid equal to size_equal
   */    
-  if (gid_equal != -1) {
+  if (gid_equal != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.gid != gid_equal) {
       return 0;
     }
@@ -1315,7 +1489,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have an gid different from gid_diff
   */    
-  if (gid_diff != -1) {
+  if (gid_diff != LONG_VALUE_UNDEF) {
     if (inode_p->s.attrs.gid == gid_diff) {
       return 0;
     }
@@ -1327,9 +1501,128 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   if (S_ISREG(inode_p->s.attrs.mode)) {
   
     /*
+    ** Must be in hybrid mode
+    */
+    if (hybrid == HYBRID) {
+      if (inode_p->s.multi_desc.byte == 0) {
+        /*
+        ** not a multifile 
+        */
+        return 0;
+      }  
+      if (inode_p->s.hybrid_desc.s.no_hybrid != 0) { 
+        return 0;
+      }  
+    }
+    
+    /*
+    ** Must not be in hybrid mode
+    */    
+    if (hybrid == NOHYBRID) {
+      if ((inode_p->s.multi_desc.byte != 0) && (inode_p->s.hybrid_desc.s.no_hybrid == 0)) {
+        return 0;
+      }
+    }  
+    
+    /*
+    ** Must be a mulifile with less than slave_lower slave inodes
+    */ 
+    if (slave_lower != LONG_VALUE_UNDEF) {
+      /*
+      ** No slave inodes
+      */
+      if (slave_lower == 0) {
+        if (inode_p->s.multi_desc.byte != 0) {
+          return 0;
+        }     
+      }
+      else {
+        if (inode_p->s.multi_desc.byte == 0) {
+          /*
+          ** not a multifile 
+          */
+          return 0;
+        }  
+        int strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+        if (strip_factor > slave_lower) {
+          return 0;
+        }  
+      }
+    } 
+     
+    /*
+    ** Must be a mulifile with more than slave_bigger slave inodes
+    */ 
+    if (slave_bigger != LONG_VALUE_UNDEF) {
+      /*
+      ** No slave inodes
+      */
+      if (slave_bigger != 0) {
+        if (inode_p->s.multi_desc.byte == 0) {
+          /*
+          ** not a multifile 
+          */
+          return 0;
+        }  
+        int strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+        if (strip_factor < slave_bigger) {
+          return 0;
+        }  
+      }
+    } 
+     
+    /*
+    ** Must be a mulifile with more than slave_bigger slave inodes
+    */ 
+    if (slave_equal != LONG_VALUE_UNDEF) {
+      /*
+      ** No slave inodes
+      */
+      if (slave_equal == 0) {
+        if (inode_p->s.multi_desc.byte != 0) {
+          return 0;
+        }     
+      }
+      else {
+        if (inode_p->s.multi_desc.byte == 0) {
+          /*
+          ** not a multifile 
+          */
+          return 0;
+        }  
+        int strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+        if (strip_factor != slave_equal) {
+          return 0;
+        }  
+      }
+    }  
+
+    /*
+    ** Must be a mulifile with more than slave_bigger slave inodes
+    */ 
+    if (slave_diff != LONG_VALUE_UNDEF) {
+      /*
+      ** No slave inodes
+      */
+      if (slave_diff == 0) {
+        if (inode_p->s.multi_desc.byte == 0) {
+          return 0;
+        }     
+      }
+      else {
+        if (inode_p->s.multi_desc.byte != 0) {
+          int strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+          if (strip_factor == slave_diff) {
+            return 0;
+          }  
+        }  
+      }
+    }  
+            
+    /*
     ** Must have a size bigger than size_bigger
     */ 
-    if (size_bigger != -1) {
+    if (size_bigger != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.size < size_bigger) {
         return 0;
       }
@@ -1338,7 +1631,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a size lower than size_lower
     */    
-    if (size_lower != -1) {
+    if (size_lower != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.size > size_lower) {
         return 0;
       }
@@ -1347,7 +1640,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a size equal to size_equal
     */    
-    if (size_equal != -1) {
+    if (size_equal != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.size != size_equal) {
         return 0;
       }
@@ -1356,7 +1649,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a size time different from size_diff
     */    
-    if (size_diff != -1) {
+    if (size_diff != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.size == size_diff) {
         return 0;
       }
@@ -1365,12 +1658,12 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a cid equal to cid_equal
     */    
-    while (cid_equal != -1) {
+    while (cid_equal != LONG_VALUE_UNDEF) {
     
       /*
       ** Check the cid and sid are present in one distribution
       */
-      if (sid_equal != -1) {        
+      if (sid_equal != LONG_VALUE_UNDEF) {        
         if (rozofs_check_cid_and_sid(inode_p,cid_equal,sid_equal) == 0) {
           return 0;
         }
@@ -1380,7 +1673,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       /*
       ** Check the cid is present but not the sid
       */      
-      if (sid_diff != -1) {        
+      if (sid_diff != LONG_VALUE_UNDEF) {        
         if (rozofs_check_cid_and_not_sid(inode_p,cid_equal,sid_diff) == 0) {
           return 0;
         }
@@ -1399,12 +1692,12 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have an cid different from cid_diff
     */    
-    while (cid_diff != -1) {    
+    while (cid_diff != LONG_VALUE_UNDEF) {    
       
       /*
       ** Check the cid and sid ar not present
       */      
-      if (sid_diff != -1) {        
+      if (sid_diff != LONG_VALUE_UNDEF) {        
         if (rozofs_check_cid_and_sid(inode_p,cid_diff,sid_diff)) {
           return 0;
         }
@@ -1424,7 +1717,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a nlink bigger than nlink_bigger
     */ 
-    if (nlink_bigger != -1) {
+    if (nlink_bigger != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.nlink < nlink_bigger) {
         return 0;
       }
@@ -1433,7 +1726,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a nlink lower than nlink_lower
     */    
-    if (nlink_lower != -1) {
+    if (nlink_lower != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.nlink > nlink_lower) {
         return 0;
       }
@@ -1442,7 +1735,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a nlink equal to nlink_equal
     */    
-    if (nlink_equal != -1) {
+    if (nlink_equal != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.nlink != nlink_equal) {
         return 0;
       }
@@ -1451,7 +1744,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a nlink different from nlink_diff
     */    
-    if (nlink_diff != -1) {
+    if (nlink_diff != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.nlink == nlink_diff) {
         return 0;
       }
@@ -1465,11 +1758,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   if (S_ISDIR(inode_p->s.attrs.mode)) {
     
     uint64_t deleted = inode_p->s.hpc_reserved.dir.nb_deleted_files;
-
+    
     /*
     ** Must have delete count bigger than deleted_bigger
     */ 
-    if (deleted_bigger != -1) {
+    if (deleted_bigger != LONG_VALUE_UNDEF) {
       if (deleted < deleted_bigger) {
         return 0;
       }
@@ -1478,7 +1771,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a delete count lower than deleted_lower
     */    
-    if (deleted_lower != -1) {
+    if (deleted_lower != LONG_VALUE_UNDEF) {
       if (deleted > deleted_lower) {
         return 0;
       }
@@ -1487,7 +1780,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a delete count equal to deleted_equal
     */    
-    if (deleted_equal != -1) {
+    if (deleted_equal != LONG_VALUE_UNDEF) {
       if (deleted != deleted_equal) {
         return 0;
       }
@@ -1496,7 +1789,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a delete count different from deleted_diff
     */    
-    if (deleted_diff != -1) {
+    if (deleted_diff != LONG_VALUE_UNDEF) {
       if (deleted == deleted_diff) {
         return 0;
       }
@@ -1505,7 +1798,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have children bigger than children_bigger
     */ 
-    if (children_bigger != -1) {
+    if (children_bigger != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.children < children_bigger) {
         return 0;
       }
@@ -1514,7 +1807,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a children lower than children_lower
     */    
-    if (children_lower != -1) {
+    if (children_lower != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.children > children_lower) {
         return 0;
       }
@@ -1523,7 +1816,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a children equal to children_equal
     */    
-    if (children_equal != -1) {
+    if (children_equal != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.children != children_equal) {
         return 0;
       }
@@ -1532,17 +1825,48 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a children different from children_diff
     */    
-    if (children_diff != -1) {
+    if (children_diff != LONG_VALUE_UNDEF) {
       if (inode_p->s.attrs.children == children_diff) {
         return 0;
       }
     }
+    
+    if (hybrid != LONG_VALUE_UNDEF) {
+      int      ishybrid;      
+      if (inode_p->s.multi_desc.byte == 0)
+      {
+        if (export_config->vid_fast == -1) ishybrid = 0;
+        else                               ishybrid = 1;
+      }
+      else {
+        if (inode_p->s.hybrid_desc.s.no_hybrid == 0) ishybrid = 1;
+        else                                         ishybrid = 0;
+      }
+      /*
+      ** Must be in hybrid mode
+      */
+      if (hybrid == HYBRID) {
+        if (!ishybrid) {
+          return 0;
+        }   
+      }
+
+      /*
+      ** Must not be in hybrid mode
+      */    
+      if (hybrid == NOHYBRID) {
+        if (ishybrid) {
+          return 0;
+        }   
+      }     
+    }   
+    
   }
 
   /*
   ** Project equals
   */
-  if (project_equal != -1) {
+  if (project_equal != LONG_VALUE_UNDEF) {
     if (S_ISDIR(inode_p->s.attrs.mode)) {    
       if (inode_p->s.attrs.cid != project_equal) {
         return 0;
@@ -1558,7 +1882,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Project differs
   */
-  if (project_diff != -1) {
+  if (project_diff != LONG_VALUE_UNDEF) {
     if (S_ISDIR(inode_p->s.attrs.mode)) {    
       if (inode_p->s.attrs.cid == project_diff) {
         return 0;
@@ -1574,7 +1898,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have or not xattributes 
   */    
-  if (has_xattr != -1) {    
+  if (has_xattr != LONG_VALUE_UNDEF) {    
     if (rozofs_has_xattr(inode_p->s.attrs.mode)) {
       if (has_xattr == 0) {
         return 0;
@@ -1966,7 +2290,7 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a size bigger than size_bigger
   */ 
-  if (size_bigger != -1) {
+  if (size_bigger != LONG_VALUE_UNDEF) {
     if (rmentry->size < size_bigger) {
       return 0;
     }
@@ -1975,7 +2299,7 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a size lower than size_lower
   */    
-  if (size_lower != -1) {
+  if (size_lower != LONG_VALUE_UNDEF) {
     if (rmentry->size > size_lower) {
       return 0;
     }
@@ -1984,7 +2308,7 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a size equal to size_equal
   */    
-  if (size_equal != -1) {
+  if (size_equal != LONG_VALUE_UNDEF) {
     if (rmentry->size != size_equal) {
       return 0;
     }
@@ -1993,7 +2317,7 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a size time different from size_diff
   */    
-  if (size_diff != -1) {
+  if (size_diff != LONG_VALUE_UNDEF) {
     if (rmentry->size == size_diff) {
       return 0;
     }
@@ -2002,7 +2326,7 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have a cid equal to cid_equal
   */    
-  if (cid_equal != -1) {
+  if (cid_equal != LONG_VALUE_UNDEF) {
     if (rmentry->cid != cid_equal) {
       return 0;
     }
@@ -2010,7 +2334,7 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must have a sid equal to sid_equal
     */
-    if (sid_equal != -1) {
+    if (sid_equal != LONG_VALUE_UNDEF) {
       if (!rozofs_check_sid_in_list(rmentry->current_dist_set, sid_equal)) {
         return 0;
       }
@@ -2018,7 +2342,7 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
     /*
     ** Must not have a sid equal to sid_diff
     */        
-    if (sid_diff != -1) {
+    if (sid_diff != LONG_VALUE_UNDEF) {
       if (rozofs_check_sid_in_list(rmentry->current_dist_set, sid_diff)) {
         return 0;
       }
@@ -2028,14 +2352,14 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Must have an cid different from cid_diff
   */    
-  if (cid_diff != -1) {
+  if (cid_diff != LONG_VALUE_UNDEF) {
   
     if (rmentry->cid == cid_diff) {
     
       /*
       ** Must not have a have cid equal to cid_diff and sid equal to sid_diff
       */        
-      if (sid_diff != -1) {
+      if (sid_diff != LONG_VALUE_UNDEF) {
         if (rozofs_check_sid_in_list(rmentry->current_dist_set, sid_diff)) {
           return 0;
         }
@@ -2142,11 +2466,9 @@ static void usage(char * fmt, ...) {
   printf("\n\033[4mUsage:\033[0m\n\t\033[1mrozo_scan [FILESYSTEM] [OPTIONS] { <CRITERIA> } { <FIELD> <CONDITIONS> } [OUTPUT]\033[0m\n\n");
   printf("\n\033[1mFILESYSTEM:\033[0m\n");
   printf("\tThe FILESYSTEM can be omitted when current path is a RozoFS mountpoint on the file system one want to scan.\n");
-  printf("\tElse the targeted RozoFS file system must be provided by eid or by path:\n");
-  printf("\tEither\t\033[1m-e,--eid <eid> [-k <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
-  printf("\tor    \t\033[1m-p,--path <export_root_path>\033[0m\t\texport root path.\n");
+  printf("\tElse the targeted RozoFS file system must be provided by eid:\n");
+  printf("\t\033[1m-e,--eid <eid> [--config <cfg file>]\033[0m\t\texport identifier and optionally its configuration file.\n");
   printf("\n\033[1mOPTIONS:\033[0m\n");
-  printf("\t\033[1m-v,--verbose\033[0m\t\tDisplay some execution statistics.\n");
   printf("\t\033[1m-h,--help\033[0m\t\tprint this message along with examples and exit.\n");
   printf("\t\033[1m-a,--all\033[0m\t\tForce scanning all tracking files and not only those matching scan time criteria.\n");
   printf("\t\t\t\tThis is usefull for files imported with tools such as rsync, since their creation\n");
@@ -2167,26 +2489,29 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m--Gn<x|w|r>\033[0m\t\tGroup has not <executable|write|read> priviledge.\n");
   printf("\t\033[1m--O<x|w|r>\033[0m\t\tOthers have <executable|write|read> priviledge.\n");
   printf("\t\033[1m--On<x|w|r>\033[0m\t\tOthers have not <executable|write|read> priviledge.\n");
+  printf("\t\033[1m--hybrid\033[0m\t\tMust be in multi volume hybrid mode file/directory.\n");
+  printf("\t\033[1m--nohybrid\033[0m\t\tMust not be in multi volume hybrid mode file/directory..\n");
   printf("\n\033[1mFIELD:\033[0m\n");
-  printf("\t\033[1m-c,--hcr8\033[0m\t\tcreation date in human readable format.\n");
-  printf("\t\033[1m-A,--scr8\033[0m\t\tcreation date in seconds.\n");
-  printf("\t\033[1m-m,--hmod\033[0m\t\tmodification date in human readable format.\n"); 
-  printf("\t\033[1m-y,--smod\033[0m\t\tmodification date in seconds..\n"); 
-  printf("\t\033[1m-M,--hctime\033[0m\t\tchange date in human readable format.\n"); 
-  printf("\t\033[1m-Y,--sctime\033[0m\t\tchange date in seconds.\n"); 
-  printf("\t\033[1m-r,--hupdate\033[0m\t\tdirectory update date in human readable format (directory only).\n"); 
-  printf("\t\033[1m-Z,--supdate\033[0m\t\tdirectory update date in seconds (directory only).\n"); 
+  printf("\t\033[1m-n,--name\033[0m\t\tfile/directory name (3).\n");
+  printf("\t\033[1m-P,--project\033[0m\t\tproject identifier (1).\n"); 
   printf("\t\033[1m-s,--size\033[0m\t\tfile/directory size.\n"); 
   printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
   printf("\t\033[1m-u,--uid\033[0m\t\tuser identifier (1).\n"); 
-  printf("\t\033[1m-C,--cid\033[0m\t\tcluster identifier (file only) (1).\n"); 
+  printf("\t\033[1m-c,--cid\033[0m\t\tcluster identifier (file only) (1).\n"); 
   printf("\t\033[1m-z,--sid\033[0m\t\tSID identifier (file only) (1).\n"); 
-  printf("\t\033[1m-P,--project\033[0m\t\tproject identifier (1).\n"); 
-  printf("\t\033[1m-l,--link\033[0m\t\tnumber of links (file only).\n"); 
-  printf("\t\033[1m-b,--children\033[0m\t\tnumber of children (directory only).\n"); 
-  printf("\t\033[1m-D,--deleted\033[0m\t\tnumber of deleted inode in the trash (directory only).\n"); 
-  printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
-  printf("\t\033[1m-n,--name\033[0m\t\tfile/directory name (3).\n");
+  printf("\t\033[1m--hcr8\033[0m\t\t\tcreation date in human readable format.\n");
+  printf("\t\033[1m--scr8\033[0m\t\t\tcreation date in seconds.\n");
+  printf("\t\033[1m--hmod\033[0m\t\t\tmodification date in human readable format.\n"); 
+  printf("\t\033[1m--smod\033[0m\t\t\tmodification date in seconds..\n"); 
+  printf("\t\033[1m--hctime\033[0m\t\tchange date in human readable format.\n"); 
+  printf("\t\033[1m--sctime\033[0m\t\tchange date in seconds.\n"); 
+  printf("\t\033[1m--hupdate\033[0m\t\tdirectory update date in human readable format (directory only).\n"); 
+  printf("\t\033[1m--supdate\033[0m\t\tdirectory update date in seconds (directory only).\n"); 
+  printf("\t\033[1m--link\033[0m\t\t\tnumber of links (file only).\n"); 
+  printf("\t\033[1m--children\033[0m\t\tnumber of children (directory only).\n"); 
+  printf("\t\033[1m--deleted\033[0m\t\tnumber of deleted inode in the trash (directory only).\n"); 
+  printf("\t\033[1m--pfid\033[0m\t\t\tParent FID (2).\n");
+  printf("\t\033[1m--slave\033[0m\t\t\tnumber of slave inodes in multifile mode.\n");
   printf("(1) only --eq or --ne conditions are supported.\n");
   printf("(2) only --eq condition is supported.\n");
   printf("(3) only --eq, --ge or --regex conditions are supported.\n");
@@ -2257,6 +2582,8 @@ static void usage(char * fmt, ...) {
     printf("  \033[1mrozo_scan --cid --eq 2 --sid --eq 7 -o distrib\033[0m\n");
     printf("Searching non writable files being executable by its group but not by the others.\n");
     printf("  \033[1mrozo_scan --Unw --Gx --Onx -o priv,gid,uid\033[0m\n");
+    printf("Searching for multifiles not hybrid having more than 4 slave inodes.\n");
+    printf("  \033[1mrozo_scan --nohybrid --slave --ge 4 -o json,all\033[0m\n");
   }
   exit(EXIT_SUCCESS);     
 };
@@ -2353,7 +2680,7 @@ static inline uint64_t rozofs_scan_u64(char * str) {
   
   ret = sscanf(str,"%llu",(long long unsigned int *)&val);
   if (ret != 1) {
-    return -1;
+    return LONG_VALUE_UNDEF;
   }    
   return val;    
 }
@@ -2392,14 +2719,14 @@ static inline uint64_t rozofs_scan_size_string(char * sizeString) {
     
     @retval -the root path or null when no such eid
 */
-char * get_export_root_path(uint8_t eid) {
+export_config_t * get_export_config(uint8_t eid) {
   list_t          * e;
   export_config_t * econfig;
 
   list_for_each_forward(e, &exportd_config.exports) {
 
     econfig = list_entry(e, export_config_t, list);
-    if (econfig->eid == eid) return econfig->root;   
+    if (econfig->eid == eid) return econfig;   
   }
   return NULL;
 }
@@ -2438,7 +2765,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a creation time bigger than cr8_bigger
   */ 
-  if (cr8_bigger != -1) {
+  if (cr8_bigger != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been modified at this timer or later
     */
@@ -2448,7 +2775,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a creation time lower than cr8_lower
   */    
-  if (cr8_lower != -1) {
+  if (cr8_lower != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been created at this time or before
     */
@@ -2458,7 +2785,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a creation time equal to cr8_equal
   */    
-  if (cr8_equal != -1) {
+  if (cr8_equal != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been created at this time or before
     */
@@ -2473,7 +2800,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a modification time bigger than mod_bigger
   */ 
-  if (mod_bigger != -1) {
+  if (mod_bigger != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been modified at this timer or later
     */
@@ -2483,7 +2810,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a modification time lower than mod_lower
   */    
-  if (mod_lower != -1) {
+  if (mod_lower != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been created at this time or before
     */
@@ -2493,7 +2820,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a modification time equal to mod_equal
   */    
-  if (mod_equal != -1) {
+  if (mod_equal != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been created at this time or before
     */
@@ -2507,7 +2834,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a modification time bigger than ctime_bigger
   */ 
-  if (ctime_bigger != -1) {
+  if (ctime_bigger != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been modified at this timer or later
     */
@@ -2517,7 +2844,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a modification time lower than mod_lower
   */    
-  if (ctime_lower != -1) {
+  if (ctime_lower != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been created at this time or before
     */
@@ -2527,7 +2854,7 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   /*
   ** Must have a modification time equal to mod_equal
   */    
-  if (ctime_equal != -1) {
+  if (ctime_equal != LONG_VALUE_UNDEF) {
     /*
     ** The tracking file must have been created at this time or before
     */
@@ -2774,24 +3101,62 @@ int rozofs_parse_output_format(char * fmt) {
 **  M A I N
 */
 
-#define NEW_CRITERIA(criteria){\
-              if (expect_comparator) {\
-                usage("Expecting --lt, --le, --gt, --ge or --ne. Got --%s", long_options[option_index].name);\
-              }\
-              expect_comparator = 1; \
-              scan_criteria = criteria;\
-              crit = c;\
+#define EXPECTING_COMPARATOR_CHECK \
+        if (expect_comparator) {\
+          if (option_index!=-1) {\
+            if (criteria_string)  usage("Expecting --lt, --le, --gt, --ge or --ne for %s. Got --%s", criteria_string, long_options[option_index].name);\
+            else                  usage("Expecting --lt, --le, --gt, --ge or --ne for %s. Got -%c", criteria_char, long_options[option_index].name);\
+          }\
+          else {\
+            if (criteria_string)  usage("Expecting --lt, --le, --gt, --ge or --ne for %s. Got --%s", criteria_string, c);\
+            else                  usage("Expecting --lt, --le, --gt, --ge or --ne for %s. Got -%c", criteria_char, c);\
+          }\
+        }
+              
+#define NEW_COMPARISON_CHECKS(criteria){\
+        EXPECTING_COMPARATOR_CHECK\
+        expect_comparator = 1; \
+        scan_criteria = criteria;\
+        if (option_index!=-1) {\
+          criteria_string = (char *)long_options[option_index].name;\
+        }\
+        else {\
+          criteria_char = c;\
+          criteria_string = NULL;\
+        }\
 }
+#define NEW_OPTION_CHECKS(){\
+        EXPECTING_COMPARATOR_CHECK\
+}
+#define BAD_FORMAT \
+  if (criteria_string) usage("Bad format for --%s %s \"%s\"",criteria_string,comp,optarg);\
+  else                 usage("Bad format for -%c %s \"%s\"",criteria_char,comp,optarg);
+ 
+#define SCAN_U64(x) \
+  x = rozofs_scan_u64(optarg);\
+  if (x==LONG_VALUE_UNDEF) {\
+    BAD_FORMAT;\
+  } 
+#define SCAN_DATE(x) \
+  x = rozofs_date2time(optarg);\
+  if (x==LONG_VALUE_UNDEF) {\
+    BAD_FORMAT;\
+  }   
+#define SCAN_SIZE(x) \
+  x = rozofs_scan_size_string(optarg);\
+  if (x==LONG_VALUE_UNDEF) {\
+    BAD_FORMAT;\
+  } 
 
 int main(int argc, char *argv[]) {
     int   c;
     void *rozofs_export_p;
     char *root_path=NULL;
-    int   eid = -1;
-    int   verbose = 0;
-    char  crit=0;
+    uint64_t   eid = LONG_VALUE_UNDEF;
     char *comp;
     int   expect_comparator = 0;
+    char *criteria_string = NULL;
+    char  criteria_char;
     int   date_criteria_is_set = 0;
     check_inode_pf_t date_criteria_cbk;
     char  regex[1024];
@@ -2799,74 +3164,6 @@ int main(int argc, char *argv[]) {
     struct timeval start;
     struct timeval stop;
         
-    static struct option long_options[] = {
-        {"help", no_argument, 0, 'h'},
-        {"path", required_argument, 0, 'p'},
-        {"eid", required_argument, 0, 'e'},
-        {"config", required_argument, 0, 'k'},
-        {"verbose", no_argument, 0, 'v'},
-        {"cr8", no_argument, 0, 'c'},
-        {"hcr8", no_argument, 0, 'c'},
-        {"scr8", no_argument, 0, 'A'},
-        {"mod", no_argument, 0, 'm'},
-        {"hmod", no_argument, 0, 'm'},
-        {"smod", no_argument, 0, 'y'},
-        {"ctime", no_argument, 0, 'M'},
-        {"hctime", no_argument, 0, 'M'},
-        {"sctime", no_argument, 0, 'Y'},
-        {"size", no_argument, 0, 's'},
-        {"uid", no_argument, 0, 'u'},
-        {"gid", no_argument, 0, 'g'},        
-        {"cid", no_argument, 0, 'C'},        
-        {"sid", no_argument, 0, 'z'},        
-        {"project", no_argument, 0, 'P'},        
-        {"link", no_argument, 0, 'l'},        
-        {"children", no_argument, 0, 'b'},        
-        {"deleted", no_argument, 0, 'D'},        
-        {"pfid", no_argument, 0, 'f'},        
-        {"name", no_argument, 0, 'n'},        
-        {"xattr", no_argument, 0, 'x'}, 
-        {"noxattr", no_argument, 0, 'X'},  
-        {"slink", no_argument, 0, 'S'},  
-        {"noreg", no_argument, 0, 'R'},  
-        {"lt", required_argument, 0, '<'},
-        {"le", required_argument, 0, '-'},
-        {"gt", required_argument, 0, '>'},
-        {"ge", required_argument, 0, '+'},
-        {"eq", required_argument, 0, '='},
-        {"regex", required_argument, 0, '*'},
-        {"ne", required_argument, 0, '!'},
-        {"dir", no_argument, 0, 'd'},
-        {"all", no_argument, 0, 'a'},
-        {"trash", no_argument, 0, 't'},
-        {"notrash", no_argument, 0, 'T'},
-        {"update", no_argument, 0, 'r'},
-        {"hupdate", no_argument, 0, 'r'},
-        {"supdate", no_argument, 0, 'Z'},
-        {"Ux", no_argument, 0, 1},
-        {"Unx", no_argument, 0, 2},
-        {"Ur", no_argument, 0, 3},
-        {"Unr", no_argument, 0, 4},
-        {"Uw", no_argument, 0, 5},
-        {"Unw", no_argument, 0, 6},
-        {"Gx", no_argument, 0, 7},
-        {"Gnx", no_argument, 0, 8},
-        {"Gr", no_argument, 0, 9},
-        {"Gnr", no_argument, 0, 10},
-        {"Gw", no_argument, 0, 11},
-        {"Gnw", no_argument, 0, 12},
-        {"Ox", no_argument, 0, 13},
-        {"Onx", no_argument, 0, 14},
-        {"Or", no_argument, 0, 15},
-        {"Onr", no_argument, 0, 16},
-        {"Ow", no_argument, 0, 17},
-        {"Onw", no_argument, 0, 18},
-        {"out", required_argument, 0, 'o'},
-        {"junk", required_argument, 0, 'j'},
-        {"wrerror", required_argument, 0, 'w'},
-
-        {0, 0, 0, 0}
-    };
 
     gettimeofday(&start,(struct timezone *)0);
 
@@ -2895,8 +3192,8 @@ int main(int argc, char *argv[]) {
   
     while (1) {
 
-      int option_index = 0;
-      c = getopt_long(argc, argv, "<:-:>:+:=:!:*:abcde:fghjk:lmno:p:rtsuvwxyzACDMPRSTXY", long_options, &option_index);
+      int option_index = -1;
+      c = getopt_long(argc, argv, "acde:ghjno:p:tsuwxAPRSTXZ", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -2904,47 +3201,169 @@ int main(int argc, char *argv[]) {
       switch (c) {
 
           case 'h':
+          case INT_VALUE_FOR_STRING_help:
               usage(NULL);
               break;
           case 'a':
+          case INT_VALUE_FOR_STRING_all:
+              NEW_OPTION_CHECKS();
               scan_all_tracking_files = 1; // scan all tracking files
               break;
-          case 'p':
-              root_path = optarg;
-              break;
-          case 'k':
+          case INT_VALUE_FOR_STRING_config:
+              NEW_OPTION_CHECKS();
               configFileName = optarg;
               break;			  	                        
           case 'e':
-              eid = rozofs_scan_u64(optarg);
-              if (eid==-1) {
-                usage("Bad format for --eid \"%s\"",optarg);     
-              }
-              break;    
-          case 'v':
-              verbose = 1;
-              break;
-              
-          case  1:  Ux = 1; break;
-          case  2:  Ux = 0; break;
-          case  3:  Ur = 1; break;
-          case  4:  Ur = 0; break;
-          case  5:  Uw = 1; break;
-          case  6:  Uw = 0; break;
-          case  7:  Gx = 1; break;
-          case  8:  Gx = 0; break;
-          case  9:  Gr = 1; break;
-          case 10:  Gr = 0; break;
-          case 11:  Gw = 1; break;
-          case 12:  Gw = 0; break;
-          case 13:  Ox = 1; break;
-          case 14:  Ox = 0; break;
-          case 15:  Or = 1; break;
-          case 16:  Or = 0; break;
-          case 17:  Ow = 1; break;
-          case 18:  Ow = 0; break;
-          
+          case INT_VALUE_FOR_STRING_eid:
+              NEW_OPTION_CHECKS();
+              SCAN_U64(eid)
+              break;                  
+          case INT_VALUE_FOR_STRING_Ux:   
+            NEW_OPTION_CHECKS();
+            if (Ux == 0) {
+              usage("--Ux and --Unx are incompatible");
+            }  
+            Ux = 1; 
+            break;
+          case INT_VALUE_FOR_STRING_Unx:  
+            NEW_OPTION_CHECKS();
+            if (Ux == 1) {
+              usage("--Ux and --Unx are incompatible");
+            }  
+            Ux = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_Ur:   
+            NEW_OPTION_CHECKS();
+            if (Ur == 0) {
+              usage("--Ur and --Unr are incompatible");
+            }  
+            Ur = 1; 
+            break;
+          case INT_VALUE_FOR_STRING_Unr:  
+            NEW_OPTION_CHECKS();
+            if (Ur == 1) {
+              usage("--Ur and --Unr are incompatible");
+            }  
+            Ur = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_Uw:   
+            NEW_OPTION_CHECKS();
+            if (Uw == 0) {
+              usage("--Uw and --Unw are incompatible");
+            }             
+            Uw = 1; 
+            break;
+          case INT_VALUE_FOR_STRING_Unw: 
+            NEW_OPTION_CHECKS();
+            if (Uw == 1) {
+              usage("--Uw and --Unw are incompatible");
+            }             
+            Uw = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_Gx:  
+            NEW_OPTION_CHECKS();
+            if (Gx == 0) {
+              usage("--Gx and --Gnx are incompatible");
+            }              
+            Gx = 1;
+            break;
+          case INT_VALUE_FOR_STRING_Gnx: 
+            NEW_OPTION_CHECKS();
+            if (Gx == 1) {
+              usage("--Gx and --Gnx are incompatible");
+            }              
+            Gx = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_Gr: 
+            NEW_OPTION_CHECKS();
+            if (Gr == 0) {
+              usage("--Gr and --Gnr are incompatible");
+            }                          
+            Gr = 1; 
+            break;
+          case INT_VALUE_FOR_STRING_Gnr:
+            NEW_OPTION_CHECKS();
+            if (Gr == 1) {
+              usage("--Gr and --Gnr are incompatible");
+            }             
+            Gr = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_Gw: 
+            NEW_OPTION_CHECKS();
+            if (Gw == 0) {
+              usage("--Gw and --Gnw are incompatible");
+            }             
+            Gw = 1; 
+            break;
+          case INT_VALUE_FOR_STRING_Gnw:
+            NEW_OPTION_CHECKS();
+            if (Gw == 1) {
+              usage("--Gw and --Gnw are incompatible");
+            }             
+            Gw = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_Ox: 
+            NEW_OPTION_CHECKS();
+            if (Ox == 0) {
+              usage("--Ox and --Onx are incompatible");
+            }             
+            Ox = 1;
+            break;
+          case INT_VALUE_FOR_STRING_Onx:
+            NEW_OPTION_CHECKS();
+            if (Ox == 1) {
+              usage("--Ox and --Onx are incompatible");
+            }              
+            Ox = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_Or: 
+            NEW_OPTION_CHECKS();
+            if (Or == 0) {
+              usage("--Or and --Onr are incompatible");
+            }              
+            Or = 1; 
+            break;
+          case INT_VALUE_FOR_STRING_Onr: 
+            NEW_OPTION_CHECKS();
+            if (Or == 1) {
+              usage("--Or and --Onr are incompatible");
+            }              
+            Or = 0;
+            break;
+          case INT_VALUE_FOR_STRING_Ow: 
+            NEW_OPTION_CHECKS();
+            if (Ow == 0) {
+              usage("--Ow and --Onw are incompatible");
+            }              
+            Ow = 1; 
+            break;
+          case INT_VALUE_FOR_STRING_Onw: 
+            NEW_OPTION_CHECKS();
+            if (Ow == 1) {
+              usage("--Ow and --Onw are incompatible");
+            }              
+            Ow = 0; 
+            break;
+          case INT_VALUE_FOR_STRING_slave:
+            NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_slave);
+            break;              
+          case INT_VALUE_FOR_STRING_hybrid:  
+            NEW_OPTION_CHECKS();
+            if (hybrid == NOHYBRID) {
+              usage("--hybrid and --nohybrid options are incompatible");
+            }
+            hybrid = HYBRID;
+            break;
+          case INT_VALUE_FOR_STRING_nohybrid:  
+            NEW_OPTION_CHECKS();
+            if (hybrid == HYBRID) {
+              usage("--hybrid and --nohybrid options are incompatible");
+            }
+            hybrid = NOHYBRID;
+            break;                
           case 'o':
+          case INT_VALUE_FOR_STRING_out:
+            NEW_OPTION_CHECKS();
             if (optarg==0) {
               usage("No output format defined");     
             }
@@ -2952,94 +3371,116 @@ int main(int argc, char *argv[]) {
               usage("Bad output format \"%s\"",optarg);     
             }
             break;
-
-          case 'c':
-              NEW_CRITERIA(SCAN_CRITERIA_HCR8);
+          case INT_VALUE_FOR_STRING_hcr8:          
+          case INT_VALUE_FOR_STRING_cr8:          
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_hcr8);
               date_criteria_is_set = 1;
               break;
-          case 'A':
-              NEW_CRITERIA(SCAN_CRITERIA_SCR8);
+          case INT_VALUE_FOR_STRING_scr8:                    
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_scr8);
               date_criteria_is_set = 1;
               break;
-          case 'm':
-              NEW_CRITERIA(SCAN_CRITERIA_HMOD);
+          case INT_VALUE_FOR_STRING_mod:          
+          case INT_VALUE_FOR_STRING_hmod:          
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_hmod);
               date_criteria_is_set = 1;
               break;
-          case 'y':
-              NEW_CRITERIA(SCAN_CRITERIA_SMOD);
+          case INT_VALUE_FOR_STRING_smod:                    
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_smod);
               date_criteria_is_set = 1;
               break;
-          case 'M':
-              NEW_CRITERIA(SCAN_CRITERIA_HCTIME);
+          case INT_VALUE_FOR_STRING_hctime:
+          case INT_VALUE_FOR_STRING_ctime:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_hctime);
               date_criteria_is_set = 1;
               break;
-          case 'Y':
-              NEW_CRITERIA(SCAN_CRITERIA_SCTIME);
+          case INT_VALUE_FOR_STRING_sctime:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_sctime);
               date_criteria_is_set = 1;
               break;
-          case 'r':
-              NEW_CRITERIA(SCAN_CRITERIA_HUPDATE);
+          case INT_VALUE_FOR_STRING_hupdate:
+          case INT_VALUE_FOR_STRING_update:          
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_hupdate);
               date_criteria_is_set = 1;
               break;
-          case 'Z':
-              NEW_CRITERIA(SCAN_CRITERIA_SUPDATE);
+          case INT_VALUE_FOR_STRING_supdate:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_supdate);
               date_criteria_is_set = 1;
               break;
            case 's':
-              NEW_CRITERIA(SCAN_CRITERIA_SIZE);
+           case INT_VALUE_FOR_STRING_size:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_size);
               break;
           case 'g':
-              NEW_CRITERIA(SCAN_CRITERIA_GID);
+          case INT_VALUE_FOR_STRING_gid:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_gid);
               break;
           case 'u':
-              NEW_CRITERIA(SCAN_CRITERIA_UID);
+          case INT_VALUE_FOR_STRING_uid:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_uid);
               break;                  
-          case 'C':
-              NEW_CRITERIA(SCAN_CRITERIA_CID);
+          case 'c':
+          case INT_VALUE_FOR_STRING_cid:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_cid);
               break;    
           case 'z':
-              NEW_CRITERIA(SCAN_CRITERIA_SID);
+          case INT_VALUE_FOR_STRING_sid:          
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_sid);
               break;    
           case 'P':
-              NEW_CRITERIA(SCAN_CRITERIA_PROJECT);
+          case INT_VALUE_FOR_STRING_project:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_project);
               break;                                    
-          case 'l':
-              NEW_CRITERIA(SCAN_CRITERIA_NLINK);
+          case INT_VALUE_FOR_STRING_link:          
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_link);
               break;                
-          case 'b':
-              NEW_CRITERIA(SCAN_CRITERIA_CHILDREN);
+          case INT_VALUE_FOR_STRING_children:          
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_children);
               break;                
-          case 'D':
-              NEW_CRITERIA(SCAN_CRITERIA_DELETED);
+          case INT_VALUE_FOR_STRING_deleted:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_deleted);
               break;                
-          case 'f':
-              NEW_CRITERIA(SCAN_CRITERIA_PFID);
+          case INT_VALUE_FOR_STRING_pfid:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_pfid);
               break;                
           case 'n':
-              NEW_CRITERIA(SCAN_CRITERIA_FNAME);
+          case INT_VALUE_FOR_STRING_name:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_name);
               break;                
           case 'x':   
+          case INT_VALUE_FOR_STRING_xattr:
+              NEW_OPTION_CHECKS();
               has_xattr = 1;
               break;   
           case 'X':
+          case INT_VALUE_FOR_STRING_noxattr:
+              NEW_OPTION_CHECKS();
               has_xattr = 0;
               break;                     
           case 'S':
+          case INT_VALUE_FOR_STRING_slink:          
+              NEW_OPTION_CHECKS();
               exclude_symlink = 0;
               break;                     
           case 'R':
+          case INT_VALUE_FOR_STRING_noreg:          
+              NEW_OPTION_CHECKS();
               exclude_regular = 1;
               if (only_trash) {
                 usage("only trash (-t) and exclude trash (-T) are incompatible");     
               }
               break;                     
           case 't':
+          case INT_VALUE_FOR_STRING_trash:
+              NEW_OPTION_CHECKS();
               only_trash = 1;
               if (exclude_trash) {
                 usage("only trash (-t) and exclude trash (-T) are incompatible");     
               }
               break;                     
           case 'j':
+          case INT_VALUE_FOR_STRING_junk:
+              NEW_OPTION_CHECKS();
               only_junk = 1;
               if (only_trash) {
                 usage("only trash (-t) and junk files (-j) are incompatible");     
@@ -3049,114 +3490,76 @@ int main(int argc, char *argv[]) {
               }
               break;  
           case 'w':
+          case INT_VALUE_FOR_STRING_wrerror:
+              NEW_OPTION_CHECKS();
               only_wrerror = 1;
               if (search_dir) {
                 usage("Directory (-d) and write errror files (-w) are incompatible");     
               }
               break;                                   
            case 'T':
+           case INT_VALUE_FOR_STRING_notrash:
+              NEW_OPTION_CHECKS();
               exclude_trash = 1;
               break;                     
           /*
           ** Lower or equal
           */              
-          case '-':
+          case INT_VALUE_FOR_STRING_le:  
+              if (expect_comparator == 0) {
+                 usage("Got unexpected --le");
+              }           
               expect_comparator = 0;
               comp = "--le";
-              switch (scan_criteria) {
-              
-                case SCAN_CRITERIA_HCR8:
-                  cr8_lower = rozofs_date2time(optarg);
-                  if (cr8_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
+              switch (scan_criteria) {              
+                case INT_VALUE_FOR_STRING_hcr8:
+                  SCAN_DATE(cr8_lower)   
+                  break;                 
+                case INT_VALUE_FOR_STRING_scr8:
+                  SCAN_U64(cr8_lower)    
+                  break;                                
+                case INT_VALUE_FOR_STRING_hmod:
+                  SCAN_U64(mod_lower)    
+                  break;                                
+                case INT_VALUE_FOR_STRING_smod:
+                  SCAN_U64(mod_lower)    
                   break; 
-                  
-                case SCAN_CRITERIA_SCR8:
-                  cr8_lower = rozofs_scan_u64(optarg);
-                  if (cr8_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
+                case INT_VALUE_FOR_STRING_hctime:
+                  SCAN_DATE(ctime_lower)    
                   break; 
-                               
-                case SCAN_CRITERIA_HMOD:
-                  mod_lower = rozofs_date2time(optarg);
-                  if (mod_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
+                case INT_VALUE_FOR_STRING_sctime:
+                  SCAN_U64(ctime_lower)    
                   break; 
-                               
-                case SCAN_CRITERIA_SMOD:
-                  mod_lower = rozofs_scan_u64(optarg);
-                  if (mod_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-
-                case SCAN_CRITERIA_HCTIME:
-                  ctime_lower = rozofs_date2time(optarg);
-                  if (ctime_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-
-                case SCAN_CRITERIA_SCTIME:
-                  ctime_lower = rozofs_scan_u64(optarg);
-                  if (ctime_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-
-                case SCAN_CRITERIA_HUPDATE:
-                  update_lower = rozofs_date2time(optarg);
-                  if (update_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
+                case INT_VALUE_FOR_STRING_hupdate:
+                  SCAN_DATE(update_lower)    
                   break;                     
-
-                case SCAN_CRITERIA_SUPDATE:
-                  update_lower = rozofs_scan_u64(optarg);
-                  if (update_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-                    
-                case SCAN_CRITERIA_SIZE:
-                  size_lower = rozofs_scan_size_string(optarg);
-                  if (size_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break;  
-                                   
-                case SCAN_CRITERIA_NLINK:
-                  nlink_lower = rozofs_scan_u64(optarg);
-                  if (nlink_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-                                   
-                case SCAN_CRITERIA_CHILDREN:
-                  children_lower = rozofs_scan_u64(optarg);
-                  if (children_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-                                   
-                case SCAN_CRITERIA_DELETED:
-                  deleted_lower = rozofs_scan_u64(optarg);
-                  if (deleted_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-                                                                    
-                case SCAN_CRITERIA_GID:          
-                case SCAN_CRITERIA_UID:
-                case SCAN_CRITERIA_CID:
-                case SCAN_CRITERIA_SID:
-                case SCAN_CRITERIA_PFID:
-                case SCAN_CRITERIA_FNAME:
-                case SCAN_CRITERIA_PROJECT:
-                  usage("No %s comparison for -%c",comp,crit);     
+                case INT_VALUE_FOR_STRING_supdate:
+                  SCAN_U64(update_lower)    
+                  break;                     
+                case INT_VALUE_FOR_STRING_size:
+                  SCAN_SIZE(size_lower)    
+                  break;                    
+                case INT_VALUE_FOR_STRING_slave:
+                  SCAN_U64(slave_lower)    
+                  break;                                       
+                case INT_VALUE_FOR_STRING_link:
+                  SCAN_U64(nlink_lower)    
+                  break;                                    
+                case INT_VALUE_FOR_STRING_children:
+                  SCAN_U64(children_lower)    
+                  break;                                   
+                case INT_VALUE_FOR_STRING_deleted:
+                  SCAN_U64(deleted_lower)    
+                  break;                                                                     
+                case INT_VALUE_FOR_STRING_gid:          
+                case INT_VALUE_FOR_STRING_uid:
+                case INT_VALUE_FOR_STRING_cid:
+                case INT_VALUE_FOR_STRING_sid:
+                case INT_VALUE_FOR_STRING_pfid:
+                case INT_VALUE_FOR_STRING_name:
+                case INT_VALUE_FOR_STRING_project:
+                  if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
+                  else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break;
                   
                 default:
@@ -3166,125 +3569,87 @@ int main(int argc, char *argv[]) {
           /*
           ** Lower strictly
           */              
-          case '<':
+          case INT_VALUE_FOR_STRING_lt:
+              if (expect_comparator == 0) {
+                 usage("Got unexpected --lt");
+              }           
               expect_comparator = 0;
               comp = "--lt";
-              switch (scan_criteria) {
-              
-                case SCAN_CRITERIA_HCR8:
-                  cr8_lower = rozofs_date2time(optarg);
-                  if (cr8_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+              switch (scan_criteria) {              
+                case INT_VALUE_FOR_STRING_hcr8:
+                  SCAN_DATE(cr8_lower) 
                   cr8_lower--;   
-                  break;   
-                  
-                case SCAN_CRITERIA_SCR8:
-                  cr8_lower = rozofs_scan_u64(optarg);
-                  if (cr8_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                  break;                     
+                case INT_VALUE_FOR_STRING_scr8:
+                  SCAN_U64(cr8_lower) 
                   cr8_lower--;   
-                  break;                                
-                             
-                case SCAN_CRITERIA_HMOD:
-                  mod_lower = rozofs_date2time(optarg);
-                  if (mod_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
+                  break;                                                             
+                case INT_VALUE_FOR_STRING_hmod:
+                  SCAN_DATE(mod_lower)
                   mod_lower--;    
-                  break;  
-                             
-                case SCAN_CRITERIA_SMOD:
-                  mod_lower = rozofs_scan_u64(optarg);
-                  if (mod_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
+                  break;                               
+                case INT_VALUE_FOR_STRING_smod:
+                  SCAN_U64(mod_lower)
                   mod_lower--;    
-                  break;  
-                  
-                case SCAN_CRITERIA_HCTIME:
-                  ctime_lower = rozofs_date2time(optarg);
-                  if (ctime_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
+                  break;                    
+                case INT_VALUE_FOR_STRING_hctime:
+                  SCAN_DATE(ctime_lower)
+                  ctime_lower--;    
+                  break;                    
+                case INT_VALUE_FOR_STRING_sctime:
+                  SCAN_U64(ctime_lower)
                   ctime_lower--;    
                   break;  
-                  
-                case SCAN_CRITERIA_SCTIME:
-                  ctime_lower = rozofs_scan_u64(optarg);
-                  if (ctime_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
-                  ctime_lower--;    
-                  break;  
-
-                case SCAN_CRITERIA_HUPDATE:
-                  update_lower = rozofs_date2time(optarg);
-                  if (update_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
+                case INT_VALUE_FOR_STRING_hupdate:
+                  SCAN_DATE(update_lower)
                   update_lower--;    
-                  break;  
-                  
-                case SCAN_CRITERIA_SUPDATE:
-                  update_lower = rozofs_scan_u64(optarg);
-                  if (update_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
+                  break;                    
+                case INT_VALUE_FOR_STRING_supdate:
+                  SCAN_U64(update_lower)
                   update_lower--;    
-                  break;  
-                  
-                case SCAN_CRITERIA_SIZE:
-                  size_lower = rozofs_scan_size_string(optarg);
-                  if (size_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                  break;                    
+                case INT_VALUE_FOR_STRING_size:
+                  SCAN_SIZE(size_lower) 
                   if (size_lower==0) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                    BAD_FORMAT;     
                   } 
                   size_lower--;   
-                  break;     
-                  
-                case SCAN_CRITERIA_NLINK:
-                  nlink_lower = rozofs_scan_u64(optarg);
-                  if (nlink_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                  break;                                    
+                case INT_VALUE_FOR_STRING_slave:
+                  SCAN_U64(slave_lower) 
+                  if (slave_lower==0) {
+                    BAD_FORMAT;     
                   } 
+                  slave_lower--;   
+                  break;                       
+                case INT_VALUE_FOR_STRING_link:
+                  SCAN_U64(nlink_lower) 
                   if (nlink_lower==0) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                    BAD_FORMAT;     
                   } 
                   nlink_lower--;   
-                  break;  
-                                   
-                case SCAN_CRITERIA_CHILDREN:
-                  children_lower = rozofs_scan_u64(optarg);
-                  if (children_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
+                  break;                                     
+                case INT_VALUE_FOR_STRING_children:
+                  SCAN_U64(children_lower)   
                   if (children_lower==0) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                    BAD_FORMAT;     
                   } 
                   children_lower--;   
-                  break;  
-                                   
-                case SCAN_CRITERIA_DELETED:
-                  deleted_lower = rozofs_scan_u64(optarg);
-                  if (deleted_lower==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
+                  break;                                     
+                case INT_VALUE_FOR_STRING_deleted:
+                  SCAN_U64(deleted_lower)   
                   if (deleted_lower==0) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                    BAD_FORMAT;     
                   } 
                   deleted_lower--;   
                   break;  
-
                                       
-                case SCAN_CRITERIA_GID:          
-                case SCAN_CRITERIA_UID:
-                case SCAN_CRITERIA_PFID:
-                case SCAN_CRITERIA_FNAME:
-                  usage("No %s comparison for -%c",comp,crit);     
+                case INT_VALUE_FOR_STRING_gid:          
+                case INT_VALUE_FOR_STRING_uid:
+                case INT_VALUE_FOR_STRING_pfid:
+                case INT_VALUE_FOR_STRING_name:
+                  if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
+                  else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break; 
                                                 
                 default:
@@ -3294,107 +3659,64 @@ int main(int argc, char *argv[]) {
           /*
           ** Greater or equal
           */  
-          case '+':
+          case INT_VALUE_FOR_STRING_ge:
+              if (expect_comparator == 0) {
+                 usage("Got unexpected --ge");
+              }           
               expect_comparator = 0;          
               comp = "--ge";         
-              switch (scan_criteria) {
-              
-                case SCAN_CRITERIA_HCR8:
-                  cr8_bigger = rozofs_date2time(optarg);
-                  if (cr8_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break;  
-                  
-                case SCAN_CRITERIA_SCR8:
-                  cr8_bigger = rozofs_scan_u64(optarg);
-                  if (cr8_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break;  
-                               
-                case SCAN_CRITERIA_HMOD:
-                  mod_bigger = rozofs_date2time(optarg);
-                  if (mod_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
+              switch (scan_criteria) {              
+                case INT_VALUE_FOR_STRING_hcr8:
+                  SCAN_DATE(cr8_bigger)    
+                  break;                    
+                case INT_VALUE_FOR_STRING_scr8:
+                  SCAN_U64(cr8_bigger)    
+                  break;                                 
+                case INT_VALUE_FOR_STRING_hmod:
+                  SCAN_DATE(mod_bigger)    
+                  break;                                
+                case INT_VALUE_FOR_STRING_smod:
+                  SCAN_U64(mod_bigger)    
                   break; 
-                               
-                case SCAN_CRITERIA_SMOD:
-                  mod_bigger = rozofs_scan_u64(optarg);
-                  if (mod_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
+                case INT_VALUE_FOR_STRING_hctime:
+                  SCAN_DATE(ctime_bigger)    
+                  break;                   
+                case INT_VALUE_FOR_STRING_sctime:
+                  SCAN_U64(ctime_bigger)    
+                  break;                    
+                case INT_VALUE_FOR_STRING_hupdate:
+                  SCAN_DATE(update_bigger)    
+                  break;                  
+                case INT_VALUE_FOR_STRING_supdate:
+                  SCAN_U64(update_bigger)    
+                  break;                                   
+                case INT_VALUE_FOR_STRING_size:
+                  SCAN_SIZE(size_bigger) 
                   break; 
-
-                case SCAN_CRITERIA_HCTIME:
-                  ctime_bigger = rozofs_date2time(optarg);
-                  if (ctime_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-                  
-                case SCAN_CRITERIA_SCTIME:
-                  ctime_bigger = rozofs_scan_u64(optarg);
-                  if (ctime_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break; 
-                   
-                case SCAN_CRITERIA_HUPDATE:
-                  update_bigger = rozofs_date2time(optarg);
-                  if (update_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
+                case INT_VALUE_FOR_STRING_slave:
+                  SCAN_U64(slave_bigger) 
+                  break;                                     
+                case INT_VALUE_FOR_STRING_link:
+                  SCAN_U64(nlink_bigger) 
+                  break;                   
+                case INT_VALUE_FOR_STRING_children:
+                  SCAN_U64(children_bigger) 
                   break;
-                  
-                case SCAN_CRITERIA_SUPDATE:
-                  update_bigger = rozofs_scan_u64(optarg);
-                  if (update_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }    
-                  break;
-                  
-                  
-                case SCAN_CRITERIA_SIZE:
-                  size_bigger = rozofs_scan_size_string(optarg);
-                  if (size_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
-                  break; 
-                   
-                case SCAN_CRITERIA_NLINK:
-                  nlink_bigger = rozofs_scan_u64(optarg);
-                  if (nlink_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
-                  break;
-                   
-                case SCAN_CRITERIA_CHILDREN:
-                  children_bigger = rozofs_scan_u64(optarg);
-                  if (children_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
-                  break;
-
-                case SCAN_CRITERIA_DELETED:
-                  deleted_bigger = rozofs_scan_u64(optarg);
-                  if (deleted_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
-                  break;
-                  
-                case SCAN_CRITERIA_FNAME:
+                case INT_VALUE_FOR_STRING_deleted:
+                  SCAN_U64(deleted_bigger) 
+                  break;                  
+                case INT_VALUE_FOR_STRING_name:
                   fname_bigger = optarg;
                   break;
                      
-                case SCAN_CRITERIA_GID:          
-                case SCAN_CRITERIA_UID:
-                case SCAN_CRITERIA_CID:                
-                case SCAN_CRITERIA_SID:                
-                case SCAN_CRITERIA_PFID:
-                case SCAN_CRITERIA_PROJECT:
-                  usage("No %s comparison for -%c",comp,crit);      
+                case INT_VALUE_FOR_STRING_gid:          
+                case INT_VALUE_FOR_STRING_uid:
+                case INT_VALUE_FOR_STRING_cid:                
+                case INT_VALUE_FOR_STRING_sid:                
+                case INT_VALUE_FOR_STRING_pfid:
+                case INT_VALUE_FOR_STRING_project:
+                  if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
+                  else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break;                               
                                        
                 default:
@@ -3403,116 +3725,76 @@ int main(int argc, char *argv[]) {
               break;
           /*
           ** Greater strictly
-          */                 
-          case '>':
+          */         
+          case INT_VALUE_FOR_STRING_gt:                  
+              if (expect_comparator == 0) {
+                 usage("Got unexpected --gt");
+              }           
               expect_comparator = 0;          
               comp = "--gt";         
-              switch (scan_criteria) {
-              
-                case SCAN_CRITERIA_HCR8:
-                  cr8_bigger = rozofs_date2time(optarg);
-                  if (cr8_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }  
+              switch (scan_criteria) {              
+                case INT_VALUE_FOR_STRING_hcr8:
+                  SCAN_DATE(cr8_bigger)  
                   cr8_bigger++; 
-                  break;        
-              
-                case SCAN_CRITERIA_SCR8:
-                  cr8_bigger = rozofs_scan_u64(optarg);
-                  if (cr8_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }  
+                  break;                      
+                case INT_VALUE_FOR_STRING_scr8:
+                  SCAN_U64(cr8_bigger)  
                   cr8_bigger++; 
-                  break;        
-                        
-                case SCAN_CRITERIA_HMOD:
-                  mod_bigger = rozofs_date2time(optarg);
-                  if (mod_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                  break;                                
+                case INT_VALUE_FOR_STRING_hmod:
+                  SCAN_DATE(mod_bigger) 
+                  mod_bigger++;  
+                  break;                  
+                case INT_VALUE_FOR_STRING_smod:
+                  SCAN_U64(mod_bigger) 
                   mod_bigger++;  
                   break;
-                  
-                case SCAN_CRITERIA_SMOD:
-                  mod_bigger = rozofs_scan_u64(optarg);
-                  if (mod_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
-                  mod_bigger++;  
-                  break;
-
-                case SCAN_CRITERIA_HCTIME:
-                  ctime_bigger = rozofs_date2time(optarg);
-                  if (ctime_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                case INT_VALUE_FOR_STRING_hctime:
+                  SCAN_DATE(ctime_bigger) 
                   ctime_bigger++;  
                   break;
-
-                case SCAN_CRITERIA_SCTIME:
-                  ctime_bigger = rozofs_scan_u64(optarg);
-                  if (ctime_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                case INT_VALUE_FOR_STRING_sctime:
+                  SCAN_U64(ctime_bigger) 
                   ctime_bigger++;  
                   break;
-
-                 case SCAN_CRITERIA_HUPDATE:
-                  update_bigger = rozofs_date2time(optarg);
-                  if (update_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                 case INT_VALUE_FOR_STRING_hupdate:
+                  SCAN_DATE(update_bigger) 
                   update_bigger++;  
                   break;                  
-
-                 case SCAN_CRITERIA_SUPDATE:
-                  update_bigger = rozofs_scan_u64(optarg);
-                  if (update_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                 case INT_VALUE_FOR_STRING_supdate:
+                  SCAN_U64(update_bigger) 
                   update_bigger++;  
                   break;                  
-
-                case SCAN_CRITERIA_SIZE:
-                  size_bigger = rozofs_scan_size_string(optarg);
-                  if (size_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                case INT_VALUE_FOR_STRING_size:
+                  SCAN_SIZE(size_bigger) 
                   size_bigger++;
                   break;  
-                  
-                case SCAN_CRITERIA_NLINK:
-                  nlink_bigger = rozofs_scan_u64(optarg);
-                  if (nlink_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                case INT_VALUE_FOR_STRING_slave:
+                  SCAN_U64(slave_bigger) 
+                  slave_bigger++; 
+                  break;                                    
+                case INT_VALUE_FOR_STRING_link:
+                  SCAN_U64(nlink_bigger) 
                   nlink_bigger++;
-                  break;  
-                  
-                case SCAN_CRITERIA_CHILDREN:
-                  children_bigger = rozofs_scan_u64(optarg);
-                  if (children_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                  break;                    
+                case INT_VALUE_FOR_STRING_children:
+                  SCAN_U64(children_bigger) 
                   children_bigger++;
-                  break;  
-                  
-                case SCAN_CRITERIA_DELETED:
-                  deleted_bigger = rozofs_scan_u64(optarg);
-                  if (deleted_bigger==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                  break;                    
+                case INT_VALUE_FOR_STRING_deleted:
+                  SCAN_U64(deleted_bigger) 
                   deleted_bigger++;
                   break;  
                   
-                case SCAN_CRITERIA_GID:          
-                case SCAN_CRITERIA_UID:
-                case SCAN_CRITERIA_CID:                
-                case SCAN_CRITERIA_SID:                
-                case SCAN_CRITERIA_PFID:
-                case SCAN_CRITERIA_FNAME:
-                case SCAN_CRITERIA_PROJECT:
-                  usage("No %s comparison for -%c",comp,crit);     
+                case INT_VALUE_FOR_STRING_gid:          
+                case INT_VALUE_FOR_STRING_uid:
+                case INT_VALUE_FOR_STRING_cid:                
+                case INT_VALUE_FOR_STRING_sid:                
+                case INT_VALUE_FOR_STRING_pfid:
+                case INT_VALUE_FOR_STRING_name:
+                case INT_VALUE_FOR_STRING_project:
+                  if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
+                  else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break;                               
                                       
                 default:
@@ -3522,137 +3804,74 @@ int main(int argc, char *argv[]) {
           /*
           ** Equality
           */    
-          case '=':
+          case INT_VALUE_FOR_STRING_eq:
+              if (expect_comparator == 0) {
+                 usage("Got unexpected --eq");
+              }           
               expect_comparator = 0;          
               comp = "--eq";        
-              switch (scan_criteria) {
-              
-                case SCAN_CRITERIA_HCR8:
-                  cr8_equal = rozofs_date2time(optarg);
-                  if (cr8_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
-                  break;    
-                  
-                case SCAN_CRITERIA_SCR8:
-                  cr8_equal =  rozofs_scan_u64(optarg);
-                  if (cr8_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
-                  break;    
-                            
-                case SCAN_CRITERIA_HMOD:
-                  mod_equal = rozofs_date2time(optarg);
-                  if (mod_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
+              switch (scan_criteria) {              
+                case INT_VALUE_FOR_STRING_hcr8:
+                  SCAN_DATE(cr8_equal) 
+                  break;                      
+                case INT_VALUE_FOR_STRING_scr8:
+                  SCAN_U64(cr8_equal) 
+                  break;                                
+                case INT_VALUE_FOR_STRING_hmod:
+                  SCAN_DATE(mod_equal)                   
+                  break;                              
+                case INT_VALUE_FOR_STRING_smod:
+                  SCAN_U64(mod_equal)                   
+                  break;                    
+                case INT_VALUE_FOR_STRING_hctime:
+                  SCAN_DATE(ctime_equal)                   
+                  break;                    
+                case INT_VALUE_FOR_STRING_sctime:
+                  SCAN_U64(ctime_equal)                   
+                  break;                     
+                case INT_VALUE_FOR_STRING_hupdate:
+                  SCAN_DATE(update_equal)                   
                   break;  
-                            
-                case SCAN_CRITERIA_SMOD:
-                  mod_equal =  rozofs_scan_u64(optarg);
-                  if (mod_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
+                case INT_VALUE_FOR_STRING_supdate:
+                  SCAN_U64(update_equal)                   
                   break;  
-                  
-                case SCAN_CRITERIA_HCTIME:
-                  ctime_equal = rozofs_date2time(optarg);
-                  if (ctime_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break;  
-                  
-                case SCAN_CRITERIA_SCTIME:
-                  ctime_equal =  rozofs_scan_u64(optarg);
-                  if (ctime_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break;  
-                   
-                case SCAN_CRITERIA_HUPDATE:
-                  update_equal = rozofs_date2time(optarg);
-                  if (update_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break;  
-
-                case SCAN_CRITERIA_SUPDATE:
-                  update_equal =  rozofs_scan_u64(optarg);
-                  if (update_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break;  
-
-                case SCAN_CRITERIA_SIZE:
-                  size_equal = rozofs_scan_size_string(optarg);
-                  if (size_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
+                case INT_VALUE_FOR_STRING_size:
+                  SCAN_SIZE(size_equal)
                   break; 
-                  
-                case SCAN_CRITERIA_GID:
-                  gid_equal = rozofs_scan_u64(optarg);
-                  if (gid_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                  
-                case SCAN_CRITERIA_NLINK:
-                  nlink_equal = rozofs_scan_u64(optarg);
-                  if (nlink_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                                                                      
-                case SCAN_CRITERIA_CHILDREN:
-                  children_equal = rozofs_scan_u64(optarg);
-                  if (children_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                  
-                case SCAN_CRITERIA_DELETED:
-                  deleted_equal = rozofs_scan_u64(optarg);
-                  if (deleted_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                                                                       
-                case SCAN_CRITERIA_UID:
-                  uid_equal = rozofs_scan_u64(optarg);
-                  if (uid_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;   
-                  
-                case SCAN_CRITERIA_CID:
-                  cid_equal = rozofs_scan_u64(optarg);
-                  if (cid_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                  
-                case SCAN_CRITERIA_SID:
-                  sid_equal = rozofs_scan_u64(optarg);
-                  if (sid_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
+                case INT_VALUE_FOR_STRING_slave:
+                  SCAN_U64(slave_equal) 
+                  break;                   
+                case INT_VALUE_FOR_STRING_gid:
+                  SCAN_U64(gid_equal)   
                   break;                  
-                  
-                case SCAN_CRITERIA_PROJECT:
-                  project_equal = rozofs_scan_u64(optarg);
-                  if (project_equal==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                  
-                case SCAN_CRITERIA_PFID:
+                case INT_VALUE_FOR_STRING_link:
+                  SCAN_U64(nlink_equal)   
+                  break;                                                                      
+                case INT_VALUE_FOR_STRING_children:
+                  SCAN_U64(children_equal)   
+                  break;                  
+                case INT_VALUE_FOR_STRING_deleted:
+                  SCAN_U64(deleted_equal)   
+                  break;                                                                       
+                case INT_VALUE_FOR_STRING_uid:
+                  SCAN_U64(uid_equal)   
+                  break;                     
+                case INT_VALUE_FOR_STRING_cid:
+                  SCAN_U64(cid_equal)   
+                  break;                  
+                case INT_VALUE_FOR_STRING_sid:
+                  SCAN_U64(sid_equal)   
+                  break;                                    
+                case INT_VALUE_FOR_STRING_project:
+                  SCAN_U64(project_equal)   
+                  break;                  
+                case INT_VALUE_FOR_STRING_pfid:
                   if (rozofs_uuid_parse(optarg, pfid_equal)!=0) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
+                    BAD_FORMAT;     
                   }   
                   break;                                                                         
                   
-                case SCAN_CRITERIA_FNAME:
+                case INT_VALUE_FOR_STRING_name:
                   fname_equal = optarg;
                   break;                                                                         
                                                                          
@@ -3664,12 +3883,15 @@ int main(int argc, char *argv[]) {
           /*
           ** Regex
           */    
-          case '*':
+          case INT_VALUE_FOR_STRING_regex:          
+              if (expect_comparator == 0) {
+                 usage("Got unexpected --regex");
+              }           
               expect_comparator = 0;          
               comp = "--regex";        
               switch (scan_criteria) {
               
-                case SCAN_CRITERIA_FNAME:
+                case INT_VALUE_FOR_STRING_name:
                 {  
                   FILE*       f;
                   const char *pcreErrorStr;     
@@ -3717,133 +3939,72 @@ int main(int argc, char *argv[]) {
           /*
           ** Different
           */    
-          case '!':
-              expect_comparator = 0;          
+          case INT_VALUE_FOR_STRING_ne:
+             if (expect_comparator == 0) {
+                usage("Got unexpected --ne");
+             }           
+             expect_comparator = 0;          
               comp = "--ne";        
-              switch (scan_criteria) {
-              
-                case SCAN_CRITERIA_HCR8:
-                  cr8_diff = rozofs_date2time(optarg);
-                  if (cr8_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+              switch (scan_criteria) {              
+                case INT_VALUE_FOR_STRING_hcr8:
+                  SCAN_DATE(cr8_diff) 
+                  break;                   
+                case INT_VALUE_FOR_STRING_scr8:
+                  SCAN_U64(cr8_diff) 
+                  break;                                
+                case INT_VALUE_FOR_STRING_hmod:
+                  SCAN_DATE(mod_diff)                   
+                  break;                                
+                case INT_VALUE_FOR_STRING_smod:
+                  SCAN_U64(mod_diff)                   
+                  break;                   
+                case INT_VALUE_FOR_STRING_hctime:
+                  SCAN_DATE(ctime_diff)                   
+                  break;                   
+                case INT_VALUE_FOR_STRING_sctime:
+                  SCAN_U64(ctime_diff)                   
                   break; 
-                  
-                case SCAN_CRITERIA_SCR8:
-                  cr8_diff =  rozofs_scan_u64(optarg);
-                  if (cr8_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  } 
+                case INT_VALUE_FOR_STRING_hupdate:
+                  SCAN_DATE(update_diff)                   
                   break; 
-                               
-                case SCAN_CRITERIA_HMOD:
-                  mod_diff = rozofs_date2time(optarg);
-                  if (mod_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
+                case INT_VALUE_FOR_STRING_supdate:
+                  SCAN_U64(update_diff)                   
+                  break;                    
+                case INT_VALUE_FOR_STRING_size:
+                  SCAN_SIZE(size_diff)
                   break; 
-                               
-                case SCAN_CRITERIA_SMOD:
-                  mod_diff =  rozofs_scan_u64(optarg);
-                  if (mod_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break; 
-                  
-                case SCAN_CRITERIA_HCTIME:
-                  ctime_diff = rozofs_date2time(optarg);
-                  if (ctime_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break; 
-                  
-                case SCAN_CRITERIA_SCTIME:
-                  ctime_diff =  rozofs_scan_u64(optarg);
-                  if (ctime_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break; 
-
-                case SCAN_CRITERIA_HUPDATE:
-                  update_diff = rozofs_date2time(optarg);
-                  if (update_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break; 
-
-                case SCAN_CRITERIA_SUPDATE:
-                  update_diff =  rozofs_scan_u64(optarg);
-                  if (update_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }                   
-                  break; 
-                   
-                case SCAN_CRITERIA_SIZE:
-                  size_diff = rozofs_scan_size_string(optarg);
-                  if (size_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
-                  break; 
-                   
-                case SCAN_CRITERIA_NLINK:
-                  nlink_diff = rozofs_scan_u64(optarg);
-                  if (nlink_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
-                  break; 
-                   
-                case SCAN_CRITERIA_CHILDREN:
-                  children_diff = rozofs_scan_u64(optarg);
-                  if (children_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
-                  break; 
-                   
-                case SCAN_CRITERIA_DELETED:
-                  deleted_diff = rozofs_scan_u64(optarg);
-                  if (deleted_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }
-                  break; 
-                  
-                case SCAN_CRITERIA_GID:
-                  gid_diff = rozofs_scan_u64(optarg);
-                  if (gid_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break; 
-                                  
-                case SCAN_CRITERIA_UID:
-                  uid_diff = rozofs_scan_u64(optarg);
-                  if (uid_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break; 
-                    
-                case SCAN_CRITERIA_CID:
-                  cid_diff = rozofs_scan_u64(optarg);
-                  if (cid_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
+                case INT_VALUE_FOR_STRING_slave:
+                  SCAN_U64(slave_diff) 
+                  break;                                     
+                case INT_VALUE_FOR_STRING_link:
+                  SCAN_U64(nlink_diff)
+                  break;                    
+                case INT_VALUE_FOR_STRING_children:
+                  SCAN_U64(children_diff)
+                  break;                    
+                case INT_VALUE_FOR_STRING_deleted:
+                  SCAN_U64(deleted_diff)
+                  break;                   
+                case INT_VALUE_FOR_STRING_gid:
+                  SCAN_U64(gid_diff)   
+                  break;                                   
+                case INT_VALUE_FOR_STRING_uid:
+                  SCAN_U64(uid_diff)   
+                  break;                     
+                case INT_VALUE_FOR_STRING_cid:
+                  SCAN_U64(cid_diff)   
+                  break;                    
+                case INT_VALUE_FOR_STRING_sid:
+                  SCAN_U64(sid_diff)   
+                  break;                    
+                case INT_VALUE_FOR_STRING_project:
+                  SCAN_U64(project_diff)   
                   break;
-                    
-                case SCAN_CRITERIA_SID:
-                  sid_diff = rozofs_scan_u64(optarg);
-                  if (sid_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                    
-                case SCAN_CRITERIA_PROJECT:
-                  project_diff = rozofs_scan_u64(optarg);
-                  if (project_diff==-1) {
-                    usage("Bad format for -%c %s \"%s\"",crit,comp,optarg);     
-                  }   
-                  break;
-                  
-                case SCAN_CRITERIA_PFID:
-                case SCAN_CRITERIA_FNAME:
-                  usage("No %s comparison for -%c",comp,crit);      
+                                    
+                case INT_VALUE_FOR_STRING_pfid:
+                case INT_VALUE_FOR_STRING_name:
+                  if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
+                  else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break;                                                   
                                                                          
                 default:
@@ -3851,6 +4012,8 @@ int main(int argc, char *argv[]) {
               }
               break;                
           case 'd':
+          case INT_VALUE_FOR_STRING_dir:
+              NEW_OPTION_CHECKS();
               search_dir = 1;
               break;                               
           case '?':
@@ -3869,7 +4032,7 @@ int main(int argc, char *argv[]) {
   ** Search for the given eid in configuration file
   ** in case one is given as input
   */
-  if (eid!=-1) {
+  if (eid!=LONG_VALUE_UNDEF) {
     /*
     ** Read configuration file
     */
@@ -3882,27 +4045,28 @@ int main(int argc, char *argv[]) {
     /*
     ** Find the export root path
     */
-    root_path = get_export_root_path(eid);
-    if (root_path==NULL) {
+    export_config = get_export_config(eid);
+    if (export_config==NULL) {
       usage("eid %d is not configured",eid);       
     }
+    root_path = export_config->root;
   }
 
   if (root_path == NULL) 
   {
-    usage("Missing root_path(-p) or export identifier (-e)");
+    usage("Missing export identifier (-e)");
   }
   
   /*
   ** sid_equal can only be set with cid equal
   */
-  if ((sid_equal != -1) && (cid_equal==-1)) {
+  if ((sid_equal != LONG_VALUE_UNDEF) && (cid_equal==LONG_VALUE_UNDEF)) {
     usage("--sid --eq can only be set along with --cid --eq to find out files having this cid and sid in its distribution.");
   }
   /*
   ** sid_diff can only be set with cid_equal or cid_diff
   */
-  if ((sid_diff != -1) && (cid_equal==-1) && (cid_diff==-1)) {
+  if ((sid_diff != LONG_VALUE_UNDEF) && (cid_equal==LONG_VALUE_UNDEF) && (cid_diff==LONG_VALUE_UNDEF)) {
     usage("--sid --ne can only be set along with\n   --cid --eq to find out files having this cid but not this sid in its distribution\nor --cid --ne to find out files not having this cid and sid in its distribution.");
   }
   /*
@@ -3918,7 +4082,7 @@ int main(int argc, char *argv[]) {
   ** init of the lv2 cache
   */
   lv2_cache_initialize(&cache);
-  rz_set_verbose_mode(verbose);
+  rz_set_verbose_mode(0);
   
   /*
   ** Use call back to reject a whole attribute file when date criteria is set

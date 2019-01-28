@@ -2129,7 +2129,7 @@ int main(int argc, char *argv[]) {
   ** init of the debug port & instance
   */
   rozo_balancing_ctx.instance = 0;
-  rozo_balancing_ctx.debug_port = rozofs_get_service_port_rebalancing_diag(rozo_balancing_ctx.instance);
+  rozo_balancing_ctx.debug_port = rozofs_get_service_port_rebalancing_diag(rozo_balancing_ctx.volume_id);
   /*
   ** start the non-blocking thread, mainly used for rozodiag purpose
   */
