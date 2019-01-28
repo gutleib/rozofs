@@ -2089,21 +2089,31 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }     
        
     IF_DISPLAY(display_striping) {
-      int strip_factor;
-      int strip_size;
-      strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
-      strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc); 
-      NEW_FIELD(hybdrid); 
-      if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
-        pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
-      }
+      if (inode_p->s.multi_desc.byte != 0){
+        int strip_factor;
+        int strip_size;
+        strip_factor = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+        strip_size   = rozofs_get_striping_size(&inode_p->s.multi_desc); 
+        NEW_FIELD(hybdrid); 
+        if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
+          pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
+          NEW_FIELD(hybdrid_size); 
+          pDisplay += rozofs_u64_append(pDisplay,rozofs_get_hybrid_size(&inode_p->s.multi_desc,&inode_p->s.hybrid_desc));
+        }
+        else {
+          pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
+        }
+        NEW_FIELD(slaves); 
+        pDisplay += rozofs_u32_append(pDisplay,strip_factor);   
+        NEW_FIELD(strip_size);       
+        pDisplay += rozofs_u32_append(pDisplay,strip_size); 
+      }   
       else {
+        NEW_FIELD(hybdrid);       
         pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
-      }
-      NEW_FIELD(slaves); 
-      pDisplay += rozofs_u32_append(pDisplay,strip_factor);   
-      NEW_FIELD(strip_size);       
-      pDisplay += rozofs_u32_append(pDisplay,strip_size);   
+        NEW_FIELD(slaves); 
+        pDisplay += rozofs_u32_append(pDisplay,0);   
+      } 
     }    
     
     IF_DISPLAY(display_distrib) {
