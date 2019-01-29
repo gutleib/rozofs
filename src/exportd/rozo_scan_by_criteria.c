@@ -1049,6 +1049,77 @@ int rozofs_check_cid(ext_mattr_t *inode_p, cid_t cid_equal) {
 **_______________________________________________________________________
 */
 /**
+*   Return stripping information for a directory
+
+   @param inode_p         pointer to the inode of the directory
+   @param ishybrid        whether the directory is hybrid
+   @param hybridSize      The size of the hybrid chunk
+   @param slaveNb         Number of slave inodes
+   @param slaveSize       The size of a slave strip
+      
+   @retval 0 no match
+   @retval 1 match
+*/
+void get_directory_stripping_info(ext_mattr_t  * inode_p,
+                                  int          * ishybrid,  
+                                  uint32_t     * hybridSize,
+                                  uint32_t     * slaveNb,
+                                  uint32_t     * slaveSize) {
+                               
+  /*
+  ** The directory has its own configuration
+  */                                
+  if (inode_p->s.multi_desc.byte != 0) {
+
+    /*
+    ** Number of slave and strip size is configured
+    */
+    if (inode_p->s.multi_desc.master.striping_factor == 0) {
+      *slaveNb    = 0; 
+      *slaveSize  = 0; 
+    }    
+    else {
+      *slaveNb    = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+      *slaveSize  = rozofs_get_striping_size(&inode_p->s.multi_desc); 
+    }
+    
+    /*
+    ** Not hybrid
+    */
+    if (inode_p->s.hybrid_desc.s.no_hybrid != 0) {
+      *ishybrid   = 0;
+      *hybridSize = 0;
+      return;  
+    }    
+    
+    /*
+    ** Hybrid mode
+    */
+    *ishybrid   = 1;      
+    *hybridSize = rozofs_get_hybrid_size(&inode_p->s.multi_desc,&inode_p->s.hybrid_desc);
+    return;
+  }
+  
+  /*
+  ** nothing defined at directory level so get the information from the export conf
+  */   
+  *slaveNb   = export_config->stripping.factor+1;
+  *slaveSize =  ROZOFS_STRIPING_UNIT_BASE << export_config->stripping.unit;
+    
+  if (export_config->vid_fast == -1) {
+    *ishybrid   = 0;
+    *hybridSize = 0;
+  }
+  else {  
+    *ishybrid   = 1;
+    *hybridSize = *slaveSize;
+  }
+  return;
+}  
+/*
+**_______________________________________________________________________
+*/
+/**
 *   RozoFS specific function for visiting
 
    @param inode_attr_p: pointer to the inode data
@@ -1067,7 +1138,12 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   char       * pName;
   export_t   * e = exportd;
   ext_mattr_t *slave_p;;
-  
+  int          ishybrid;
+  uint32_t     hybridSize;
+  uint32_t     slaveNb = -1;
+  uint32_t     slaveSize;
+      
+   
   nb_scanned_entries++;
   
   if (search_dir==0) {
@@ -1831,36 +1907,53 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       }
     }
     
-    if (hybrid != LONG_VALUE_UNDEF) {
-      int      ishybrid;      
-      if (inode_p->s.multi_desc.byte == 0)
-      {
-        if (export_config->vid_fast == -1) ishybrid = 0;
-        else                               ishybrid = 1;
-      }
-      else {
-        if (inode_p->s.hybrid_desc.s.no_hybrid == 0) ishybrid = 1;
-        else                                         ishybrid = 0;
-      }
-      /*
-      ** Must be in hybrid mode
-      */
-      if (hybrid == HYBRID) {
-        if (!ishybrid) {
-          return 0;
-        }   
-      }
-
-      /*
-      ** Must not be in hybrid mode
-      */    
-      if (hybrid == NOHYBRID) {
-        if (ishybrid) {
-          return 0;
-        }   
-      }     
-    }   
     
+    if ((hybrid       != LONG_VALUE_UNDEF) 
+    ||  (slave_lower  != LONG_VALUE_UNDEF) 
+    ||  (slave_bigger != LONG_VALUE_UNDEF)
+    ||  (slave_equal  != LONG_VALUE_UNDEF)
+    ||  (slave_diff   != LONG_VALUE_UNDEF)) {
+      get_directory_stripping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize);
+    }
+ 
+    /*
+    ** Must be in hybrid mode
+    */
+    if (hybrid == HYBRID) {
+      if (!ishybrid) {
+        return 0;
+      }   
+    }
+
+    /*
+    ** Must not be in hybrid mode
+    */    
+    if (hybrid == NOHYBRID) {
+      if (ishybrid) {
+        return 0;
+      }   
+    }     
+
+    if (slave_lower != LONG_VALUE_UNDEF) {
+      if (slaveNb > slave_lower) {
+        return 0;
+      }  
+    }
+    if (slave_bigger != LONG_VALUE_UNDEF) {
+      if (slaveNb < slave_bigger) {
+        return 0;
+      }  
+    } 
+    if (slave_equal != LONG_VALUE_UNDEF) {
+      if (slaveNb != slave_equal) {
+        return 0;
+      }  
+    } 
+    if (slave_diff != LONG_VALUE_UNDEF) {
+      if (slaveNb == slave_diff) {
+        return 0;
+      }  
+    }            
   }
 
   /*
@@ -2054,6 +2147,30 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
         }  
       }
     }
+
+    IF_DISPLAY(display_striping) {
+      
+      /*
+      ** Stripping info not yet read
+      */
+      if (slave_lower == -1) {
+        get_directory_stripping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize);
+      }  
+      
+      NEW_FIELD(hybdrid); 
+      if (ishybrid) {
+        pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
+        NEW_FIELD(hybdrid_size); 
+        pDisplay += rozofs_u64_append(pDisplay,hybridSize);
+      }
+      else {
+        pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
+      }
+      NEW_FIELD(slaves); 
+      pDisplay += rozofs_u32_append(pDisplay,slaveNb);   
+      NEW_FIELD(strip_size);       
+      pDisplay += rozofs_u32_append(pDisplay,slaveSize); 
+    }        
   }
 
   /*
@@ -2719,7 +2836,26 @@ static inline uint64_t rozofs_scan_size_string(char * sizeString) {
   if (*pUnits == 'P') return 1024UL*1024UL*1024UL*1024UL*1024UL*value;
   return value;
 }
-   
+/*
+**_______________________________________________________________________
+*/
+/** Find out the export root path from its eid reading the configuration file
+*   
+    @param  eid : eport identifier
+    
+    @retval -the root path or null when no such eid
+*/
+volume_config_t * get_volume_config(uint8_t vid) {
+  list_t          * v;
+  volume_config_t * vconfig;
+
+  list_for_each_forward(v, &exportd_config.volumes) {
+
+    vconfig = list_entry(v, volume_config_t, list);
+    if (vconfig->vid == vid) return vconfig;   
+  }
+  return NULL;
+}   
 /*
 **_______________________________________________________________________
 */
@@ -2732,14 +2868,29 @@ static inline uint64_t rozofs_scan_size_string(char * sizeString) {
 export_config_t * get_export_config(uint8_t eid) {
   list_t          * e;
   export_config_t * econfig;
-
+  volume_config_t * vconfig;
+  
   list_for_each_forward(e, &exportd_config.exports) {
 
     econfig = list_entry(e, export_config_t, list);
-    if (econfig->eid == eid) return econfig;   
+    if (econfig->eid == eid) {
+      /*
+      ** When ttriping factor is not initialize at export level
+      ** Get it at volume level
+      */
+      if (econfig->stripping.factor == 255) {
+        vconfig = get_volume_config(econfig->vid);
+        if (vconfig != NULL) {
+          memcpy(&econfig->stripping,&vconfig->stripping, sizeof(vconfig->stripping));
+        }
+      }
+    }
+    return econfig;   
   }
   return NULL;
 }
+
+
 #if 1
 #define dbg(fmt,...)
 #define dbgsuccess(big,small) 
@@ -4059,7 +4210,8 @@ int main(int argc, char *argv[]) {
     if (export_config==NULL) {
       usage("eid %d is not configured",eid);       
     }
-    root_path = export_config->root;
+    root_path = export_config->root;    
+    
   }
 
   if (root_path == NULL) 
