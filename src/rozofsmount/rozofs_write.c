@@ -262,7 +262,12 @@ int buf_flush(void *fuse_ctx_p,file_t *p)
   if ((write_buf_nb(fuse_ctx_p,p, flush_off, buffer, flush_len)) < 0) {
     return -1;
   }
+  /*
+  ** since the buffer has been pushed on disk, clean the write variables
+  */
   p->buf_write_wait = 0;
+  p->write_from     = 0;
+  p->write_pos      = 0;  
   ie = (ientry_t *) p->ie;
   if (ie->write_pending == p) ie->write_pending = NULL;
   return 0;
@@ -881,7 +886,7 @@ void buf_file_write_nb(ientry_t * ie,
       /*
       ** copy the buffer
       */
-      buf_off = (uint32_t)(p->write_pos - off_requested);
+      buf_off = (uint32_t)(off2end - off_requested);
       rozofs_write_in_buffer(p,p->buffer,buf+buf_off,(len-buf_off));
 
       p->write_from = off2end; 
