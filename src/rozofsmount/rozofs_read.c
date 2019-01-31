@@ -241,8 +241,13 @@ int file_read_nb(void *buffer_p,file_t * f, uint64_t off, char **buf, uint32_t l
        ** The file has just been created and is empty so far
        ** Don't request the read to the storio, this would trigger an io error
        ** since the file do not yet exist on disk
+       ** For the case of the writeback cache, it might be possible to have some reads that take
+       ** place because the off+size is not aligned on a 4KB boundary.
+       ** In that case if the offset is greater or equal to the known file size, we return with a length of 0
+       ** This will avoid an I/O error if there is a pending write that has been triggered by the writeback cache
+       ** flush       
        */
-       if (ie->attrs.attrs.size == 0) {
+       if (ie->attrs.attrs.size <= off) {
          *length_p = 0;
          return 0;       
        }
