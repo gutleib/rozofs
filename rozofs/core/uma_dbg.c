@@ -354,9 +354,23 @@ void show_uma_dbg_syslog(char * argv[], uint32_t tcpRef, void *bufRef) {
 * @param name The syslog name
 */
 void uma_dbg_record_syslog_name(char * name) {
+  /*
+  ** First call to the API. Must record rozodiag CLI
+  */ 
+  if (uma_dbg_syslog_name[0] == 0) {
+    uma_dbg_addTopicAndMan("syslog",show_uma_dbg_syslog, show_uma_dbg_syslog_man, 0); 
+  }
+  /*
+  ** Extra call to the API. Must close last opened log session
+  */ 
+  else {
+    closelog();
+  } 
+  /*
+  ** Record name and open a log session
+  */
   strcpy(uma_dbg_syslog_name,name);
-  openlog(uma_dbg_syslog_name, LOG_PID, LOG_DAEMON);
-  uma_dbg_addTopicAndMan("syslog",show_uma_dbg_syslog, show_uma_dbg_syslog_man, 0);  
+  openlog(uma_dbg_syslog_name, LOG_PID, LOG_DAEMON);  
 }
 /*__________________________________________________________________________
  */
