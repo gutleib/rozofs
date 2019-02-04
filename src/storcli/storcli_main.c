@@ -1901,6 +1901,9 @@ int main(int argc, char *argv[]) {
     
     {
          char path[256];
+         
+         sprintf(path,"storcli:%d:%d",conf.rozofsmount_instance, conf.module_index);
+         uma_dbg_record_syslog_name(path);
 	 
 	 sprintf(path,"%s/mount/inst_%d/storcli_%d/",ROZOFS_KPI_ROOT_PATH,conf.rozofsmount_instance,conf.module_index);
 	 ALLOC_KPI_FILE_PROFILING(path,"profiler",stcpp_profiler_t);    
