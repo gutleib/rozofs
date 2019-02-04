@@ -1806,7 +1806,8 @@ int fuseloop(struct fuse_args *args, int fg) {
     int export_index=0;
     char * pHost;
 
-    uma_dbg_record_syslog_name("rozofsmount");
+    sprintf(ppfile,"rozofsmount:%d",conf.instance);
+    uma_dbg_record_syslog_name(ppfile);
 
     uma_dbg_thread_add_self("Starter");
 
