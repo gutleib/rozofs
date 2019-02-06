@@ -2183,7 +2183,7 @@ int main(int argc, char *argv[]) {
       cluster_error = 0;
       for (cluster_idx = 0; cluster_idx < export_rebalance_vol_stat_p->nb_cluster;cluster_idx++)
       {
-	 ret =load_cluster_stats(1,export_rebalance_vol_stat_p->cluster_tab[cluster_idx].cluster_id,cluster_idx);
+	 ret =load_cluster_stats(rozo_balancing_ctx.volume_id,export_rebalance_vol_stat_p->cluster_tab[cluster_idx].cluster_id,cluster_idx);
 	 if (ret < 0) 
 	 {
 	   if (errno == EAGAIN) rozo_balancing_ctx.eagain_cluster++;
