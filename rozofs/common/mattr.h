@@ -856,7 +856,7 @@ static int rozofs_build_multiple_size_vector(uint64_t len,rozofs_iov_multi_t *ve
        p++;
      }    
    }   
-   vector_p->nb_vectors = striping_factor+2;
+   vector_p->nb_vectors = striping_factor+1;
    return 0;  
 }   
 
@@ -927,7 +927,7 @@ static int rozofs_build_multiple_size_vector_hybrid(uint64_t len,rozofs_iov_mult
        p++;
      }    
    }   
-   vector_p->nb_vectors = striping_factor+2;
+   vector_p->nb_vectors = striping_factor+1;
    return 0;  
 }   
 
