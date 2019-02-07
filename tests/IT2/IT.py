@@ -1574,7 +1574,7 @@ def is_elf(name):
 
 def compil_openmpi(): 
 #___________________________________________________
-  os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz  > %s/compil_openmpi 2>&1; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh  >> %s/compil_openmpi 2>&1;"%(exepath,exepath,exepath,exepath,exepath))
+  os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz  > %s/compil_openmpi 2>&1; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh /tmp/compil >> %s/compil_openmpi 2>&1;"%(exepath,exepath,exepath,exepath,exepath))
   
   string="cat %s/tst_openmpi/hello.res"%(exepath)
   parsed = shlex.split(string)  
@@ -1712,8 +1712,7 @@ def mmap():
 #___________________________________________________  
 def resize(): 
 #___________________________________________________
-  report(red + bold + "   !!! resize service is not yet supported !!!" + endeffect )
-  return 0
+
   realSizeMB = 15
   
   # Create a 1M file
@@ -2864,7 +2863,7 @@ TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node'
 
 # File locking
 TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race']
-TST_COMPIL=['compil_rozofs','compil_openmpi']
+TST_COMPIL=['compil_openmpi']
 TST_TRASH=['trashNrestore','trashNrebuild']
 
 ifnumber=get_if_nb()

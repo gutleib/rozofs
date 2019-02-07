@@ -3,9 +3,7 @@
 cnf_clusters=[]
 global layout
 global layout_int
-global nbclusters
 global clients_nb
-global georep
 
 #_____________________________________ 
 def setLayout(l=0):
@@ -29,11 +27,9 @@ def setLayout(l=0):
 # when the given number is too small, the minimum 
 # required number of SID per host is used.
 #
-def setVolumeHosts(nbHosts, nbSidPerHost=0,vid=None):
+def setVolumeHosts(nbHosts, nbclusters, nbSidPerHost=0,vid=None):
   global layout_int
-  global nbclusters
   global clients_nb
-  global georep
   global failures
    
   # Compute the required number of SID per host 
@@ -73,23 +69,17 @@ def setVolumeHosts(nbHosts, nbSidPerHost=0,vid=None):
     # Create the required number of sid on each cluster
     # The 2 clusters use the same host for a given sid number
     for s in range(nbHosts):
-      if georep == False:
-        for f in range(nbSidPerHost):
-          c.add_sid_on_host(s+1,(s % rozofs.site_number)+1)
+      for f in range(nbSidPerHost):
+        c.add_sid_on_host(s+1,(s % rozofs.site_number)+1)
       
-      else:
-        # In geo replication 
-	# host2 on site 1 replicates host1 on site 0
-	# host4 on site 1 replicates host3 on site 0...	
-        for f in range(nbSidPerHost):
-          c.add_sid_on_host((2*s)+1,0,(2*s)+2,1)
     while nbSid != 0:
       for s in range(nbHosts):
         c.add_sid_on_host(s+1,(s % rozofs.site_number)+1)
         nbSid -= 1
         if nbSid == 0: break
                  
-  return v1  
+  return v1 
+   
 #_____________________________________ 
 def addPrivate(vol,layout=None,eid=63):
 
@@ -97,6 +87,7 @@ def addPrivate(vol,layout=None,eid=63):
   e = vol.add_export(rozofs.bsize4K(),layout,eid)
   m = e.add_mount(0,name="private")
   return e    
+
 #_____________________________________ 
 def addExport(vol,layout=None,eid=None):
 
@@ -104,27 +95,21 @@ def addExport(vol,layout=None,eid=None):
   e = vol.add_export(rozofs.bsize4K(),layout,eid)
 
   for i in range(1,clients_nb+1): 
-    # Georeplication : 1 clinet on each site
-    if georep==True: 
+    if rozofs.site_number == 1:
       m1 = e.add_mount(0)
-      m2 = e.add_mount(1)
-    # Multi site one client on each site  
-    else:
-      if rozofs.site_number == 1:
-        m1 = e.add_mount(0)
-      else:	
-        for site in range(0,rozofs.site_number+1): 
-          m1 = e.add_mount(site)
+    else:	
+      for site in range(0,rozofs.site_number+1): 
+        m1 = e.add_mount(site)
   return e        
 #_____________________________________ 
 
+#rozofs.spare_restore_disable()
+
 # Set metadata device characteristics
-rozofs.set_metadata_size(200)
+rozofs.set_metadata_size(500)
 rozofs.set_min_metadata_inodes(1000)
 rozofs.set_min_metadata_MB(5)
 
-georep = False
-#georep = True
 
 # Number of sites : default is to have 1 site
 #rozofs.set_site_number(4)
@@ -165,7 +150,7 @@ rozofs.set_self_healing(1,"spareOnly")
 #rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
-rozofs.set_ext4(320)
+rozofs.set_ext4(60)
 #rozofs.set_xfs(1000,None)
 #rozofs.set_xfs(1000,"4096")
 #rozofs.set_xfs(1000,"64K")
@@ -183,7 +168,7 @@ rozofs.set_ext4(320)
 # rozofs.set_mojette_threads_threshold(32*1024)
 
 # NB STORCLI
-rozofs.set_nb_storcli(4)
+#rozofs.set_nb_storcli(4)
 
 # Disable POSIX lock
 #rozofs.no_posix_lock()
@@ -202,24 +187,56 @@ xtraSID = 0
 xtraDevice = 0
 
 #-------------- NB devices per sid
-devices    = 2
-mapper     = 2
-redundancy = 2
+devices    = 1
+mapper     = 1
+redundancy = 1
 
-# Nb cluster per volume
-nbclusters = 2
+
 
 # default is to have one mount point per site and export
-clients_nb = 2
+clients_nb = 1
 # Define default layout
 setLayout(1)
 
-# Define volume 1 on some hosts
-vol = setVolumeHosts(4)
 
-# Create an export on this volume with layout 1
-e = addExport(vol,layout=1,eid=1)
-#e = addExport(vol,layout=1,eid=2)
+config_choice = "hybrid"
+
+#_________________________________________________
+# Single 
+#
+if config_choice == "single":
+
+  vol = setVolumeHosts(nbHosts = 4, nbclusters = 5)
+  e = addExport(vol,layout=1,eid=1)
+
+#_________________________________________________
+# multiple 
+#
+if config_choice == "multiple":
+
+  rozofs.set_multiple(1,1)
+
+  vol = setVolumeHosts(nbHosts = 4, nbclusters = 5)
+
+  multiple = addExport(vol,layout=1,eid=1)
+  
+#_________________________________________________
+# Hybrid 
+# 
+if config_choice == "hybrid":
+
+  rozofs.set_multiple(1,1)
+
+  vfast = setVolumeHosts(nbHosts = 4, nbclusters = 3)
+  vol   = setVolumeHosts(nbHosts = 4, nbclusters = 4)
+
+  hybrid = addExport(vol,layout=1,eid=1)
+  hybrid.set_vid_fast(vfast)
+  
+  multiple = addExport(vol,layout=1,eid=2)
+
+
+
 # Set thin provisionning
 #e.set_thin()
 
@@ -227,17 +244,6 @@ e = addExport(vol,layout=1,eid=1)
 #e = addExport(vol,layout=1,eid=17)
 
 #addPrivate(vol,layout=1)
-
-# Add an other export on this volume with layout 1
-#addExport(vol,1)
-
-
-# An other volume on the same hosts
-#vol = setVolumeHosts(8)
-# Create an export on this volume with layout 1
-#addExport(vol,1)
-# Add an other export on this volume with layout 1
-#addExport(vol,1)
 
 
 # Set host 1 faulty

@@ -1016,8 +1016,7 @@ class exportd_class:
     print ");"
 
   def display(self): 
-    console("EXPORTD:")
-    console("  . %-12s : %s"%("Hosts",self.export_host))    
+    console("EXPORTD : %s"%(self.export_host))    
 
 
   
@@ -1378,31 +1377,7 @@ class rozofs_class:
         print line[:-1]
     
   def display(self):
-    exportd.display()
-    console("STORCLI:") 
-    console("  . %-12s : %s "%("Nb",self.nb_storcli))
-    console("  * Mojette threads")
-    console("    . %-10s : %s"%("Read",self.read_mojette_threads))
-    console("    . %-10s : %s"%("Write",self.write_mojette_threads))
-    if self.mojette_threads_threshold == None:
-      console("    . %-10s : %s"%("Threshold","default"))    
-    else:  
-      console("    . %-10s : %s bytes"%("Threshold",self.mojette_threads_threshold))
-    console("STORAGE:")
-    console("  . %-12s : %s"%("CRC32",self.crc32))
-    console("  . %-12s : %s"%("Self healing mode",self.device_selfhealing_mode))
-    console("  . %-12s : %s minutes"%("Self healing delay",self.device_selfhealing_delay))
-    console("  . %-12s : %s ports"%("Listen",self.nb_listen))
-    console("  . %-12s : %s "%("Threads",self.threads))
-    if self.device_automount == True:
-      console("  . %-12s : %s "%("Automount","YES"))
-    else:  
-      console("  . %-12s : %s "%("Automount","no"))  
-    if self.disk_size_mb == None:
-      console("  . %-12s : %s "%("Device size","no limit"))
-    else:
-      console("  . %-12s : %s MB (%s)"%("Device size",self.disk_size_mb,self.fstype))
-        
+    exportd.display()        
     for v in volumes:
       v.display()  
       break  
@@ -1430,18 +1405,19 @@ class rozofs_class:
     exportd.start()
     for m in mount_points: m.start() 
 
-  def configure(self):
+  def create_devices(self):
     # Case of a loop device for metadata
     if rozofs.metadata_size != None:
       path="%s/devices/exportd"%(rozofs.get_simu_path())
       mount="%s/export"%(rozofs.get_config_path())
       rozofs.create_export_loopback_device(path,mount,rozofs.metadata_size)  
-    self.create_path()
-    self.create_config()   
-       
+         
   def start(self):  
     self.stop()
-    self.configure()    
+    os.system("rm -rf /var/run/exportd")
+    self.create_devices()
+    self.create_path()
+    self.create_config()    
     self.resume()
     
   def pause(self):
@@ -1843,7 +1819,8 @@ def test_parse(command, argv):
   # configure 
   elif command == "configure"          : 
     if len(argv) < 3:  
-      rozofs.configure() 
+      rozofs.create_path() 
+      rozofs.create_config() 
     else:
       if argv[2] == "edit" : 
         os.system("nedit cnf.py &")
@@ -1926,17 +1903,15 @@ def test_parse(command, argv):
   elif command == "mount"             :
        if len(argv) <= 3: syntax("mount requires instance + action","mount")
        if argv[2] == "all":
-	 first=0
-	 last=len(mount_points)
+         instance = "all"
        else:
 	 try: instance = int(argv[2])  
 	 except: syntax("mount requires an integer instance","mount")
-	 if (len(mount_points)) <= int(instance):syntax("No such mount instance %s"%(argv[2]),"mount")
-	 first=instance
-	 last=instance+1
-       for idx in range(first,last):
-	 obj = mount_points[idx]       
-	 if argv[3] == "stop"        : obj.stop()
+       for obj in mount_points:
+         if instance != "all":
+           if int(obj.instance) != int(instance): continue
+            
+	 if argv[3] == "stop"          : obj.stop()
 	 elif argv[3] == "start"       : obj.start()     
 	 elif argv[3] == "reset"       : obj.reset()          
 	 elif argv[3] == "pid"         : obj.process('-ap') 
