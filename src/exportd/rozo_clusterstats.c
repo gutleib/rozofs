@@ -97,13 +97,44 @@ char *rozo_display_one_sid(rz_sids_stats_t *sid_p,int i,char *pbuf)
 }
 /*
 **_______________________________________________________________________
+** Read configuration to find out which volule is hosting a given cluster
+**
+** @param cid    The cluster id ti search for
+**
+** @retval the vid or -1 in case of error
+**_______________________________________________________________________
+*/
+vid_t rozo_get_vid_from_cid(int cid) {
+  list_t            * v;
+  volume_config_t   * volume_p;
+  list_t            * c;
+  cluster_config_t  * cluster_p;
+
+  /*
+  ** Find out the voulme hosting this cluster
+  */
+  list_for_each_forward(v, &exportd_config.volumes) {
+
+    volume_p = list_entry(v, volume_config_t, list);    
+    
+    list_for_each_forward(c, &volume_p->clusters) {
+
+      cluster_p = list_entry(c, cluster_config_t, list);    
+      if (cluster_p->cid == cid) return volume_p->vid;
+    }
+  }    
+  return -1;
+}  
+/*
+**_______________________________________________________________________
 */
 void rozo_display_one_cluster(rz_cids_stats_t *cid_p,int i)
 {
    char buffer[1024];
    int sid;
    rz_sids_stats_t *sid_p;
-   printf("Cluster %d:\n",i);
+   
+   printf("Volume %d / Cluster %d:\n",rozo_get_vid_from_cid(i),i);
    printf(" sid |   bins files  |   total size  |    0-128K  |   128K-1M  |    1-10M   |   10-100M  |   100-1000M|     1-10G  |    10-100G |   100-1000G|      > 1TB |\n");
    printf(" ----+---------------+---------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+\n");
    for (sid=0; sid < SID_MAX; sid++)
@@ -486,6 +517,7 @@ int main(int argc, char *argv[]) {
     layout = econfig->layout;  
     rozofs_get_rozofs_invers_forward_safe(econfig->layout, &rozofs_inv, &rozofs_fwd, &rozofs_safe);
     blocksize = ROZOFS_BSIZE_BYTES(econfig->bsize)/rozofs_inv;
+    break;
   }
   if (layout == -1) {  
     usage("No such eid %d configured",econfig->layout);
