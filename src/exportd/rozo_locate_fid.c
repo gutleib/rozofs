@@ -404,9 +404,9 @@ try_vid_fast:
                cconfig = list_entry(p, cluster_config_t, list);
                if (cconfig->cid == cid) {
                  printf ("\n    { \"fid\" : \"%s\",\n", fidString);
-                 printf ("      \"eid\" : \"%d\",\n", eid);
-                 printf ("      \"vid\" : \"%d\",\n", vid);
-                 printf ("      \"cid\" : \"%d\",\n", cid);
+                 printf ("      \"eid\" : %d,\n", eid);
+                 printf ("      \"vid\" : %d,\n", vid);
+                 printf ("      \"cid\" : %d,\n", cid);
                  printf ("      \"files\" : [");
                  slave_sectors = 0;
                  locate_cluster(cconfig, fid);    
