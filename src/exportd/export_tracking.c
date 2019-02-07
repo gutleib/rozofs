@@ -2056,7 +2056,164 @@ out:
     STOP_PROFILING_EID(export_stat,e->eid);
     return status;
 }
+/*
+**__________________________________________________________________
+**
+** Retrieve the master inode from an input inode that may a slave 
+** inode and fill the attributes in attrs according to the input inode.
+**
+**   @param e               the eid context
+**   @param fid             the fid given by the rozofsmount
+**   @param lv2             input lv2 entry retrieved from fid 
+**   @param attrs           attributes to filled on return.
+** optional
+**   @param slave_ino_len   returned size of slave inodes
+**   @param slave_inode_p   returned back slave information
+**
+** @retval 0 when inode is valid. -1 when inode is invalid
+**__________________________________________________________________
+**/
+static int export_recopy_extended_attributes_multifiles(export_t                * e, 
+                                                        fid_t                     fid, 
+                                                        lv2_entry_t             * lv2, 
+                                                        struct inode_internal_t * attrs, 
+                                                        uint32_t                * slave_ino_len,
+                                                        rozofs_slave_inode_t    * slave_inode_p) {
+  lv2_entry_t       * master = NULL;  
+  rozofs_iov_multi_t  vector;
+  rozofs_inode_t    * inode_p;
+  int                 length; 
 
+  /*
+  ** Reset slave inode length 
+  */   
+  if (slave_ino_len != NULL) {  
+    *slave_ino_len = 0;   
+  }
+  
+  /*
+  ** Case of the simple file or not regular file (directory, symlink,...)
+  ** Just recopy attributes from lv2 entry
+  */
+  if ((!S_ISREG(lv2->attributes.s.attrs.mode)) || (lv2->attributes.s.multi_desc.byte == 0)) {
+    export_recopy_extended_attributes(e,lv2, attrs);  
+    memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
+    return 0;
+  }  
+  
+  /*
+  ** Multifile case
+  */
+  inode_p = (rozofs_inode_t  *) fid;
+  
+  /*
+  ** The master inode
+  */
+  if (lv2->attributes.s.multi_desc.common.master != 0) {
+     
+    /*
+    ** Not a mover FID. This FID represents the whole file.
+    ** let's return every subfile information along with master inode attributes
+    */ 
+    if ((inode_p->s.key != ROZOFS_REG_S_MOVER) && (inode_p->s.key != ROZOFS_REG_D_MOVER)) {
+      /*
+      ** Recopy master inode attributes
+      */
+      export_recopy_extended_attributes(e,lv2, attrs); 
+      /*
+      ** Recopy the slave inodes information if any
+      */	
+      if (slave_ino_len != NULL) {   
+        length = rozofs_export_slave_inode_copy(slave_inode_p,lv2);
+        if (length < 0) {
+	  severe("slave inode pointer has been released");
+	  return -1;
+        }
+        *slave_ino_len = length;	
+      }  
+      memcpy(attrs->attrs.fid,fid,sizeof(fid_t));	 
+      return 0;
+    }
+          
+    /*
+    ** Mover FID inode is valid in hybrid mode for the rebalancer 
+    ** to move the 1rst chunk on fast volume.
+    */
+    if (lv2->attributes.s.hybrid_desc.s.no_hybrid == 1){ 
+      errno = ENOENT; 
+      return -1;
+    } 
+    
+    master = lv2;
+  } 
+  
+  /*
+  ** The slaves inodes
+  */
+  else {
+    /*
+    ** Only mover FID can be used by rebalancer to mover independantly each chunk.
+    */
+    if ((inode_p->s.key != ROZOFS_REG_S_MOVER) && (inode_p->s.key != ROZOFS_REG_D_MOVER)) {
+      errno = ENOENT; 
+      return -1;
+    } 
+    /*
+    ** Retrieve master entry
+    */
+    fid_t               master_fid;
+    inode_p = (rozofs_inode_t  *) &master_fid;
+    memcpy(master_fid,lv2->attributes.s.attrs.fid, sizeof(fid_t));
+    inode_p->s.idx -= (lv2->attributes.s.multi_desc.slave.file_idx+1);
+    master = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, master_fid);
+    if (master == NULL) {    
+      errno = ENOENT; 
+      return -1;
+    } 
+  }  
+  
+  
+  /*
+  ** Only mover inode after this line
+  **
+  ** Master is the master inode,
+  ** while lv2 is the input inode that may be the same.
+  */
+  
+  
+  /*
+  ** Recopy the master information
+  */
+  export_recopy_extended_attributes(e,master, attrs);           
+  
+  /*
+  ** Get the distribution from the lv2 entry
+  */
+  attrs->attrs.cid      = lv2->attributes.s.attrs.cid;
+  memcpy(attrs->attrs.sids, lv2->attributes.s.attrs.sids,sizeof(attrs->attrs.sids));
+  attrs->attrs.children = lv2->attributes.s.attrs.children;
+  
+  /*
+  ** Compute the size of the different chunks
+  */    
+  rozofs_get_multiple_file_sizes(&master->attributes,&vector);      
+  if (lv2->attributes.s.multi_desc.common.master != 0) {
+    attrs->attrs.size = vector.vectors[0].len;
+  }
+  else {
+    attrs->attrs.size = vector.vectors[lv2->attributes.s.multi_desc.slave.file_idx+1].len;
+  }   
+  
+  /*
+  ** Let's say to rozofsmount that this inode is not a multifile.
+  ** so rozofsmount will read/write this chunk independanty of the other chunks
+  ** of the file. 
+  */
+  attrs->multi_desc.byte = 0; 
+  
+  memcpy(attrs->attrs.fid,fid,sizeof(fid_t));  
+  return 0;
+}  
 /*
 **__________________________________________________________________
 */
@@ -2107,7 +2264,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     {
        if (strcmp(name,".")==0)
        {       
-          export_recopy_extended_attributes(e,plv2, attrs);
+          export_recopy_extended_attributes_multifiles(e,pfid,lv2, attrs, NULL /* No slave inode */, NULL);
 	  memset(pattrs->attrs.fid,0, sizeof(fid_t));     
        }
        else
@@ -2118,7 +2275,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
 	  if (!(pplv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, plv2->attributes.s.pfid))) {
               goto out;
 	  }
-          export_recopy_extended_attributes(e,pplv2, attrs);          
+          export_recopy_extended_attributes_multifiles(e,plv2->attributes.s.pfid,pplv2, attrs, NULL /* No slave inode */, NULL);
 	  memset(pattrs->attrs.fid,0, sizeof(fid_t));     	         
        }
        status = 0;
@@ -2127,7 +2284,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     /*
     ** copy the parent attributes
     */
-    export_recopy_extended_attributes(e,plv2, pattrs);
+    export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL /* No slave inode */, NULL);
     int parent_state = 0;
     /*
     ** The parent fid might not have the delete bit asserted even if it has been deleted
@@ -2187,25 +2344,10 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
 	  errno = ENOENT;
 	  goto out;
 	}
-         
-        export_recopy_extended_attributes(e,lv2, attrs);
-	/*
-	** copy the slave inodes if any
-	*/
-	{
-	   int length;
-	   length = rozofs_export_slave_inode_copy(slave_inode_p,lv2);
-	   if (length < 0)
-	   {
-	      severe("slave inode pointer has been released");
-	      goto out;
-	   }
-	   *slave_ino_len = length;		
+        if (export_recopy_extended_attributes_multifiles(e, fid_direct, lv2, attrs, slave_ino_len, slave_inode_p)<0)
+        {
+	  goto out;
 	}
-	/*
-	** copy the fid provided in the input argument
-	*/
-	memcpy(attrs->attrs.fid,fid_direct,sizeof(fid_t));
         status = 0;  
         goto out;      
     }
@@ -2239,7 +2381,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
 	 /*
 	 ** assert the del pending bit in the returned attributes of the parent and return the parent attributes
 	 */
-         export_recopy_extended_attributes(e,plv2, attrs);
+         export_recopy_extended_attributes_multifiles(e, pfid, plv2, attrs, NULL /* No slave inode */, NULL);
 	 exp_metadata_inode_del_assert(attrs->attrs.fid);
 	 rozofs_inode_set_trash(attrs->attrs.fid);
 	 status = 0;
@@ -2287,20 +2429,8 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     ** take care of the case of the mover
     */
     rozofs_mover_check_for_validation(e,lv2,child_fid);
-    export_recopy_extended_attributes(e,lv2, attrs);
-    /*
-    ** copy the slave inodes if any
-    */
-    {
-       int length;
-       length = rozofs_export_slave_inode_copy(slave_inode_p,lv2);
-       if (length < 0)
-       {
-	  severe("slave inode pointer has been released");
-	  goto out;
-       }
-       *slave_ino_len = length;		
-    }
+    export_recopy_extended_attributes_multifiles(e, child_fid, lv2, attrs, slave_ino_len, slave_inode_p);
+
     /*
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
@@ -2453,7 +2583,7 @@ void export_get_parent_attributes(export_t *e, fid_t pfid, struct inode_internal
      memset(pattrs->attrs.fid, 0, sizeof (fid_t));
      return;
    }
-   export_recopy_extended_attributes(e,plv2, pattrs);
+   export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL /* No slave inode */, NULL);
 
 #ifdef ROZOFS_DIR_STATS
    /*
@@ -2505,21 +2635,10 @@ int export_getattr(export_t *e, fid_t fid, struct inode_internal_t *attrs,struct
     ** Recopy the nb of blocks in the children field 
     ** which is where the rozofsmount expects it to be in case of thin provisioning
     */
-    export_recopy_extended_attributes(e,lv2,attrs);   
-    memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
-    /*
-    ** check the case of the slave inodes (multiple file)
-    */
+    if (export_recopy_extended_attributes_multifiles(e,fid,lv2, attrs, slave_ino_len, slave_inode_p)<0)
     {
-      int length;
-      length = rozofs_export_slave_inode_copy(slave_inode_p,lv2);
-      if (length < 0)
-      {
-	 severe("slave inode pointer has been released");
-	 goto out;
-      }
-      *slave_ino_len = length;        
-    }
+       goto out;
+    }    
     /*
     ** check if the file has the delete pending bit asserted: if it is the
     ** case the file MUST be in READ only mode
@@ -2827,12 +2946,12 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, struct
         goto out;
 
     // Return attributes
-    export_recopy_extended_attributes(e,target,attrs);
+    export_recopy_extended_attributes_multifiles(e, inode, target, attrs, NULL, NULL);
     
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(e,plv2,pattrs);
+    export_recopy_extended_attributes_multifiles(e, newparent, plv2, pattrs, NULL, NULL);
     status = 0;
 
 out:
@@ -3625,7 +3744,6 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     int hybrid = 0;
     int ret;
     ext_mattr_t *attr_slave_p = NULL;
-    int length;
 
    
     START_PROFILING(export_mknod);
@@ -3702,8 +3820,11 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
 		/*
 		** Let's respond the file has been created by this request
 		*/
-                export_recopy_extended_attributes(e,lv2_child,attrs);
-                export_recopy_extended_attributes(e,plv2,pattrs);
+                if (export_recopy_extended_attributes_multifiles(e,node_fid,lv2_child, attrs, slave_len, slave_buf_p)<0)
+                {
+                   goto out;
+                }  
+                export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);
 		status = 0;
 		goto out;	   
 	    }
@@ -3973,16 +4094,8 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     /*
     ** return the parent attributes and the child attributes and the slave inodes if any
     */
-    export_recopy_extended_attributes(e,plv2,pattrs);
-    export_recopy_extended_attributes(e,(lv2_entry_t*)&ext_attrs,attrs);
-    length = rozofs_export_slave_inode_copy(slave_buf_p,lv2_child);
-    if (length < 0)
-    {
-       severe("slave inode pointer has been released");
-       goto error;
-    }
-    *slave_len = length;
-    
+    export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);    
+    export_recopy_extended_attributes_multifiles(e, lv2_child->attributes.s.attrs.fid, lv2_child, attrs, slave_len, slave_buf_p);
     goto out;
 
 error:
@@ -4092,8 +4205,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       /*
       ** get the attributes of the directory and parent directory
       */
-      export_recopy_extended_attributes(e,plv2,attrs);
-      export_recopy_extended_attributes(e,plv2,pattrs);
+      export_recopy_extended_attributes_multifiles(e, pfid, plv2, attrs, NULL, NULL);
+      export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);
       /*
       ** assert the delete pending bit on the pseudo trash directory and set the key to ROZOFS_TRASH
       */
@@ -4140,8 +4253,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
 	     /*
 	     ** get the attributes of the directory and parent directory
 	     */
-             export_recopy_extended_attributes(e,lv2,attrs);
-             export_recopy_extended_attributes(e,plv2,pattrs);
+             export_recopy_extended_attributes_multifiles(e, node_fid, lv2, attrs, NULL, NULL);
+             export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);
 	     status = 0;
 	     goto out;	   
   	  }
@@ -4381,8 +4494,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     /*
     ** return the parent and child attributes
     */
-    export_recopy_extended_attributes(e,(lv2_entry_t *)&ext_attrs,attrs);
-    export_recopy_extended_attributes(e,plv2,pattrs);
+    export_recopy_extended_attributes_multifiles(e, ext_attrs.s.attrs.fid, (lv2_entry_t *)&ext_attrs, attrs, NULL, NULL);
+    export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);
     goto out;
 
 error:
@@ -4718,7 +4831,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,str
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(e,plv2,pattrs);
+    export_recopy_extended_attributes_multifiles(e, parent, plv2, pattrs, NULL, NULL);
     status = 0;
 
 out:
@@ -5564,7 +5677,7 @@ duplicate_deleted_file:
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(e,plv2,pattrs);
+    export_recopy_extended_attributes_multifiles(e, parent, plv2, pattrs, NULL, NULL);
     status = 0;
     /*
     ** CHECK THE CASE OF THE RENAME
@@ -6368,7 +6481,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,struct inode_int
     */
     if (strcmp(name,ROZOFS_DIR_TRASH)==0)
     {
-      export_recopy_extended_attributes(e,plv2,pattrs);
+      export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);
 // #warning clear the trash flag on rmdir rozofs-trash
 //      if (plv2->attributes.s.attrs.sids[1]!= 0) {
 //         plv2->attributes.s.attrs.sids[1] = 2;
@@ -6558,7 +6671,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,struct inode_int
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(e,plv2,pattrs);
+    export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);
     status = 0;
     /*
     ** Check the case of the rename
@@ -6854,8 +6967,8 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     /*
     ** return the parent and child attributes
     */
-    export_recopy_extended_attributes(e,(lv2_entry_t*)&ext_attrs,attrs);
-    export_recopy_extended_attributes(e,plv2,pattrs);    
+    export_recopy_extended_attributes_multifiles(e, ext_attrs.s.attrs.fid, lv2, attrs, NULL, NULL);
+    export_recopy_extended_attributes_multifiles(e, pfid, plv2, pattrs, NULL, NULL);
     goto out;
 
 error:
@@ -7105,7 +7218,7 @@ int export_rename_trash(export_t *e, fid_t pfid, char *name, fid_t npfid,
     /*
     ** provide the attributes of the parent directory and assert the deleted by on the fid;
     */
-    export_recopy_extended_attributes(e,lv2_old_parent,attrs);    
+    export_recopy_extended_attributes_multifiles(e, pfid, lv2_old_parent, attrs, NULL, NULL);
     exp_metadata_inode_del_assert(attrs->attrs.fid);
     rozofs_inode_set_trash(attrs->attrs.fid);
     
@@ -7535,8 +7648,8 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     // Write attributes of renamed file
     if (export_lv2_write_attributes(e->trk_tb_p,lv2_to_rename, 1/* sync */) != 0)
         goto out;
-
-    export_recopy_extended_attributes(e,lv2_to_rename,attrs);    
+        
+    export_recopy_extended_attributes_multifiles(e, fid_to_rename, lv2_to_rename, attrs, NULL, NULL);
     status = 0;
 
 out:
@@ -7696,8 +7809,10 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	  ** write block should be ignored
 	  */
 	  length = len;
-          export_recopy_extended_attributes(e,lv2,attrs);    
-          memcpy(attrs->attrs.fid,fid,sizeof(fid_t));
+          if (export_recopy_extended_attributes_multifiles(e,fid,lv2, attrs, NULL, NULL)<0)
+          {
+	    goto out;
+	  }             
 	  goto out;	  
        }
     }
@@ -7780,7 +7895,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     /*
     ** return the parent attributes
     */
-    export_recopy_extended_attributes(e,lv2,attrs);       
+    export_recopy_extended_attributes_multifiles(e, fid, lv2, attrs, NULL /* No slave inode */, NULL);
     length = len;
     if (e->volume->georep) 
     {
@@ -8010,6 +8125,12 @@ out:
   *p++ = ' ';\
 }
 
+#define DISPLAY_ATTR_FID(name,val) {\
+  DISPLAY_ATTR_TITLE(name); \
+  p += rozofs_fid_append(p,val);\
+  p += rozofs_eol(p);\
+}
+
 #define DISPLAY_ATTR_ULONG(name,val) {\
   DISPLAY_ATTR_TITLE(name); \
   p += rozofs_u64_append(p,val); \
@@ -8089,7 +8210,6 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   int       idx;
   char      bufall[128];
   uint8_t   rozofs_safe = rozofs_get_rozofs_safe(e->layout);
-  rozofs_inode_t inode; 
   
   DISPLAY_ATTR_UINT("EID", e->eid);
   DISPLAY_ATTR_UINT("VID", e->volume->vid);
@@ -8099,32 +8219,9 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   {
     DISPLAY_ATTR_TXT("NAME",bufall);
   }
-  DISPLAY_ATTR_TITLE( "PARENT"); 
-  rozofs_uuid_unparse(lv2->attributes.s.pfid,p);
-  p += 36;
-  *p++ = '\n';    
-  DISPLAY_ATTR_TITLE( "FID"); 
-  rozofs_uuid_unparse(lv2->attributes.s.attrs.fid,p);
-  p += 36;
-  *p++ = '\n';
-  if (S_ISREG(lv2->attributes.s.attrs.mode)) {
+  DISPLAY_ATTR_FID( "PARENT",lv2->attributes.s.pfid);
+  DISPLAY_ATTR_FID( "FID",lv2->attributes.s.attrs.fid);
 
-     fid_t fidtmp;
-     rozofs_inode_t *fake_inode = (rozofs_inode_t*)fidtmp;
-     memcpy(fidtmp,lv2->attributes.s.attrs.fid,sizeof(fid_t));
-     fake_inode->s.key = ROZOFS_REG_S_MOVER;
-     fake_inode->s.del = 0;
-     DISPLAY_ATTR_TITLE( "FID_S"); 
-     rozofs_uuid_unparse(fidtmp,p);
-     p += 36;
-     *p++ = '\n';     
-     fake_inode->s.key = ROZOFS_REG_D_MOVER;
-     fake_inode->s.del = 0;
-     DISPLAY_ATTR_TITLE( "FID_M"); 
-     rozofs_uuid_unparse(fidtmp,p);
-     p += 36;
-     *p++ = '\n';                 
-  }
   rozofs_inode_t * fake_inode_p =  (rozofs_inode_t *) lv2->attributes.s.attrs.fid;
   DISPLAY_ATTR_TITLE( "SPLIT");   
   p += rozofs_string_append(p,"vers=");
@@ -8338,29 +8435,26 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
      int retcode;
      
      rozofs_build_storage_fid_from_attr(&lv2->attributes.s.attrs,fid_storage,ROZOFS_PRIMARY_FID);
-     DISPLAY_ATTR_TITLE( "FID_SP"); 
-     rozofs_uuid_unparse(fid_storage,p);
-     p += 36;
-     *p++ = '\n';     
+     DISPLAY_ATTR_FID( "FID_SP",fid_storage);
+     rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid_storage;
+     fake_inode->s.key = ROZOFS_REG_S_MOVER;
+     fake_inode->s.del = 0;
+     DISPLAY_ATTR_FID( "FID_S",fid_storage);
+
+     fake_inode->s.key = ROZOFS_REG_D_MOVER;
+     fake_inode->s.del = 0;
+     DISPLAY_ATTR_FID( "FID_M",fid_storage);   
+          
      retcode = rozofs_build_storage_fid_from_attr(&lv2->attributes.s.attrs,fid_storage,ROZOFS_MOVER_FID);
      if (retcode == 0)
      {
-       DISPLAY_ATTR_TITLE( "FID_SM"); 
-       rozofs_uuid_unparse(fid_storage,p);
-       p += 36;
-       *p++ = '\n';             
-     }  
+       DISPLAY_ATTR_FID( "FID_SM",fid_storage);           
+     }   
   }
   DISPLAY_ATTR_TITLE("ST.SLICE");
   p += rozofs_u32_append(p,rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid)); 
   p += rozofs_eol(p);
-  
-  DISPLAY_ATTR_TITLE("ST.NAME");
-  memcpy(&inode,fake_inode_p,sizeof(rozofs_inode_t));
-  rozofs_reset_recycle_on_fid(&inode);
-  rozofs_uuid_unparse((unsigned char *)&inode,p);
-  p += 36;
-  *p++ = '\n';
+
 
   DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
   DISPLAY_ATTR_ULONG("SIZE",lv2->attributes.s.attrs.size);
@@ -8473,18 +8567,22 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 	     int retcode;
 
 	     rozofs_build_storage_fid_from_attr(&slave_p->s.attrs,fid_storage,ROZOFS_PRIMARY_FID);
-	     DISPLAY_ATTR_TITLE( "FID_SP"); 
-	     rozofs_uuid_unparse(fid_storage,p);
-	     p += 36;
-	     *p++ = '\n';     
+	     DISPLAY_ATTR_FID( "FID_SP",fid_storage);
+
+             rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid_storage;
+             fake_inode->s.key = ROZOFS_REG_S_MOVER;
+             fake_inode->s.del = 0;
+             DISPLAY_ATTR_FID( "FID_S",fid_storage);
+
+             fake_inode->s.key = ROZOFS_REG_D_MOVER;
+             fake_inode->s.del = 0;
+             DISPLAY_ATTR_FID( "FID_M",fid_storage);                      
+          
 	     retcode = rozofs_build_storage_fid_from_attr(&slave_p->s.attrs,fid_storage,ROZOFS_MOVER_FID);
 	     if (retcode == 0)
 	     {
-	       DISPLAY_ATTR_TITLE( "FID_SM"); 
-	       rozofs_uuid_unparse(fid_storage,p);
-	       p += 36;
-	       *p++ = '\n';             
-	     }  
+	       DISPLAY_ATTR_FID( "FID_SM",fid_storage);        
+	     }            
 	  }         
         }
     }
@@ -8761,6 +8859,74 @@ int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) {
   */  
   export_setxattr(e, lv2->attributes.s.attrs.fid, ROZOFS_XATTR_FLOCKP, buf_xattr, p-buf_xattr, 0, NULL);
   return p-buf_xattr;
+}
+/*
+**__________________________________________________________________________________
+**
+** The master lv2 entry has a buffer (slave_inode_p) containing the attributes of its 
+** slave inodes. It returns these information to rozofsmount. Try to find out the master 
+** lv2 entry from a slave lv2 entry and update the slave_inode_p buffer of the master
+** entry from the given slave lv2 entry.
+** This is mainly used when the distribution of the slave inode has changed on mover
+** validation or invalidation.
+**
+** @param e       export context
+** @param lv2     input slave inode lv2 entry
+**__________________________________________________________________________________
+*/
+static inline int export_update_slave_buffer_in_master_lv2(export_t *e, lv2_entry_t *lv2) {
+  fid_t               master_fid;
+  lv2_entry_t       * master = NULL;  
+  rozofs_inode_t    * inode_p = (rozofs_inode_t  *) &master_fid;
+  ext_mattr_t       * attr_p;
+
+  /*
+  ** Simple file. No slave entry !!!
+  */
+  if (lv2->attributes.s.multi_desc.byte == 0) return 0;
+
+  /*
+  ** Master file 
+  */
+  if (lv2->attributes.s.multi_desc.common.master != 0) return 0;
+  
+
+  /*
+  ** Retrieve the master lv2 entry
+  */
+  memcpy(master_fid,lv2->attributes.s.attrs.fid, sizeof(fid_t));
+  inode_p->s.idx -= (lv2->attributes.s.multi_desc.slave.file_idx+1);
+  master = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, master_fid);
+  if (master == NULL) {    
+    char   slaveString[40];
+    fid2string(lv2->attributes.s.attrs.fid,slaveString);
+    severe("export_update_slave_buffer_in_master_lv2 slave %s without master",slaveString);
+    return -1;
+  }  
+
+  /*
+  ** Point to the input slave inode part in the master buffer
+  */
+  attr_p = master->slave_inode_p;
+  if (attr_p == NULL) {
+    char   slaveString[40];
+    char   masterString[40];
+    fid2string(lv2->attributes.s.attrs.fid,slaveString);
+    fid2string(master->attributes.s.attrs.fid,masterString);
+    severe("export_update_slave_buffer_in_master_lv2 slave %s has master %s without slave_inode_p",slaveString,masterString);
+    return -1;
+  }   
+  
+  attr_p += lv2->attributes.s.multi_desc.slave.file_idx;
+  
+  /*
+  ** Update distribution fields.
+  ** i.e cid, sids list and children that contains primary and mover storage indexes.
+  */
+  attr_p->s.attrs.cid = lv2->attributes.s.attrs.cid;
+  memcpy(attr_p->s.attrs.sids, lv2->attributes.s.attrs.sids,sizeof(attr_p->s.attrs.sids));
+  attr_p->s.attrs.children = lv2->attributes.s.attrs.children;
+  return 0;
 }
 /*
 **__________________________________________________________________________________
@@ -9148,12 +9314,25 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   }
   if (sscanf(p," mover_invalidate = %llu", (long long unsigned int *)&valu64) == 1)
   {
-     return (rozofs_mover_invalid_scan(e,lv2,valu64));  
+     if (rozofs_mover_invalid_scan(e,lv2,valu64) < 0) {
+       return -1;
+     }  
+     /*
+     ** Update slave buffer of master lv2 context
+     */
+     return export_update_slave_buffer_in_master_lv2(e,lv2);    
   }
 
   if (sscanf(p," mover_validate = %llu", (long long unsigned int *)&valu64) == 1)
   {
-     return (rozofs_mover_valid_scan(e,lv2,valu64));  
+     if (rozofs_mover_valid_scan(e,lv2,valu64)<0){
+       return -1;
+     }    
+     /*
+     ** Update slave buffer of master lv2 context
+     */
+     return export_update_slave_buffer_in_master_lv2(e,lv2);    
+     
   }
 
   /*

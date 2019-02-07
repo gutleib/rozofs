@@ -226,6 +226,7 @@ def do_one_df():
     try: free    = "%s"%(int(total)-int(used))
     except: continue
     mount   = line.split()[5]
+    if "rozofs_mover" in mount: continue
     if name == "rozofs":
       dev = get_device_by_mount(mount)
       if dev == None:

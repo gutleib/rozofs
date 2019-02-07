@@ -112,7 +112,8 @@ int rebalance_trigger_score;         /**< score relative to the rozo_balancing_c
     
 econfig_t exportd_config;            /**<exportd configuration */
 int rozofs_no_site_file = 0;
-eid_t volume_export_table[EXPGW_EID_MAX_IDX];   /**< table of eids associated with a volume  */
+export_config_t * volume_export_table[EXPGW_EID_MAX_IDX];   /**< table of eids associated with a volume  */
+export_config_t * current_export = NULL;
 
 rz_cids_stats_t *cids_tab_p[ROZOFS_CLUSTERS_MAX];
 time_t mtime_cluster_table[ROZOFS_CLUSTERS_MAX];   /**< mtime value of the cluster file */
@@ -1054,23 +1055,23 @@ int rozo_bal_display_cluster_score()
 }
 /*
 **_______________________________________________________________________
-*/
-/**
-*   RozoFS specific function for visiting
-
-   @param inode_attr_p: pointer to the inode data
-   @param exportd : pointer to exporthd data structure
-   @param p: always NULL
-   
-   @retval 0 no match
-   @retval 1 match
+**
+**   RozoFS specific function for visiting
+**
+** @param exportd :    pointer to exporthd data structure
+** @param inode_p:     pointer to the master inode data
+** @param slave_p:     pointer to the slave inode data
+** @param chunk_len:   size of the slave chunk
+** 
+** @retval 0 no match
+** @retval 1 match
 */
 char bufall[1024];
 char *bufout;
-char rzofs_path_bid[]="rozofs";
-int rozofs_fwd = -1;
-uint8_t rozofs_layout=0;
-int divider;
+uint8_t rozofs_fwd ;
+uint8_t rozofs_inv;
+uint8_t rozofs_sf;
+
 int blocksize= 4096;
 int scanned_current_count = 0;
 int all_export_scanned_count = 0;
@@ -1078,61 +1079,33 @@ int score_shrink;
 
 void check_tracking_table(int,int);
 
-int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
-{
-   int ret= 0;
-   int i;
-   ext_mattr_t *inode_p = inode_attr_p;
-   rz_cids_stats_t  *cid_p;
-   rz_sids_stats_t  *sid_p;
-   
-   
-   /*
-   ** Do not process symlink
-   */
-   if (!S_ISREG(inode_p->s.attrs.mode)) {
-     return 0;
-   }   
-   
-   rozo_balancing_ctx.current_scanned_file_cpt++;   
+int rozofs_do_visit(void *exportd, ext_mattr_t *inode_p, ext_mattr_t *slave_p, uint64_t chunk_len) {
+    int i;
+    rz_cids_stats_t  *cid_p;
+    rz_sids_stats_t  *sid_p;
+    cid_t             cid;
 
-   if (rozofs_fwd < 0) 
-   {
-      /*
-      ** compute the layout on the first file
-      */
-      rozofs_fwd = 0;
-      for (i=0; i < ROZOFS_SAFE_MAX; i++,rozofs_fwd++)
-      {
-         if (inode_p->s.attrs.sids[i]==0) break;
-      }
-      switch (rozofs_fwd)
-      {
-         case 4:
-           rozofs_layout = 0;
-	   rozofs_fwd -=1;
-	   divider = 2;
-	   break;
-	 case 8:
-           rozofs_layout = 1;
-	   rozofs_fwd -=2;
-	   divider = 4;
-	   break;
-	 case 16:
-           rozofs_layout = 2;         
-	   rozofs_fwd -=4;
-	   divider = 8;
-	   break;
-	 default:
-           severe("EXIT : rozofs_fwd is %d",rozofs_fwd); 
-	   exit(-1);
-      }
-      blocksize = blocksize/divider;
+
+    /*
+    ** Do not process symlink
+    */
+    if (!S_ISREG(inode_p->s.attrs.mode)) {
+      return 0;
     }
+    
+    /*
+    ** This chunk may not be in the balanced volume in case some export
+    ** are configured with vid as well as vid_fast.
+    */   
+    cid = slave_p->s.attrs.cid;
+    if (sid2idx_table_p[cid] == NULL) return 0;
+
+    rozo_balancing_ctx.current_scanned_file_cpt++;   
+
     /*
     ** Get the cluster pointer
     */
-    if (cids_tab_p[inode_p->s.attrs.cid] == 0)
+    if (cids_tab_p[cid] == 0)
     {
       rz_cids_stats_t *temp_p;
       temp_p = malloc(sizeof(rz_cids_stats_t));
@@ -1142,34 +1115,33 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 	 exit(-1);
       }
       memset(temp_p,0,sizeof(rz_cids_stats_t));
-      cids_tab_p[inode_p->s.attrs.cid] = temp_p;
+      cids_tab_p[cid] = temp_p;
     }
-    cid_p = cids_tab_p[inode_p->s.attrs.cid];
+    cid_p = cids_tab_p[cid];
     uint64_t size;
-    uint64_t size2 = inode_p->s.attrs.size;
-    size2 = size2/divider;
+    uint64_t size2 = chunk_len;
+    size2 = size2/rozofs_inv;
     if (size2/blocksize == 0) size2 = blocksize;
-
     
     /*
     ** Compute the score of the file
     */
-    int score = rozo_bal_compute_file_score(inode_p->s.attrs.cid,inode_p->s.attrs.sids,rozofs_fwd,inode_p->s.attrs.size);
+    int score = rozo_bal_compute_file_score(cid,slave_p->s.attrs.sids,rozofs_fwd,chunk_len);
     
 
     for (i = 0; i < rozofs_fwd; i++)
     {
-       sid_p = &cid_p->sid_tab[inode_p->s.attrs.sids[i]];
+       sid_p = &cid_p->sid_tab[slave_p->s.attrs.sids[i]];
        sid_p->nb_files++;
        sid_p->byte_size+=size2;
        while(1)
        {
-	 if (inode_p->s.attrs.size/RZ_FILE_128K == 0)
+	 if (chunk_len/RZ_FILE_128K == 0)
 	 {
            sid_p->tab_size[FILE_128K_E]++;
 	   break;
 	 }
-	 size = inode_p->s.attrs.size;
+	 size = chunk_len;
 	 size = size/RZ_FILE_1M;
 	 if (size == 0)
 	 {
@@ -1219,8 +1191,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Check the file size is in range
   */
-  if ((inode_p->s.attrs.size < rozo_balancing_ctx.min_filesize_config)
-  ||  (inode_p->s.attrs.size > rozo_balancing_ctx.max_filesize_config)) {
+  if ((chunk_len < rozo_balancing_ctx.min_filesize_config)
+  ||  (chunk_len > rozo_balancing_ctx.max_filesize_config)) {
     return 0;
   }
   
@@ -1231,78 +1203,144 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   {
      return 0;
   }
-  switch (rozo_balancing_ctx.file_mode)
+  
+  uuid_unparse(slave_p->s.attrs.fid,bufall);
+  bufout = bufall;
+  
+  if (score <= (rozo_balancing_ctx.max_cid_score - score_shrink)) {
+    return 0;
+  }  
+    
+
+  scanned_current_count++;  
+  rozofs_mover_job_t * job;
+  job = malloc(sizeof(rozofs_mover_job_t));
+  memset(job,0,sizeof(rozofs_mover_job_t));
+  int retval = do_cluster_distribute_size_balancing(current_export->layout,0,job->sid,0,chunk_len,&job->cid);
+  if (retval < 0)
   {
-    case REBALANCE_MODE_REL:
-    case REBALANCE_MODE_FID:
-      uuid_unparse(inode_p->s.attrs.fid,bufall);
-      bufout = bufall;
-      break;
-    case REBALANCE_MODE_ABS:
-      bufout = rozo_get_full_path(exportd,inode_p,bufall,1023);
-      break;
+    scanned_current_count--;
+    warning("cannot allocate a distribution for the file %s\n",bufout);
+    free(job); 
+    return 0;   
+  }
+
+
+  /*
+  ** adjust the remain size to move
+  */
+  rozo_bal_adjust_sid_score(cid,slave_p->s.attrs.sids,rozofs_fwd,chunk_len);
+
+  if (rozo_balancing_ctx.verbose)
+  {
+     char   msg[256];
+     char * p=msg;
+     info("%s size:%llu bytes score %d\n",bufout,(long long unsigned int)chunk_len,score);
+     int z;
+     p += sprintf(p,"CID :%d SID:",job->cid);
+     for (z=0;z<4;z++)
+     {
+        p += sprintf(p,"%d ",job->sid[z]);
+     }
+     info("%s",msg);
   }
   
-  if (score > (rozo_balancing_ctx.max_cid_score - score_shrink))
-  {
-    scanned_current_count++;  
-    rozofs_mover_job_t * job;
-    job = malloc(sizeof(rozofs_mover_job_t));
-    memset(job,0,sizeof(rozofs_mover_job_t));
-    int retval = do_cluster_distribute_size_balancing(rozofs_layout,0,job->sid,0,inode_p->s.attrs.size,&job->cid);
-    if (retval < 0)
-    {
-      scanned_current_count--;
-      warning("cannot allocate a distribution for the file %s\n",bufout);
-      free(job);    
-    }
-    else
-    {
-      /*
-      ** adjust the remain size to move
-      */
-      rozo_bal_adjust_sid_score(inode_p->s.attrs.cid,inode_p->s.attrs.sids,rozofs_fwd,inode_p->s.attrs.size);
+  job->name = malloc(sizeof(fid_t));
+  memcpy(job->name,slave_p->s.attrs.fid,sizeof(fid_t));
+  
+  /*
+  ** update the current size to move
+  */
+  rozo_balancing_ctx.cur_move_size += chunk_len;
 
-      if (rozo_balancing_ctx.verbose)
-      {
-         char   msg[256];
-         char * p=msg;
-         info("%s size:%llu bytes score %d\n",bufout,(long long unsigned int)inode_p->s.attrs.size,score);
-	 int z;
-	 p += sprintf(p,"CID :%d SID:",job->cid);
-	 for (z=0;z<4;z++)
-	 {
-            p += sprintf(p,"%d ",job->sid[z]);
-	 }
-         info("%s",msg);
-      }
-      if (rozo_balancing_ctx.file_mode != REBALANCE_MODE_FID)
-      {
-        job->name = strdup(bufout);
-      }
-      else
-      {
-	job->name = malloc(sizeof(fid_t));
-	memcpy(job->name,inode_p->s.attrs.fid,sizeof(fid_t));
-      }
-      /*
-      ** update the current size to move
-      */
-      rozo_balancing_ctx.cur_move_size +=inode_p->s.attrs.size;
+  list_init(&job->list);
+  list_push_back(&jobs,&job->list);    
 
-      list_init(&job->list);
-      list_push_back(&jobs,&job->list);    
+  return 1;
+}
+/*
+**_______________________________________________________________________
+**
+**   RozoFS specific function for visiting
+**
+** @param inode_attr_p: pointer to the inode data
+** @param exportd : pointer to exporthd data structure
+** @param p: always NULL
+**  
+**  @retval 0 no match
+**  @retval 1 when match
+*/
+int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
+  ext_mattr_t *inode_p = inode_attr_p;
+  ext_mattr_t *slave_p;  
+  int          idx;
+  int          nb_slave;
+  rozofs_iov_multi_t vector; 
+   
+  /*
+  ** Simple file case
+  */
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** Regular file without striping nor hybrid mode
+    */
+    if (rozofs_do_visit(exportd, inode_p , inode_p, inode_p->s.attrs.size)) {
+      goto success;
     }
+    return 0;  
+  }  
+  
+  /*
+  ** Multiple file case. 
+  */
+    
+  /*
+  ** get the size of each chunk
+  */
+  rozofs_get_multiple_file_sizes(inode_p,&vector);
+
+  /*
+  ** The master inode is used only in hybrid mode
+  */
+  if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
+    if (rozofs_do_visit(exportd, inode_p, inode_p, vector.vectors[0].len)) {
+      /*
+      ** Rebalance just one chunk at a time to avoid getting the same
+      ** distribution on every chunk...
+      */
+      goto success;
+    }  
+  }  
+  
+  /*
+  ** Check every slave inode.
+  */
+  slave_p = inode_p + 1;
+  nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+  for (idx=1; idx<=nb_slave; idx++,slave_p++) {
+    if (rozofs_do_visit(exportd, inode_p, slave_p, vector.vectors[idx].len)) {
+      /*
+      ** Rebalance just one chunk at a time to avoid getting the same
+      ** distribution on every chunk...
+      */
+      goto success;
+    }  
   }
+  
+  /*
+  ** No chunk selected for rebalancing
+  */
+  return 0;
+  
 
-  if ((scanned_current_count > rozo_balancing_ctx.max_scanned) || (rozo_balancing_ctx.cur_move_size >=rozo_balancing_ctx.max_move_size_config))
+success:  
+  if ((scanned_current_count > rozo_balancing_ctx.max_scanned) 
+  ||  (rozo_balancing_ctx.cur_move_size >=rozo_balancing_ctx.max_move_size_config))
   {  
     rozo_lib_stop_scanning();
-  }
-  
-  return ret;
-}
-
+  }  
+  return 1;
+}  
 /**
 *   ALlocate a set of SID based on the available space
 
@@ -1453,26 +1491,6 @@ success:
 /*
 **_______________________________________________________________________
 */
-/** Find out the export root path from its eid reading the configuration file
-*   
-    @param  eid : export identifier
-    
-    @retval -the root path or null when no such eid
-*/
-char * get_export_root_path(uint8_t eid) {
-  list_t          * e;
-  export_config_t * econfig;
-
-  list_for_each_forward(e, &exportd_config.exports) {
-
-    econfig = list_entry(e, export_config_t, list);
-    if (econfig->eid == eid) return econfig->root;   
-  }
-  return NULL;
-}
-/*
-**_______________________________________________________________________
-*/
 /**
 *   Build the list of the eid that are associated with the volume
    
@@ -1490,34 +1508,14 @@ int build_eid_table_associated_with_volume(vid_t vid)
   list_for_each_forward(e, &exportd_config.exports) {
 
     econfig = list_entry(e, export_config_t, list);
-    if (econfig->vid == vid)
+    
+    if ((econfig->vid == vid) || (econfig->vid_fast == vid))
     {
-       volume_export_table[index] =  econfig->eid;
+       volume_export_table[index] =  econfig;
        index++;
-    }  
+    } 
   }
   return index;   
-}
-/*
-**_______________________________________________________________________
-*/
-/** Find out the export root path from its eid reading the configuration file
-*   
-    @param  vid : volume identifier
-    
-    @retval 0 found
-    @retval <0 not found
-*/
-int get_volume(vid_t vid) {
-  list_t          * e;
-  volume_config_t * econfig;
-
-  list_for_each_forward(e, &exportd_config.volumes) {
-
-    econfig = list_entry(e, volume_config_t, list);
-    if (econfig->vid == vid) return 0;   
-  }
-  return -1;
 }
 /*
 **_______________________________________________________________________
@@ -1682,20 +1680,13 @@ void rozo_bal_read_configuration_file(void) {
   } 
   
   
-  if (strcmp(rebalance_config.mode,"rel")== 0) {
-    rozo_balancing_ctx.file_mode = REBALANCE_MODE_REL;
-  }
-  else if (strcmp(rebalance_config.mode,"abs")== 0) {
-    rozo_balancing_ctx.file_mode = REBALANCE_MODE_ABS;
-  }		
-  else if (strcmp(rebalance_config.mode,"fid")== 0)
+  if (strcmp(rebalance_config.mode,"fid") != 0)
   {
-    rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
-  }	
-  else {
+
     severe("unsupported file_mode: %s\n",rebalance_config.mode);
   }
-      
+  rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
+     
   info("cfg file %s reread", rozo_balancing_ctx.rebalanceConfigFile);
 
 }
@@ -1929,27 +1920,6 @@ int main(int argc, char *argv[]) {
                 ** Up to now only FID mode is supported
                 */
                 break;
-#if 0
-	        if (strcmp(optarg,"rel")== 0)
-		{
-		  rozo_balancing_ctx.file_mode = REBALANCE_MODE_REL;
-		  break;
-		}
-	        if (strcmp(optarg,"abs")== 0)
-		{
-		  rozo_balancing_ctx.file_mode = REBALANCE_MODE_ABS;
-		  break;
-		}		
-	        if (strcmp(optarg,"fid")== 0)
-		{
-		  rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
-		  break;
-		}	
-	        severe("unsupported file_mode: %s",optarg);	  
-        	usage();
-        	exit(EXIT_FAILURE);	
-		break;
-#endif  
 
 	      case 10:
                 rozo_balancing_ctx.rebalanceConfigFile = optarg;
@@ -2103,13 +2073,7 @@ int main(int argc, char *argv[]) {
   }   
   /**
   * check if the volume is defined in the configuration file
-  */
-  ret = get_volume(rozo_balancing_ctx.volume_id);
-  if (ret < 0)
-  {
-       severe("EXIT : volume identified (%d) is not defined in the exportd configuration file (%s)",rozo_balancing_ctx.volume_id,rozo_balancing_ctx.configFileName);
-       exit(EXIT_FAILURE);  
-  }    
+  */  
   rozo_balancing_ctx.number_of_eid_in_volume = build_eid_table_associated_with_volume(rozo_balancing_ctx.volume_id); 
   if ( rozo_balancing_ctx.number_of_eid_in_volume <=0)
   {
@@ -2167,6 +2131,7 @@ int main(int argc, char *argv[]) {
       if (start == 0) sleep(rozo_balancing_ctx.rebalance_frequency);
       start = 0;
       rozo_balancing_ctx.rebalance_threshold = rozo_balancing_ctx.rebalance_threshold_config;
+      
       /*
       ** load up in memory the volume statistics
       */
@@ -2174,7 +2139,8 @@ int main(int argc, char *argv[]) {
       if (ret < 0) {
          if (errno == EAGAIN) rozo_balancing_ctx.eagain_volume++;
 	 continue;
-      }
+      }      
+      
       rozo_balancing_ctx.cur_move_size = 0;
       /*
       ** load up the cluster statistics
@@ -2273,10 +2239,11 @@ reloop:
 	 ** get the path towards the first eid
 	 */
 	 rozo_balancing_ctx.current_eid_idx = 0;
-	 root_path = get_export_root_path( volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+         current_export = volume_export_table[rozo_balancing_ctx.current_eid_idx];
+	 root_path = current_export->root;
 	 if (root_path == NULL)
 	 {
-	   severe("EXIT : eid %d does not exist", volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+	   severe("EXIT : eid %d does not exist",current_export->eid);
 	   exit(EXIT_FAILURE); 
 	 } 	    
 	 rozofs_export_p = rz_inode_lib_init(root_path);
@@ -2285,6 +2252,12 @@ reloop:
 	   severe("EXIT : RozoFS: error while reading %s",root_path);
 	   exit(EXIT_FAILURE);  
 	 }
+         if (rozofs_get_rozofs_invers_forward_safe(current_export->layout,&rozofs_inv,&rozofs_fwd,&rozofs_sf)<0)
+         {
+	   severe("EXIT : unexpected layout %d for eid %d",current_export->layout,current_export->eid);
+	   exit(EXIT_FAILURE);  
+         }           
+         blocksize = ROZOFS_BSIZE_BYTES(current_export->bsize)/rozofs_inv;
 	 /*
 	 ** start scanning from beginning 
 	 */
@@ -2306,21 +2279,10 @@ reloop:
       {
         if (rozo_balancing_ctx.verbose) info("%d file to move\n",scanned_current_count);
         all_export_scanned_count +=scanned_current_count;
-
-        if (rozo_balancing_ctx.file_mode == REBALANCE_MODE_FID)
-	{
-	  rozofs_do_move_one_export_fid_mode("localhost", 
-                        	get_export_root_path( volume_export_table[rozo_balancing_ctx.current_eid_idx]), 
-				rozo_balancing_ctx.throughput, 
-				&jobs); 
-	} 
-	else
-	{
-	  rozofs_do_move_one_export("localhost", 
-                        	get_export_root_path( volume_export_table[rozo_balancing_ctx.current_eid_idx]), 
-				rozo_balancing_ctx.throughput, 
-				&jobs); 	
-	}    
+	rozofs_do_move_one_export_fid_mode("localhost", 
+                              current_export->root, 
+			      rozo_balancing_ctx.throughput, 
+			      &jobs); 
       }
       
       if (rozo_lib_is_scanning_stopped()== 0)
@@ -2365,10 +2327,11 @@ reloop:
 	  pthread_rwlock_unlock(&cluster_stats_lock);
 
 	}
-	root_path = get_export_root_path( volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+        current_export = volume_export_table[rozo_balancing_ctx.current_eid_idx];
+	root_path = current_export->root;
 	if (root_path == NULL)
 	{
-	  severe("EXIT : eid %d does not exist", volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+	  severe("EXIT : eid %d does not exist", current_export->eid);
 	  exit(EXIT_FAILURE); 
 	} 	    
 	rozofs_export_p = rz_inode_lib_init(root_path);
@@ -2377,12 +2340,18 @@ reloop:
 	  severe("EXIT : RozoFS: error while reading %s",root_path);
 	  exit(EXIT_FAILURE);  
 	}
+        if (rozofs_get_rozofs_invers_forward_safe(current_export->layout,&rozofs_inv,&rozofs_fwd,&rozofs_sf)<0)
+        {
+	  severe("EXIT : unexpected layout %d for eid %d",current_export->layout,current_export->eid);
+	  exit(EXIT_FAILURE);  
+        }   
+        blocksize = ROZOFS_BSIZE_BYTES(current_export->bsize)/rozofs_inv;        
 	/*
 	** start scanning from beginning 
 	*/
 	rozo_lib_reset_index_context(&scan_context);	
 	if (rozo_balancing_ctx.verbose) {
-          info("scan export %d from the beginning\n",volume_export_table[rozo_balancing_ctx.current_eid_idx]);
+          info("scan export %d from the beginning\n",current_export->eid);
         }
       }
       else

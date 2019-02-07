@@ -471,8 +471,14 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
   /*
   ** Check cluster and sid exist
   */
-  if (volume_distribution_check(e->volume, rozofs_safe, new_cid, new_sids) != 0) return -1;
+  if (volume_distribution_check(e->volume, rozofs_safe, new_cid, new_sids) != 0) {
 
+    if (e->volume_fast == NULL) return -1;
+    
+    if (volume_distribution_check(e->volume_fast, rozofs_safe, new_cid, new_sids) != 0) {
+      return -1;
+    }  
+  }
   /*
   ** OK for the new distribution
   */
