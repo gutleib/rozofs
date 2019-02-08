@@ -383,7 +383,7 @@ int rbs_get_fid_attr(rpcclt_t * clt, const char *export_host, fid_t fid, ep_matt
     epgw_mattr_ret_t *ret = 0;
     epgw_mfile_arg_t arg;
     rozofs_inode_t  * inode = (rozofs_inode_t *) fid;
-
+    rozofs_inode_t *inode_p;
     DEBUG_FUNCTION;
 
     struct timeval timeo;
@@ -402,6 +402,12 @@ int rbs_get_fid_attr(rpcclt_t * clt, const char *export_host, fid_t fid, ep_matt
     // Send request
     arg.arg_gw.eid = inode->s.eid;
     memcpy(&arg.arg_gw.fid,fid, sizeof(fid_t));
+    /*
+    ** Make it a mover source FID
+    */
+    inode_p = (rozofs_inode_t*)arg.arg_gw.fid;
+    inode_p->s.key = ROZOFS_REG_S_MOVER;
+
     ret = ep_getattr_1(&arg, clt->client);
     if (ret == 0) {
         errno = EPROTO;

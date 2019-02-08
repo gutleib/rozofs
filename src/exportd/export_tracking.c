@@ -8210,7 +8210,8 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   int       idx;
   char      bufall[128];
   uint8_t   rozofs_safe = rozofs_get_rozofs_safe(e->layout);
-  
+  rozofs_mover_children_t mover;
+      
   DISPLAY_ATTR_UINT("EID", e->eid);
   DISPLAY_ATTR_UINT("VID", e->volume->vid);
   DISPLAY_ATTR_UINT("LAYOUT", e->layout);  
@@ -8402,6 +8403,10 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     p += rozofs_u32_padded_append(p,3, rozofs_zero,lv2->attributes.s.attrs.sids[idx]);
   } 
   p += rozofs_eol(p);
+  DISPLAY_ATTR_TITLE("ST.SLICE");
+  p += rozofs_u32_append(p,rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid)); 
+  p += rozofs_eol(p);
+
   /*
   ** Check the case of a file that is currently move internally
   */
@@ -8420,7 +8425,11 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     p += rozofs_eol(p);
     }
   }
-  DISPLAY_ATTR_HEX("CHILD",lv2->attributes.s.attrs.children);
+  
+  mover.u32 = lv2->attributes.s.attrs.children;
+  DISPLAY_ATTR_UINT("VID_FAST",mover.fid_st_idx.vid_fast);  
+  DISPLAY_ATTR_UINT("PRI.IDX",mover.fid_st_idx.primary_idx);  
+  DISPLAY_ATTR_UINT("MOV.IDX",mover.fid_st_idx.mover_idx);  
   if (lv2->time_move != 0)
   {
     bufall[0] = 0;
@@ -8451,9 +8460,6 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
        DISPLAY_ATTR_FID( "FID_SM",fid_storage);           
      }   
   }
-  DISPLAY_ATTR_TITLE("ST.SLICE");
-  p += rozofs_u32_append(p,rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid)); 
-  p += rozofs_eol(p);
 
 
   DISPLAY_ATTR_UINT("NLINK",lv2->attributes.s.attrs.nlink);
@@ -8559,6 +8565,10 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 	  DISPLAY_ATTR_TITLE("ST.SLICE");
 	  p += rozofs_u32_append(p,rozofs_storage_fid_slice(slave_p->s.attrs.fid)); 
 	  p += rozofs_eol(p);
+          mover.u32 = slave_p->s.attrs.children;
+          DISPLAY_ATTR_UINT("VID_FAST",mover.fid_st_idx.vid_fast);  
+          DISPLAY_ATTR_UINT("PRI.IDX",mover.fid_st_idx.primary_idx);  
+          DISPLAY_ATTR_UINT("MOV.IDX",mover.fid_st_idx.mover_idx);  
 	  /*
 	  ** display the FID used for the storage
 	  */
