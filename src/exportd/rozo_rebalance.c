@@ -121,8 +121,7 @@ time_t mtime_volume;                               /**< mtime value of the volum
 
 int rozo_balance_non_blocking_thread_started = 0;  /**< flag that indicates that the non-blocking thread is started  */
 rozo_balancing_ctx_t rozo_balancing_ctx;
-
-int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx,  sid_t *sids, uint8_t multi_site,uint64_t size,cid_t *cid);
+int rozo_rebalance_do_cluster_distribute_size_balancing(uint8_t layout,int site_idx,  sid_t *sids, uint8_t multi_site,uint64_t size,cid_t *cid);
 static pthread_t rebalance_thread=0;
 char *debug_buffer = NULL;
 
@@ -1216,7 +1215,7 @@ int rozofs_do_visit(void *exportd, ext_mattr_t *inode_p, ext_mattr_t *slave_p, u
   rozofs_mover_job_t * job;
   job = malloc(sizeof(rozofs_mover_job_t));
   memset(job,0,sizeof(rozofs_mover_job_t));
-  int retval = do_cluster_distribute_size_balancing(current_export->layout,0,job->sid,0,chunk_len,&job->cid);
+  int retval = rozo_rebalance_do_cluster_distribute_size_balancing(current_export->layout,0,job->sid,0,chunk_len,&job->cid);
   if (retval < 0)
   {
     scanned_current_count--;
@@ -1353,7 +1352,7 @@ success:
    
    @retval -1 on error
 */
-int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, sid_t *sids, uint8_t multi_site,uint64_t size,cid_t *cid) 
+int rozo_rebalance_do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, sid_t *sids, uint8_t multi_site,uint64_t size,cid_t *cid) 
 {
   int        idx;
   uint64_t   sid_taken=0;
