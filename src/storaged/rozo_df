@@ -170,12 +170,11 @@ class rozofs_device:
        color = YELLOW
      elif (int(percent) > (int(average)+int(threshold))):
        color = CYAN
+     elif (int(percent) == int(good_percent)):
+       color = BOLD  
      else:
        color = NORMAL          
-     if int(percent) < int(10):
-       pc = "%3.1f%%"%(percent)
-     else:
-       pc = "%3d%%"%(percent) 
+     pc = "%5.1f%%"%(percent)
              
      LINE += color + pc + NORMAL + " %-17s"%(display_free) 
 
@@ -197,7 +196,7 @@ class rozofs_device:
        color = NORMAL
      else:
        color = CYAN 
-     LINE += "%3s%% "%(percent) + color + " %-17s"%(display_free) + NORMAL 
+     LINE += "%5.1f%% "%(percent) + color + " %-17s"%(display_free) + NORMAL 
          
    LINE += "/ %7s  %s"%(common_bytes_with_unit(self.total+"K"), self.mount)   
    print LINE
@@ -205,16 +204,13 @@ class rozofs_device:
       
 def do_one_df():
   global average_free
+  global good_percent
 
   total_free   = 0
+  total_size   = 0
   total_device = 0
   
   now = datetime.datetime.now()
-  print "____________________ %s ____________________"%(now.strftime("%Y-%m-%d %H:%M:%S"))
-  if options.freeSpace == False:
-    print "        NAME  " + CYAN + "   % " + NORMAL + " FREE             /    SIZE  MOUNT POINT" 
-  else:   
-    print "        NAME     % " + CYAN + " FREE             " + NORMAL + "/    SIZE  MOUNT POINT" 
     
   string = "df "
   parsed = shlex.split(string)
@@ -227,6 +223,7 @@ def do_one_df():
     except: continue
     mount   = line.split()[5]
     if "rozofs_mover" in mount: continue
+    if "export" in mount: continue
     if name == "rozofs":
       dev = get_device_by_mount(mount)
       if dev == None:
@@ -244,8 +241,16 @@ def do_one_df():
          dev.update(free,total)
       total_device += 1 
       total_free   += int(free)   
+      total_size   += int(total)   
       continue
   average_free = int(total_free) /  int(total_device)
+  good_percent = float(total_free)*100/float(total_size)
+  
+  print "____________________ %s ____________________%5.1f%%"%(now.strftime("%Y-%m-%d %H:%M:%S"),good_percent)
+  if options.freeSpace == False:
+    print "        NAME  " + CYAN + "   % " + NORMAL + "   FREE             /    SIZE  MOUNT POINT" 
+  else:   
+    print "        NAME     % " + CYAN + "   FREE             " + NORMAL + "/    SIZE  MOUNT POINT" 
       
 
 RED='\033[91m\033[40m'
@@ -270,6 +275,7 @@ parser.add_option("-f","--free", action="store_true",default=False, dest="freeSp
 threshold = int(4)        
 period = int(0)
 average_free = int(0)
+good_percent = int(0)
 
 if options.threshold != None:
   try: threshold = options.threshold
