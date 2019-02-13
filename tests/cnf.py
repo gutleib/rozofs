@@ -150,7 +150,7 @@ rozofs.set_self_healing(1,"spareOnly")
 #rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
-rozofs.set_ext4(60)
+rozofs.set_ext4(320)
 #rozofs.set_xfs(1000,None)
 #rozofs.set_xfs(1000,"4096")
 #rozofs.set_xfs(1000,"64K")
