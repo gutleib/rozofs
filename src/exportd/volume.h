@@ -208,4 +208,6 @@ void volume_stat(volume_t *volume, volume_stat_t *volume_stat);
  */
 int volume_distribution_check(volume_t *volume, int rozofs_safe, int cid, int *sids);
 int volume_distrib_display(char * pChar, volume_t * volume);
+int do_cluster_distribute_strict_round_robin(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint8_t multi_site) ;
+int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint64_t size, uint8_t multi_site);
 #endif

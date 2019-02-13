@@ -1136,7 +1136,7 @@ void  do_reorderSpare(list_t * l) {
 
 // what if a cluster is < rozofs safe
 #define DISTTRACE(fmt,...)
-static int do_cluster_distribute_strict_round_robin(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint8_t multi_site) {
+int do_cluster_distribute_strict_round_robin(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint8_t multi_site) {
   int        nb_selected=0; 
   int        location_collision = 0; 
   int        location_bit;
@@ -1370,11 +1370,12 @@ spare:
 ** @param cluster       Selected Cluster identifier (to be returned)
 ** @param sids          Selected sids withing the cluster (to be returned)
 ** @param multi_site    Whether multi site distribution has to be applied
+** @param size          The size in bytes of the allocated file (to update cluster size)
 **
 ** @retval 0 on success, -1 else (errno is set)
 **___________________________________________________________________________________________________
 */
-static int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint8_t multi_site) {
+int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, cluster_t *cluster, sid_t *sids, uint64_t size, uint8_t multi_site) {
   int        idx;
   uint64_t   sid_taken=0;
   uint64_t   taken_bit;  
@@ -1465,7 +1466,27 @@ success:
   ** In weighted round robin and in size equalizing decrease the estimated size 
   ** of the storages and re-order them in the cluster
   */
-  decrease_size = common_config.alloc_estimated_mb*(1024*1024);
+  
+  
+  /*
+  ** Get given file estimated size and divide it by the inverse number
+  ** to get the approximative projection size
+  */
+  decrease_size = size/rozofs_inverse;
+  /*
+  ** Nothing takes less than 4K
+  */
+  if (decrease_size < 4096) decrease_size = 4096;
+  /*
+  ** Round up to 4096
+  */
+  decrease_size = (decrease_size-1)/ 4096;
+  decrease_size = (decrease_size+1)* 4096;
+  /*
+  ** Add at least one header file
+  */
+  decrease_size += 4096;
+  
   idx = 0;
 
   while(idx < rozofs_inverse) {
@@ -1593,7 +1614,7 @@ static inline int volume_distribute_size_balancing(uint8_t layout, volume_t *vol
     cluster_t *cluster = list_entry(p, cluster_t, list);
 
 
-    if (do_cluster_distribute_size_balancing(layout, site_idx, cluster, sids, volume->multi_site) == 0) {
+    if (do_cluster_distribute_size_balancing(layout, site_idx, cluster, sids, common_config.alloc_estimated_mb*(1024*1024),volume->multi_site) == 0) {
 
       *cid = cluster->cid;
 
