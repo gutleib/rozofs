@@ -72,6 +72,8 @@ typedef struct _rozofs_mover_stat_t {
   uint64_t         error;
   uint64_t         success;
   uint64_t         bytes;
+  uint64_t         seconds;
+  uint64_t         round;
 } rozofs_mover_stat_t;
 
 static rozofs_mover_stat_t stats;
@@ -82,8 +84,130 @@ static int          dst=-1;
 static char         tmp_fname[256]={0};
 static char         mount_path[128]={0};
 static char         src_fname[128];
+static char         failed_fname[128];
 
 
+uint64_t     rozofs_mover_throughput;
+uint64_t     rozofs_mover_new_throughput;
+uint64_t     rozofs_mover_time_reference;
+uint64_t     rozofs_mover_total_credit;
+uint64_t     rozofs_mover_one_credit;
+
+/*-----------------------------------------------------------------------------
+**
+** Get time in micro seconds
+**
+** @param from  when set compute the delta in micro seconds from this time to now
+**              when zero just return current time in usec
+**----------------------------------------------------------------------------
+*/
+uint64_t rozofs_mover_get_us(uint64_t from) {
+  struct timeval     timeDay;
+  uint64_t           us;
+  
+  /*
+  ** Get current time in us
+  */
+  gettimeofday(&timeDay,(struct timezone *)0); 
+  us = ((unsigned long long)timeDay.tv_sec * 1000000 + timeDay.tv_usec);
+
+  /*
+  ** When from is given compute the delta
+  */
+  if (from) {
+    us -= from;
+  }  
+  
+  return us;	
+}
+/*-----------------------------------------------------------------------------
+**
+** Request for a throughput value change
+**
+** @param throughput        Requested throughput limitation or zero when no limit
+**
+**----------------------------------------------------------------------------
+*/
+void rozofs_mover_throughput_update_request(uint64_t throughput) {
+  /*
+  ** Store new requested throughput set through rozodiag
+  */
+  rozofs_mover_new_throughput = throughput;
+} 
+/*-----------------------------------------------------------------------------
+**
+** Reset mover time references for throughput computation
+** 
+** @param throughput   The new throughput that is to take place
+**
+**----------------------------------------------------------------------------
+*/
+void rozofs_mover_throughput_init(uint64_t throughput) {
+
+  /*
+  ** Store throughput
+  */
+  rozofs_mover_throughput = throughput;
+  
+  if (rozofs_mover_throughput > 0) {
+    /*
+    ** Get starting time 
+    */
+    rozofs_mover_time_reference = rozofs_mover_get_us(0);
+    rozofs_mover_total_credit   = 0;
+    /*
+    ** Compute the credit in us for copying the buffer of size ROZOFS_MOVER_BUFFER_SIZE_MB
+    */
+    rozofs_mover_one_credit = 1000000 * ROZOFS_MOVER_BUFFER_SIZE_MB/rozofs_mover_throughput;
+  }  
+  
+  src_fname[0]    = 0;
+  failed_fname[0] = 0;
+} 
+/*-----------------------------------------------------------------------------
+**
+** Apply the throughput limitation, and eventually hange throughput when requested
+**
+**----------------------------------------------------------------------------
+*/
+void rozofs_mover_apply_throughput(int size) {
+  int64_t sleep_time_us;
+  
+  /*
+  ** Check whether throughput limitation is set
+  */
+  if (rozofs_mover_throughput > 0) {
+   
+    /*
+    ** Add credit to the total time credit
+    */
+    if (size == ROZOFS_MOVER_BUFFER_SIZE) {
+      rozofs_mover_total_credit += rozofs_mover_one_credit;
+    }  
+    else {
+      rozofs_mover_total_credit += ((rozofs_mover_one_credit*size)/ROZOFS_MOVER_BUFFER_SIZE);
+    }  
+    
+    /*
+    ** Compute the advance in time 
+    */
+    sleep_time_us = rozofs_mover_total_credit - rozofs_mover_get_us(rozofs_mover_time_reference);
+        
+    /*
+    ** Sleep a while if we are too fast
+    */
+    if (sleep_time_us >= 10000) {
+      usleep(sleep_time_us);
+    }
+  }   
+
+  /*
+  ** Check whether throughput has changed
+  */
+  if (rozofs_mover_new_throughput != rozofs_mover_throughput) {
+    rozofs_mover_throughput_init(rozofs_mover_new_throughput);
+  }
+} 
 /*-----------------------------------------------------------------------------
 **
 ** Check whether a mount path is actually mounted by reading /proc/mounts
@@ -304,33 +428,6 @@ int rozofs_mover_create_mount_point(char * export_hosts, char * export_path, cha
 }
 /*-----------------------------------------------------------------------------
 **
-** Get time in micro seconds
-**
-** @param from  when set compute the delta in micro seconds from this time to now
-**              when zero just return current time in usec
-**----------------------------------------------------------------------------
-*/
-uint64_t rozofs_mover_get_us(uint64_t from) {
-  struct timeval     timeDay;
-  uint64_t           us;
-  
-  /*
-  ** Get current time in us
-  */
-  gettimeofday(&timeDay,(struct timezone *)0); 
-  us = ((unsigned long long)timeDay.tv_sec * 1000000 + timeDay.tv_usec);
-
-  /*
-  ** When from is given compute the delta
-  */
-  if (from) {
-    us -= from;
-  }  
-  
-  return us;	
-}
-/*-----------------------------------------------------------------------------
-**
 ** Build the destination temporary file name
 **
 ** @param result     Where to format the file name
@@ -444,10 +541,8 @@ int rozofs_do_move_one_file(rozofs_mover_job_t * job, int throughput) {
   char       * pChar;
   int          i;
   off_t        offset=0;
-  uint64_t     loop_delay_us = 0;
-  uint64_t     total_delay_us=0;
-  int64_t      sleep_time_us;
   uint64_t     begin;
+  uint64_t     total_delay_us;
   int          nbxattr;
   int          size;
   
@@ -547,18 +642,7 @@ int rozofs_do_move_one_file(rozofs_mover_job_t * job, int throughput) {
   if (dst < 0) {
     severe("open(%s) %s",tmp_fname,strerror(errno));
     goto generic_error;    
-  }   
-
-  /*
-  ** When troughput limitation is set, compute allowed time for
-  ** one read write loop
-  */
-  if (throughput>0) {
-    /*
-    ** Compute loop_delay_us in us for copying the buffer of size ROZOFS_MOVER_BUFFER_SIZE_MB
-    */
-    loop_delay_us = 1000000 * ROZOFS_MOVER_BUFFER_SIZE_MB/throughput;
-  }   
+  }    
 
   /*
   ** Copy the file
@@ -594,18 +678,7 @@ int rozofs_do_move_one_file(rozofs_mover_job_t * job, int throughput) {
     ** When throughput limitation is set adapdt the speed accordingly
     ** by sleeping for a while
     */
-    if (throughput>0) {
-      if (size == ROZOFS_MOVER_BUFFER_SIZE) {
-        total_delay_us += loop_delay_us;
-      }
-      else {
-      	total_delay_us += (loop_delay_us*size/ROZOFS_MOVER_BUFFER_SIZE);
-      }	
-      sleep_time_us   = total_delay_us - rozofs_mover_get_us(begin);
-      if (sleep_time_us >= 10000) {
-        usleep(sleep_time_us);
-      }
-    }       
+    rozofs_mover_apply_throughput(size);   
   }
 
   close(src);
@@ -747,7 +820,12 @@ int rozofs_do_move_one_export(char * exportd_hosts, char * export_path, int thro
   */
   rozofs_mover_create_mount_point(exportd_hosts , export_path, mount_path, instance);
 
-  
+  /*
+  ** Initialize throughput computation
+  */
+  rozofs_mover_throughput_init(throughput);
+  rozofs_mover_throughput_update_request(throughput);
+    
   /*
   ** Loop on the file to move
   */
@@ -804,10 +882,7 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   char       * pChar;
   int          i;
   off_t        offset=0;
-  uint64_t     loop_delay_us = 0;
-  uint64_t     total_delay_us=0;
-  int64_t      sleep_time_us;
-  uint64_t     begin;
+  int          ret;
   
   tmp_fname[0] = 0;
   char dst_fname[128];
@@ -822,10 +897,7 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   inode_p->s.key = ROZOFS_REG_D_MOVER;
   rozofs_uuid_unparse((unsigned char *)job->name,buf_fid);
   sprintf(dst_fname,"@rozofs_uuid@%s",buf_fid);
-  /*
-  ** Starting time
-  */
-  begin = rozofs_mover_get_us(0);    
+   
   /*
   ** Check file name exist
   */
@@ -870,16 +942,6 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
     severe("open(%s) %s",dst_fname,strerror(errno));
     goto abort;    
   }   
-  /*
-  ** When troughput limitation is set, compute allowed time for
-  ** one read write loop
-  */
-  if (throughput>0) {
-    /*
-    ** Compute loop_delay_us in us for copying the buffer of size ROZOFS_MOVER_BUFFER_SIZE_MB
-    */
-    loop_delay_us = 1000000 * ROZOFS_MOVER_BUFFER_SIZE_MB/throughput;
-  }   
 
   /*
   ** Copy the file
@@ -915,25 +977,17 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
     ** When throughput limitation is set adapdt the speed accordingly
     ** by sleeping for a while
     */
-    if (throughput>0) {
-      if (size == ROZOFS_MOVER_BUFFER_SIZE) {
-        total_delay_us += loop_delay_us;
-      }
-      else {
-      	total_delay_us += (loop_delay_us*size/ROZOFS_MOVER_BUFFER_SIZE);
-      }	
-      sleep_time_us   = total_delay_us - rozofs_mover_get_us(begin);
-      if (sleep_time_us >= 10000) {
-        usleep(sleep_time_us);
-      }
-    }       
+    rozofs_mover_apply_throughput(size);         
   }
 
   close(src);
   src = -1;
-  close(dst);
+  ret = close(dst);
   dst = -1;
-
+  if (ret < 0) {
+    goto abort;       
+  }
+    
   pChar = buf;
   pChar += sprintf(pChar,"mover_validate = 0");
   if (setxattr(dst_fname, "user.rozofs", buf, strlen(buf),0)<0) {
@@ -963,6 +1017,7 @@ generic_error:
   
 specific_error:  
 
+  strcpy(failed_fname,src_fname);
   /*
   ** Close opened files
   */
@@ -995,11 +1050,14 @@ int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path,
   list_t             * p;
   list_t             * n;
   rozofs_mover_job_t * job;
-
+  time_t               start;
+  
   if (list_empty(jobs)) {
      return 0;
   }
   
+  stats.round++;
+    
   /*
   ** Find out a free rozofsmount instance
   */
@@ -1011,6 +1069,13 @@ int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path,
   */
   rozofs_mover_create_mount_point(exportd_hosts , export_path, mount_path, instance);
 
+  /*
+  ** Initialize throughput computation
+  */
+  rozofs_mover_throughput_init(throughput);
+  rozofs_mover_throughput_update_request(throughput);
+
+  start = time(NULL);
   
   /*
   ** Loop on the file to move
@@ -1038,6 +1103,8 @@ int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path,
     free(job);
   }
 
+  stats.seconds += (time(NULL)-start);
+   
   /*
   ** Get out of the mountpoint before removing it
   */
@@ -1047,6 +1114,7 @@ int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path,
   ** Unmount the temporary mount path 
   */
   rozofs_mover_remove_mount_point(mount_path);
+
   /*
   ** Clear mount path name
   */
@@ -1070,16 +1138,27 @@ void rozofs_mover_man(char * pChar) {
 **----------------------------------------------------------------------------
 */
 void rozofs_mover_print_stat(char * pChar) {
+  float throughput = 0;
+  
+  if (stats.seconds!=0) {
+    throughput = stats.bytes;
+    throughput /= (1024*1024);
+    throughput /= stats.seconds;
+  }  
   pChar += sprintf(pChar,"{ \"mover\" : \n");
   pChar += sprintf(pChar,"   {\n");
+  pChar += sprintf(pChar,"     \"round\"          : %llu,\n",(unsigned long long)stats.round);
   pChar += sprintf(pChar,"     \"submited files\" : %llu,\n",(unsigned long long)stats.submited);
   pChar += sprintf(pChar,"     \"mount error\"    : %llu,\n",(unsigned long long)stats.not_mounted);
   pChar += sprintf(pChar,"     \"updated files\"  : %llu,\n",(unsigned long long)stats.updated);
   pChar += sprintf(pChar,"     \"xattr copy\"     : %llu,\n",(unsigned long long)stats.xattr);
   pChar += sprintf(pChar,"     \"other error\"    : %llu,\n",(unsigned long long)stats.error);
   pChar += sprintf(pChar,"     \"success\"        : %llu,\n",(unsigned long long)stats.success);
-  pChar += sprintf(pChar,"     \"bytes moved\"    : %llu\n",(unsigned long long)stats.bytes);
-  pChar += sprintf(pChar,"     \"last moved\"     : %s\n",src_fname);
+  pChar += sprintf(pChar,"     \"last moved\"     : \"%s\",\n",src_fname);
+  pChar += sprintf(pChar,"     \"last failed\"    : \"%s\",\n",failed_fname);
+  pChar += sprintf(pChar,"     \"bytes moved\"    : %llu,\n",(unsigned long long)stats.bytes);
+  pChar += sprintf(pChar,"     \"throughput MiB\" : %.1f,\n",throughput);
+  pChar += sprintf(pChar,"     \"duration secs\"  : %llu\n",(long long unsigned int) stats.seconds);
   pChar += sprintf(pChar,"   }\n}\n");
 }  
 /*-----------------------------------------------------------------------------
