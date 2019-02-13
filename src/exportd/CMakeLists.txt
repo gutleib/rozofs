@@ -291,6 +291,17 @@ add_executable(rozo_rebalance
 )
 target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 #________________________________________________________
+add_executable(rozo_vmove
+    rozo_vmove.c  
+    econfig.c     
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h        
+    rozofs_mover.c  
+    rozofs_mover.h
+    volume.c
+)
+target_link_libraries(rozo_vmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+#________________________________________________________
 add_executable(rozo_rcmd_server
     rozofs_rcmd_server.c 
     ../../rozofs/core/rozofs_rcmd.h     
@@ -450,6 +461,13 @@ install(TARGETS rozo_rebalance
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     COMPONENT rozo_rebalance
+)
+
+install(TARGETS rozo_vmove
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_vmove
 )
 
 install(TARGETS rozo_rcmd_server
