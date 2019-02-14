@@ -217,13 +217,13 @@ int rozofs_get_free_rozofsmount_intance(void) {
       continue;
     } 
     pChar += 9; 
-    mask |= (1ULL<<instance);  
+    if (instance < 64) mask |= (1ULL<<instance);  
   }
 
   /*
   ** Find a free instance starting at instance 10
   */
-  for (instance=6; instance<64; instance=instance+2) {
+  for (instance=62; instance>0; instance=instance-2) {
     if ((mask & (1ULL<<instance))==0) return instance;
   }
   /*
@@ -804,6 +804,7 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   char       * pChar;
   int          i;
   off_t        offset=0;
+  int          ret;
   uint64_t     loop_delay_us = 0;
   uint64_t     total_delay_us=0;
   int64_t      sleep_time_us;
@@ -931,9 +932,12 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
 
   close(src);
   src = -1;
-  close(dst);
+  ret = close(dst);
   dst = -1;
-
+  if (ret < 0) {
+    goto abort;       
+  }
+    
   pChar = buf;
   pChar += sprintf(pChar,"mover_validate = 0");
   if (setxattr(dst_fname, "user.rozofs", buf, strlen(buf),0)<0) {
