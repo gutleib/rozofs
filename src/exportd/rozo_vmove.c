@@ -202,6 +202,7 @@ int rozofs_get_subdir_nb(export_t * e, fid_t fid, uint32_t * nbsubdir, uint32_t 
   int                ret;
   uint32_t           local_subdir;
   
+
   
   /*
   ** Lookup directory entry 
@@ -212,11 +213,21 @@ int rozofs_get_subdir_nb(export_t * e, fid_t fid, uint32_t * nbsubdir, uint32_t 
     rozofs_fid_append(fidstr,fid);
     severe("rozo_vmove_read_dir_attribute(%s) %s\n",fidstr,strerror(errno));
     return -1;	   
-  }  
-  
+  } 
+    
   local_subdir = ext_mattr.s.attrs.nlink - 2;
   (*nbsubdir) = local_subdir;
   (*nbfile)   = (ext_mattr.s.attrs.children - local_subdir);   
+  
+#if 0  
+  {
+    char fidstr[40];
+    rozofs_fid_append(fidstr,fid);
+    info("%s %s subdir %d files %d",
+         (ext_mattr.s.fname.name_type==ROZOFS_FNAME_TYPE_DIRECT)?ext_mattr.s.fname.name:"?",
+         fidstr, local_subdir,(ext_mattr.s.attrs.children - local_subdir));
+  }
+#endif
   
   if (ext_mattr.s.attrs.children - local_subdir) {
     nbFid++;
@@ -244,10 +255,15 @@ int rozofs_visit_directory(void *exportd,void *inode_attr_p,void *p) {
   int                      idx;
 
   /*
+  ** Check this directory contains something
+  */     
+  if (inode_p->s.attrs.children == 0) return 0; 
+
+  /*
   ** Compare the parent FID of the directory to the FIDs in the
   ** pPrevLevel context. This is the list of directory FID of the upper level
   */
-  for (idx=0; idx<pPrevLevel->nb; idx++) {
+  for (idx=0; idx<pPrevLevel->count; idx++) {
     if (memcmp(inode_p->s.pfid,pPrevLevel->dir[idx].fid,sizeof(fid_t)) != 0) {
       continue;
     }  
@@ -257,6 +273,18 @@ int rozofs_visit_directory(void *exportd,void *inode_attr_p,void *p) {
     */
     memcpy(pNextLevel->dir[pNextLevel->count].fid,inode_p->s.attrs.fid,sizeof(fid_t));
     pNextLevel->count++;
+#if 0  
+    {
+      char fidstr[40];
+      char parentstr[40];
+      rozofs_fid_append(fidstr,inode_p->s.attrs.fid);
+      rozofs_fid_append(parentstr,pPrevLevel->dir[idx].fid);
+      info("%s %s found under %s",
+           (inode_p->s.fname.name_type==ROZOFS_FNAME_TYPE_DIRECT)?inode_p->s.fname.name:"?",
+           fidstr, parentstr);
+    }
+#endif
+
     /*
     ** Whe the number of FID that we are lokking for is reached,
     ** no need to go on scanning
@@ -351,12 +379,12 @@ int rozofs_build_directory_list(export_t * e, fid_t fid, int recursive) {
     ** how many subdirectories and files it contain
     */
     localdir = 0;
-    for (idx=0; idx<pPrevLevel->nb; idx++) {    
+    for (idx=0; idx<pPrevLevel->count; idx++) {    
       rozofs_get_subdir_nb(e ,pPrevLevel->dir[idx].fid, &pPrevLevel->dir[idx].subdirs, &pPrevLevel->dir[idx].files);
       totalfile += pPrevLevel->dir[idx].files;
       localdir  += pPrevLevel->dir[idx].subdirs;
     }
-    
+ 
     /*
     ** No more sub directories
     */
@@ -368,7 +396,7 @@ int rozofs_build_directory_list(export_t * e, fid_t fid, int recursive) {
     ** Not recursive case 
     */
     if (!recursive) break;
-    
+      
     /*
     ** Allocate the structure for the next level now that we now how much subdirectories exist
     */
