@@ -2051,6 +2051,15 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     pDisplay += rozofs_string_append(pDisplay,pChar);
   }
 
+  IF_DISPLAY(display_id) {
+    NEW_QUOTED_FIELD(fid);  
+    pDisplay += rozofs_fid_append(pDisplay,inode_p->s.attrs.fid);
+    pDisplay += rozofs_string_append(pDisplay,"\"");   
+    NEW_QUOTED_FIELD(pfid);  
+    pDisplay += rozofs_fid_append(pDisplay,inode_p->s.pfid);
+    pDisplay += rozofs_string_append(pDisplay,"\"");   
+  }   
+    
   /*
   ** User id
   */  
@@ -2197,13 +2206,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       else {
         pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
       }
-    }
-
-    IF_DISPLAY(display_id) {
-      NEW_QUOTED_FIELD(fid);  
-      pDisplay += rozofs_fid_append(pDisplay,inode_p->s.attrs.fid);
-      pDisplay += rozofs_string_append(pDisplay,"\"");   
-    }     
+    }   
        
     IF_DISPLAY(display_striping) {
       if (inode_p->s.multi_desc.byte != 0){

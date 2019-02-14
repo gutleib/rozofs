@@ -7494,6 +7494,16 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
             // Remove the dir to replace from the cache (will be closed and freed)
             if (export_attr_thread_check_context(lv2_to_replace)==0)lv2_cache_del(e->lv2_cache, fid_to_replace);
 	    lv2_to_replace = 0;
+            
+            /**
+            * release the inode allocated for storing the directory attributes
+            */
+            if (exp_attr_delete(e->trk_tb_p,fid_to_replace) < 0)
+            {
+               char fidstr[40];
+               rozofs_fid_append(fidstr,fid_to_replace);
+	       severe("error on inode %s rename : %s",fidstr,strerror(errno));
+            }
 
             // Return the fid of deleted directory
             memcpy(fid, fid_to_replace, sizeof (fid_t));
