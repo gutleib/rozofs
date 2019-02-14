@@ -80,10 +80,11 @@ int storio_insert_pending_request_list(storio_device_mapping_t *p,list_t *reques
   
   @param p: pointer the FID context that contains the requests lisk
   @param diskthread_list: pointer to the current disk thread list
+  @param do_not_clear_running: if asserted serial_is_running is not cleared when both queues are empty
 
   @retval 1: no more request to process
   @retval 0: the list is not empty
 */
-int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list);
+int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list,int do_not_clear_running);
 
 #endif

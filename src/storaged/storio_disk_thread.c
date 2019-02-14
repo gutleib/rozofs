@@ -1429,7 +1429,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
     /*
     ** Check if there are some other pending Write requests
     */
-    empty = storio_get_pending_request_list(fidCtx,diskthread_list_p);
+    empty = storio_get_pending_request_list(fidCtx,diskthread_list_p,1);
     if (empty) 
     {
       /*
@@ -1626,9 +1626,9 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
      }     
   }
   /*
-  ** need to return the status of the thread queue
+  ** always returns 0
   */
-  return empty;
+  return 0;
 } 
 #else
 static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_thread_msg_t * msg,list_t *diskthread_list_p) {
@@ -3429,7 +3429,7 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
   while(1)
   {
      
-     empty = storio_get_pending_request_list(fidCtx,&diskthread_list);
+     empty = storio_get_pending_request_list(fidCtx,&diskthread_list,0);
      if (empty) 
      {  
        break;
@@ -3498,13 +3498,7 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
          break;
 
        case STORIO_DISK_THREAD_WRITE_RDMA:
-	 /*
-	 ** need to check queue empty because when the queue becomes empty the main thread
-	 ** can post a message that will be processed by another thread
-	 ** so in that case we must exit for the serialization
-	 */
-         queue_empty = storio_disk_write_rdma(ctx_p,&msg,&diskthread_list);
-	 if (queue_empty) return;
+         storio_disk_write_rdma(ctx_p,&msg,&diskthread_list);	 
          break;
 
 	 /*
