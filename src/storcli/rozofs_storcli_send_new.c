@@ -591,7 +591,18 @@ void rozofs_storcli_read_reply_success(rozofs_storcli_ctx_t *p)
    storcli_status_t status = STORCLI_SUCCESS;
    int data_len;
    uint32_t alignment;
-   
+      
+    /*
+    ** Check the case of the read retry in progress
+    */
+    if (p->read_retry_in_prg != 0)
+    {
+       ROZOFS_STORCLI_STATS(ROZOFS_STORCLI_READ_RETRY_SUCCESS);
+    }
+    /**
+    * Clear the read_retry_enable because it has been asserted upon receiving at least inverse-1 projections
+    */
+    p->read_retry_enable = 0;  
     /*
     ** create xdr structure on top of the buffer that will be used for sending the response
     */
@@ -723,6 +734,26 @@ void rozofs_storcli_read_reply_error(rozofs_storcli_ctx_t *p,int error)
    XDR xdrs;
    int len;
    storcli_status_ret_t status;
+   /*
+   ** Check if the read_retry_enable flag is asserted
+   **
+   **   In it is the case, a read retry will take place atthe time we attempt to release the context
+   **   Here we skip the reply that will be done to the caller
+   */
+   if (p->read_retry_enable != 0)
+   {
+     /*
+     ** we might need to release the xmit buffer
+     */
+     return;     
+   }
+   /*
+   ** Check the case of the read retry in progress
+   */
+   if (p->read_retry_in_prg != 0)
+   {
+      ROZOFS_STORCLI_STATS(ROZOFS_STORCLI_READ_RETRY_FAILURE);
+   }
 
    status.status = STORCLI_FAILURE;
    status.storcli_status_ret_t_u.error = error;

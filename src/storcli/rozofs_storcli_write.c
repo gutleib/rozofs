@@ -2307,7 +2307,7 @@ int rozofs_storcli_internal_read_req(rozofs_storcli_ctx_t *working_ctx_p,rozofs_
    /*
    ** Submit the pseudo request
    */
-   rozofs_storcli_read_req_init(0,xmit_buf,rozofs_storcli_internal_read_rsp_cbk,(void*)working_ctx_p,STORCLI_DO_NOT_QUEUE);
+   rozofs_storcli_read_req_init(0,xmit_buf,rozofs_storcli_internal_read_rsp_cbk,(void*)working_ctx_p,STORCLI_DO_NOT_QUEUE,NULL);
    return 0;
 }
 

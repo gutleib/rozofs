@@ -212,7 +212,7 @@ void rozofs_storcli_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *re
     switch (hdr.proc)
     {
        case STORCLI_READ:
-        rozofs_storcli_read_req_init(socket_ctx_idx,recv_buf,rozofs_storcli_remote_rsp_cbk,0,STORCLI_DO_QUEUE);
+        rozofs_storcli_read_req_init(socket_ctx_idx,recv_buf,rozofs_storcli_remote_rsp_cbk,0,STORCLI_DO_QUEUE,NULL);
         return;
        
        case STORCLI_WRITE:

@@ -296,6 +296,12 @@ typedef struct _rozofs_storcli_ctx_t
   */
   storcli_delete_arg_t storcli_delete_arg;  /**< delete parameter of the request */
   /*
+  ** Retry section in case of read failure (internal or external): need to avoid false I/O error while
+  ** there is a race condition between a writer and a reader (same node or residing on different node)
+  */
+  int  read_retry_enable; /** assert to 1 when storcli has been able to read from storio */
+  int  read_retry_in_prg; /**< assert to 1 when the read is a read retry: in that case we cannot re-assert read_retry_enable. */
+  /*
   ** Trace buffer 
   */
   int                  traceSize;
@@ -461,6 +467,9 @@ typedef enum
   ROZOFS_STORCLI_NO_BUFFER_ERROR,
   ROZOFS_STORCLI_EMPTY_READ,    /**< number of empty blocks read  (read and clear) */
   ROZOFS_STORCLI_EMPTY_WRITE,    /**< number of empty blocks written (read and clear)  */
+  ROZOFS_STORCLI_READ_RETRY,
+  ROZOFS_STORCLI_READ_RETRY_SUCCESS,
+  ROZOFS_STORCLI_READ_RETRY_FAILURE,
   ROZOFS_STORCLI_COUNTER_MAX
 }rozofs_storcli_tx_stats_e;
 
@@ -1015,6 +1024,9 @@ void rozofs_storcli_reply_error_with_recv_buf(uint32_t  socket_ctx_idx,
 /*
 **__________________________________________________________________________
 */
+/*
+**__________________________________________________________________________
+*/
 /**
   Initial read request
     
@@ -1023,6 +1035,7 @@ void rozofs_storcli_reply_error_with_recv_buf(uint32_t  socket_ctx_idx,
   @param rozofs_storcli_remote_rsp_cbk: callback for sending out the response
   @param user_param : pointer to a user opaque parameter (non significant for a remote access)
   @param do_not_queue: when asserted, the request in not inserted in the serialization hash table
+  @param read_retry_ctx_p: NULL for normal request and not NULL when it is a retry
  
    @retval : TRUE-> xmit ready event expected
   @retval : FALSE-> xmit  ready event not expected
@@ -1031,7 +1044,8 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
                                   void *recv_buf,
                                   rozofs_storcli_resp_pf_t rozofs_storcli_remote_rsp_cbk,
                                   void *user_param,
-                                  uint32_t do_not_queue);
+                                  uint32_t do_not_queue,rozofs_storcli_ctx_t *read_retry_ctx_p);
+				  
 
 int rozofs_storcli_remote_rsp_cbk(void *buffer,uint32_t socket_ref,void *user_param);
 /*
