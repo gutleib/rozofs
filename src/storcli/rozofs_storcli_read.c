@@ -97,6 +97,17 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
 *      LOCAL FUNCTIONS
 **_________________________________________________________________________
 */
+
+
+static inline void rozofs_storcli_assert_read_retry(rozofs_storcli_ctx_t *working_ctx_p)
+{
+
+   /*
+   ** do not assert the flag if it is already a read retry
+   */
+   if (working_ctx_p->read_retry_in_prg) return;
+   working_ctx_p->read_retry_enable = 1;   
+}
 /*
 **__________________________________________________________________________
 */
@@ -109,7 +120,7 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
   
   @retval number of received projection
 */
-static inline int rozofs_storcli_rebuild_check(uint8_t layout,rozofs_storcli_projection_ctx_t *prj_cxt_p)
+static inline int rozofs_storcli_rebuild_check(uint8_t layout,rozofs_storcli_ctx_t *working_ctx_p)
 {
   /*
   ** Get the rozofs_inverse and rozofs_forward value for the layout
@@ -119,11 +130,17 @@ static inline int rozofs_storcli_rebuild_check(uint8_t layout,rozofs_storcli_pro
   int i;
   int received = 0;
   int enoent   = 0;
+
+  rozofs_storcli_projection_ctx_t *prj_cxt_p = working_ctx_p->prj_ctx;
   
   for (i = 0; i <rozofs_safe; i++,prj_cxt_p++)
   {
     if (prj_cxt_p->prj_state == ROZOFS_PRJ_READ_DONE) { 
       received++;
+      /*
+      ** check if the read retry should be asserted
+      */
+      if (received == (rozofs_inverse-1)) rozofs_storcli_assert_read_retry(working_ctx_p);
       if (received == rozofs_inverse) return received;  
     }   
     if (prj_cxt_p->prj_state == ROZOFS_PRJ_READ_ENOENT) {
@@ -209,6 +226,7 @@ void rozofs_storcli_resize_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
   @param rozofs_storcli_remote_rsp_cbk: callback for sending out the response
   @param user_param : pointer to a user opaque parameter (non significant for a remote access)
   @param do_not_queue: when asserted, the request in not inserted in the serialization hash table
+  @param read_retry_ctx_p: NULL for normal request and not NULL when it is a retry
  
    @retval : TRUE-> xmit ready event expected
   @retval : FALSE-> xmit  ready event not expected
@@ -217,7 +235,7 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
                                   void *recv_buf,
                                   rozofs_storcli_resp_pf_t rozofs_storcli_remote_rsp_cbk,
                                   void *user_param,
-                                  uint32_t do_not_queue)
+                                  uint32_t do_not_queue,rozofs_storcli_ctx_t *read_retry_ctx_p)
 {
    rozofs_rpc_call_hdr_with_sz_t    *com_hdr_p;
    rozofs_storcli_ctx_t *working_ctx_p = NULL;
@@ -231,18 +249,28 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
    XDR xdrs;
    int errcode = EINVAL;
    /*
-   ** allocate a context for the duration of the read
+   ** allocate a context for the duration of the read unless it is read retry
    */
-   working_ctx_p = rozofs_storcli_alloc_context();
-   if (working_ctx_p == NULL)
+   if (read_retry_ctx_p != NULL)
    {
      /*
-     ** that situation MUST not occur since there the same number of receive buffer and working context!!
+     ** Case of the read retry
      */
-     severe("out of working read/write saved context");
-     errcode = ENOMEM;
-     goto failure;
+     working_ctx_p = read_retry_ctx_p;
+   }
+   else
+   {
+     working_ctx_p = rozofs_storcli_alloc_context();
+     if (working_ctx_p == NULL)
+     {
+       /*
+       ** that situation MUST not occur since there the same number of receive buffer and working context!!
+       */
+       severe("out of working read/write saved context");
+       errcode = ENOMEM;
+       goto failure;
 
+     }
    }
    /*
    ** no bytes since lenngth is unknown
@@ -1433,7 +1461,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     /*
     ** OK now check if we have enough projection to rebuild the initial message
     */
-    ret = rozofs_storcli_rebuild_check(layout,working_ctx_p->prj_ctx);
+    ret = rozofs_storcli_rebuild_check(layout,working_ctx_p);
     if (ret <rozofs_inverse)
     {
       /*
@@ -1821,7 +1849,7 @@ void rozofs_storcli_read_timeout(rozofs_storcli_ctx_t *working_ctx_p)
     rozofs_safe    = rozofs_get_rozofs_safe(layout);
     rozofs_inverse = rozofs_get_rozofs_inverse(layout);
 
-    nb_received = rozofs_storcli_rebuild_check(layout,working_ctx_p->prj_ctx);
+    nb_received = rozofs_storcli_rebuild_check(layout,working_ctx_p);
     
     missing = rozofs_inverse - nb_received;
     

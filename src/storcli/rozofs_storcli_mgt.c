@@ -102,6 +102,9 @@ void rozofs_storcli_debug_show(uint32_t tcpRef, void *bufRef) {
   pChar += sprintf(pChar,"RTIMEOUT       : %10llu\n",(unsigned long long int)rozofs_storcli_stats[ROZOFS_STORCLI_TIMEOUT]);  
   pChar += sprintf(pChar,"EMPTY READ     : %10llu\n",(unsigned long long int)rozofs_storcli_stats[ROZOFS_STORCLI_EMPTY_READ]);  
   pChar += sprintf(pChar,"EMPTY WRITE    : %10llu\n",(unsigned long long int)rozofs_storcli_stats[ROZOFS_STORCLI_EMPTY_WRITE]);
+  pChar += sprintf(pChar,"READ_RETRY     : %10llu\n",(unsigned long long int)rozofs_storcli_stats[ROZOFS_STORCLI_READ_RETRY]);
+  pChar += sprintf(pChar,"READ_RETRY_OK  : %10llu\n",(unsigned long long int)rozofs_storcli_stats[ROZOFS_STORCLI_READ_RETRY_SUCCESS]);
+  pChar += sprintf(pChar,"READ_RETRY_NOK : %10llu\n",(unsigned long long int)rozofs_storcli_stats[ROZOFS_STORCLI_READ_RETRY_FAILURE]);
   rozofs_storcli_stats[ROZOFS_STORCLI_EMPTY_READ] = 0;
   rozofs_storcli_stats[ROZOFS_STORCLI_EMPTY_WRITE] = 0;  
   pChar += sprintf(pChar,"\n");
@@ -556,6 +559,61 @@ void  rozofs_storcli_ctxInit(rozofs_storcli_ctx_t *p,uint8_t creation)
   memset(p->traceBuffer,0,sizeof(p->traceBuffer));
 }
 
+
+/*
+**____________________________________________________
+*/
+/**
+   rozofs_storcli_reinit because of read retry
+
+  create the transaction context pool
+
+@param     : pointer to the Transaction context
+@retval   : none
+*/
+void  rozofs_storcli_ctx_reinit(rozofs_storcli_ctx_t *p)
+{
+
+  p->integrity  = -1;     /* the value of this field is incremented at 
+					      each MS ctx allocation */
+                          
+
+  p->data_read_p = NULL;
+  memset(p->prj_ctx,0,sizeof(rozofs_storcli_projection_ctx_t)*ROZOFS_SAFE_MAX_STORCLI);
+  /*
+  ** clear the array that contains the association between projection_id and load balancing group
+  */
+  rozofs_storcli_lbg_prj_clear(p->lbg_assoc_tb);
+  /*
+  ** working variables for read
+  */
+  p->cur_nmbs2read = 0;
+  p->cur_nmbs = 0;
+  p->nb_projections2read = 0;
+  p->redundancyStorageIdxCur = 0;
+  p->redundancyStorageIdxCur = 0;
+  p->read_seqnum    = 0;
+  p->reply_done     = 0;
+  p->write_ctx_lock = 0;
+  p->read_ctx_lock  = 0;
+  p->enoent_count   = 0;
+  memset(p->fid_key,0, sizeof (sp_uuid_t));
+
+  p->rsvd_ctx_count= 0;
+  
+  p->opcode_key = STORCLI_NULL;
+  p->shared_mem_p = NULL;
+  p->shared_mem_req_p = NULL;
+
+   /*
+   ** timer cell
+   */
+  ruc_listEltInitAssoc((ruc_obj_desc_t *)&p->timer_list,p);
+  
+  p->traceSize = 0;
+  memset(p->traceBuffer,0,sizeof(p->traceBuffer));
+}
+
 /*
 **__________________________________________________________________________
 */
@@ -593,6 +651,11 @@ rozofs_storcli_ctx_t *rozofs_storcli_alloc_context()
    rozofs_storcli_ctx_allocated++;
    p->free = FALSE;
    p->read_seqnum = 0;
+   /*
+   ** clear the retry enable flag
+   */
+   p->read_retry_enable = 0;
+   p->read_retry_in_prg = 0;
   
    
    ruc_objRemove((ruc_obj_desc_t*)p);
@@ -620,15 +683,7 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p)
   ** Remove the context from the timer list
   */
   rozofs_storcli_stop_read_guard_timer(ctx_p);
-  /*
-  ** release the buffer that was carrying the initial request
-  */
-  if (ctx_p->recv_buf != NULL) 
-  {
-    ruc_buf_freeBuffer(ctx_p->recv_buf);
-    ctx_p->recv_buf = NULL;
-  }
-  ctx_p->socketRef = -1;
+
   if (ctx_p->xmitBuf != NULL) 
   {
     ruc_buf_freeBuffer(ctx_p->xmitBuf);
@@ -704,15 +759,9 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p)
     
     }
   }
-  /*
-  ** remove it from any other list and re-insert it on the free list
-  */
-  ruc_objRemove((ruc_obj_desc_t*) ctx_p);
+  
    
-   /*
-   **  insert it in the free list
-   */
-   rozofs_storcli_ctx_allocated--;
+
    if (ctx_p->rsvd_ctx_count != 0) rozofs_storcli_rsvd_context_release(ctx_p);
    /*
    ** check the lock
@@ -727,6 +776,41 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p)
    {
     severe("bad read_ctx_lock value %d",ctx_p->read_ctx_lock);   
    }  
+   /*
+   ** Check the case of the read retry
+   */
+   if (ctx_p->read_retry_enable)
+   {
+     ctx_p->read_retry_enable = 0;
+     ctx_p->read_retry_in_prg = 1;
+     
+     ROZOFS_STORCLI_STATS(ROZOFS_STORCLI_READ_RETRY);
+     rozofs_storcli_ctx_reinit(ctx_p);
+     return rozofs_storcli_read_req_init(ctx_p->socketRef, 
+                                         ctx_p->recv_buf,
+					 ctx_p->response_cbk,
+					 ctx_p->user_param,
+					 STORCLI_DO_NOT_QUEUE,ctx_p);   
+   }
+
+   /*
+   **  insert it in the free list
+   */
+   rozofs_storcli_ctx_allocated--;
+   /*
+   ** release the buffer that was carrying the initial request
+   */
+   if (ctx_p->recv_buf != NULL) 
+   {
+     ruc_buf_freeBuffer(ctx_p->recv_buf);
+     ctx_p->recv_buf = NULL;
+   }
+   ctx_p->socketRef = -1;
+   /*
+   ** remove it from any other list and re-insert it on the free list
+   */
+   ruc_objRemove((ruc_obj_desc_t*) ctx_p);
+   
    ctx_p->free = TRUE;
    ctx_p->read_seqnum = 0;
    ruc_objInsert((ruc_obj_desc_t*)rozofs_storcli_ctx_freeListHead,
