@@ -1514,14 +1514,24 @@ void show_trc_fuse_buffer(uint32_t tcpRef, void *bufRef)
 		         (p->par.name.name[0] == 0)?strerror(p->errno_val):p->par.name.name); 
               break;		       
 	    case rozofs_trc_type_attr:
-              pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %16llx %s %d:%s %8llu\n",
-	                 (unsigned long long int)(p->ts - cur_ts),
-		         trc_fuse_display_srv(p->hdr.s.service_id),
-		         p->hdr.s.index,
-		         (unsigned long long int)p->ino,
-		         str,
-		         p->errno_val,strerror(p->errno_val),
-		         (unsigned long long int)p->par.attr.size);
+              if (p->flags == 0)
+                pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %16llx %s %d:%s %8llu\n",
+	                   (unsigned long long int)(p->ts - cur_ts),
+		           trc_fuse_display_srv(p->hdr.s.service_id),
+		           p->hdr.s.index,
+		           (unsigned long long int)p->ino,
+		           str,
+		           p->errno_val,strerror(p->errno_val),
+		           (unsigned long long int)p->par.attr.size);
+              else
+                pChar+=sprintf(pChar,"[%12llu ]<-- %-8s %4d %16llx %s/%d %d:%s %8llu\n",
+	                   (unsigned long long int)(p->ts - cur_ts),
+		           trc_fuse_display_srv(p->hdr.s.service_id),
+		           p->hdr.s.index,
+		           (unsigned long long int)p->ino,
+		           str, p->flags,
+		           p->errno_val,strerror(p->errno_val),
+		           (unsigned long long int)p->par.attr.size);                             
 	      break;	
 	  }
 

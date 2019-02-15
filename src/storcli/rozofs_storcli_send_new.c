@@ -481,61 +481,63 @@ void rozofs_storcli_resize_reply_success(rozofs_storcli_ctx_t *p, uint32_t nb_bl
     ** Encode the length of returned data
     */ 
     STORCLI_STOP_NORTH_PROF(p,read,0);
+    data_len = ROZOFS_BSIZE_BYTES(p->storcli_read_arg.bsize) * nb_blocks + last_block_size;
+    
+    if (p->shared_mem_req_p != NULL)
+     {
+        rozofs_shmem_cmd_read_t *share_rd_p = (rozofs_shmem_cmd_read_t*)p->shared_mem_req_p;
+        share_rd_p->received_len = data_len;
+
+        alignment = 0x53535353;
+        data_len   = 0;
+        XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+        XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+        XDR_PUTINT32(&xdrs, (int32_t *)&alignment);       
+        XDR_PUTINT32(&xdrs, (int32_t *)&data_len);
+        /*
+        ** insert the length in the shared memory
+        */
+        /*
+        ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
+        ** the ruc buffer to take care of the header length of the rpc message.
+        */
+        int total_len = xdr_getpos(&xdrs) ;
+        *header_len_p = htonl(0x80000000 | total_len);
+        total_len +=sizeof(uint32_t);
+
+        ruc_buf_setPayloadLen(p->xmitBuf,total_len);    
+     }
+     else
+     {
+       /*
+       ** skip the alignment
+       */
+       alignment = 0;
+       XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+       XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+       XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+       XDR_PUTINT32(&xdrs, (int32_t *)&data_len);
+       /*
+       ** round up data_len to 4 bytes alignment
+       */
+       if ((data_len%4)!= 0) data_len = (data_len &(~0x3))+4;
+
+       /*
+       ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
+       ** the ruc buffer to take care of the header length of the rpc message.
+       */
+       int total_len = xdr_getpos(&xdrs)+data_len ;
+       *header_len_p = htonl(0x80000000 | total_len);
+       total_len +=sizeof(uint32_t);
+
+       ruc_buf_setPayloadLen(p->xmitBuf,total_len);
+     }
 
     //int position;
     //position = xdr_getpos(&xdrs);
     /*
     ** check the case of the shared memory
     */
-    if (p->shared_mem_p != NULL)
-    {
-       uint32_t *sharedmem_p = (uint32_t*)p->shared_mem_p;
-       sharedmem_p[1] = data_len;
-
-       alignment = 0x53535353;
-       XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
-       XDR_PUTINT32(&xdrs, (int32_t *)&nb_blocks);
-       XDR_PUTINT32(&xdrs, (int32_t *)&last_block_size);
-       alignment = 0;       
-       XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
-       /*
-       ** insert the length in the shared memory
-       */
-       /*
-       ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
-       ** the ruc buffer to take care of the header length of the rpc message.
-       */
-       int total_len = xdr_getpos(&xdrs) ;
-       *header_len_p = htonl(0x80000000 | total_len);
-       total_len +=sizeof(uint32_t);
-
-       ruc_buf_setPayloadLen(p->xmitBuf,total_len);    
-    }
-    else
-    {
-      /*
-      ** skip the alignment
-      */
-      alignment = 0;
-      XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
-      XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
-      XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
-      XDR_PUTINT32(&xdrs, (int32_t *)&data_len);
-      /*
-      ** round up data_len to 4 bytes alignment
-      */
-      if ((data_len%4)!= 0) data_len = (data_len &(~0x3))+4;
-
-      /*
-      ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
-      ** the ruc buffer to take care of the header length of the rpc message.
-      */
-      int total_len = xdr_getpos(&xdrs)+data_len ;
-      *header_len_p = htonl(0x80000000 | total_len);
-      total_len +=sizeof(uint32_t);
-
-      ruc_buf_setPayloadLen(p->xmitBuf,total_len);
-    }
     /*
     ** Clear the reference of the seqnum to prevent any late response to be processed
     ** by setting seqnum to 0 any late response is ignored and the associated ressources
