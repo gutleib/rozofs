@@ -41,6 +41,7 @@ add_executable(rozofsmount
     rozofs_create.c 
     rozofs_xattr.c
     rozofs_read.c
+    rozofs_resize.c
     rozofs_write.c
     rozofs_readdir.c
     rozofs_sharedmem.c

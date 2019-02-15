@@ -486,7 +486,7 @@ void rozofs_truncate_pending_write_buffer(ientry_t * ie) {
 */
 void rozofs_ll_setattr_cbk(void *this,void *param); 
 void rozofs_ll_truncate_cbk(void *this,void *param); 
-void rozofs_resize(fuse_req_t req, ientry_t *ie, void *buffer_p, int trc_idx) ;
+void rozofs_ll_resize_nb(fuse_req_t req, ientry_t *ie, void *buffer_p, int trc_idx) ;
 
 void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
         int to_set, struct fuse_file_info *fi) 
@@ -557,9 +557,9 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     ** The xon/xoff mechanism can not be used with FUSE kernel module
     **
     */
-    if ((to_set & FUSE_SET_ATTR_ATIME) && (to_set & FUSE_SET_ATTR_ATIME)
+    if ((to_set & FUSE_SET_ATTR_ATIME) && (to_set & FUSE_SET_ATTR_MTIME)
     &&  (attr.mtime == ROZOFS_RESIZEM)  && (attr.atime == ROZOFS_RESIZEA)) {
-       return rozofs_resize(req, ie, buffer_p, trc_idx); 
+       return rozofs_ll_resize_nb(req, ie, buffer_p, trc_idx); 
     }
     
     /*

@@ -619,6 +619,37 @@ static inline void rozofs_trc_rsp_attr(int service,fuse_ino_t ino,fid_t fid,int 
      }
    }
 }
+static inline void rozofs_trc_rsp_attr_multiple(int service,fuse_ino_t ino,fid_t fid,int status,uint64_t size,int index,int file_idx)
+{
+   rozofs_trace_t *p;
+   if (rozofs_trc_enabled == 0) return;
+   {
+     
+     p = &rozofs_trc_buffer[rozofs_trc_wr_idx];
+     p->hdr.u32 = 0;
+     p->ts = ruc_rdtsc();
+     p->hdr.s.service_id = service;
+     p->hdr.s.trc_type  = rozofs_trc_type_attr;
+     if (status==0) p->hdr.s.status=0;
+     else p->hdr.s.status=1;
+     p->flags = file_idx;
+     p->hdr.s.index = index;
+     p->ino= ino;
+     p->errno_val = errno;
+     if (fid != NULL) 
+     {
+        memcpy(p->par.def.fid,fid,sizeof(fid_t)); 
+	p->hdr.s.fid = 1;
+     } 
+     p->par.attr.size = size;  
+     rozofs_trc_wr_idx++;
+     if (rozofs_trc_wr_idx >= rozofs_trc_last_idx) 
+     {
+       rozofs_trc_wr_idx= 0;
+       rozofs_trc_buf_full = 1;
+     }
+   }
+}
 /*
 **____________________________________________________
 */

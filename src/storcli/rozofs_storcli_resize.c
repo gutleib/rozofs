@@ -1206,10 +1206,10 @@ void rozofs_storcli_resize_req_processing_cbk(void *this,void *param)
     ** That's fine, all the projections have been received start rebuild the initial message
     ** for the case of the shared memory, we must check if the rozofsmount has not aborted the request
     */
-    if (working_ctx_p->shared_mem_p != NULL)
+    if (working_ctx_p->shared_mem_req_p != NULL)
     {
-      uint32_t *xid_p = (uint32_t*)working_ctx_p->shared_mem_p;
-      if (*xid_p !=  working_ctx_p->src_transaction_id)
+      rozofs_shmem_cmd_read_t *share_rd_p = (rozofs_shmem_cmd_read_t*)working_ctx_p->shared_mem_req_p;
+      if (share_rd_p->xid !=  working_ctx_p->src_transaction_id)
       {
         /*
         ** the source has aborted the request
@@ -1218,7 +1218,7 @@ void rozofs_storcli_resize_req_processing_cbk(void *this,void *param)
         storcli_trace_error(__LINE__,errno,working_ctx_p);            
         goto io_error;
       }    
-    }  
+    }        
         
     /*
     ** check if we can proceed with transform inverse
