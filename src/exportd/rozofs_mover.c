@@ -883,7 +883,6 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   int          i;
   off_t        offset=0;
   int          ret;
-  
   tmp_fname[0] = 0;
   char dst_fname[128];
   char buf_fid[64];
