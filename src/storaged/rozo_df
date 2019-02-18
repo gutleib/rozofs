@@ -103,7 +103,6 @@ def get_device_by_mount(mount):
   for dev in rozofs_devices:
     if dev.mount == mount: return dev
   return None
-    
 #____________________________________
 class rozofs_device:
 
@@ -117,25 +116,42 @@ class rozofs_device:
     self.old_free = free
     self.total    = total
     self.string   = None
+    self.time     = int(0)
     rozofs_devices.append(self)
     if self.name == "rozofs": 
-      average = int(self.free)*int(100)/int(self.total)   
+      if int(self.total) == 0:
+        average = 0
+      else:   
+        average = int(self.free)*int(100)/int(self.total)   
 
+  def delete(self):
+    global rozofs_devices
+    rozofs_devices.remove(self)
+    
   def update(self, free, total):
    global average
 
    self.old_free = self.free
    self.free     = free
    self.total    = total
+   self.time     = int(0)
    if self.name == "rozofs": 
-     average = int(self.free)*int(100)/int(self.total)   
-      
+     if int(self.total) == 0:
+       average = 0
+     else:   
+       average = int(self.free)*int(100)/int(self.total)   
+        
   def display(self):
    global average
    global threshold
    global mini
    global maxi   
-   percent = float(self.free)*float(100)/float(self.total)
+   
+   self.time = self.time + int(1)
+   if int(self.total) == 0:
+     percent = 0
+   else:  
+     percent = float(self.free)*float(100)/float(self.total)
 
    delta = int(self.total) * int(threshold)
    delta /= 100
@@ -170,8 +186,6 @@ class rozofs_device:
        color = YELLOW
      elif (int(percent) > (int(average)+int(threshold))):
        color = CYAN
-     elif (int(percent) == int(good_percent)):
-       color = BOLD  
      else:
        color = NORMAL          
      pc = "%5.1f%%"%(percent)
@@ -198,7 +212,12 @@ class rozofs_device:
        color = CYAN 
      LINE += "%5.1f%% "%(percent) + color + " %-17s"%(display_free) + NORMAL 
          
-   LINE += "/ %7s  %s"%(common_bytes_with_unit(self.total+"K"), self.mount)   
+   LINE += "/ %7s  "%(common_bytes_with_unit(self.total+"K"))   
+   if self.time > int(1):   
+     LINE = LINE + RED + BOLD + "%s"%(self.mount) + NORMAL 
+     if self.time > int(8): self.delete()
+   else:     
+     LINE = LINE +"%s"%(self.mount) 
    print LINE
    
       
@@ -243,8 +262,12 @@ def do_one_df():
       total_free   += int(free)   
       total_size   += int(total)   
       continue
-  average_free = int(total_free) /  int(total_device)
-  good_percent = float(total_free)*100/float(total_size)
+  if  int(total_device) == 0:
+    average_free = 0
+    good_percent = 0
+  else:     
+    average_free = int(total_free) /  int(total_device)
+    good_percent = float(total_free)*100/float(total_size)
   
   print "____________________ %s ____________________%5.1f%%"%(now.strftime("%Y-%m-%d %H:%M:%S"),good_percent)
   if options.freeSpace == False:
