@@ -950,16 +950,19 @@ static void usage(char * fmt, ...) {
   
   printf("RozoFS hybrid volume mover - %s\n", VERSION);    
   printf("Move hybrid chunks of hybrid files betwwen slow and fast volumes.\n");
-  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove [--recursive] [--throughput <MiB>] {--fast|--slow} {--fid <directory FID>|--name <directory name>}"ROZOFS_COLOR_NONE"\n");
-  printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\tMove hybrid chunks from slow volume to fast volume.\n");
-  printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\tMove hybrid chunks from fast volume to slow volume.\n");
-  printf(ROZOFS_COLOR_BOLD"\t-n, --name"ROZOFS_COLOR_NONE"\t\tRoot directory name on which to apply the operation.\n");  
-  printf(ROZOFS_COLOR_BOLD"\t-F, --fid"ROZOFS_COLOR_NONE"\t\tRoot directory FID on which to apply the operation.\n");  
-  printf(ROZOFS_COLOR_BOLD"\t-r, --recursive"ROZOFS_COLOR_NONE"\t\tApply vmove recursively on each sub-directory under the root directory.\n");
-  printf(ROZOFS_COLOR_BOLD"\t-t, --throughput"ROZOFS_COLOR_NONE"\t\tThroughput limitation of the mover..\n");
+  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory FID>|--name <directory name>|--eid <eid>} [--recursive] [--throughput <MiB>]"ROZOFS_COLOR_NONE"\n");
+  printf("The direction of the move is defined by one of the following mandatory parameter:\n");
+  printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\t\tMove hybrid chunks from slow volume to fast volume.\n");
+  printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\t\tMove hybrid chunks from fast volume to slow volume.\n");
+  printf("The files to move are defined as follow:\n");
+  printf(ROZOFS_COLOR_BOLD"\t-n, --name <directory name>"ROZOFS_COLOR_NONE"\tRoot directory name on which the move applies.\n");  
+  printf(ROZOFS_COLOR_BOLD"\t-F, --fid <directory FID>"ROZOFS_COLOR_NONE"\tRoot directory FID on which the move applies.\n");  
+  printf(ROZOFS_COLOR_BOLD"\t-e, --eid <eid>"ROZOFS_COLOR_NONE"\t\t\tWhole eid must be moved (--recursive is implicit).\n");  
+  printf(ROZOFS_COLOR_BOLD"\t-r, --recursive"ROZOFS_COLOR_NONE"\t\t\tApply vmove recursively on each sub-directory under the root directory.\n");
   printf("Miscellaneous options:\n");
-  printf(ROZOFS_COLOR_BOLD"\t-h, --help"ROZOFS_COLOR_NONE"\t\tprint this message.\n");
-  printf(ROZOFS_COLOR_BOLD"\t-c, --config <filename>"ROZOFS_COLOR_NONE"\texportd configuration file name (when different from %s)\n",EXPORTD_DEFAULT_CONFIG);  
+  printf(ROZOFS_COLOR_BOLD"\t-t, --throughput"ROZOFS_COLOR_NONE"\t\tThroughput limitation of the mover.\n");
+  printf(ROZOFS_COLOR_BOLD"\t-h, --help"ROZOFS_COLOR_NONE"\t\t\tprint this message.\n");
+  printf(ROZOFS_COLOR_BOLD"\t-c, --config <filename>"ROZOFS_COLOR_NONE"\t\tExportd configuration file name (when different from %s)\n",EXPORTD_DEFAULT_CONFIG);  
   printf("\n");
   exit(EXIT_SUCCESS); 
 }
