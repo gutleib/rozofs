@@ -67,7 +67,7 @@
 #include "export_expgw_conf.h"
 #include "export_internal_channel.h"
 #include "export_share.h"
-#include "geo_profiler.h"
+//#include "geo_profiler.h"
 #include "export_thin_prov_api.h"
 #include "rozofs_suffix.h"
 
@@ -103,7 +103,7 @@ static pthread_rwlock_t volumes_lock;
 static pthread_t bal_vol_thread=0;
 static pthread_t monitor_thread=0;
 static pthread_t exp_tracking_thread=0;
-static pthread_t geo_poll_thread=0;
+//static pthread_t geo_poll_thread=0;
 
 static char exportd_config_file[PATH_MAX] = EXPORTD_DEFAULT_CONFIG;
 
@@ -1175,6 +1175,7 @@ static void *monitoring_thread_slave(void *v) {
   }
   return 0;
 }
+#ifdef GEO_REPLICATION 
 /*
 **____________________________________________________________________________
 */
@@ -1187,6 +1188,7 @@ static void *monitoring_thread_slave(void *v) {
 */
 void geo_replication_poll()
 {
+
     list_t *iterator;
     export_t *e;
     int k;
@@ -1279,7 +1281,7 @@ static void *georep_poll_thread(void *v) {
     }
     return 0;
 }
-
+#endif    
 /*
  *_______________________________________________________________________
  */
@@ -1431,7 +1433,9 @@ void exports_release() {
     list_for_each_forward_safe(p, q, &exports) {
         export_entry_t *entry = list_entry(p, export_entry_t, list);
 //	export_profiler_free(entry->export.eid);
+#ifdef GEO_REPLICATION
 	geo_profiler_free(entry->export.eid);
+#endif        
         export_release(&entry->export);
         list_remove(p);
         free(entry);
@@ -1593,8 +1597,9 @@ static int load_exports_conf() {
      
        // Allocate default profiler structure
         export_profiler_allocate(econfig->eid);
+#ifdef GEO_REPLICATION         
         geo_profiler_allocate(econfig->eid);
-
+#endif
 
         // Add this export to the list of exports
         list_push_back(&exports, &entry->list);
@@ -1674,11 +1679,13 @@ static int exportd_initialize() {
       if (pthread_create(&monitor_thread, NULL, monitoring_thread_slave, NULL) != 0)
           fatal("can't create monitoring thread %s", strerror(errno));      
 
+#ifdef GEO_REPLICATION         
       /*
       ** just needed by slave exportd
       */
       if (pthread_create(&geo_poll_thread, NULL, georep_poll_thread, NULL) != 0)
 	  fatal("can't create geo-replication polling thread %s", strerror(errno));
+#endif          
     }
 
 
@@ -1777,8 +1784,9 @@ static void on_start() {
         
     // Allocate default profiler structure
     export_profiler_allocate(0);
+#ifdef GEO_REPLICATION         
     geo_profiler_allocate(0);
-
+#endif
     /*
     ** IPv4 filtering initialization
     */

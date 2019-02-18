@@ -88,14 +88,6 @@ Requires: rozofs-manager-lib rozofs-manager-cli
 %description manager-agent
 Management daemon for RozoFS.
 
-%package geomgr
-Summary: RozoFS filesystem (geo-replication software).
-License: GPLv2
-Group: System Environment/Daemons
-Requires: libconfig rozofs-rozolauncher
-%description geomgr
-Geo-replication daemon for RozoFS.
-
 %package metadata-backup
 Summary: RozoFS metadata backup utility.
 License: GPLv2
@@ -139,7 +131,6 @@ mkdir -p %{buildroot}%{_unitdir}
 %{__cp} redhat/rozofs-exportd.service %{buildroot}%{_unitdir}/rozofs-exportd.service
 %{__cp} redhat/rozofs-storaged.service %{buildroot}%{_unitdir}/rozofs-storaged.service
 %{__cp} redhat/rozofs-manager-agent.service %{buildroot}%{_unitdir}/rozofs-manager-agent.service
-%{__cp} redhat/rozofs-geomgr.service %{buildroot}%{_unitdir}/rozofs-geomgr.service
 %{__cp} redhat/rozofs-rozofsmount.service %{buildroot}%{_unitdir}/rozofs-rozofsmount.service
 %{__cp} redhat/rozofs-metadata-backup.service %{buildroot}%{_unitdir}/rozofs-metadata-backup.service
 %{__cp} redhat/rozofs-metadata-backup.timer %{buildroot}%{_unitdir}/rozofs-metadata-backup.timer
@@ -150,7 +141,6 @@ mkdir -p %{buildroot}%{_initrddir}
 %{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-storaged %{buildroot}%{_initrddir}/rozofs-storaged
 #%{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-rozofsmount %{buildroot}%{_initrddir}/rozofs-rozofsmount
 %{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-manager-agent %{buildroot}%{_initrddir}/rozofs-manager-agent
-%{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-geomgr %{buildroot}%{_initrddir}/rozofs-geomgr
 %{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-manager-agent.default %{buildroot}%{_sysconfdir}/sysconfig/rozofs-manager-agent
 %endif
 
@@ -182,8 +172,6 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_rbsList
 %{_bindir}/rozo_trashd
 %{_bindir}/rozo_du
-%{_bindir}/rozo_geoRepList
-%{_bindir}/rozo_geoReplicationReinitialize
 %{_bindir}/rozo_export_send_stats
 %config(noreplace) %{_sysconfdir}/rozofs/export.conf
 %{_sysconfdir}/rozofs/export.conf.sample
@@ -286,19 +274,6 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_initrddir}/rozofs-manager-agent
 %endif
 
-%files geomgr
-%defattr(-,root,root)
-%{_bindir}/geocli
-%{_bindir}/geomgr
-%{_mandir}/man5/geomgr.conf.5.gz
-%{_mandir}/man8/geomgr.8.gz
-%{_mandir}/man8/geocli.8.gz
-%if 0%{?rhel} >= 7
-%{_unitdir}/rozofs-geomgr.service
-%else
-%{_initrddir}/rozofs-geomgr
-%endif
-
 %files metadata-backup
 %defattr(-,root,root)
 %{_bindir}/rozofs-metadata-backup
@@ -375,6 +350,9 @@ fi
 %endif
 
 %changelog
+
+* Tue Ja, 22 2018 RozoFS <devel@rozofs.org> 4.0
+- Remove geo replication
 
 * Mon Oct 22 2018 RozoFS <devel@rozofs.org> 3.0.alpha60-1
 - Added rozofs-metadata-backup

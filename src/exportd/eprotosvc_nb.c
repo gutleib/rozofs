@@ -102,11 +102,13 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     local =  ep_null_1_svc_nb;
 	     break;
 
+#ifdef GEO_REPLICATION
      case EP_GEO_POLL:
 	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_void;
 	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_void;
 	     local =  ep_geo_poll_1_svc_nb;
 	     break;
+#endif
 		 
      case EP_MOUNT_MSITE:
 	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_mount_arg_t;

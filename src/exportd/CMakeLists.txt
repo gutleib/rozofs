@@ -82,22 +82,21 @@ add_executable(exportd
    export_tracking_poll.c
    dirent_writeback_cache.c
    export_trash_reload.c
-    geo_replication.c
-    geo_replication_dbg.c    
-    geo_replication.h
-    
-    geo_replica_proto_nb.c    
-    geo_replica_proto_nb.h
-    geo_replica_protosvc_nb.h   
-    geo_replica_protosvc_nb.c   
-    geo_replica_srv.c
-    geo_replica_srv.h
-    geo_replica_north_intf.c
-    geo_replica_north_intf.h
-    geo_replica_ctx.c
-    geo_replica_ctx.h
-    geo_replica_tmr.c
-    geo_replica_tmr.h
+#    geo_replication.c
+#    geo_replication_dbg.c    
+#    geo_replication.h   
+#    geo_replica_proto_nb.c    
+#    geo_replica_proto_nb.h
+#    geo_replica_protosvc_nb.h   
+#    geo_replica_protosvc_nb.c   
+#    geo_replica_srv.c
+#    geo_replica_srv.h
+#    geo_replica_north_intf.c
+#    geo_replica_north_intf.h
+#    geo_replica_ctx.c
+#    geo_replica_ctx.h
+#    geo_replica_tmr.c
+#    geo_replica_tmr.h
 
     rozofs_quota.h
     rozofs_quota_api.h
@@ -345,18 +344,6 @@ add_executable(rozo_rbsList
 )
 target_link_libraries(rozo_rbsList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
-#________________________________________________________
-# Build lists of FID of an export for geo replication from 
-# scratch
-#
-add_executable(rozo_geoRepList
-    rozo_geoRepList.c  
-    econfig.c  
-    rozofs_ip4_flt.c 
-    rozofs_ip4_flt.h   
-)
-target_link_libraries(rozo_geoRepList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
-
 
 add_executable(rozo_du
     rozo_du_scan.c
@@ -449,13 +436,6 @@ install(TARGETS rozo_rbsList
     COMPONENT rozo_rbsList
 )
 
-install(TARGETS rozo_geoRepList
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    COMPONENT rozo_geoRepList
-)
-
 install(TARGETS rozo_rebalance
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
@@ -503,5 +483,4 @@ install(TARGETS rozo_export_send_stats
 )
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
-install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)
 install(PROGRAMS rozofs-metadata-backup DESTINATION bin)

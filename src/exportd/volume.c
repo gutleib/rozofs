@@ -957,7 +957,8 @@ void volume_balance(volume_t *volume) {
         volume->full = 0;
       }  
     }
-    
+
+#ifdef GEO_REPLICATION    
     /*
     ** case of the geo-replication
     */
@@ -995,6 +996,7 @@ void volume_balance(volume_t *volume) {
       }
       mstoraged_release_cnx(&cnx);
     }  
+#endif
     
       
     /* 
@@ -1007,13 +1009,14 @@ void volume_balance(volume_t *volume) {
         cluster_t *cluster = list_entry(p, cluster_t, list);
 		
         list_sort((&cluster->storages[local_site]), volume_storage_compare);
-
+#ifdef GEO_REPLICATION
 	if (volume->georep) {
     	  /*
     	  ** do it also for the remote site
     	  */
           list_sort((&cluster->storages[1-local_site]), volume_storage_compare);
     	}
+#endif        
       }
 	  
 	  

@@ -65,9 +65,9 @@
 #include "export_north_intf.h"
 #include "export_share.h"
 #include "mdirent.h"
-#include "geo_replication.h"
-#include "geo_replica_srv.h"
-#include "geo_replica_ctx.h"
+//#include "geo_replication.h"
+//#include "geo_replica_srv.h"
+//#include "geo_replica_ctx.h"
 #include "rozofs_quota_api.h"
 #include "export_quota_thread_api.h"
 #include "export_thin_prov_api.h"
@@ -232,8 +232,8 @@ char * show_profiler_one(char * pChar, uint32_t eid) {
     SHOW_PROFILER_PROBE(ep_clearowner_flock);
     SHOW_PROFILER_PROBE(ep_set_file_lock);
     SHOW_PROFILER_PROBE(ep_get_file_lock);
-    SHOW_PROFILER_PROBE(ep_poll_file_lock);
-    SHOW_PROFILER_PROBE(ep_geo_poll);
+//    SHOW_PROFILER_PROBE(ep_poll_file_lock);
+//    SHOW_PROFILER_PROBE(ep_geo_poll);
     SHOW_PROFILER_PROBE(quota_set);
     SHOW_PROFILER_PROBE(quota_get);
     SHOW_PROFILER_PROBE(quota_setinfo);
@@ -1246,7 +1246,9 @@ int expgwc_start_nb_blocking_th(void *args) {
       return -1;
     }
     uma_dbg_addTopic("fid_parse",uma_dbg_split_fid);
+#ifdef GEO_REPLICATION
     uma_dbg_addTopic_option("geoReplicationRestartFromScratch",geo_rep_restart_from_scratch_dbg,UMA_DBG_OPTION_HIDE);
+#endif
     /*
     ** add profiler subject (exportd statistics)
     */
@@ -1307,7 +1309,8 @@ int expgwc_start_nb_blocking_th(void *args) {
     */
     expthin_init();
     uma_dbg_addTopic("thin_prov", show_thin_prov);
-       
+
+#ifdef GEO_REPLICATION       
     if (args_p->slave == 0)
     {
       /*
@@ -1320,6 +1323,7 @@ int expgwc_start_nb_blocking_th(void *args) {
       }
       uma_dbg_addTopic_option("geo_profiler", show_geo_profiler,UMA_DBG_OPTION_RESET);
     }
+#endif    
     /*
     ** init of the quota module
     */
@@ -1335,12 +1339,14 @@ int expgwc_start_nb_blocking_th(void *args) {
       severe("error on af_unix quota socket creation\n");
       return -1;
     }        
+#ifdef GEO_REPLICATION    
     ret = geo_proc_module_init(GEO_REP_SRV_CLI_CTX_MAX);
     if (ret < 0)
     {
       severe("geo replication service is unavailable: %s",strerror(errno));
     }
     uma_dbg_addTopic_option("geo_replica", show_geo_replication,UMA_DBG_OPTION_RESET);
+#endif
 
     expgwc_non_blocking_thread_started = 1;
     

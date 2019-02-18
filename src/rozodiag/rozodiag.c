@@ -819,7 +819,6 @@ char *argv[];
   uint32_t            ret;
   uint32_t            idx;
   uint32_t            port32;
-  uint32_t            val32;
   char              * pt;
   uint32_t            ports[MAX_TARGET];
   int                 nbPorts = 0;
@@ -956,9 +955,6 @@ char *argv[];
     ** storio                 : -f storio[:<instance>]
     ** rozofsmount            : -f mount[:<mount instance>]
     ** storcli of rozofsmount : -f mount[:<mount instance>[:<1|2>]]
-    ** geomgr                 : -f geomgr
-    ** geocli                 : -f geocli[:<geocli instance>]
-    ** storcli of geocli      : -f geocli[:<geocli instance>[:<1|2>]]
     */
     if (strcmp(argv[idx],"-T")==0) {
     
@@ -1079,36 +1075,7 @@ char *argv[];
           port32 = rozofs_get_service_port_export_master_diag();
           nbPorts = 1;             
         }	  	
-      }    
-      else if (strncasecmp(pt,"geomgr",strlen("geomgr"))==0) {
-	port32 = rozofs_get_service_port_geomgr_diag();	
-        nbPorts = 1;                       	
-      }  
-      else if (strncasecmp(pt,"geocli",strlen("geocli"))==0) {
-	pt += strlen("geocli");  	
-        if (*pt != ':') { 
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-	}  
-	pt++;
-	ret = sscanf(pt,"%u",&port32);
-	if (ret != 1) {
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-        }
-	while ((*pt != 0)&&(*pt != ':')) pt++;
-	if (*pt == 0) { 
-	  port32 = rozofs_get_service_port_geocli_diag(port32);
-	}    
-	else { // geocli:x: ...
-	  pt++;
-	  ret = sscanf(pt,"%u",&val32);
-	  if (ret != 1) {
-	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-          }	
-	  // storcli:x:y 
-	  port32 = rozofs_get_service_port_geocli_storcli_diag(port32,val32);
-          nbPorts = 1;                       	
-	}
-      }  
+      }      
 
       else if (strncasecmp(pt,"rebalancer",strlen("rebalancer"))==0) {
       

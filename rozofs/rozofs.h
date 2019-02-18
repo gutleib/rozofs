@@ -442,7 +442,11 @@ typedef enum _ROZOFS_BSIZE_E {
 #define ROZOFS_MD5_SIZE 22
 #define ROZOFS_MD5_NONE "0000000000000000000000"
 
+#if GEO_REPLICATION 
 #define ROZOFS_GEOREP_MAX_SITE 2 /**< max sites supported for geo-replication   */
+#else
+#define ROZOFS_GEOREP_MAX_SITE 1 /**< max sites supported for geo-replication   */
+#endif
 
 #define EXPGW_EID_MAX_IDX 1024 /**< max number of eid  */
 #define EXPGW_EXPGW_MAX_IDX 32 /**< max number of export gateway per exportd */
@@ -490,8 +494,14 @@ typedef enum _ROZOFS_BSIZE_E {
 #define ROZO_SOCKCTRL_CTX_STORCLI        1024
 #define ROZO_SOCKCTRL_CTX_STORAGED       (3*1024)
 #define ROZO_SOCKCTRL_CTX_STORIO         (3*1024)
+
+#if GEO_REPLICATION 
 #define ROZO_SOCKCTRL_CTX_GEOMGR         (32)
 #define ROZO_SOCKCTRL_CTX_GEOCLI         (128)
+#else
+#define ROZO_SOCKCTRL_CTX_GEOMGR         (0)
+#define ROZO_SOCKCTRL_CTX_GEOCLI         (0)
+#endif
 
 /*
 **   AF_UNIX configuration: define the max nuumber of context per process
@@ -502,8 +512,13 @@ typedef enum _ROZOFS_BSIZE_E {
 #define ROZO_AFUNIX_CTX_STORCLI        1024
 #define ROZO_AFUNIX_CTX_STORAGED       1024
 #define ROZO_AFUNIX_CTX_STORIO         (3*1024)
+#if GEO_REPLICATION 
 #define ROZO_AFUNIX_CTX_GEOMGR         (32)
 #define ROZO_AFUNIX_CTX_GEOCLI         (32)
+#else
+#define ROZO_AFUNIX_CTX_GEOMGR         (0)
+#define ROZO_AFUNIX_CTX_GEOCLI         (0)
+#endif
 /**
 * cluster state
 */

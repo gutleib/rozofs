@@ -1784,7 +1784,8 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     */
     memset(&e->space_left, 0, sizeof(meta_resources_t));
 
-    
+
+#ifdef GEO_REPLICATION     
     /*
     ** init of the replication context
     */
@@ -1800,6 +1801,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
 	geo_rep_dbg_add(e->geo_replication_tb[k]);      
       }    
     }
+#endif    
     /*
     ** create the tracking context of the export
     */
@@ -4753,6 +4755,8 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,str
       ** delete the metadata associated with the file
       */
       ret = exp_delete_file(e,lv2);
+      
+#ifdef GEO_REPLICATION      
       /*
       * In case of geo replication, insert a delete request from the 2 sites 
       */
@@ -4777,6 +4781,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,str
 			   lv2->attributes.s.attrs.cid,
 			   lv2->attributes.s.attrs.sids);
       }	
+#endif      
       /*
       ** Preparation of the rmfentry
       */
@@ -5173,6 +5178,7 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
      ** delete the metadata associated with the file
      */
      ret = exp_delete_file(e,lv2);
+#ifdef GEO_REPLICATION      
      /*
      * In case of geo replication, insert a delete request from the 2 sites 
      */
@@ -5197,6 +5203,7 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
 			  lv2->attributes.s.attrs.cid,
 			  lv2->attributes.s.attrs.sids);
      }	
+#endif     
      /*
      ** Preparation of the rmfentry
      */
@@ -5507,6 +5514,7 @@ duplicate_deleted_file:
 		ret = exp_delete_file(e,lv2);
 		if (no_master_distribution == 0)
 		{		
+#ifdef GEO_REPLICATION 
 		  /*
 		  * In case of geo replication, insert a delete request from the 2 sites 
 		  */
@@ -5531,6 +5539,7 @@ duplicate_deleted_file:
 				       lv2->attributes.s.attrs.cid,
 				       lv2->attributes.s.attrs.sids);
 		  }	
+#endif                  
         	  /*
 		  ** Preparation of the rmfentry
 		  */
@@ -7907,6 +7916,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     */
     export_recopy_extended_attributes_multifiles(e, fid, lv2, attrs, NULL /* No slave inode */, NULL);
     length = len;
+#ifdef GEO_REPLICATION 
     if (e->volume->georep) 
     {
       /*
@@ -7918,6 +7928,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 			 lv2->attributes.s.attrs.cid,
 			 lv2->attributes.s.attrs.sids);
     }
+#endif    
 out:
     STOP_PROFILING(export_write_block);
 

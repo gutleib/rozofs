@@ -40,6 +40,7 @@ void *ep_null_1_svc(void *noargs, struct svc_req *req) {
     return &ret;
 }
 
+#ifdef GEO_REPLICATION
 /**
 *  pseudo periodic task for geo-replication polling
 *  the goal is to check the geo-replication entries that
@@ -52,6 +53,7 @@ void *ep_geo_poll_1_svc(void *noargs, struct svc_req *req) {
     geo_replication_poll();
     return &ret;
 }
+#endif
 
 /*
  *_______________________________________________________________________

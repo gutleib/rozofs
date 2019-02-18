@@ -228,13 +228,13 @@ export_program_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		_xdr_result = (xdrproc_t) xdr_epgw_status_ret_t;
 		local = (char *(*)(char *, struct svc_req *)) ep_poll_file_lock_1_svc;
 		break;
-
+#ifdef GEO_REPLICATION
 	case EP_GEO_POLL:
 		_xdr_argument = (xdrproc_t) xdr_void;
 		_xdr_result = (xdrproc_t) xdr_void;
 		local = (char *(*)(char *, struct svc_req *)) ep_geo_poll_1_svc;
 		break;
-
+#endif
 	case EP_SYMLINK2:
 		_xdr_argument = (xdrproc_t) xdr_epgw_symlink2_arg_t;
 		_xdr_result = (xdrproc_t) xdr_epgw_mattr_ret_t;

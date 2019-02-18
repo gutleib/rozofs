@@ -46,7 +46,7 @@
 #include "volume.h"
 #include "cache.h"
 #include "export_expgw_conf.h"
-#include "geo_replication.h"
+//#include "geo_replication.h"
 
 #define TRASH_DNAME "trash"
 #define FSTAT_FNAME "fstat"
@@ -255,7 +255,7 @@ typedef struct export {
     fid_t rfid; ///< root fid
     lv2_cache_t *lv2_cache; ///< cache of lv2 entries
     export_tracking_table_t *trk_tb_p; 
-    geo_rep_srv_ctx_t  *geo_replication_tb[EXPORT_GEO_MAX_CTX];        
+//    geo_rep_srv_ctx_t  *geo_replication_tb[EXPORT_GEO_MAX_CTX];        
     trash_bucket_t * trash_buckets; ///< Address of the array of trash buckets of this export
     recycle_bucket_t * recycle_buckets; ///< Address of the array of recycle buckets of this export
     // of files to delete for each bucket trash

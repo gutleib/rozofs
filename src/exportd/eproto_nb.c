@@ -95,6 +95,7 @@ void ep_null_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 /*
 **______________________________________________________________________________
 */
+#ifdef GEO_REPLICATION
 /**
 *  pseudo periodic task for geo-replication polling
 *  the goal is to check the geo-replication entries that
@@ -111,6 +112,7 @@ void ep_geo_poll_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     STOP_PROFILING(ep_geo_poll);
     return ;
 }
+#endif
 /*
 **______________________________________________________________________________
 */
