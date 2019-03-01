@@ -204,6 +204,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_df
 %{_bindir}/rozodump
 %{_bindir}/rozo_device
+%{_bindir}/rozo_mpt3sas_port_couters
 %{_bindir}/rozo_storage_throughput
 %{_bindir}/rozo_storage_fid2pathname
 %{_bindir}/rozo_storage_send_stats

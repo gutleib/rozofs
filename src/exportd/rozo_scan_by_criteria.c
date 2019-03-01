@@ -220,6 +220,7 @@ typedef enum _name_format_e {
   name_format_full = 0,
   name_format_relative,
   name_format_fid,
+  name_format_none,
 } name_format_e;
 name_format_e name_format = name_format_full;
 
@@ -2022,6 +2023,10 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),1);
       break;
 
+    case name_format_none:
+      return 1;
+      break;
+          
     default:        
       pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),0);
   }     
@@ -2508,6 +2513,11 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   ** This inode is valid
   */
   nb_matched_entries++;
+  if (name_format == name_format_none) {
+    return 1;
+  }
+  
+  
   pDisplay = display_buffer;
 
   
@@ -2686,6 +2696,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
   printf("\t\033[1mjson\033[0m\t\t\toutput is in json format.\n");
   printf("\t\033[1mcount<val>\033[0m\t\tStop after displaying the <val> first found entries.\n");
+  printf("\t\033[1mnone\033[0m\t\t\tJust display the count of file/dir but no file/dir information.\n");
   
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
@@ -3079,7 +3090,10 @@ int rozofs_parse_output_format(char * fmt) {
       } 
       NEXT(p);
     }
-    
+    if (strncmp(p, "none", 4)==0) {
+      name_format = name_format_none;
+      NEXT(p);
+    }   
     if (strncmp(p, "fid", 3)==0) {
       name_format = name_format_fid;
       NEXT(p);
@@ -4282,7 +4296,19 @@ int main(int argc, char *argv[]) {
     usecs   = stop.tv_sec  * 1000000 + stop.tv_usec;
     usecs  -= (start.tv_sec  * 1000000 + start.tv_usec);
     printf("  \"micro seconds\"   : %llu\n}\n", usecs);    
+  }
+  /*
+  ** When not in json format but output is none, the count of matched entries is required
+  */
+  else if (name_format == name_format_none) {
+    printf("scanned entries : %llu\n", (long long unsigned int)nb_scanned_entries);
+    printf("matched entries : %llu\n", (long long unsigned int)nb_matched_entries);
+    gettimeofday(&stop,(struct timezone *)0); 
+    usecs   = stop.tv_sec  * 1000000 + stop.tv_usec;
+    usecs  -= (start.tv_sec  * 1000000 + start.tv_usec);
+    printf("micro seconds   : %llu\n", usecs);    
   }  
+  
   /*
   ** Current ouput line is not yet finished.
   ** add a \n
