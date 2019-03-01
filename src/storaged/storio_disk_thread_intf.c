@@ -36,6 +36,7 @@
 #include "config.h"
 #include "storio_device_mapping.h"
 #include "storio_serialization.h"
+#include "storio_north_intf.h"
 
 DECLARE_PROFILING(spp_profiler_t); 
  
@@ -807,6 +808,72 @@ uint32_t af_unix_disk_rcvMsgsock(void * unused,int socketId)
   
 out:
   return TRUE;
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*   That function is intended to be called when the storio runs out of TCP buffer
+    We wait for at least 16 buffers before re-attempting to allocated a buffer for
+    a TCP receive.
+    That function is called by storio_north_RcvAllocBufCallBack
+    
+    @param none: 
+    
+    @retval none;
+*/
+void af_unix_disk_pool_socket_on_receive_buffer_depletion()
+{
+    rozo_fd_set  localRdFdSet;   
+    int nbrSelect;
+    uint32_t free_count;
+    /*
+    ** erase the Fd receive set
+    */
+    memset(&localRdFdSet,0,sizeof(localRdFdSet));
+    
+    if (af_unix_disk_pending_req_count == 0)
+    {
+       /*
+       ** we are in deep shit!!
+       */
+       fatal("TCP out of receive buffer whiule there no read/write pending");       
+    } 
+   
+    while(1)
+    {        
+    /*
+      ** wait for event 
+      */
+      FD_SET(af_unix_disk_south_socket_ref,&localRdFdSet);   	  
+      nbrSelect=select(af_unix_disk_south_socket_ref+1,(fd_set *)&localRdFdSet,(fd_set *)NULL,NULL, NULL);
+      if (nbrSelect < 0) 
+      {
+         if (errno == EINTR) 
+	 {
+           //RUC_WARNING(errno);
+           continue;
+         }
+         
+         fatal("Buffer depletion case. Error on select(%s)",strerror(errno));
+         return;
+      }
+      /*
+      ** attempt to process a message from disk Thread queue
+      */
+      af_unix_disk_rcvMsgsock(NULL,af_unix_disk_south_socket_ref);
+      /*
+      ** Check if we have been able to recover some buffer for TCP
+      */      
+      free_count  = ruc_buf_getFreeBufferCount(storage_receive_buffer_pool_p);  
+      if (free_count < 16) continue;
+      /*
+      ** We have at least 16 buffers, so we can rework with TCP
+      */
+      break;
+    }
+
 }
 
 

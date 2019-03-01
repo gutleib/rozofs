@@ -1,0 +1,203 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+from optparse import OptionParser
+import datetime
+
+REDBOLD = "033[1m\033[91m\033[40m" 
+NORMAL  = "\033[0m"
+host_list = []
+
+#____________________________________
+# Read file
+#____________________________________
+def do_read_file(name):
+  string="cat %s"%(name)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:  
+    value = line.replace("\n","")
+    return value    
+#____________________________________
+# Class host
+#____________________________________
+class host_class:
+
+  def __init__(self,host):
+    self.host = host
+    self.board_name = do_read_file("/sys/class/scsi_host/%s/board_name"%(host))
+    host_list.append(self)
+    self.port_list = []
+    
+  def find_port(self,port):  
+    for p in self.port_list:
+      if p.port != port: continue
+      return p
+    return port_class(self,port)      
+
+#____________________________________
+# Class port
+#____________________________________
+class port_class:
+
+  def __init__(self,host,port):
+    self.host = host
+    self.port = port
+    self.invalid_dword_count = 0
+    self.loss_of_dword_sync_count = 0
+    self.phy_reset_problem_count = 0
+    self.running_disparity_error_count = 0  
+    self.alarm = True  
+    self.checked = False
+    host.port_list.append(self)
+    
+  def getpath(self):    
+    return "/sys/class/scsi_host/%s/device/%s/sas_phy/%s"%(self.host.host,self.port,self.port)
+    
+  def check(self):
+    #
+    # Reset alarm
+    #
+    self.alarm = False
+    
+    path = self.getpath()
+    invalid_dword_count            = do_read_file("%s/invalid_dword_count"%(path))  
+    loss_of_dword_sync_count       = do_read_file("%s/loss_of_dword_sync_count"%(path)) 
+    phy_reset_problem_count        = do_read_file("%s/phy_reset_problem_count"%(path)) 
+    running_disparity_error_count  = do_read_file("%s/running_disparity_error_count"%(path))
+    
+    if int(invalid_dword_count) != int(self.invalid_dword_count):
+      self.invalid_dword_count = int(invalid_dword_count)
+      self.alarm = True
+    
+    if int(loss_of_dword_sync_count) != int(self.loss_of_dword_sync_count):
+      self.loss_of_dword_sync_count = int(loss_of_dword_sync_count)
+      self.alarm = True
+    
+    if int(phy_reset_problem_count) != int(self.phy_reset_problem_count):
+      self.phy_reset_problem_count = int(phy_reset_problem_count)
+      self.alarm = True
+
+    if int(running_disparity_error_count) != int(self.running_disparity_error_count):
+      self.running_disparity_error_count = int(running_disparity_error_count)
+      self.alarm = True
+
+#____________________________________      
+def do_find_host(host):  
+  global host_list
+  for h in host_list:
+    if h.host != host: continue
+    return h
+  return host_class(host) 
+        
+#____________________________________      
+def do_display(now):  
+  global host_list
+  
+  print "{"
+  print "  \"date\" : \"%s\","%(now.strftime("%Y-%m-%d %H:%M:%S"))
+  print "  \"HBA\" : ["
+
+  for h in host_list:
+    print "      { \"name\" : \"%s\", \"host\" :  \"%s\", \"ports\" : ["%(h.board_name, h.host)
+    for p in h.port_list:
+      #
+      # Set color in case of problems
+      #
+      if p.alarm == True:
+        beg = REDBOLD
+        end = NORMAL
+      else:
+        beg = ""
+        end = ""
+        
+      #
+      # Raise alarm until next check
+      #  
+      p.alarm = True
+                
+      last = len(h.port_list) - int(1)
+      if p == h.port_list[last] :
+        print beg + "           { \"port\" : \"%s\",  \"invalid_dword_count\" : %d, \"loss_of_dword_sync_count\" : %d, \"phy_reset_problem_count\" : %d, \"running_disparity_error_count\" : %d}"%(p.port,p.invalid_dword_count, p.loss_of_dword_sync_count, p.phy_reset_problem_count, p.running_disparity_error_count) +end                   
+      else:
+        print beg + "           { \"port\" : \"%s\",  \"invalid_dword_count\" : %d, \"loss_of_dword_sync_count\" : %d, \"phy_reset_problem_count\" : %d, \"running_disparity_error_count\" : %d},"%(p.port,p.invalid_dword_count, p.loss_of_dword_sync_count, p.phy_reset_problem_count, p.running_disparity_error_count) +end                   
+    print "        ]"  
+    last  = len(host_list) - int(1) 
+    if h == host_list[last] :
+      print "      }"
+    else:
+      print "      },"                
+  print "   ]"  
+  print "}"        
+
+
+#____________________________________
+    
+       
+parser = OptionParser()
+parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
+ 
+(options, args) = parser.parse_args()
+
+
+period = int(0)
+if options.period != None:
+  try: period = int(options.period)
+  except:
+    print "Unexpected period value"
+    sys.exit(-1)
+    
+while True:
+
+  now = datetime.datetime.now()
+  
+  #
+  # Loop on SCSI hosts
+  #
+  for host in os.listdir("/sys/class/scsi_host"):
+
+    try:
+
+      #
+      # Check this is a mpt3sas controler
+      #    
+      proc_name = do_read_file("/sys/class/scsi_host/%s/proc_name"%(host))
+      if not "mpt3sas" in proc_name: continue
+      
+      #
+      # Retrieve or create the host context
+      #
+      h = do_find_host(host)
+      
+      #
+      # Loop on ports of this HBA
+      #
+      for port in os.listdir("/sys/class/scsi_host/%s/device/"%(host)):
+      
+        if not "phy-" in port: continue
+
+        # 
+        # Find or create port context
+        # and then read error counters
+        #
+        p = h.find_port(port)
+        p.check()
+    except:
+      continue      
+
+  #
+  # Display SAS port error counters
+  #
+  do_display(now)
+  
+  #
+  # Sleep and reloop
+  #
+  if period == 0: sys.exit(0)
+  time.sleep(int(period))     
