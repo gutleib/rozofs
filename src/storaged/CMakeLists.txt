@@ -261,5 +261,6 @@ install(TARGETS rozo_storage_send_stats
 install(FILES storage.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
 install(FILES storage.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT storage)
 install(PROGRAMS rozo_device DESTINATION bin)
+install(PROGRAMS rozo_mpt3sas_port_couters DESTINATION bin)
 install(PROGRAMS rozo_df DESTINATION bin)
 install(PROGRAMS rozo_storage_throughput DESTINATION bin)

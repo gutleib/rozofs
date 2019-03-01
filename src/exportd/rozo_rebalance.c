@@ -724,10 +724,12 @@ int load_cluster_stats(int vid,int cid,int cluster_idx)
          return -1;
       }
    }
-   memset(export_rebalance_cluster_stat_p[cluster_idx],0,sizeof(export_vol_cluster_stat2_t));
    sprintf(path, "%s%s%d_cluster_%d.bin", DAEMON_PID_DIRECTORY, "exportd/volume_", vid,cid);
    for (i = 0; i < 4; i++)
    {
+
+     memset(export_rebalance_cluster_stat_p[cluster_idx],0,sizeof(export_vol_cluster_stat2_t));
+
      if (i!=0) sleep(1);
      if (fd_v!=-1) 
      {

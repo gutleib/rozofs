@@ -56,6 +56,23 @@ void *storage_receive_buffer_pool_p = NULL;  /**< reference of the read/write bu
 extern void storage_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf);
 
 extern sconfig_t storaged_config;
+uint64_t tcp_receive_depletion_count = 0;
+
+extern void af_unix_disk_pool_socket_on_receive_buffer_depletion();
+
+/*
+**____________________________________________________
+*/
+
+void tcp_receive_depletion_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
+
+  char           *pChar=uma_dbg_get_buffer();
+  sprintf(pChar,"Number of Receive buffers depletion: %llu\n",(long long unsigned int)tcp_receive_depletion_count);
+  
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;   
+
+}
 /*
 **____________________________________________________
 */
@@ -83,7 +100,12 @@ void * storio_north_RcvAllocBufCallBack(void *userRef,uint32_t socket_context_re
   uint32_t free_count = ruc_buf_getFreeBufferCount(storage_receive_buffer_pool_p);  
   if (free_count < 1)
   {
-    return NULL;
+    /*
+    ** Case of the buffer depletion: loop on disk thread response socket on order to recover some buffers
+    */
+    tcp_receive_depletion_count++;
+    af_unix_disk_pool_socket_on_receive_buffer_depletion();
+
   }
 
 
@@ -346,6 +368,8 @@ int storio_north_interface_init(char * host, int instance_id) {
     }
 #endif
   }
+  
+    uma_dbg_addTopic("depletion", tcp_receive_depletion_debug); 
   
   return 0;
 }

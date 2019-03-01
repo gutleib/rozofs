@@ -109,7 +109,6 @@ class rozofs_device:
 
   def __init__(self, name, mount, free, total):
     global rozofs_devices
-    global average
 
     self.name     = name
     self.mount    = mount
@@ -117,36 +116,35 @@ class rozofs_device:
     self.old_free = free
     self.total    = total
     self.string   = None
+    self.time     = int(0)
     rozofs_devices.append(self)
-    if self.name == "rozofs": 
-      average = int(self.free)*int(100)/int(self.total)   
 
+  def delete(self):
+    global rozofs_devices
+    rozofs_devices.remove(self)
+    
   def update(self, free, total):
-   global average
 
    self.old_free = self.free
    self.free     = free
    self.total    = total
-   if self.name == "rozofs": 
-     average = int(self.free)*int(100)/int(self.total)   
-      
+   self.time     = int(0)
+        
   def display(self):
-   global average
    global threshold
-   global mini
-   global maxi   
-   percent = float(self.free)*float(100)/float(self.total)
-
-   delta = int(self.total) * int(threshold)
-   delta /= 100
-   mini = int(average_free) - int(delta)
-   maxi = int(average_free) + int(delta)
-#   print "delta %s  mini %s maxi %s"%(delta,mini,maxi)
+   global average_free
+   global good_percent
    
+   self.time = self.time + int(1)
+   if int(self.total) == 0:
+     percent = float(0)
+   else:  
+     percent = float(self.free)*float(100)/float(self.total)
+
    
    if options.freeSpace == False:
      try:
-       int(average)
+       int(average_free)
      except:  
        options.freeSpace = True
    
@@ -164,11 +162,11 @@ class rozofs_device:
    if options.freeSpace == False:
      if int(percent) == int(0):
        color = RED+BOLD+REVERSE
-     elif float(percent) < int(5):
+     elif int(percent) < int(5):
        color = RED+BOLD         
-     elif (int(percent) < (int(average)-int(threshold))):
+     elif (float(percent) < (float(good_percent)-float(threshold))):
        color = YELLOW
-     elif (int(percent) > (int(average)+int(threshold))):
+     elif (float(percent) > (float(good_percent)+float(threshold))):
        color = CYAN
      else:
        color = NORMAL          
@@ -186,17 +184,29 @@ class rozofs_device:
      else: 
        display_free = "%6s(-%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.old_free)-int(self.free))))
 
-     if int(percent) < int(5):
+     delta = float(self.total) * float(threshold)
+     delta /= float(100)
+     mini = int(average_free) - int(delta)
+     maxi = int(average_free) + int(delta)
+
+     if int(percent) == int(0):
        color = RED+BOLD+REVERSE
+     elif int(percent) < int(5):
+       color = RED+BOLD
      elif (int(self.free) < int(mini)):
-       color = RED
+       color = YELLOW
      elif (int(self.free) > int(maxi)):
-       color = NORMAL
+       color = CYAN
      else:
-       color = CYAN 
+       color = NORMAL 
      LINE += "%5.1f%% "%(percent) + color + " %-17s"%(display_free) + NORMAL 
          
-   LINE += "/ %7s  %s"%(common_bytes_with_unit(self.total+"K"), self.mount)   
+   LINE += "/ %7s  "%(common_bytes_with_unit(self.total+"K"))   
+   if self.time > int(1):   
+     LINE = LINE + RED + BOLD + "%s"%(self.mount) + NORMAL 
+     if self.time > int(8): self.delete()
+   else:     
+     LINE = LINE +"%s"%(self.mount) 
    print LINE
    
       
@@ -241,10 +251,16 @@ def do_one_df():
       total_free   += int(free)   
       total_size   += int(total)   
       continue
-  average_free = int(total_free) /  int(total_device)
-  good_percent = float(total_free)*100/float(total_size)
+  if  int(total_device) == 0:
+    average_free = 0
+    good_percent = 0
+  else:     
+    average_free = int(total_free) /  int(total_device)
+    good_percent = float(total_free)*100/float(total_size)
+    
+  good_range = " %5.1f%% [%2.1f%%..%2.1f%%]"%(good_percent, float(good_percent)-float(threshold),  float(good_percent)+float(threshold))
   
-  print "____________________ %s ____________________%5.1f%%"%(now.strftime("%Y-%m-%d %H:%M:%S"),good_percent)
+  print "____________________ %s ____________________%s"%(now.strftime("%Y-%m-%d %H:%M:%S"),good_range)
   if options.freeSpace == False:
     print "        NAME  " + CYAN + "   % " + NORMAL + "   FREE             /    SIZE  MOUNT POINT" 
   else:   
@@ -272,8 +288,8 @@ parser.add_option("-f","--free", action="store_true",default=False, dest="freeSp
 
 threshold = int(4)        
 period = int(0)
-average_free = int(0)
-good_percent = int(0)
+average_free = float(0)
+good_percent = float(0)
 
 if options.threshold != None:
   try: threshold = options.threshold
