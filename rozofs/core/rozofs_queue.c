@@ -47,18 +47,25 @@ int rozofs_queue_init(rozofs_queue_t * q, const unsigned int slots)
 void *rozofs_queue_get(rozofs_queue_t * q)
 {
     void *j;
+    int full = 0;
 
     pthread_mutex_lock(&q->lock);
     while (q->head == q->tail)
         pthread_cond_wait(&q->wait_data,&q->lock);
 
+    if ((q->head + 1U) % q->size == q->tail) 
+    {
+       full = 1;
+//       full_stats++;
+    }
     j = q->queue[q->tail];
     q->queue[q->tail] = NULL;
     q->tail = (q->tail + 1U) % q->size;
-
-    pthread_cond_signal(&q->wait_room);
-
+    
     pthread_mutex_unlock(&q->lock);
+
+    if (full) pthread_cond_signal(&q->wait_room);
+
     return j;
 }
 
@@ -67,17 +74,21 @@ void *rozofs_queue_get(rozofs_queue_t * q)
 */
 void rozofs_queue_put(rozofs_queue_t *q, void *j)
 {
+    int empty = 0;
     pthread_mutex_lock(&q->lock);
     while ((q->head + 1U) % q->size == q->tail)
         pthread_cond_wait(&q->wait_room,&q->lock);
 
-
+    if (q->head == q->tail) 
+    {
+      empty = 1;
+//      empty_stats++;
+    }  
     q->queue[q->head] = j;
     q->head = (q->head + 1U) % q->size;
-
-    pthread_cond_signal(&q->wait_data);
-
     pthread_mutex_unlock(&q->lock);
+    
+    if (empty) pthread_cond_signal(&q->wait_data);
+
     return;
 }
-
