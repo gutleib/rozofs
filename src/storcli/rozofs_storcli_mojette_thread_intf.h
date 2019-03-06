@@ -29,6 +29,7 @@
 #include <rozofs/core/af_unix_socket_generic.h>
 #include <rozofs/core/af_unix_socket_generic.h>
 #include <rozofs/core/rozofs_socket_family.h>
+#include <rozofs/core/rozofs_queue.h>
 #include "rozofs_storcli.h"
 
 
@@ -78,7 +79,8 @@ extern uint32_t rozofs_stcmoj_thread_len_threshold;
 
 typedef enum _rozofs_stcmoj_thread_request_e {
   STORCLI_MOJETTE_THREAD_INV = 0,
-  STORCLI_MOJETTE_THREAD_FWD = 1
+  STORCLI_MOJETTE_THREAD_FWD ,
+  STORCLI_MOJETTE_THREAD_INV_RELEASE,  
 } rozofs_stcmoj_thread_request_e;
 
 typedef struct _rozofs_stcmoj_thread_msg_t
@@ -91,6 +93,33 @@ typedef struct _rozofs_stcmoj_thread_msg_t
   uint64_t            size;
   void              * working_ctx;
 } rozofs_stcmoj_thread_msg_t;
+
+#define STORCLI_MOJ_QUEUE 1 
+
+#define ROZOFS_MOJETTE_QUEUE_RING_SZ 1024
+#define ROZOFS_MOJETTE_QUEUE_BUF_COUNT (ROZOFS_MOJETTE_QUEUE_RING_SZ +8)
+
+extern rozofs_stcmoj_thread_msg_t *rozofs_storcli_moj_req_pool_p;
+extern uint32_t rozofs_storcli_moj_pool_pool_idx_cur;
+extern rozofs_queue_t rozofs_storcli_mojette_req_queue;
+/*__________________________________________________________________________
+*/
+/*
+**  Allocate an entry to submit a job to the mojette threads
+
+  @param none
+  
+  @retval: pmointer to the context to use
+*/
+static inline rozofs_stcmoj_thread_msg_t *rozofs_storcli_mojette_req_get_next_slot()
+{
+  rozofs_stcmoj_thread_msg_t *p = &rozofs_storcli_moj_req_pool_p[rozofs_storcli_moj_pool_pool_idx_cur];
+  rozofs_storcli_moj_pool_pool_idx_cur++;
+  if (rozofs_storcli_moj_pool_pool_idx_cur == ROZOFS_MOJETTE_QUEUE_BUF_COUNT) rozofs_storcli_moj_pool_pool_idx_cur = 0;
+  return p;
+
+}
+
 
 /*__________________________________________________________________________
 * Initialize the disk thread interface

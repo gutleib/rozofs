@@ -119,7 +119,65 @@ int af_unix_mojette_sock_create_internal(char *nameOfSocket,int size)
   }
 
   return(fd);
-}  
+} 
+
+
+/*
+**__________________________________________________________________________
+*/
+
+/**
+* callback for sending a response to a read ta remote entity from a mojette thread
+
+ potential failure case:
+  - socket_ref is out of range
+  - connection is down
+  
+ @param buffer : pointer to the ruc_buffer that cointains the response
+ @param socket_ref : index of the scoket context with the caller is remode, non significant for local caller
+ @param user_param_p : pointer to a user opaque parameter (non significant for a remote access)
+ 
+ @retval 0 : successfully submitted to the transport layer
+ @retval < 0 error, the caller is intended to release the buffer
+ */
+int rozofs_storcli_mojette_thread_remote_rsp_cbk(void *buffer,uint32_t socket_ref,void *user_param_p)
+{
+   int write_len;
+   af_unix_ctx_generic_t *this;
+   char *pbuf;
+   int bytes;
+
+   write_len  = (int)ruc_buf_getPayloadLen(buffer);
+   pbuf = (char *)ruc_buf_getPayload(buffer);
+   this = af_unix_getObjCtx_p(socket_ref);
+   if (this == NULL)
+   {
+      fatal("The socket does not exist");
+   }
+   bytes = send(this->socketRef,pbuf,(int)write_len,0);
+  if (bytes == 0)
+  {
+     /*
+     ** the other end is probably dead
+     */
+     fatal("Mojette thread cannot send back the response");
+  }
+  if (bytes > 0)
+  {
+     if (bytes != write_len)
+     {
+       fatal("Mojette thread socket partial send not supported when sending from mojette thread (%d/%d)",bytes,write_len);      
+     }
+     return 0;
+  }
+  /*
+  ** error cases
+  */
+  fatal("Mojette thread socket send: sending error (%s)",strerror(errno));
+  return -1;
+
+  
+} 
 /*__________________________________________________________________________
 */
 /**
@@ -136,6 +194,9 @@ static inline void storcli_mojette_inverse(rozofs_mojette_thread_ctx_t *thread_c
   rozofs_storcli_ctx_t      * working_ctx_p;
   unsigned long long cycleBefore, cycleAfter;
   storcli_read_arg_t *storcli_read_rq_p;
+  rozofs_storcli_resp_pf_t  saved_response_cbk;
+  void *saved_xmitBuf;
+
     
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeBefore = MICROLONG(timeDay);
@@ -169,6 +230,47 @@ static inline void storcli_mojette_inverse(rozofs_mojette_thread_ctx_t *thread_c
   thread_ctx_p->stat.MojetteInverse_Byte_count += (working_ctx_p->effective_number_of_blocks*ROZOFS_BSIZE_BYTES(storcli_read_rq_p->bsize));
   thread_ctx_p->stat.MojetteInverse_cycle +=(cycleAfter-cycleBefore);  
   thread_ctx_p->stat.MojetteInverse_time +=(timeAfter-timeBefore);  
+  /*
+  ** Check if we can send the response from the Mojette thread. For this we MUST not have any projection to repair
+  */
+  {
+    storcli_read_arg_t *storcli_read_rq_p;
+    storcli_read_rq_p = (storcli_read_arg_t*)&working_ctx_p->storcli_read_arg;
+    uint8_t layout         = storcli_read_rq_p->layout;
+    uint8_t rozofs_safe    = rozofs_get_rozofs_safe(layout);
+    
+    int ret = rozofs_storcli_check_repair(working_ctx_p,rozofs_safe);  
+    if (ret != 0)
+    { 
+      /*
+      ** the reply will be done in the main thread for the case of the repair
+      */
+      goto out;          
+    }
+
+  } 
+  /*
+  ** Here is the case of the direct reply done from the thread
+  ** First of all we must save the current callback and the xmit buffer since the called procedure remove
+  ** the reference of the xmit buffer from the storcli context
+  */
+  saved_response_cbk = working_ctx_p->response_cbk;
+  saved_xmitBuf = working_ctx_p->xmitBuf;
+  working_ctx_p->response_cbk = rozofs_storcli_mojette_thread_remote_rsp_cbk;
+  /*
+  ** send the response
+  */
+  rozofs_storcli_read_reply_success(working_ctx_p);
+  /*
+  ** restore the xmit buffer reference in order to release it at working context release time
+  */
+  working_ctx_p->xmitBuf= saved_xmitBuf;
+  /*
+  ** change the opcode to indicate that only the release must take place
+  */
+  msg->opcode =STORCLI_MOJETTE_THREAD_INV_RELEASE;
+   
+out:
   /*
   ** send the response
   */
@@ -259,10 +361,13 @@ static inline void storcli_mojette_forward(rozofs_mojette_thread_ctx_t *thread_c
 */
 
 void *rozofs_stcmoj_thread(void *arg) {
-  rozofs_stcmoj_thread_msg_t   msg;
   rozofs_mojette_thread_ctx_t * ctx_p = (rozofs_mojette_thread_ctx_t*)arg;
+#ifdef STORCLI_MOJ_QUEUE
+  rozofs_stcmoj_thread_msg_t   *msg_p;
+#else
   int                        bytesRcvd;
-
+  rozofs_stcmoj_thread_msg_t   msg;
+#endif
   uma_dbg_thread_add_self("Mojette");
 
   //info("Disk Thread %d Started !!\n",ctx_p->thread_idx);
@@ -299,11 +404,32 @@ void *rozofs_stcmoj_thread(void *arg) {
      
     }
   while(1) {
-    if (ctx_p->thread_idx >= common_config.mojette_thread_count)
+    if ((ctx_p->thread_idx != 0) && (ctx_p->thread_idx >= common_config.mojette_thread_count))
     {
        sleep(30);
        continue;
     }
+#ifdef STORCLI_MOJ_QUEUE
+#warning FDL new code for Mojette request submit  
+    /*
+    ** Read some data from the queue
+    */
+    msg_p = rozofs_queue_get(&rozofs_storcli_mojette_req_queue);  
+    switch (msg_p->opcode) {
+    
+      case STORCLI_MOJETTE_THREAD_INV:
+        storcli_mojette_inverse(ctx_p,msg_p);
+        break;
+	
+      case STORCLI_MOJETTE_THREAD_FWD:
+        storcli_mojette_forward(ctx_p,msg_p);
+        break;
+       	
+      default:
+        fatal(" unexpected opcode : %d\n",msg_p->opcode);
+        exit(0);       
+    }
+#else
     /*
     ** read the north disk socket
     */
@@ -334,6 +460,7 @@ void *rozofs_stcmoj_thread(void *arg) {
         exit(0);       
     }
     sched_yield();
+#endif
   }
 }
 /*

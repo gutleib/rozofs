@@ -47,7 +47,9 @@ int        af_unix_mojette_empty_recv_count = 0;
 
 struct  sockaddr_un storio_south_socket_name;
 struct  sockaddr_un storio_north_socket_name;
-
+rozofs_stcmoj_thread_msg_t *rozofs_storcli_moj_req_pool_p=NULL;
+uint32_t rozofs_storcli_moj_pool_pool_idx_cur = 0;
+rozofs_queue_t rozofs_storcli_mojette_req_queue;
  
 int rozofs_stcmoj_thread_create(char * hostname,int eid,int storcli_idx, int nb_threads) ;
  
@@ -364,9 +366,10 @@ uint32_t af_unix_disk_rcvReadysock(void * unused,int socketId)
 *  process the end of Mojette inverse transform process
 
   @param working_ctx_p : pointer to the working context of the read
+  @param send_needed: when asserted the send must be done from the main thread, otherwise we just do the release
   @retval none:
 */
-void rozofs_storcli_inverse_threaded_end(rozofs_storcli_ctx_t * working_ctx_p)
+void rozofs_storcli_inverse_threaded_end(rozofs_storcli_ctx_t * working_ctx_p,int send_needed)
 {
    rozofs_storcli_projection_ctx_t  *read_prj_work_p = NULL;
    uint32_t   projection_id;
@@ -389,6 +392,11 @@ void rozofs_storcli_inverse_threaded_end(rozofs_storcli_ctx_t * working_ctx_p)
       read_prj_work_p[projection_id].prj_buf = NULL;
       read_prj_work_p[projection_id].prj_state = ROZOFS_PRJ_READ_IDLE;
     }
+    /*
+    ** Check we just need to proceed with the context release : case when Mojette thread
+    ** sent back the reponse to rozofsmount by itself
+    */
+    if (send_needed == 0) goto release;
 
     /*
     ** update the index of the next block to read
@@ -422,6 +430,7 @@ void rozofs_storcli_inverse_threaded_end(rozofs_storcli_ctx_t * working_ctx_p)
     ** read is finished, send back the buffer to the client (rozofsmount)
     */       
     rozofs_storcli_read_reply_success(working_ctx_p);
+release:
     /*
     ** release the root context and the transaction context
     */
@@ -459,7 +468,10 @@ void af_unix_mojette_thread_response(rozofs_stcmoj_thread_msg_t *msg)
        break;     
 
     case STORCLI_MOJETTE_THREAD_INV:
-       rozofs_storcli_inverse_threaded_end(working_ctx_p);
+       rozofs_storcli_inverse_threaded_end(working_ctx_p,1);
+       break;
+    case STORCLI_MOJETTE_THREAD_INV_RELEASE:
+       rozofs_storcli_inverse_threaded_end(working_ctx_p,0);
        break;
 
     default:
@@ -634,8 +646,28 @@ int rozofs_stcmoj_thread_intf_send(rozofs_stcmoj_thread_request_e   opcode,
 				   uint64_t                       timeStart) 
 {
   int                         ret;
+
+#ifdef STORCLI_MOJ_QUEUE
+#warning FDL new code for Mojette request submit  
+  /*
+  ** allocate a slot in the queue to submit the request
+  */
+  rozofs_stcmoj_thread_msg_t    *msg_p; 
+  msg_p = rozofs_storcli_mojette_req_get_next_slot();
+  /* Fill the message */
+  msg_p->msg_len         = sizeof(rozofs_stcmoj_thread_msg_t)-sizeof(msg_p->msg_len);
+  msg_p->opcode          = opcode;
+  msg_p->status          = 0;
+  msg_p->transaction_id  = transactionId++;
+  msg_p->timeStart       = timeStart;
+  msg_p->working_ctx     = working_ctx;
+  /*
+  ** post the request to the thread
+  */ 
+  rozofs_queue_put(&rozofs_storcli_mojette_req_queue,msg_p);  
+
+#else 
   rozofs_stcmoj_thread_msg_t    msg;
- 
   /* Fill the message */
   msg.msg_len         = sizeof(rozofs_stcmoj_thread_msg_t)-sizeof(msg.msg_len);
   msg.opcode          = opcode;
@@ -651,7 +683,7 @@ int rozofs_stcmoj_thread_intf_send(rozofs_stcmoj_thread_request_e   opcode,
                                                                     storio_north_socket_name.sun_path, strerror(errno));
      exit(0);  
   }
-  
+#endif  
   af_unix_mojette_pending_req_count++;
   if (af_unix_mojette_pending_req_count > af_unix_mojette_pending_req_max_count)
       af_unix_mojette_pending_req_max_count = af_unix_mojette_pending_req_count;
@@ -750,6 +782,7 @@ void af_unix_mojette_scheduler_entry_point(uint64_t current_time)
 */
 int rozofs_stcmoj_thread_intf_create(char * hostname,int eid,int storcli_idx, int nb_threads, int nb_buffer) {
   char socketName[128];
+  int ret;
 
   af_unix_mojette_thread_count = nb_threads;
 
@@ -789,10 +822,31 @@ int rozofs_stcmoj_thread_intf_create(char * hostname,int eid,int storcli_idx, in
   storcli_set_socket_name_with_eid_stc_id(&storio_north_socket_name,ROZOFS_SOCK_FAMILY_STORCLI_MOJETTE_NORTH_SUNPATH,hostname,eid,storcli_idx);
   
   uma_dbg_addTopic_option("MojetteThreads", mojette_thread_debug, UMA_DBG_OPTION_RESET); 
+#if 0
   /*
   ** attach the callback on socket controller
   */
   ruc_sockCtrl_attach_applicative_poller(af_unix_mojette_scheduler_entry_point);  
+#endif
+  /*
+  ** create the common queue used for submitting the mojette transform requests towards the Mojette threads
+  */
+  ret = rozofs_queue_init(&rozofs_storcli_mojette_req_queue,ROZOFS_MOJETTE_QUEUE_RING_SZ);
+  if (ret < 0)
+  {
+     severe("Cannot create queue for Mojette threads \n");
+     return (-1);
+  }
+  /*
+  ** Create the pool of buffer
+  */
+  rozofs_storcli_moj_req_pool_p = xmalloc(sizeof(rozofs_stcmoj_thread_msg_t)*(ROZOFS_MOJETTE_QUEUE_RING_SZ));
+  if (rozofs_storcli_moj_req_pool_p == NULL)
+  {
+     severe("Cannot allocated memory for Mojette threads \n");
+     return (-1);
+  } 
+  rozofs_storcli_moj_pool_pool_idx_cur = 0; 
    
   return rozofs_stcmoj_thread_create(hostname,eid,storcli_idx, nb_threads);
 }
