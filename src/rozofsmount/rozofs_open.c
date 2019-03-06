@@ -149,7 +149,7 @@ void rozofs_ll_open_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
       /*
       ** send back response to fuse
       */
-      fuse_reply_open(req, fi);
+      rz_fuse_reply_open(req, fi);
       goto out; 
     }    
     /*
@@ -214,7 +214,7 @@ short_cut:
 	/*
 	** send back response to fuse
 	*/
-	fuse_reply_open(req, fi);
+	rz_fuse_reply_open(req, fi);
 	goto out;         
       }
       goto error;  
@@ -314,7 +314,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
 	 /*
 	 ** send back response to fuse
 	 */
-	 fuse_reply_open(req, fi);
+	 rz_fuse_reply_open(req, fi);
 	 errno = EAGAIN;
 	 goto out;         
        }       
@@ -451,7 +451,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
     */
     rzcachetrack_file(ie->pfid,ie->attrs.attrs.size,ie->attrs.attrs.mtime);    
     
-    fuse_reply_open(req, fi);
+    rz_fuse_reply_open(req, fi);
     goto out;
 error:
     if (file)

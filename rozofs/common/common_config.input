@@ -101,7 +101,7 @@ INT	storage recycle_truncate_blocks         0
 // To activate export writebehind attributes thread.
 BOOL	export export_attr_thread		True
 // To activate rozofsmount reply fuse threads.
-BOOL	client rozofsmount_fuse_reply_thread	False
+INT	client rozofsmount_fuse_reply_thread	0 0:4
 // Support of deleted directory/file versioning.
 BOOL    export export_versioning 		False     
 // Number of MB to account a file for during file distribution phase

@@ -776,6 +776,11 @@ int rozofs_stat_start(void *args) {
     */    
     rozofs_iowr_err_init(args_p->instance);  
     /*
+    **  Indicates that the main thread is ready
+    */
+    rozofsmount_main_ready = 1;
+        
+    /*
      ** main loop
      */
     while (1) {

@@ -122,7 +122,7 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
     COMMON_CONFIG_SET_BOOL(export_attr_thread,value);
   }
   if (strcmp(parameter,"rozofsmount_fuse_reply_thread")==0) {
-    COMMON_CONFIG_SET_BOOL(rozofsmount_fuse_reply_thread,value);
+    COMMON_CONFIG_SET_INT_MINMAX(rozofsmount_fuse_reply_thread,value,0,4);
   }
   if (strcmp(parameter,"export_versioning")==0) {
     COMMON_CONFIG_SET_BOOL(export_versioning,value);
@@ -559,10 +559,10 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
 
   if (strcasestr("rozofsmount_fuse_reply_thread",parameter) != NULL) {
     match++;
-    COMMON_CONFIG_IS_DEFAULT_BOOL(rozofsmount_fuse_reply_thread,False);
+    COMMON_CONFIG_IS_DEFAULT_INT(rozofsmount_fuse_reply_thread,0);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// To activate rozofsmount reply fuse threads.\n");
-    COMMON_CONFIG_SHOW_BOOL(rozofsmount_fuse_reply_thread,False);
+    COMMON_CONFIG_SHOW_INT_OPT(rozofsmount_fuse_reply_thread,0,"0:4");
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
@@ -1360,10 +1360,10 @@ char * show_common_config_module_client(char * pChar) {
   COMMON_CONFIG_SHOW_BOOL(wr_pending_anticipated,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_BOOL(rozofsmount_fuse_reply_thread,False);
+  COMMON_CONFIG_IS_DEFAULT_INT(rozofsmount_fuse_reply_thread,0);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To activate rozofsmount reply fuse threads.\n");
-  COMMON_CONFIG_SHOW_BOOL(rozofsmount_fuse_reply_thread,False);
+  COMMON_CONFIG_SHOW_INT_OPT(rozofsmount_fuse_reply_thread,0,"0:4");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(client_fast_reconnect,False);
@@ -1962,10 +1962,10 @@ char * save_common_config_module_client(char * pChar) {
     COMMON_CONFIG_SHOW_BOOL(wr_pending_anticipated,False);
   }
 
-  COMMON_CONFIG_IS_DEFAULT_BOOL(rozofsmount_fuse_reply_thread,False);
+  COMMON_CONFIG_IS_DEFAULT_INT(rozofsmount_fuse_reply_thread,0);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// To activate rozofsmount reply fuse threads.\n");
-    COMMON_CONFIG_SHOW_BOOL(rozofsmount_fuse_reply_thread,False);
+    COMMON_CONFIG_SHOW_INT_OPT(rozofsmount_fuse_reply_thread,0,"0:4");
   }
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(client_fast_reconnect,False);
@@ -2774,7 +2774,7 @@ static inline void common_config_generated_read(char * fname) {
   // To indicate if we can respond before write_pending reaches 0. 
   COMMON_CONFIG_READ_BOOL(wr_pending_anticipated,False);
   // To activate rozofsmount reply fuse threads. 
-  COMMON_CONFIG_READ_BOOL(rozofsmount_fuse_reply_thread,False);
+  COMMON_CONFIG_READ_INT_MINMAX(rozofsmount_fuse_reply_thread,0,0,4);
   // To activate fast reconnect from client to exportd 
   COMMON_CONFIG_READ_BOOL(client_fast_reconnect,False);
   // delay is minutes after which a file is considered as an archived file (unit is minute) 
