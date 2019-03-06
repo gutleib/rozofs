@@ -71,6 +71,7 @@ extern int rozofs_max_storcli_tx ;  /**< depends on the number of storcli proces
 extern char *rozofs_mountpoint;
 extern struct fuse_lowlevel_ops rozofs_ll_operations;
 extern int ROZOFS_MAX_WRITE_THREADS;  /**< number of active write threads           */
+extern int rozofsmount_main_ready;
 typedef struct rozofsmnt_conf {
     char *host;
     char *export;

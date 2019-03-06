@@ -1360,6 +1360,23 @@ int fuse_reply_thread_init();
  */
 void rz_fuse_reply_attr(fuse_req_t req, const struct stat *attr,
 		    double attr_timeout);
+
+/*
+**__________________________________________________________________
+*/
+/**
+ * Reply on file opening
+ *
+ * Possible requests:
+ *   fuse_ll_open
+ *
+ *
+ * @param req request handle
+ * @param fi opened parameters
+ * @return none
+ */
+void rz_fuse_reply_open(fuse_req_t req, struct fuse_file_info *fi);
+
 /*
 **__________________________________________________________________
 */
@@ -1409,4 +1426,41 @@ int rozofs_storcli_wr_thread_send(int rpc_opcode,void *msg2encode_p,xdrproc_t en
 
 void af_unix_fuse_write_process_response(void *msg);
 void rozofs_fuse_release_rcv_buffer_pool(rozofs_fuse_rcv_buf_t *p_rcv_buf);
+
+/*
+**  Get the receive buffer that contains the fuse request
+*/
+static inline void * rozofs_get_fuse_req_receive_buf()
+{
+   return (void*) rozofs_fuse_cur_rcv_buf->buf;
+}
+/*
+**__________________________________________________________________________
+*/
+/**
+*   Check if the storcli will do a direct write to page cache when
+    doing Mojette Inverse Transform
+    
+    @param inode_p: pointer to the arry where the ino value will be store (0: no inode)
+    @param ino: ino to store
+    
+    @retval 0: not spported
+    @retval 1: supported
+*/
+static inline int rozofs_check_for_shared_buffer_by_pass(uint64_t *inode_p,uint64_t ino)
+{
+   /*
+   ** check if the fuse kernel module supports the by-pass
+   */
+   *inode_p = 0;
+   if ((rozofs_fuse_ctx_p->fuse_path_solved == 0) /*|| (rozofs_fuse_ctx_p->no_fuse_kernel_bypass)*/)
+   {
+     *inode_p = 0;
+     return 0;      
+   }
+   *inode_p = ino;
+   return 1;
+}
+
+
 #endif

@@ -19,7 +19,7 @@
 //#define TRACE_FS_READ_WRITE 1
 //#warning TRACE_FS_READ_WRITE active
 #include <inttypes.h>
-
+#include <linux/fuse.h>
 #include <rozofs/rpc/eproto.h>
 #include <rozofs/rpc/storcli_proto.h>
 
@@ -92,7 +92,12 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
    int storcli_idx;
    int bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);
    int max_prj = ROZOFS_MAX_BLOCK_PER_MSG;
-
+   uint64_t ino;
+   /*
+   ** get the inode saved in the fuse context: it might needed for the case when storcli needs
+   ** to open the inode during Mojette Transform
+   */
+   RESTORE_FUSE_PARAM(buffer_p,ino);
    // Nb. of the first block to read
    bid = off / bbytes;
    nb_prj = len / bbytes;
@@ -162,6 +167,11 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
        share_rd_p->cmd[args.cmd_idx].xid = 0;
        share_rd_p->cmd[args.cmd_idx].received_len = 0;       
        share_rd_p->cmd[args.cmd_idx].offset_in_buffer = 0;
+       /*
+       ** Check if the inode must be filled in the storcli request in order to have a direct write in the
+       ** page cache of Linux
+       */
+       rozofs_check_for_shared_buffer_by_pass(&share_rd_p->cmd[args.cmd_idx].inode,ino);
        /*
        ** get the index of the shared payload in buffer
        */
@@ -547,6 +557,27 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     file_t *file = (file_t *) (unsigned long) fi->fh;
     int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_read,(fuse_ino_t)file,file->fid,size,off);
 
+#if 0   
+    /*
+    ** Get the inode from the read request: It might be possible that the value is not there
+    */
+    void *fuse_req_in = rozofs_get_fuse_req_receive_buf();
+    if (fuse_req_in == NULL)
+    {
+       fatal ("No fuse receive buffer !!");
+    }
+    struct fuse_read_in *fuse_kern_rd_p;
+    struct fuse_in_header *fuse_in_hdr_p;
+    void * kernel_fuse_inode_addr_p = NULL;  
+    fuse_in_hdr_p = (struct fuse_in_header* )fuse_req_in;
+    fuse_in_hdr_p +=1; 
+    fuse_kern_rd_p = (struct fuse_read_in*) fuse_in_hdr_p;
+    if (fuse_kern_rd_p->padding)
+    {
+      kernel_fuse_inode_addr_p = (void*)fuse_kern_rd_p->lock_owner; 
+      info("FDL inode addr:%p ino: %llu ",kernel_fuse_inode_addr_p,(unsigned long long int)ino);
+    }
+#endif
     /*
     ** Update the IO statistics
     */
@@ -563,6 +594,7 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
       goto error;
     }
     SAVE_FUSE_PARAM(buffer_p,req);
+    SAVE_FUSE_PARAM(buffer_p,ino); /**< needed by storcli to open the inode during Mojette Transform  */
     SAVE_FUSE_PARAM(buffer_p,size);
     SAVE_FUSE_PARAM(buffer_p,off);
     SAVE_FUSE_PARAM(buffer_p,trc_idx);

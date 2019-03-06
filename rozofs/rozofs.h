@@ -65,6 +65,9 @@ typedef struct _rozofs_shmem_cmd_read_t
     uint32_t xid;                /**< XID of the transaction (IN)   */
     uint32_t received_len;       /**< number of bytes read (OUT) */
     uint32_t offset_in_buffer;   /**< offset of the data in the shared buffer (IN) */
+    uint32_t filler;             /**< for future usage          */
+    uint64_t inode;              /**< reference of the inode for the case of the direct write in page cache (by-pass shared read/write buffer). */
+    uint64_t f_offset;           /**< offset within the target file     */
 } rozofs_shmem_cmd_read_t;
     
 
@@ -608,6 +611,44 @@ typedef union
      uint64_t  del:1;     /**< asserted to 1 when the i-node has a pending deletion      */
    } meta;
 } rozofs_inode_t;
+
+/*
+** Structures used for direct read based on inode opening thanks IOCTL of the fusectl
+*/
+
+#define ROZOFS_FUSECTL_IOCTL_INODE 8
+#define ROZOFS_FUSECTL_IOCTL_MOUNT 9
+
+typedef enum {
+  OPE_OPEN = 0,
+  OPE_MMAP,
+  OPE_UNMAP,
+  OPE_CLOSE,
+  OPE_MAX
+} rozofs_mmap_ope_e;
+/*
+** ** RozoFS-inodeFile
+** Structure used to open/mmap,unmap and close a file that has been opened by its inode
+*/
+typedef struct _ioctl_direct_read_t
+{
+   uint64_t ino;                  /**< IN: inode to open  */
+   rozofs_mmap_ope_e      ope;   /**< IN : operation to execute */
+   int status;                   /**< OUT: status of the operation */
+   void *file;                   /**< OUT/IN : allocated file      */
+   void *raddr;                  /**< OUT: pointer to address to be used by user land process */
+   unsigned long size;           /**< IN: buffer size (mmap)   */
+   unsigned long pgoff;          /**< IN: offset in the file (mmap)*/
+} ioctl_direct_read_t;
+
+typedef struct _ioctl_rozofs_mountpath_t
+{
+   char name[1024];              /**< IN: rozofs mountpath  */
+   int status;                   /**< OUT: status : O (OK) < 0 (NOK) */
+} ioctl_rozofs_mountpath_t;
+
+
+
 
 /*
 **__________________________________________

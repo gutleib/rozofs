@@ -176,6 +176,8 @@ typedef struct _rozofs_fuse_ctx_t
    int     data_xon;         /**< assert to one when there is enough buffer on storcli side  */
    int     dir_attr_invalidate;   /**< assert to one for directory invalidate on mkdir/mknod/unlink/create and rmdir  */
    int     ioctl_supported;  /**< assert to 1 if ioctl is supported for xon/xoff */
+   int     dev;              /**< device number or -1 when ioctl is not supported */
+   int     fuse_path_solved; /**< assert to 1 if rozofsmount has been able to get the path of the mount point at kernel level */
 
 } rozofs_fuse_ctx_t;
  

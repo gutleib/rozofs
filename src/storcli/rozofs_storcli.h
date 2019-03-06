@@ -539,6 +539,8 @@ typedef struct storcli_conf {
     unsigned localPreference;
     unsigned noReadFaultTolerant;
     unsigned numanode;
+    char *fusectl;
+    int   fusectl_fd;
 } storcli_conf;
 
 extern storcli_conf conf;

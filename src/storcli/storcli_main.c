@@ -128,7 +128,7 @@ uint32_t rozofs_storcli_cid_state_table[ROZOFS_CLUSTERS_MAX];
 uint32_t storcli_vid_state = CID_DEPENDENCY_ST;
 
 storcli_lbg_cnx_supervision_t storcli_lbg_cnx_supervision_tab[STORCLI_MAX_LBG];
-
+#define DISPLAY_INT_CONFIG(field)   pChar += sprintf(pChar,"%-25s = %d\n",#field, conf.field); 
 #define DISPLAY_UINT32_CONFIG(field)   pChar += sprintf(pChar,"%-25s = %u\n",#field, conf.field); 
 #define DISPLAY_STRING_CONFIG(field) \
   if (conf.field == NULL) pChar += sprintf(pChar,"%-25s = NULL\n",#field);\
@@ -157,6 +157,8 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(localPreference);  
   DISPLAY_UINT32_CONFIG(noReadFaultTolerant); 
   DISPLAY_UINT32_CONFIG(numanode);
+  DISPLAY_STRING_CONFIG(fusectl);  
+  DISPLAY_INT_CONFIG(fusectl_fd);
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }    
 
@@ -1524,6 +1526,7 @@ void usage() {
     printf("\t-f,--localPreference\t\tfavor local storage on read to save network bandwith in case of poor network connection\n");
     printf("\t-F,--noReadFaultTolerant\t\tReturn EIO on block corruption detection.\n");
     printf("\t-n,--numanode <#node>\t\tNode to pin the STORCLI on.\n");
+    printf("\t-C,--channel <path>\t\tfuse channel control path of the mountpoint.\n");
 
 }
 
@@ -1564,6 +1567,7 @@ int main(int argc, char *argv[]) {
         { "localPreference", required_argument, 0, 'f'},
         { "noReadFaultTolerant", required_argument, 0, 'F'},
         { "numanode", required_argument, 0, 'n'},
+        { "channel", required_argument, 0, 'C'},
         { 0, 0, 0, 0}
     };
 
@@ -1628,11 +1632,13 @@ int main(int argc, char *argv[]) {
     conf.mojThreadThreshold  = -1;
     conf.localPreference     = 0;  
     conf.noReadFaultTolerant = 0;
+    conf.fusectl = NULL;    
+    conf.fusectl_fd = -1;
     
     while (1) {
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hH:E:P:i:D:M:R:s:t:k:c:l:S:g:o:r:w:m:L:B:n:Ff", long_options, &option_index);
+        c = getopt_long(argc, argv, "hH:E:P:i:D:M:R:s:t:k:c:l:S:g:o:r:w:m:L:B:n:FfC:", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -1644,6 +1650,14 @@ int main(int argc, char *argv[]) {
                 break;
             case 'H':
                 conf.host = strdup(optarg);
+                break;
+            case 'C':
+                conf.fusectl = strdup(optarg);
+		/*
+		** Attempt to open the a filedescriptor on the fuse control channel of the mountpoint
+		*/
+		conf.fusectl_fd = open(conf.fusectl,O_RDWR);
+		if (conf.fusectl_fd < 0) warning("Fusectl: %s: %s",conf.fusectl,strerror(errno));
                 break;
             case 'o':
                 conf.owner = strdup(optarg);

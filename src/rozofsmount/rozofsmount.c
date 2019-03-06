@@ -74,6 +74,7 @@
 int rozofs_rotation_read_modulo = 0;
 char *rozofs_mountpoint = NULL;
 int rozofs_max_storcli_tx =0;  /**< depends on the number of storcli processes */
+int rozofsmount_main_ready = 0; /**< assert to 1 the main thread is ready */
     
 DEFINE_PROFILING(mpp_profiler_t) ;
 
@@ -1769,7 +1770,16 @@ void rozofs_start_one_storcli(int instance) {
     if (conf.noReadFaultTolerant) {
       cmd_p += sprintf(cmd_p, "-F ");
     } 
+    /*
+    ** Add the fuse channel if known
+    */
+
+    if (rozofs_fuse_ctx_p->dev > 0)
+    {
+      cmd_p += sprintf(cmd_p, "-C /sys/fs/fuse/connections/%d/rozofs ",rozofs_fuse_ctx_p->dev);    
     
+    }
+   
     sprintf(pid_file,"/var/run/launcher_rozofsmount_%d_storcli_%d.pid", conf.instance, instance);
     rozo_launcher_start(pid_file,cmd);
     
@@ -2187,6 +2197,14 @@ int fuseloop(struct fuse_args *args, int fg) {
        }
     }   
     rozofs_shared_mem_init_done  = 1;  
+    /*
+    ** Wait for the end of the main thread init becuse some data structure are needed at 
+    ** the time the storclis are started
+    */
+    while (rozofsmount_main_ready == 0)
+    {
+       usleep(100000);
+    }
 
     /*
     ** start the storcli processes
@@ -2323,6 +2341,8 @@ int main(int argc, char *argv[]) {
     struct rlimit core_limit;
     
     memset(&exportclt,0,sizeof(exportclt_t ));
+    
+    rozofsmount_main_ready = 0;
 
     ALLOC_PROFILING(mpp_profiler_t) ;
     /*

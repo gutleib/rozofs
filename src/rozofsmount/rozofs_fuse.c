@@ -59,7 +59,6 @@ uint64_t rozofs_storcli_xon_count= 0;
 
 void  rozofs_fuse_share_mem_init();
 
-
 /*
 **  Call back function for socket controller
 */
@@ -84,6 +83,9 @@ void rozofs_fuse_get_ticker()
 list_t rozofs_fuse_rcv_buf_head;    /**< head of the receive buffer   */
 int    rozofs_fuse_rcv_buf_count;
 rozofs_fuse_rcv_buf_t *rozofs_fuse_cur_rcv_buf = NULL;  /**< current receive buffer */
+
+
+
 
 /*
 **__________________________________________________________________________
@@ -802,7 +804,8 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 	   ret = ioctl(rozofs_fuse_ctx_p->fd,7,&cnx_param);  
 	   if (ret == 0)
 	   {
-	     pChar +=sprintf(pChar,"Device path          : /sys/fs/fuse/connections/%u\n",cnx_param.dev);
+	     pChar +=sprintf(pChar,"Device path          : /sys/fs/fuse/connections/%u (%s)\n",cnx_param.dev,
+	                                                   (rozofs_fuse_ctx_p->fuse_path_solved==0)?"NOT SOLVED":"SOLVED");
 	     pChar +=sprintf(pChar,"ra_pages             : %llu\n",(long long unsigned int)cnx_param.ra_pages);
 	     pChar +=sprintf(pChar,"max_background       : %u\n",cnx_param.max_background);
 	     pChar +=sprintf(pChar,"congestion_threshold : %u\n",cnx_param.congestion_threshold);	   	   
@@ -1066,6 +1069,19 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
   
   pChar +=  sprintf(pChar,"FUSE %8s - %d/%d ctx remaining\n",
                status, buffer_count, rozofs_fuse_ctx_p->initBufCount);
+  /*
+  ** print the fusectl channel path
+  */
+  if (rozofs_fuse_ctx_p->dev < 0)
+  {
+    pChar +=  sprintf(pChar,"fusectl    : Unknown\n");  
+  }
+  else
+  {
+    pChar +=  sprintf(pChar,"fusectl    : /sys/fs/fuse/connections/%d (%s)\n",rozofs_fuse_ctx_p->dev,(rozofs_fuse_ctx_p->fuse_path_solved==0)?"NOT SOLVED":"SOLVED");  
+  
+  }
+  	       
   /*
   ** display the cache mode
   */
@@ -1401,7 +1417,55 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
 	  break;     
         }
      }
-     /*
+    /*
+    **  Get the device within fusectl mount point
+    */
+    while(1)
+    {
+       rozofs_cnx_param_t  rozofs_fuse_cnx_param;
+       rozofs_fuse_ctx_p->dev = -1;
+       ioctl_rozofs_mountpath_t ioctl_mount;
+       int fd_fusectl;
+       char pathname[1024];
+       /*
+       **  RozoFS fuse connection parameters
+       */
+
+       memset(&rozofs_fuse_cnx_param,0,sizeof(rozofs_cnx_param_t));
+
+       if (rozofs_fuse_ctx_p->ioctl_supported == 0) break;
+	rozofs_fuse_cnx_param.read = 1;
+	ioctl(rozofs_fuse_ctx_p->fd,7,&rozofs_fuse_cnx_param);  
+	if (rozofs_fuse_cnx_param.dev == 0) break ;
+	rozofs_fuse_ctx_p->dev = rozofs_fuse_cnx_param.dev;
+	/*
+	** Now attempt to fill up the mount path on the fuse connection. It is needed by
+	** the storcli in order to be able to open the inode on which mojette transform should apply
+	*/
+	sprintf(pathname,"/sys/fs/fuse/connections/%d/rozofs",rozofs_fuse_ctx_p->dev);  
+	if ((fd_fusectl = open(pathname,O_RDONLY)) < 0)
+	{
+	    info("RozoFS Cannot open %s (%s)",pathname,strerror(errno));
+            break;
+	}
+	strcpy(ioctl_mount.name,rozofs_mountpoint);
+	ioctl_mount.status = -1;
+        ioctl(fd_fusectl,ROZOFS_FUSECTL_IOCTL_MOUNT,&ioctl_mount); 
+	/*
+	** check the the kernel has been able to solve the mountpath in order to get the mount structure of the kernel
+	*/
+	if (ioctl_mount.status == 0) rozofs_fuse_ctx_p->fuse_path_solved = 1;
+	else
+	{
+	    info("RozoFS error while providing mountpath to kernel: direct inode open disabled");	
+	}
+	/*
+	** close the channel open on fusectl for that mountpoint
+	*/
+	close(fd_fusectl);
+	break;
+    } 
+    /*
      ** perform the connection with the socket controller
      */
    /*
