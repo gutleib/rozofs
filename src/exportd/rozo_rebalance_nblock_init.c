@@ -49,6 +49,7 @@
 #include <rozofs/core/ruc_tcpServer_api.h>
 #include <rozofs/core/af_unix_socket_generic_api.h>
 #include "rozo_balance.h"
+#include "rozofs_mover.h"
 
 extern int scanned_current_count;
 
@@ -384,6 +385,10 @@ void set_balancing(char * argv[], uint32_t tcpRef, void *bufRef)
       }
       p->throughput = value;
       pChar+=sprintf(pChar,"max file throughput is now %d MB/s\n",value);
+      /*
+      ** Update mover immediatly
+      */
+      rozofs_mover_throughput_update_request(p->throughput);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;   
     }

@@ -17,6 +17,7 @@
  */
 #ifndef ROZOFS_MOVER_H
 #define ROZOFS_MOVER_H
+#include <rozofs/common/list.h>
 
 /*
 ** Description of a file to move
@@ -25,6 +26,7 @@ typedef struct _rozofs_mover_job_t {
   cid_t       cid;                      /* Destination cluster */
   sid_t       sid[ROZOFS_SAFE_MAX];     /* Destination storages */
   char      * name;                     /* File name */
+  uint64_t    size;                     /* Size of the file to mode */
   list_t      list;                     /* For job chaining */
 } rozofs_mover_job_t;
 /*-----------------------------------------------------------------------------
@@ -55,7 +57,15 @@ int rozofs_mover_init();
 **----------------------------------------------------------------------------
 */
 int rozofs_do_move_one_export(char * exportd_hosts, char * export_path, int throughput, list_t * jobs);
-
+/*-----------------------------------------------------------------------------
+**
+** Request for a throughput value change
+**
+** @param throughput        Requested throughput limitation or zero when no limit
+**
+**----------------------------------------------------------------------------
+*/
+void rozofs_mover_throughput_update_request(uint64_t throughput) ;
 
 /*-----------------------------------------------------------------------------
 **
@@ -68,6 +78,6 @@ int rozofs_do_move_one_export(char * exportd_hosts, char * export_path, int thro
 **
 **----------------------------------------------------------------------------
 */
-int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path, int throughput, list_t * jobs);
+int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path, int throughput, list_t * jobs) ;
 
 #endif
