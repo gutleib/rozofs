@@ -30,8 +30,10 @@ bold = '\033[1m'
 underline = '\033[4m'
 blink = '\033[5m'
 reverse = '\033[7m'
+ORANGE='\033[33m\033[40m'
 
 
+rozo_device_list = []
 newlsblk = False
 
 #_______________________________________________
@@ -268,61 +270,80 @@ class adaptative_tbl:
 
 #_____________________________________________  
 #
-# Return device, fs type as well as mountpoint
-# associated to a device when these data are 
-# meaningfull
+# Device class
 #
-def rozo_list_all_block_devices(blockDev=None) :
-  global newlsblk
-  
-  tmp="/tmp/rozofs_temporary_dir.%s"%(os.getpid())
-  previous_uuid="UNKNOWN"
-  
-  # Create a display array
-  d = adaptative_tbl(2,"RozoFS block devices",cyan+bold) 
-  d.new_center_line()
-  color = blue+reverse+bold
-  d.set_column(1,"Dev",color)
-  d.set_column(2,"size",color)
-  d.set_column(3,"FS",color)      
-  d.set_column(4,"Mount",color)
-  d.set_column(5,"Label",color)
-  d.set_column(6,"UUID",color)
-  d.set_column(7,"If",color)
-  d.set_column(8,"Model[Vendor]",color)
-  d.set_column(9,"HCTL",color)
-  d.set_column(10,"Sch",color)
-  d.set_column(11,"Rota",color)
-  d.set_column(12,"R.A",color)
-  d.end_separator()   
-  
+def find_dev(dev):
+  for d in rozo_device_list:
+    if d.dev == dev: return d
+  return None
+    
+class rozo_device:
+
+  def __init__(self,dev,size,fs,mount,label,uuid,model,path,scheduler,rota,ra):
+    self.dev   = dev
+    self.size  = size
+    self.fs    = fs
+    self.mount = mount
+    self.label = label
+    self.uuid  = uuid
+    self.model = model
+    self.path  = path
+    self.scheduler = scheduler
+    self.rota  = rota
+    self.ra    = ra
+    #
+    # Insert in the list
+    #
+    idx = -1
+    for d in rozo_device_list:
+      idx = idx + 1
+      if d.label < label: continue
+      if d.label > label: 
+        rozo_device_list.insert(idx,self)  
+        break
+      if d.uuid < uuid: continue
+      if d.uuid > uuid:
+        rozo_device_list.insert(idx,self)  
+        break
+      if d.mount == "" :
+        rozo_device_list.insert(idx,self)  
+        break          
+    if idx == len(rozo_device_list)-1:           
+      rozo_device_list.append(self)       
+    
+  def update(self,size,fs,mount,label,uuid,model,path,scheduler,rota,ra):  
+    self.size  = size
+    self.fs    = fs
+    self.mount = mount
+    self.label = label
+    self.uuid  = uuid
+    self.model = model
+    self.path  = path
+    self.scheduler = scheduler
+    self.rota  = rota
+    self.ra    = ra
+     
+#_____________________________________________  
+#
+# Device list
+#
+def list_devices():
   # List every block device and find out a specific one
   if newlsblk == False:
-    string1="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,MODEL,ROTA,SIZE,UUID "
+    string="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,MODEL,ROTA,SIZE,UUID "
   else:
-    string1="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,MODEL,ROTA,SIZE,UUID,TRAN,VENDOR,HCTL,RA -x LABEL"
-  parsed1 = shlex.split(string1)
-  cmd1 = subprocess.Popen(parsed1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-  string2="sort -u"
-  parsed2 = shlex.split(string2)
-  cmd2 = subprocess.Popen(parsed2, stdin=cmd1.stdout,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-  string3="sort -k 2,2"
-  parsed3 = shlex.split(string3)
-  cmd3 = subprocess.Popen(parsed3, stdin=cmd2.stdout,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-  cmd1.stdout.close()
-  cmd2.stdout.close()
-  for line in cmd3.stdout:
+    string="lsblk -Pno KNAME,LABEL,FSTYPE,MOUNTPOINT,SCHED,MODEL,ROTA,SIZE,UUID,VENDOR,RA -x LABEL"
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
 
     device = line.split('"')[1].strip()
-    
-
-    if blockDev != None:
-      if blockDev != device:
-        continue
-      
+     
+    try: 
+      path = os.readlink("/sys/block/%s"%(device)).replace("../devices/","").replace("/block/%s"%(device),"")
+    except:
+      continue
+            
     label     = line.split('"')[3].strip()
     fs         = line.split('"')[5].strip()
     mountpoint = line.split('"')[7].strip()  
@@ -332,45 +353,115 @@ def rozo_list_all_block_devices(blockDev=None) :
     rota       = line.split('"')[13].strip()
     if rota == "1": rota = "Yes"
     size       = line.split('"')[15].strip()      
-    uuid      = line.split('"')[17].strip()
-    if uuid == previous_uuid: 
-      color = yellow 
-    else:
-      color = None
+    uuid       = line.split('"')[17].strip()
       
-    if uuid == "":
-       previous_uuid="UNKNOWN"
-    else:      
-      previous_uuid = uuid        
-      
-    if len(line.split('"')) < int(25):
-      interface =""
+    if len(line.split('"')) < int(21):
       vendor= "?"
-      hctl = ""
       ra = ""
     else:
-      interface  = line.split('"')[19].strip()
-      vendor     = line.split('"')[21].strip()
+      vendor     = line.split('"')[19].strip()
       if vendor == "": vendor ="?" 
-      hctl       = line.split('"')[23].strip()
-      ra        = line.split('"')[25].strip()
+      ra        = line.split('"')[21].strip()
+      
+         
+    d = find_dev(device)
+    if d == None:
+      rozo_device(device,size,fs,mountpoint,label,uuid,model+'['+vendor+']',path,scheduler,rota,ra)
+    else:
+      d.update(size,fs,mountpoint,label,uuid,model+'['+vendor+']',path,scheduler,rota,ra)
+         
+#_____________________________________________  
+#
+# Return device, fs type as well as mountpoint
+# associated to a device when these data are 
+# meaningfull
+#
+def rozo_list_all_block_devices(blockDev=None, pathDisplay=False) :
+
+  list_devices()
+  previous_uuid="UNKNOWN"
+    
+  # Create a display array
+  d = adaptative_tbl(2,"RozoFS %d block devices"%(len(rozo_device_list)),cyan+bold) 
+  d.new_center_line()
+  color = blue+reverse+bold
+  idx = 0
+  
+  idx += 1
+  d.set_column(idx,"Dev",color)
+  if pathDisplay == False:
+    idx += 1
+    d.set_column(idx,"size",color)
+    idx += 1
+    d.set_column(idx,"FS",color)      
+  idx += 1
+  d.set_column(idx,"Mount",color)
+  idx += 1
+  d.set_column(idx,"Label",color)
+  if pathDisplay == True:  
+    idx += 1
+    d.set_column(idx,"path",color)
+  else:
+    idx += 1
+    d.set_column(idx,"Model[Vendor]",color)
+    idx += 1
+    d.set_column(idx,"Sch",color)
+    idx += 1
+    d.set_column(idx,"Rota",color)
+    idx += 1
+    d.set_column(idx,"R.A",color)
+  d.end_separator()   
+  for dev in  rozo_device_list:
+
+    if blockDev != None:
+      if blockDev != dev.device:
+        continue
+      
+    if dev.uuid == previous_uuid: 
+      color = ORANGE 
+      size  = ""
+      fs    = ""
+      label = ""
+    else:
+      color = None
+      size  = dev.size
+      fs    = dev.fs
+      label = dev.label
+      
+    if dev.uuid == "":
+       previous_uuid="UNKNOWN"
+    else:      
+      previous_uuid = dev.uuid        
          
     d.new_line()
-    d.set_column(1,device,color)  
-    d.set_column(2,size,color)   
-    d.set_column(3,fs,color)
-    d.set_column(4,mountpoint,color)   
-    d.set_column(5,label,color)   
-    d.set_column(6,uuid,color)   
-    d.set_column(7,interface,color)   
-    d.set_column(8,"%s[%s]"%(model,vendor),color)   
-    d.set_column(9,hctl,color)   
-    d.set_column(10,scheduler,color)   
-    d.set_column(11,rota,color)   
-    d.set_column(12,ra,color)   
+    idx = 0
+  
+    idx += 1
+    d.set_column(idx,dev.dev,color)  
+    if pathDisplay == False:
+      idx += 1
+      d.set_column(idx,size,None)   
+      idx += 1
+      d.set_column(idx,fs,None)
+    idx += 1
+    d.set_column(idx,dev.mount,None)   
+    idx += 1
+    d.set_column(idx,label,None)  
+    if pathDisplay == True:
+      idx += 1
+      d.set_column(idx,dev.path,color)   
+    else:
+      idx += 1
+      d.set_column(idx,dev.model,color)   
+      idx += 1
+      d.set_column(idx,dev.scheduler,color)   
+      idx += 1
+      d.set_column(idx,dev.rota,color)   
+      idx += 1
+      d.set_column(idx,dev.ra,color)   
     
   d.display() 
-  os.system("rmdir %s 2>/dev/null"%(tmp))
+
 #_____________________________________________  
 #
 # List one block device
@@ -769,6 +860,7 @@ parser.add_option("-r","--read_expire", action="store",type="string",dest="read_
 parser.add_option("-w","--write_expire", action="store",type="string",dest="write_expire", help="write_expire value to set.")
 parser.add_option("-a","--read_ahead", action="store",type="string",dest="read_ahead", help="read ahead KB value to set.")
 parser.add_option("-l","--led", action="store",type="string", dest="led", help="The led requested status (on/off).")
+parser.add_option("-p","--path", action="store_true",dest="path", default=False,help="Display path")
 
 (options, args) = parser.parse_args()
 
@@ -888,7 +980,7 @@ if options.format != None:
 if len(blockdev) != 0:
   rozo_list_some_block_device(blockdev)
 else:    
-  rozo_list_all_block_devices()
+  rozo_list_all_block_devices(pathDisplay=options.path)
 exit(0)    
 
   
