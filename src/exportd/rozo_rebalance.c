@@ -1251,6 +1251,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     rozofs_mover_job_t * job;
     job = malloc(sizeof(rozofs_mover_job_t));
     memset(job,0,sizeof(rozofs_mover_job_t));
+    job->size = inode_p->s.attrs.size;
     int retval = do_cluster_distribute_size_balancing(rozofs_layout,0,job->sid,0,inode_p->s.attrs.size,&job->cid);
     if (retval < 0)
     {
