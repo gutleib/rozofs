@@ -73,7 +73,10 @@ typedef struct _rozofs_mover_stat_t {
   uint64_t         success;
   uint64_t         bytes;
   uint64_t         seconds;
+  float            throughput;
   uint64_t         round;
+  uint64_t         last_offset;  
+  uint64_t         last_size;  
 } rozofs_mover_stat_t;
 
 static rozofs_mover_stat_t stats;
@@ -160,9 +163,6 @@ void rozofs_mover_throughput_init(uint64_t throughput) {
     */
     rozofs_mover_one_credit = 1000000 * ROZOFS_MOVER_BUFFER_SIZE_MB/rozofs_mover_throughput;
   }  
-  
-  src_fname[0]    = 0;
-  failed_fname[0] = 0;
 } 
 /*-----------------------------------------------------------------------------
 **
@@ -547,6 +547,8 @@ int rozofs_do_move_one_file(rozofs_mover_job_t * job, int throughput) {
   int          size;
   
   tmp_fname[0] = 0;
+  stats.last_offset = 0;
+  stats.last_size   = job->size;
   
   /*
   ** Starting time
@@ -673,6 +675,7 @@ int rozofs_do_move_one_file(rozofs_mover_job_t * job, int throughput) {
     }
     
     offset += size;
+    stats.last_offset = offset;
 
     /*
     ** When throughput limitation is set adapdt the speed accordingly
@@ -892,7 +895,9 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
   inode_p->s.key = ROZOFS_REG_S_MOVER;
   rozofs_uuid_unparse((unsigned char *)job->name,buf_fid);
   sprintf(src_fname,"@rozofs_uuid@%s",buf_fid);
-
+  stats.last_offset = 0;
+  stats.last_size   = job->size;
+  
   inode_p->s.key = ROZOFS_REG_D_MOVER;
   rozofs_uuid_unparse((unsigned char *)job->name,buf_fid);
   sprintf(dst_fname,"@rozofs_uuid@%s",buf_fid);
@@ -971,7 +976,8 @@ int rozofs_do_move_one_file_fid_mode(rozofs_mover_job_t * job, int throughput) {
     }
     
     offset += size;
-
+    stats.last_offset = offset;
+    
     /*
     ** When throughput limitation is set adapdt the speed accordingly
     ** by sleeping for a while
@@ -1103,7 +1109,13 @@ int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path,
   }
 
   stats.seconds += (time(NULL)-start);
-   
+  if (stats.seconds!=0) {
+    float actual_throughput; 
+    actual_throughput = stats.bytes;
+    actual_throughput /= (1024*1024);
+    actual_throughput /= stats.seconds;
+    stats.throughput = actual_throughput;
+  }     
   /*
   ** Get out of the mountpoint before removing it
   */
@@ -1137,13 +1149,6 @@ void rozofs_mover_man(char * pChar) {
 **----------------------------------------------------------------------------
 */
 void rozofs_mover_print_stat(char * pChar) {
-  float throughput = 0;
-  
-  if (stats.seconds!=0) {
-    throughput = stats.bytes;
-    throughput /= (1024*1024);
-    throughput /= stats.seconds;
-  }  
   pChar += sprintf(pChar,"{ \"mover\" : \n");
   pChar += sprintf(pChar,"   {\n");
   pChar += sprintf(pChar,"     \"round\"          : %llu,\n",(unsigned long long)stats.round);
@@ -1153,10 +1158,14 @@ void rozofs_mover_print_stat(char * pChar) {
   pChar += sprintf(pChar,"     \"xattr copy\"     : %llu,\n",(unsigned long long)stats.xattr);
   pChar += sprintf(pChar,"     \"other error\"    : %llu,\n",(unsigned long long)stats.error);
   pChar += sprintf(pChar,"     \"success\"        : %llu,\n",(unsigned long long)stats.success);
-  pChar += sprintf(pChar,"     \"last moved\"     : \"%s\",\n",src_fname);
+  pChar += sprintf(pChar,"     \"currently moved\": {\"\n");
+  pChar += sprintf(pChar,"          \"name\"      : \"%s\",\n",src_fname);
+  pChar += sprintf(pChar,"          \"size\"      : %llu,\n",(unsigned long long)stats.last_size);
+  pChar += sprintf(pChar,"          \"offset\"    : %llu,\n",(unsigned long long)stats.last_offset);
+  pChar += sprintf(pChar,"     },\n");
   pChar += sprintf(pChar,"     \"last failed\"    : \"%s\",\n",failed_fname);
   pChar += sprintf(pChar,"     \"bytes moved\"    : %llu,\n",(unsigned long long)stats.bytes);
-  pChar += sprintf(pChar,"     \"throughput MiB\" : %.1f,\n",throughput);
+  pChar += sprintf(pChar,"     \"throughput MiB\" : %.1f,\n",stats.throughput);
   pChar += sprintf(pChar,"     \"duration secs\"  : %llu\n",(long long unsigned int) stats.seconds);
   pChar += sprintf(pChar,"   }\n}\n");
 }  
@@ -1221,6 +1230,9 @@ static void on_crash(int sig) {
 */
 int rozofs_mover_init() {
 
+  src_fname[0]    = 0;
+  failed_fname[0] = 0;
+  
   /*
   ** Initialize global variables
   */

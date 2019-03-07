@@ -1217,6 +1217,7 @@ int rozofs_do_visit(void *exportd, ext_mattr_t *inode_p, ext_mattr_t *slave_p, u
   rozofs_mover_job_t * job;
   job = malloc(sizeof(rozofs_mover_job_t));
   memset(job,0,sizeof(rozofs_mover_job_t));
+  job->size = chunk_len;
   int retval = rozo_rebalance_do_cluster_distribute_size_balancing(current_export->layout,0,job->sid,0,chunk_len,&job->cid);
   if (retval < 0)
   {
