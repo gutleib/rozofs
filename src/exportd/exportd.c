@@ -73,7 +73,6 @@
 /* Maximum open file descriptor number for exportd daemon */
 #define EXPORTD_MAX_OPEN_FILES 5000
 
-extern econfig_t exportd_config;
 pthread_rwlock_t config_lock;
 export_reload_conf_status_t export_reload_conf_status;
 int export_instance_id;    /**< instance id of the export  : 0 is the master   */

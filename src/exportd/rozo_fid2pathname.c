@@ -18,7 +18,6 @@
 
 int rozofs_no_site_file = 0;
 lv2_cache_t cache;
-econfig_t exportd_config;
 /*
 ** Get the default config file name
 */

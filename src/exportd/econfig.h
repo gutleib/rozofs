@@ -106,6 +106,8 @@ typedef struct filter_config {
 } filter_config_t;
 
 
+extern econfig_t   exportd_config;
+
 int econfig_initialize(econfig_t *config);
 
 void econfig_release(econfig_t *config);

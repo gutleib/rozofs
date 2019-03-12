@@ -75,7 +75,6 @@ uint64_t total_bytes = 0;
 int rozofs_no_site_file = 0;
 char *rozo_get_full_path(void *exportd,void *inode_p,char *buf,int lenmax);
 char  *display_size(long long unsigned int number,char *buffer);
-econfig_t exportd_config;
 int rozodu_eid;
 int format_bytes=1;
 char *rozodu_output_path = NULL;

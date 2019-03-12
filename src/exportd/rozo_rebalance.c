@@ -110,7 +110,6 @@ scan_index_context_t scan_context;   /**< current indexes for inode tracking    
 list_t pList_volume_cluster;         /**< ordered list of the cluster within a volume                    */
 int rebalance_trigger_score;         /**< score relative to the rozo_balancing_ctx.rebalance_threshold_trigger              */
     
-econfig_t exportd_config;            /**<exportd configuration */
 int rozofs_no_site_file = 0;
 eid_t volume_export_table[EXPGW_EID_MAX_IDX];   /**< table of eids associated with a volume  */
 

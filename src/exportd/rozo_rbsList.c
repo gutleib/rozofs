@@ -31,7 +31,6 @@ int rozofs_no_site_file;
 char * pDir = NULL;
 char working_dir[ROZOFS_FILENAME_MAX];
   
-econfig_t exportd_config;
 
 int    parallel=0;
 char * configFileName = EXPORTD_DEFAULT_CONFIG;

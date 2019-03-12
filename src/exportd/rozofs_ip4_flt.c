@@ -29,8 +29,6 @@
 #include "econfig.h"
 #include "rozofs_ip4_flt.h"
 
-extern econfig_t exportd_config;
-
 
 /*
 **_______________________________________________________________________

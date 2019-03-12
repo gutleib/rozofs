@@ -204,7 +204,6 @@ static int adminscnt, adminsalloc;
 static struct adminstable *adminstable;
 
 char *confname=NULL;
-econfig_t exportd_config;
 int rozofs_no_site_file = 0;
 
 export_one_profiler_t * export_profiler[1];
