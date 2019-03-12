@@ -729,6 +729,8 @@ static void *remove_bins_thread(void *v) {
   rmbins_thread_t * thCtx;
   uint64_t          before,after,credit;
   uint64_t          processed;
+  // To store re-start bucket index for each exports  
+  uint16_t          bucket_idx[EXPGW_EID_MAX_IDX];
 
   thCtx = (rmbins_thread_t *) v;
 
@@ -738,10 +740,8 @@ static void *remove_bins_thread(void *v) {
   sprintf(thName, "Trash%d", thCtx->idx);    
   uma_dbg_thread_add_self(thName);
 
-  // Pointer for store re-start bucket index for each exports
-  uint16_t * bucket_idx = xmalloc(list_size(&exports) * sizeof (uint16_t));
   // Init. each index to 0
-  memset(bucket_idx, 0, sizeof (uint16_t) * list_size(&exports));
+  memset(&bucket_idx[0], 0, sizeof (uint16_t) * EXPGW_EID_MAX_IDX);
 
   /*
   ** Thread time shifting.
@@ -1432,7 +1432,7 @@ void exports_release() {
 	geo_profiler_free(entry->export.eid);
         export_release(&entry->export);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 
     if ((errno = pthread_rwlock_destroy(&exports_lock)) != 0) {
@@ -1449,7 +1449,7 @@ void volumes_release() {
         volume_entry_t *entry = list_entry(p, volume_entry_t, list);
         volume_release(&entry->volume);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
     if ((errno = pthread_rwlock_destroy(&volumes_lock)) != 0) {
         severe("can't release volumes lock: %s", strerror(errno));
@@ -2007,7 +2007,7 @@ int export_reload_nb()
         volume_entry_t *entry = list_entry(p, volume_entry_t, list);
         volume_release(&entry->volume);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 
     load_volumes_conf();
@@ -2049,7 +2049,7 @@ int export_reload_nb()
         }
         export_release(&entry->export);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 
     // Load new list of exports
@@ -2096,7 +2096,7 @@ int export_reload_nb()
         expgw_entry_t *entry = list_entry(p, expgw_entry_t, list);
         expgw_release(&entry->expgw);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
     load_export_expgws_conf();
 

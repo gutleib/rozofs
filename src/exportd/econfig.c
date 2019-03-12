@@ -90,7 +90,7 @@ int storage_node_config_initialize(storage_node_config_t *s, uint8_t sid,
         fatal("Invalid site number 0");
         goto out;    
     }
-
+    memset(s,0,sizeof(storage_node_config_t));
     s->sid = sid;
     strncpy(s->host, host, ROZOFS_HOSTNAME_MAX);
     s->siteNum = siteNum;
@@ -108,7 +108,7 @@ void storage_node_config_release(storage_node_config_t *s) {
 int cluster_config_initialize(cluster_config_t *c, cid_t cid) {
     DEBUG_FUNCTION;
     int i;
-
+    memset(c,0,sizeof(cluster_config_t));
     c->cid = cid;
     for (i = 0; i <ROZOFS_GEOREP_MAX_SITE; i++) list_init(&c->storages[i]);
     list_init(&c->list);
@@ -127,7 +127,7 @@ void cluster_config_release(cluster_config_t *c) {
                   list);
           storage_node_config_release(entry);
           list_remove(p);
-          free(entry);
+          xfree(entry);
       }
     }
 }
@@ -154,7 +154,7 @@ void volume_config_release(volume_config_t *v) {
         if (v->rebalance_cfg) xfree(v->rebalance_cfg);
         v->rebalance_cfg = NULL;
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 }
 
@@ -203,7 +203,7 @@ void expgw_config_release(expgw_config_t *c) {
                 list);
         expgw_node_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 }
 
@@ -332,20 +332,20 @@ void econfig_release(econfig_t *config) {
         volume_config_t *entry = list_entry(p, volume_config_t, list);
         volume_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 
     list_for_each_forward_safe(p, q, &config->exports) {
         export_config_t *entry = list_entry(p, export_config_t, list);
         export_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
     list_for_each_forward_safe(p, q, &config->expgw) {
         expgw_config_t *entry = list_entry(p, expgw_config_t, list);
         expgw_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
     list_for_each_forward_safe(p, q, &config->filters) {
         filter_config_t *entry = list_entry(p, filter_config_t, list);
