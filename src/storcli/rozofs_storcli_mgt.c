@@ -549,6 +549,11 @@ void  rozofs_storcli_ctxInit(rozofs_storcli_ctx_t *p,uint8_t creation)
   p->opcode_key = STORCLI_NULL;
   p->shared_mem_p = NULL;
   p->shared_mem_req_p = NULL;
+  /*
+  ** Clear the fd that correspond to the file that has been opened by inode
+  */
+  p->inode_mmap_ctx.file= NULL;
+  p->inode_mmap_ctx.ino= 0;
 
    /*
    ** timer cell
@@ -793,6 +798,11 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p)
 					 STORCLI_DO_NOT_QUEUE,ctx_p);   
    }
 
+   if (ctx_p->inode_mmap_ctx.file != NULL)
+   {
+      warning("Storcli has still a opened file descriptor on file/inode (%llu)!!!",(unsigned long long int)ctx_p->inode_mmap_ctx.ino);
+      ctx_p->inode_mmap_ctx.file= NULL;
+   }
    /*
    **  insert it in the free list
    */

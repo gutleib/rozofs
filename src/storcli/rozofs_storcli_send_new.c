@@ -601,6 +601,11 @@ void rozofs_storcli_read_reply_success(rozofs_storcli_ctx_t *p)
     {
        ROZOFS_STORCLI_STATS(ROZOFS_STORCLI_READ_RETRY_SUCCESS);
     }
+
+   /*
+   ** Attempt to close the file/inode that might have been mapped
+   */
+   rozofs_storcli_inode_close(p);
     /**
     * Clear the read_retry_enable because it has been asserted upon receiving at least inverse-1 projections
     */
@@ -756,6 +761,10 @@ void rozofs_storcli_read_reply_error(rozofs_storcli_ctx_t *p,int error)
    {
       ROZOFS_STORCLI_STATS(ROZOFS_STORCLI_READ_RETRY_FAILURE);
    }
+   /*
+   ** Attempt to close the file/inode that might have been mapped
+   */
+   rozofs_storcli_inode_close(p);
 
    status.status = STORCLI_FAILURE;
    status.storcli_status_ret_t_u.error = error;

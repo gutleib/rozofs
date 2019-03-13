@@ -301,6 +301,7 @@ typedef struct _rozofs_storcli_ctx_t
   */
   int  read_retry_enable; /** assert to 1 when storcli has been able to read from storio */
   int  read_retry_in_prg; /**< assert to 1 when the read is a read retry: in that case we cannot re-assert read_retry_enable. */
+  ioctl_direct_read_t  inode_mmap_ctx; /**< file descriptor that corresponds to the inode that has been opened at read request processing init time */
   /*
   ** Trace buffer 
   */

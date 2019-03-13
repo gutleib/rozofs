@@ -265,6 +265,7 @@ static inline void storcli_mojette_inverse(rozofs_mojette_thread_ctx_t *thread_c
   ** restore the xmit buffer reference in order to release it at working context release time
   */
   working_ctx_p->xmitBuf= saved_xmitBuf;
+  working_ctx_p->response_cbk = saved_response_cbk;
   /*
   ** change the opcode to indicate that only the release must take place
   */

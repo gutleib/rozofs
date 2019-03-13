@@ -32,6 +32,7 @@
 #include <getopt.h>
 #include <pthread.h>
 #include <assert.h>
+#include <sys/ioctl.h>
 
 #include <rozofs/rozofs.h>
 #include "config.h"
@@ -91,7 +92,146 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param) ;
 void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
 
 
+/*
+**_________________________________________________________________________
+*      INODE OPENING for writing in page cache
+**_________________________________________________________________________
+*/
+/*
+**__________________________________________________________________________
+*/
+/*
+**   Attempt to open and mmap the inode on which we apply Mojette Transform
 
+    @param working_ctx_p: storcli working context for that inode
+    
+    @retval 0 on success
+    @retval < 0 on error si errno for details
+*/
+int rozofs_storcli_inode_open(rozofs_storcli_ctx_t *working_ctx_p)
+{
+   ioctl_direct_read_t *rozofs_inode_ctx_p;   
+   rozofs_shmem_cmd_read_t *share_mem_cmd_p;
+   storcli_read_arg_t     *storcli_read_rq_p;
+
+   storcli_read_rq_p = &working_ctx_p->storcli_read_arg;   
+   share_mem_cmd_p = working_ctx_p->shared_mem_req_p;
+   rozofs_inode_ctx_p = &working_ctx_p->inode_mmap_ctx;
+   /*
+   ** Check if it is already opened
+   */
+   if (rozofs_inode_ctx_p->file != NULL)
+   {
+      /*
+      ** already opened, nothing to do
+      */
+      return 0;
+   }
+   /*
+   ** Check if fusectl rozofs pseudo file is opened
+   */
+   if (storcli_conf_p->fusectl_fd < 0)
+   {
+      /*
+      ** We cannot use that inode mode since the pseudo file is not opened
+      */
+      errno = ENOENT;
+      return -1;
+   }
+   rozofs_inode_ctx_p->status = -1;
+   rozofs_inode_ctx_p->file= 0;
+   
+   rozofs_inode_ctx_p->ope = OPE_OPEN;
+   rozofs_inode_ctx_p->ino = share_mem_cmd_p->inode;
+   rozofs_inode_ctx_p->size = storcli_read_rq_p->nb_proj*4096;
+   rozofs_inode_ctx_p->pgoff = share_mem_cmd_p->f_offset;
+      
+   ioctl(storcli_conf_p->fusectl_fd,ROZOFS_FUSECTL_IOCTL_INODE,rozofs_inode_ctx_p); 
+   if (rozofs_inode_ctx_p->status != 0)
+   {
+      warning("Storcli failed to open %llu inode at offset %llu and size %d",
+                                (unsigned long long int)rozofs_inode_ctx_p->ino,
+				(unsigned long long int)rozofs_inode_ctx_p->pgoff,
+				(int)rozofs_inode_ctx_p->size);
+      errno = EIO;
+      return -1;
+   }
+#if 0
+   /*
+   ** now lock the pages in memory
+   */
+   ret = mlock(rozofs_inode_ctx_p->raddr,rozofs_inode_ctx_p->size);
+   if (ret < 0)
+   {
+      warning("Storcli failed to mlock %llu inode at offset %llu on size %d (%s)",
+                                (unsigned long long int)rozofs_inode_ctx_p->ino,
+				(unsigned long long int)rozofs_inode_ctx_p->pgoff,rozofs_inode_ctx_p->size,
+				strerror(errno));  
+     /*
+     ** unmap and close the inode that has been opened
+     */   
+      rozofs_inode_ctx_p->ope = OPE_UNMAP;
+      ioctl(storcli_conf_p->fusectl_fd,ROZOFS_FUSECTL_IOCTL_INODE,rozofs_inode_ctx_p);    
+      rozofs_inode_ctx_p->ope = OPE_CLOSE;
+      ioctl(storcli_conf_p->fusectl_fd,ROZOFS_FUSECTL_IOCTL_INODE,rozofs_inode_ctx_p);
+      /*
+      ** clear the reference of the file
+      */
+      rozofs_inode_ctx_p->file = 0;
+      return -1;     
+   }
+#endif
+   /*
+   ** all is fine
+   */
+   return 0;
+   
+}
+
+
+/*
+**__________________________________________________________________________
+*/
+/*
+**   Attempt to unmap and close the inode on which we have applied Mojette Transform
+
+    @param working_ctx_p: storcli working context for that inode
+    
+    @retval 0 on success
+    @retval < 0 on error si errno for details
+*/
+int rozofs_storcli_inode_close(rozofs_storcli_ctx_t *working_ctx_p)
+{
+   ioctl_direct_read_t *rozofs_inode_ctx_p;   
+
+   rozofs_inode_ctx_p = &working_ctx_p->inode_mmap_ctx;
+   /*
+   ** Check if it is already opened
+   */
+   if (rozofs_inode_ctx_p->file == NULL)
+   {
+      /*
+      ** already opened, nothing to do
+      */
+      return 0;
+   }
+   rozofs_inode_ctx_p->status = -1;
+   rozofs_inode_ctx_p->ope = OPE_UNMAP;
+   ioctl(storcli_conf_p->fusectl_fd,ROZOFS_FUSECTL_IOCTL_INODE,rozofs_inode_ctx_p);    
+   if (rozofs_inode_ctx_p->status != 0) warning("Error on unmap");
+
+   rozofs_inode_ctx_p->status = -1;
+   rozofs_inode_ctx_p->ope = OPE_CLOSE;
+   ioctl(storcli_conf_p->fusectl_fd,ROZOFS_FUSECTL_IOCTL_INODE,rozofs_inode_ctx_p);
+   if (rozofs_inode_ctx_p->status != 0) warning("Error on close");
+   
+   /*
+   ** clear the reference of the file
+   */
+   rozofs_inode_ctx_p->file = 0;
+   return 0;
+
+}
 /*
 **_________________________________________________________________________
 *      LOCAL FUNCTIONS
@@ -384,6 +524,8 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
        /*
        ** set data_read_p to point to the array where data will be returned
        */
+       int ret;
+       
        uint8_t *pbase = (uint8_t*)storcli_rozofsmount_shared_mem[SHAREMEM_IDX_READ].data_p;
        uint32_t buf_offset = storcli_read_rq_p->shared_buf_idx*storcli_rozofsmount_shared_mem[SHAREMEM_IDX_READ].buf_sz;
        rozofs_shared_buf_rd_hdr_t *share_rd_p = (rozofs_shared_buf_rd_hdr_t*)(pbase + buf_offset);
@@ -391,8 +533,46 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
        working_ctx_p->shared_mem_req_p = &share_rd_p->cmd[storcli_read_rq_p->cmd_idx];
 #warning it is better to clear received_len from rozofsmount
        share_rd_p->cmd[storcli_read_rq_p->cmd_idx].received_len = 0;
-       working_ctx_p->data_read_p  = (char*)working_ctx_p->shared_mem_p;     
-       working_ctx_p->data_read_p  += ROZOFS_SHMEM_READ_PAYLOAD_OFF+share_rd_p->cmd[storcli_read_rq_p->cmd_idx].offset_in_buffer;
+       {
+          /*
+	  ** check if rozofsmount ask for a direct write in the Linux page cache at Mojette Transform level
+	  */
+	  rozofs_shmem_cmd_read_t *share_mem_cmd_p;
+	  share_mem_cmd_p = working_ctx_p->shared_mem_req_p;
+	  if (share_mem_cmd_p->inode != 0)
+	  {
+	    
+	     /*
+	     ** need to open the inode for Mojette Transform
+	     */
+#if 0	     
+	     info("FDL inode %llu offset %llu (%d) nb_blocks %d size %d",(unsigned long long int)share_mem_cmd_p->inode, 
+	                                       (unsigned long long int)share_mem_cmd_p->f_offset,share_mem_cmd_p->f_offset%4096,
+					       storcli_read_rq_p->nb_proj,storcli_read_rq_p->nb_proj*4096);
+#endif
+	     ret = rozofs_storcli_inode_open(working_ctx_p);
+	     if (ret == 0)
+	     {
+	        /*
+		** put the address that has been mapped on the inode array to write
+		*/
+	     	working_ctx_p->data_read_p  = (char *)working_ctx_p->inode_mmap_ctx.raddr;   
+	     }
+	     else
+	     {
+	        /*
+		** fallback to share buffer
+		*/
+		working_ctx_p->data_read_p  = (char*)working_ctx_p->shared_mem_p;     
+		working_ctx_p->data_read_p  += ROZOFS_SHMEM_READ_PAYLOAD_OFF+share_rd_p->cmd[storcli_read_rq_p->cmd_idx].offset_in_buffer; 
+	     }	  
+	  }
+	  else
+	  {       
+	    working_ctx_p->data_read_p  = (char*)working_ctx_p->shared_mem_p;     
+	    working_ctx_p->data_read_p  += ROZOFS_SHMEM_READ_PAYLOAD_OFF+share_rd_p->cmd[storcli_read_rq_p->cmd_idx].offset_in_buffer; 
+          }                    
+       }
      }   
    }
    /*

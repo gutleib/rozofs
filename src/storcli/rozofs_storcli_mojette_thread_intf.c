@@ -645,7 +645,6 @@ int rozofs_stcmoj_thread_intf_send(rozofs_stcmoj_thread_request_e   opcode,
                                    rozofs_storcli_ctx_t            * working_ctx,
 				   uint64_t                       timeStart) 
 {
-  int                         ret;
 
 #ifdef STORCLI_MOJ_QUEUE
 #warning FDL new code for Mojette request submit  
