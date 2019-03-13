@@ -3407,7 +3407,6 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
   rozorpc_srv_ctx_t      * rpcCtx;
   storio_disk_thread_msg_t   msg;  
   int fdl_count = 0;
-  int queue_empty;
   
   memcpy(&msg,msg_in,sizeof(storio_disk_thread_msg_t));
   /*
