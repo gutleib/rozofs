@@ -38,7 +38,7 @@ typedef struct _rozofs_fuse_thread_stat_t {
   uint64_t            write_count;
   uint64_t            write_Byte_count;
   uint64_t            write_time;
-
+  uint64_t            use_page_cache_count;
 } rozofs_fuse_thread_stat_t;
 /*
 ** Fuse thread context
@@ -73,6 +73,7 @@ typedef struct _rozofs_fuse_thread_msg_t
   uint64_t            timeStart;
   uint64_t            timeResp;
   uint32_t            size;       /**< size of the buffer   */
+  int                 use_page_cache; /**< assert to one when the storcli has used the page cache to provide directly the data to the kernel */
   fuse_req_t          req ;       /**< fuse initial request   */
   void                *payload;   /**< pointer to the buffer payload   */
   void                *bufRef;   /**< shared memory buffer reference   */
@@ -119,6 +120,7 @@ typedef union
 */
 int rozofs_fuse_thread_intf_create(char * hostname, int instance_id, int nb_threads) ;
 
+
 /*__________________________________________________________________________
 */
 /**
@@ -127,6 +129,7 @@ int rozofs_fuse_thread_intf_create(char * hostname, int instance_id, int nb_thre
 * @param fidCtx     FID context
 * @param rpcCtx     pointer to the generic rpc context
 * @param timeStart  time stamp when the request has been decoded
+  @param use_page_cache: flag asserted if the storcli has used the page cache during Mojette Inverse
 *
 * @retval 0 on success -1 in case of error
 *  
@@ -135,7 +138,8 @@ int rozofs_thread_fuse_reply_buf(fuse_req_t req,
                                  char *payload,
 				 uint32_t size,
 				 void *bufRef,
-				 uint64_t       timeStart);
+				 uint64_t       timeStart,
+				 int use_page_cache) ;
 
 
 /*__________________________________________________________________________

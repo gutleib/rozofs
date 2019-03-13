@@ -140,8 +140,16 @@ static inline void rozofs_fuse_th_fuse_reply_buf(rozofs_fuse_thread_ctx_t *threa
   ** update statistics
   */
   thread_ctx_p->stat.write_count++;     
-  thread_ctx_p->stat.write_Byte_count+=msg->size;     
-  fuse_reply_buf(msg->req, (char *) buf_sharem, msg->size);
+  thread_ctx_p->stat.write_Byte_count+=msg->size; 
+  /*
+  ** Check if the storcli did a direct write in the page cache
+  */
+  if (msg->use_page_cache)  
+  {
+    thread_ctx_p->stat.use_page_cache_count++;
+    fuse_reply_err( msg->req,EREMOTE); 
+  } 
+  else  fuse_reply_buf(msg->req, (char *) buf_sharem, msg->size);
 
   rozofs_fuse_th_send_response(thread_ctx_p,msg,0);
 

@@ -1221,9 +1221,8 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
     TX_STATS(ROZOFS_TX_SEND);
 
     /*
-    ** OK, so now finish by starting the guard timer
+    ** OK, so now finish by starting the guard timer: no required for storcli
     */
-#warning STORCLI timer not started
 //    rozofs_tx_start_timer(rozofs_tx_ctx_p,timeout_sec);  
 //    if (*tx_ptr != NULL) *tx_ptr = rozofs_tx_ctx_p;
     return 0;  
@@ -2446,12 +2445,12 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
     int               opcode;
     uint32_t          vers;    
     uint32_t          prog;
-    uint32_t timeout_sec;
     uint32_t         null_val = 0;    
     rozofs_fuse_save_ctx_t *fuse_save_ctx_p=NULL;
     fuse_end_tx_recv_pf_t  callback;
-    uint64_t         storcli_ino;
+    uint64_t         storcli_ino = 0;
     uint64_t         ino;
+    int use_page_cache;
 
     int bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);    
     int trc_idx;
@@ -2462,11 +2461,12 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
     ** page cache during mojette transform
     */
     RESTORE_FUSE_PARAM(fuse_ctx_p,ino);    
+    RESTORE_FUSE_PARAM(fuse_ctx_p,use_page_cache);   
     /*
     ** Check if the inode must be filled in the storcli request in order to have a direct write in the
     ** page cache of Linux
     */
-    rozofs_check_for_shared_buffer_by_pass(&storcli_ino,ino);
+    if (use_page_cache) storcli_ino = ino;
     /*
     ** Get the pointer to the rozofs fuse context 
     */
@@ -2560,10 +2560,11 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
     opcode = STORCLI_READ;
     vers = STORCLI_VERSION;
     prog = STORCLI_PROGRAM;
-    timeout_sec = ROZOFS_TMR_GET(TMR_STORCLI_PROGRAM);
+
     share_rd_p->cmd[0].xid = 0;
     share_rd_p->cmd[0].received_len = 0;   
     share_rd_p->cmd[0].inode = storcli_ino;
+    share_rd_p->cmd[0].f_offset = off;
     /*
     **___________________________________________________________________
     **   Build the individual storcli read command
@@ -2581,7 +2582,7 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
       share_rd_p->cmd[args.cmd_idx].received_len = 0;       
       share_rd_p->cmd[args.cmd_idx].offset_in_buffer = entry_p->byte_offset_in_shared_buf;  
       share_rd_p->cmd[args.cmd_idx].inode = storcli_ino;  
-
+      share_rd_p->cmd[args.cmd_idx].f_offset = off+ entry_p->byte_offset_in_shared_buf;  
       /*
       ** Get the FID storage, cid and sids lists for the current file index
       */
@@ -2774,9 +2775,9 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
     TX_STATS(ROZOFS_TX_SEND);
 
     /*
-    ** OK, so now finish by starting the guard timer
+    ** OK, so now finish by starting the guard timer: not needed with storcli
     */
-#warning FDL disable STORCLI timer
+
 //    rozofs_tx_start_timer(rozofs_tx_ctx_p,timeout_sec);      
   }
   /*

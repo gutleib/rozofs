@@ -149,13 +149,14 @@ void fuse_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
       display_txt("Total");
     }   
 #if 1
-    display_line_topic("Write Requests");  
+    display_line_topic("Read Requests");  
     display_line_val("   number", write_count);
     display_line_val("   Bytes",write_Byte_count);      
     display_line_val("   Cumulative Time (us)",write_time);
     display_line_div("   Average Bytes",write_Byte_count,write_count);  
     display_line_div("   Average Time (us)",write_time,write_count);
     display_line_div("   Throughput (MBytes/s)",write_Byte_count,write_time);  
+    display_line_val("   Page cache",use_page_cache_count);      
 #endif
  
     display_line_topic("");  
@@ -633,6 +634,7 @@ void rozofs_fuse_wr_th_send_response (rozofs_fuse_thread_ctx_t *thread_ctx_p, ro
 * @param fidCtx     FID context
 * @param rpcCtx     pointer to the generic rpc context
 * @param timeStart  time stamp when the request has been decoded
+  @param use_page_cache: flag asserted if the storcli has used the page cache during Mojette Inverse
 *
 * @retval 0 on success -1 in case of error
 *  
@@ -641,7 +643,8 @@ int rozofs_thread_fuse_reply_buf(fuse_req_t req,
                                  char *payload,
 				 uint32_t size,
 				 void *bufRef,
-				 uint64_t       timeStart) 
+				 uint64_t       timeStart,
+				 int use_page_cache) 
 {
   int                         ret;
   rozofs_fuse_thread_msg_t    msg;
@@ -655,6 +658,7 @@ int rozofs_thread_fuse_reply_buf(fuse_req_t req,
   msg.payload          = payload;
   msg.size             = size;
   msg.bufRef           = bufRef;
+  msg.use_page_cache   = use_page_cache;
   
   /* Send the buffer to its destination */
   ret = sendto(af_unix_fuse_south_socket_ref,&msg, sizeof(msg),0,(struct sockaddr*)&rozofs_fuse_north_socket_name,sizeof(rozofs_fuse_north_socket_name));

@@ -1441,25 +1441,22 @@ static inline void * rozofs_get_fuse_req_receive_buf()
 *   Check if the storcli will do a direct write to page cache when
     doing Mojette Inverse Transform
     
-    @param inode_p: pointer to the arry where the ino value will be store (0: no inode)
-    @param ino: ino to store
+    @param size: size to read
+
     
     @retval 0: not spported
     @retval 1: supported
 */
-static inline int rozofs_check_for_shared_buffer_by_pass(uint64_t *inode_p,uint64_t ino)
+static inline int rozofs_check_for_shared_buffer_by_pass(size_t size)
 {
-   /*
-   ** check if the fuse kernel module supports the by-pass
-   */
-   *inode_p = 0;
-   if ((rozofs_fuse_ctx_p->fuse_path_solved == 0) /*|| (rozofs_fuse_ctx_p->no_fuse_kernel_bypass)*/)
+
+   if ((rozofs_fuse_ctx_p->fuse_path_solved != 0) && (conf.pagecache !=0) && (size > ROZOFS_MAX_FILE_BUF_SZ))
    {
-     *inode_p = 0;
-     return 0;      
+
+     return 1;      
    }
-   *inode_p = ino;
-   return 1;
+
+   return 0;
 }
 
 

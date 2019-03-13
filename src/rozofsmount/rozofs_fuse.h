@@ -150,6 +150,7 @@ typedef struct _rozofs_fuse_save_ctx_t
    int       lkup_cpt;
    uint32_t  multiple_pending;           /**< number of transaction that are pending: read or write multiple */
    int       multiple_errno;             /**< multiple errno                                                 */ 
+   int       use_page_cache;             /**< assert to 1 if the storcli must use the page cache, 0 otherwise) */
    rozofs_fuse_lookup_entry_t lookup_tb[ROZOFS_MAX_PENDING_LKUP];
    /*
    ** Parameters specific to the exportd gateway management

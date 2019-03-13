@@ -93,11 +93,13 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
    int bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);
    int max_prj = ROZOFS_MAX_BLOCK_PER_MSG;
    uint64_t ino;
+   int use_page_cache;
    /*
    ** get the inode saved in the fuse context: it might needed for the case when storcli needs
    ** to open the inode during Mojette Transform
    */
    RESTORE_FUSE_PARAM(buffer_p,ino);
+   RESTORE_FUSE_PARAM(buffer_p,use_page_cache);
    // Nb. of the first block to read
    bid = off / bbytes;
    nb_prj = len / bbytes;
@@ -171,7 +173,9 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
        ** Check if the inode must be filled in the storcli request in order to have a direct write in the
        ** page cache of Linux
        */
-       rozofs_check_for_shared_buffer_by_pass(&share_rd_p->cmd[args.cmd_idx].inode,ino);
+       if (use_page_cache) share_rd_p->cmd[args.cmd_idx].inode = ino;
+       else share_rd_p->cmd[args.cmd_idx].inode = 0;
+       share_rd_p->cmd[args.cmd_idx].f_offset = off;
        /*
        ** get the index of the shared payload in buffer
        */
@@ -553,11 +557,12 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     char *buff;
     size_t length = 0;
     uint32_t readahead =0;
+    int use_page_cache = 0;
     errno = 0;
     file_t *file = (file_t *) (unsigned long) fi->fh;
     int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_read,(fuse_ino_t)file,file->fid,size,off);
 
-#if 0   
+#if 1   
     /*
     ** Get the inode from the read request: It might be possible that the value is not there
     */
@@ -568,14 +573,19 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     }
     struct fuse_read_in *fuse_kern_rd_p;
     struct fuse_in_header *fuse_in_hdr_p;
-    void * kernel_fuse_inode_addr_p = NULL;  
     fuse_in_hdr_p = (struct fuse_in_header* )fuse_req_in;
     fuse_in_hdr_p +=1; 
     fuse_kern_rd_p = (struct fuse_read_in*) fuse_in_hdr_p;
     if (fuse_kern_rd_p->padding)
     {
-      kernel_fuse_inode_addr_p = (void*)fuse_kern_rd_p->lock_owner; 
-      info("FDL inode addr:%p ino: %llu ",kernel_fuse_inode_addr_p,(unsigned long long int)ino);
+      /*
+      ** The kernel indicates that it support page cache write from storcli. Check if the fusectl path has been solved and if the 
+      ** length permits it
+      */
+      
+//      kernel_fuse_inode_addr_p = (void*)fuse_kern_rd_p->lock_owner; 
+//      info("FDL inode addr:%p ino: %llu ",kernel_fuse_inode_addr_p,(unsigned long long int)ino);
+        use_page_cache = rozofs_check_for_shared_buffer_by_pass(size);
     }
 #endif
     /*
@@ -595,10 +605,12 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     }
     SAVE_FUSE_PARAM(buffer_p,req);
     SAVE_FUSE_PARAM(buffer_p,ino); /**< needed by storcli to open the inode during Mojette Transform  */
+    SAVE_FUSE_PARAM(buffer_p,use_page_cache);  /**< needed by storcli to open the inode during Mojette Transform  */  
     SAVE_FUSE_PARAM(buffer_p,size);
     SAVE_FUSE_PARAM(buffer_p,off);
     SAVE_FUSE_PARAM(buffer_p,trc_idx);
     SAVE_FUSE_PARAM(buffer_p,readahead);
+
     SAVE_FUSE_STRUCT(buffer_p,fi,sizeof( struct fuse_file_info));    
 
     /*
@@ -732,6 +744,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
    uint8_t *src_p,*dst_p;
    int len;
    void *shared_buf_ref;
+   int use_page_cache = 0;
    
    int status;
    uint8_t  *payload;
@@ -753,6 +766,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    RESTORE_FUSE_PARAM(param,req);
    RESTORE_FUSE_PARAM(param,size);
+   RESTORE_FUSE_PARAM(param,use_page_cache); /**< needed to indicate that storcli did the write in the page cache */
    RESTORE_FUSE_PARAM(param,readahead);
    RESTORE_FUSE_STRUCT(param,fi,sizeof( struct fuse_file_info));    
    RESTORE_FUSE_PARAM(param,off);
@@ -1016,7 +1030,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
       ** after the reply read thread processing
       */
       update_pending_buffer_todo = 0;
-      rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0); 
+      rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0,use_page_cache); 
       /*
       ** update the current position in the file
       */
@@ -1462,7 +1476,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
 	  ** after the reply read thread processing
 	  */
           update_pending_buffer_todo = 0;
-	  rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0);
+	  rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0,use_page_cache);
 	}
 	else
 #endif

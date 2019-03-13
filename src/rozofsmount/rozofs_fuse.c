@@ -764,6 +764,7 @@ static char *rozofs_fuse_show_usage(char *pChar)
   pChar += sprintf(pChar,"fuse ra_pages <nb_pages>  :set the max readahead (unit is Linux page) \n");
   pChar += sprintf(pChar,"fuse max_background <count>        :set fuse max background requests count \n");
   pChar += sprintf(pChar,"fuse congestion_threshold <count>  :set fuse congestion threshold \n");
+  pChar += sprintf(pChar,"fuse pagecache <enable|disable>    :enable or disable page cache direct write for storcli on read greater than 256KB \n");
   pChar += sprintf(pChar,"fuse                      :display statistics \n");
   return pChar;
 }
@@ -1053,6 +1054,43 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 	 return;
       }
+      if (strcmp(argv[1],"pagecache")==0) 
+      {
+	 if (rozofs_fuse_ctx_p->fuse_path_solved==0)
+	 {
+           pChar += sprintf(pChar, "ioctl not supported with that fuse kernel version\n");
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;
+	 }
+	 errno = 0;
+	 if (argv[2] == NULL)
+	 {
+           pChar += sprintf(pChar, "argument is missing\n");
+	   rozofs_fuse_show_usage(pChar);
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;	  	  
+	 }
+	 if (strcmp(argv[2],"enable")==0) 
+	 {
+	   conf.pagecache = 1;
+           pChar += sprintf(pChar, "direct page cache write is now enabled\n");
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;
+         }
+	 if (strcmp(argv[2],"disable")==0) 
+	 {
+	   conf.pagecache = 0;
+           pChar += sprintf(pChar, "direct page cache write is now disabled\n");
+	   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	   return;
+         }
+         pChar += sprintf(pChar, "unsupported argument %s\n",argv[2]);
+	 rozofs_fuse_show_usage(pChar);
+	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+	 return;
+      }
+ 
+ 
       pChar += sprintf(pChar, "unsupported command %s\n",argv[1]);
       rozofs_fuse_show_usage(pChar);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -1081,7 +1119,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar +=  sprintf(pChar,"fusectl    : /sys/fs/fuse/connections/%d (%s)\n",rozofs_fuse_ctx_p->dev,(rozofs_fuse_ctx_p->fuse_path_solved==0)?"NOT SOLVED":"SOLVED");  
   
   }
-  	       
+    pChar +=  sprintf(pChar,"pagecache  : %s/%s\n",(conf.pagecache)?"Enabled":"Disabled",(rozofs_fuse_ctx_p->dev > 0)?"Supported":"Not supported");    	       
   /*
   ** display the cache mode
   */
