@@ -106,6 +106,10 @@ typedef struct filter_config {
 } filter_config_t;
 
 
+extern econfig_t   exportd_config;
+extern econfig_t   exportd_reloaded_config;
+extern econfig_t * exportd_config_to_show;
+
 int econfig_initialize(econfig_t *config);
 
 void econfig_release(econfig_t *config);
@@ -119,4 +123,32 @@ int econfig_check_consistency(econfig_t *from, econfig_t *to);
 int econfig_print(econfig_t *config);
 
 int load_exports_conf_api(econfig_t *ec, struct config_t *config);
+
+/*
+**_________________________________________________________________________
+**
+** Compare an old configuration to a new oneto see whether some new clusters 
+** and/or SIDs appears in the new conf. These new CID/SID must not be used
+** immediatly for distributing the new files because the STORCLI do not yet know 
+** about them. We have to wait for 2 minutes, that every storcli has reloaded the 
+** new configuration before using these new CID/SID.
+**
+** @param old     The old configuration
+** @param new     The new configuration
+**
+** @retval 1 when new objects exist that requires delay
+**         0 when configuration can be changed immediatly
+*/
+int econfig_does_new_config_requires_delay(econfig_t *old, econfig_t *new);
+/*
+**_________________________________________________________________________
+**
+** Replace old configuration by the new configuration
+**
+** @param old     The old configuration
+** @param new     The new configuration
+**
+*/
+void econfig_move(econfig_t *old, econfig_t *new);
+
 #endif

@@ -82,7 +82,6 @@ struct  sockaddr_un sock_path;
 int quota_transactionId=1;
 
 char *confname=NULL;
-econfig_t exportd_config;
 int rozofs_no_site_file = 0;
 
 /* Print usage information */
