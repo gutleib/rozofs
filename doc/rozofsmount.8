@@ -159,6 +159,15 @@ When asserted, it permits to cache the extended attributes on the client. The ti
 \fB\-o asyncsetattr
 When asserted,rozofsmount operates asynchronous mode for setattr operations.
 .TP
+\fB\-o wbcache
+When asserted,rozofsmount activate the write back cache at fuse kernel level. If the fuse kernel does not provide the feature, it turns back to default. That option
+is mainly useful when NFS (either V3 or V4) is used.
+.TP
+\fB\-o pagecache
+When asserted,the erasure coding process by-passes the shared buffer of rozofsmount and performs a direct write in the page cache allocated for the inode for which erasure coding took place.
+That action takes place if the read request is greater than 256KB. If the fuse kernel does not support that feature, the erasure process switches back to the default mode.The goal is 
+to avoid extra memory copy when reading.
+.TP
 \fB\-o numanode=\fP\fIN\fP
 NUMA node to pin the rozofsmount and its STORCLIs on when numa_aware is set in rozofs.conf. Default value is the rozofsmount instance.
 .PP

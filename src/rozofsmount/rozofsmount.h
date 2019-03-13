@@ -132,6 +132,7 @@ typedef struct rozofsmnt_conf {
     unsigned nb_writeThreads;  /**< number of write threads (default:0                             */ 
     unsigned long rozofs_bypass_size;     
     unsigned idx_fuse_profile;
+    unsigned pagecache; /**< when assert storcli performs a direct write in Linux page cache for I/O greater than 256 KB */
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 

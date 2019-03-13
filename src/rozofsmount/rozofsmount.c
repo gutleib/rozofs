@@ -236,7 +236,8 @@ static void usage() {
     fprintf(stderr, "    -o rozofssparestoragems=N\tdefine timeout for switching to a spare storaged for read/write requests (default: %d ms)\n",
                             rozofs_tmr_get(TMR_PRJ_READ_SPARE));
     fprintf(stderr, "    -o numanode=<#node>\tpin rozofsmount as well as its STORCLI on numa node <node#>\n");
-    fprintf(stderr, "    -o wbcache\t\tactivate Linux writeback cache\n");
+    fprintf(stderr, "    -o wbcache\t\tactivate Linux writeback cache\n");    
+    fprintf(stderr, "    -o pagecache\t\twhen set, the storcli can perform a direct write in the page cache for I/O greater than 256KB\n");
     fprintf(stderr, "    -o nb_writeThreads=N\tDefine the number of active write threads\n");
     fprintf(stderr, "    -o fuse_profile=N\tDefine the fuse profile to apply(default %u/max %u)\n",(unsigned int)ROZOFS_DEFAULT_FUSE_PROFILE,(unsigned int)(ROZOFS_MAX_PROFILE-1));
 
@@ -304,6 +305,7 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("xattrcache", xattrcache, 0),
     MYFS_OPT("asyncsetattr", asyncsetattr,0),
     MYFS_OPT("wbcache", wbcache,1),
+    MYFS_OPT("pagecache", pagecache,1),
     MYFS_OPT("fuse_profile=%u", idx_fuse_profile,1),
    
     FUSE_OPT_KEY("-H ", KEY_EXPORT_HOST),
@@ -467,7 +469,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(wbcache);  
   DISPLAY_UINT32_CONFIG(rozofs_bypass_size);
   DISPLAY_UINT32_CONFIG(idx_fuse_profile);
-
+  DISPLAY_UINT32_CONFIG(pagecache);  
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
 /*__________________________________________________________________________
@@ -2404,6 +2406,7 @@ int main(int argc, char *argv[]) {
     conf.noReadFaultTolerant = 0; // Give back blocks with 0 on read for corrupted block instead of EIO
     conf.wbcache = 0;
     conf.nb_writeThreads = 0;
+    conf.pagecache = 0;
     conf.idx_fuse_profile = ROZOFS_DEFAULT_FUSE_PROFILE;
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
