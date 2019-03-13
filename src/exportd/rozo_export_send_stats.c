@@ -43,7 +43,6 @@
         INFLUX_END);
 
 char exportd_config_file[PATH_MAX] = EXPORTD_DEFAULT_CONFIG;
-econfig_t exportd_config;
 int rozofs_no_site_file;
 /*----------------------------------------------------------------------------
 **

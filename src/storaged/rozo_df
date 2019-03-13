@@ -147,13 +147,14 @@ class rozofs_device:
        int(average_free)
      except:  
        options.freeSpace = True
-   
+
+   display_free = "%6s "%(common_bytes_with_unit(self.free+"K"))    
    if int(self.free) == int(self.old_free):
-     display_free = "%6s        "%(common_bytes_with_unit(self.free+"K"))
+     display_free += "        "
    elif int(self.free) > int(self.old_free):
-     display_free = "%6s(+%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.free)-int(self.old_free))))
+     display_free += GREEN + "(+%6s) "%(common_bytes_with_unit("%sK"%(int(self.free)-int(self.old_free)))) + NORMAL
    else: 
-     display_free = "%6s(-%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.old_free)-int(self.free))))
+     display_free += ORANGE + "(-%6s) "%(common_bytes_with_unit("%sK"%(int(self.old_free)-int(self.free)))) + NORMAL
 
    LINE = "%12s  "%(self.name) 
    #
@@ -262,9 +263,9 @@ def do_one_df():
   
   print "____________________ %s ____________________%s"%(now.strftime("%Y-%m-%d %H:%M:%S"),good_range)
   if options.freeSpace == False:
-    print "        NAME  " + CYAN + "   % " + NORMAL + "   FREE             /    SIZE  MOUNT POINT" 
+    print "        NAME  " + CYAN + "   % " + NORMAL + "   FREE            /    SIZE  MOUNT POINT" 
   else:   
-    print "        NAME     % " + CYAN + "   FREE             " + NORMAL + "/    SIZE  MOUNT POINT" 
+    print "        NAME     % " + CYAN + "   FREE            " + NORMAL + "/    SIZE  MOUNT POINT" 
       
 
 RED='\033[91m\033[40m'
@@ -274,6 +275,7 @@ BLUE='\033[94m\033[40m'
 PURPLE='\033[95m\033[40m'
 CYAN='\033[96m\033[40m'
 WHITE='\033[97m\033[40m'
+ORANGE='\033[33m\033[40m'
 
 BOLD='\033[1m'
 REVERSE='\033[7m'

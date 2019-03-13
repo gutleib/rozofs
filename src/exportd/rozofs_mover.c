@@ -1060,8 +1060,6 @@ int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path,
   if (list_empty(jobs)) {
      return 0;
   }
-  
-  stats.round++;
     
   /*
   ** Find out a free rozofsmount instance
@@ -1108,6 +1106,7 @@ int rozofs_do_move_one_export_fid_mode(char * exportd_hosts, char * export_path,
     free(job);
   }
 
+  stats.round++;
   stats.seconds += (time(NULL)-start);
   if (stats.seconds!=0) {
     float actual_throughput; 
@@ -1151,7 +1150,6 @@ void rozofs_mover_man(char * pChar) {
 void rozofs_mover_print_stat(char * pChar) {
   pChar += sprintf(pChar,"{ \"mover\" : \n");
   pChar += sprintf(pChar,"   {\n");
-  pChar += sprintf(pChar,"     \"round\"          : %llu,\n",(unsigned long long)stats.round);
   pChar += sprintf(pChar,"     \"submited files\" : %llu,\n",(unsigned long long)stats.submited);
   pChar += sprintf(pChar,"     \"mount error\"    : %llu,\n",(unsigned long long)stats.not_mounted);
   pChar += sprintf(pChar,"     \"updated files\"  : %llu,\n",(unsigned long long)stats.updated);
@@ -1160,11 +1158,13 @@ void rozofs_mover_print_stat(char * pChar) {
   pChar += sprintf(pChar,"     \"success\"        : %llu,\n",(unsigned long long)stats.success);
   pChar += sprintf(pChar,"     \"currently moved\": {\"\n");
   pChar += sprintf(pChar,"          \"name\"      : \"%s\",\n",src_fname);
-  pChar += sprintf(pChar,"          \"size\"      : %llu,\n",(unsigned long long)stats.last_size);
-  pChar += sprintf(pChar,"          \"offset\"    : %llu,\n",(unsigned long long)stats.last_offset);
+  pChar += sprintf(pChar,"          \"size\"      : %15llu,\n",(unsigned long long)stats.last_size);
+  pChar += sprintf(pChar,"          \"ruler\"     :\"   T  G  M  K  \",\n");  
+  pChar += sprintf(pChar,"          \"offset\"    : %15llu,\n",(unsigned long long)stats.last_offset);
   pChar += sprintf(pChar,"     },\n");
   pChar += sprintf(pChar,"     \"last failed\"    : \"%s\",\n",failed_fname);
   pChar += sprintf(pChar,"     \"bytes moved\"    : %llu,\n",(unsigned long long)stats.bytes);
+  pChar += sprintf(pChar,"     \"round\"          : %llu,\n",(unsigned long long)stats.round);
   pChar += sprintf(pChar,"     \"throughput MiB\" : %.1f,\n",stats.throughput);
   pChar += sprintf(pChar,"     \"duration secs\"  : %llu\n",(long long unsigned int) stats.seconds);
   pChar += sprintf(pChar,"   }\n}\n");

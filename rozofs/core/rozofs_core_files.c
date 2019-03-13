@@ -346,7 +346,9 @@ void rozofs_catch_error(int sig){
   ** Log signal if not yet in syslog
   */
   if (!rozofs_in_syslog) {
-    syslog(LOG_INFO, sigString,NULL); 
+    if (sig == SIGTERM) {
+      syslog(LOG_INFO, sigString,NULL); 
+    }   
   }
 
   /* 
@@ -382,7 +384,7 @@ void rozofs_catch_hangup(int sig){
   int idx;
  
   /* Write the information in the trace file */
-  info("Receive reload signal");
+  //info("Receive reload signal");
 
   /* Call the relaod call back */
   for (idx = 0; idx <rozofs_hgup_cbk_nb; idx++) {
