@@ -24,7 +24,6 @@
 #include "econfig.h"
 #include "export.h"
 
-extern econfig_t exportd_config;
 extern pthread_rwlock_t config_lock;
 
 eid_t *exports_lookup_id(ep_path_t path);

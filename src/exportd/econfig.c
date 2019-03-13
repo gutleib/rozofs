@@ -78,7 +78,10 @@
 #define EGWID     "gwid"
 
 
-econfig_t exportd_config;
+econfig_t   exportd_config;
+econfig_t   exportd_reloaded_config;
+econfig_t * exportd_config_to_show = &exportd_config;
+
 
 int storage_node_config_initialize(storage_node_config_t *s, uint8_t sid,
         const char *host, uint8_t siteNum) {
@@ -94,7 +97,7 @@ int storage_node_config_initialize(storage_node_config_t *s, uint8_t sid,
         fatal("Invalid site number 0");
         goto out;    
     }
-
+    memset(s,0,sizeof(storage_node_config_t));
     s->sid = sid;
     strncpy(s->host, host, ROZOFS_HOSTNAME_MAX);
     s->siteNum = siteNum;
@@ -112,7 +115,7 @@ void storage_node_config_release(storage_node_config_t *s) {
 int cluster_config_initialize(cluster_config_t *c, cid_t cid) {
     DEBUG_FUNCTION;
     int i;
-
+    memset(c,0,sizeof(cluster_config_t));
     c->cid = cid;
     for (i = 0; i <ROZOFS_GEOREP_MAX_SITE; i++) list_init(&c->storages[i]);
     list_init(&c->list);
@@ -131,7 +134,7 @@ void cluster_config_release(cluster_config_t *c) {
                   list);
           storage_node_config_release(entry);
           list_remove(p);
-          free(entry);
+          xfree(entry);
       }
     }
 }
@@ -158,7 +161,7 @@ void volume_config_release(volume_config_t *v) {
         if (v->rebalance_cfg) xfree(v->rebalance_cfg);
         v->rebalance_cfg = NULL;
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 }
 
@@ -207,7 +210,7 @@ void expgw_config_release(expgw_config_t *c) {
                 list);
         expgw_node_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 }
 
@@ -341,20 +344,20 @@ void econfig_release(econfig_t *config) {
         volume_config_t *entry = list_entry(p, volume_config_t, list);
         volume_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
 
     list_for_each_forward_safe(p, q, &config->exports) {
         export_config_t *entry = list_entry(p, export_config_t, list);
         export_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
     list_for_each_forward_safe(p, q, &config->expgw) {
         expgw_config_t *entry = list_entry(p, expgw_config_t, list);
         expgw_config_release(entry);
         list_remove(p);
-        free(entry);
+        xfree(entry);
     }
     list_for_each_forward_safe(p, q, &config->filters) {
         filter_config_t *entry = list_entry(p, filter_config_t, list);
@@ -1198,7 +1201,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
           /*
           ** Check filter exists 
           */
-          rozofs_ip4_subnet_t * tree = rozofs_ip4_flt_get_tree(filter_name);
+          rozofs_ip4_subnet_t * tree = rozofs_ip4_flt_get_tree(ec,filter_name);
           if (tree == NULL) {
             fatal("No such IPv4 filter \"%s\" defined for export %d.",filter_name, (int)eid);
           }  
@@ -1226,7 +1229,147 @@ out:
 int load_exports_conf_api(econfig_t *ec, struct config_t *config) {
    return load_exports_conf(ec,config);
 }
+/*
+**_________________________________________________________________________
+**
+** Replace old configuration by the new configuration
+**
+** @param old     The old configuration
+** @param new     The new configuration
+**
+*/
+void econfig_move(econfig_t *old, econfig_t *new) {
+  
+  /*
+  ** Release old configuration
+  */
+  econfig_release(old);
 
+  /*
+  ** Recopy the new configuration
+  */
+  memcpy(old,new,sizeof(econfig_t));
+  
+  /*
+  ** Reinitialize the list broken by memcpy and then move the lists 
+  ** from the new configuration to the old configuration
+  */
+  list_init(&old->volumes);
+  list_move(&old->volumes, &new->volumes);
+
+  list_init(&old->exports);
+  list_move(&old->exports, &new->exports);
+
+  list_init(&old->expgw);
+  list_move(&old->expgw, &new->expgw);
+  
+  list_init(&old->filters);      
+  list_move(&old->filters, &new->filters);
+  
+//  info ("MOVED");
+//  econfig_info(old);
+  
+} 
+/* 
+**_________________________________________________________________________
+**
+** Compare an old configuration to a new oneto see whether some new clusters 
+** and/or SIDs appears in the new conf. These new CID/SID must not be used
+** immediatly for distributing the new files because the STORCLI do not yet know 
+** about them. We have to wait for 2 minutes, that every storcli has reloaded the 
+** new configuration before using these new CID/SID.
+**
+** @param old     The old configuration
+** @param new     The new configuration
+**
+** @retval 1 when new objects exist that requires delay
+**         0 when configuration can be changed immediatly
+*/
+int econfig_does_new_config_requires_delay(econfig_t *old, econfig_t *new) {
+  volume_config_t       * vnew, * vold;
+  list_t                * vn,   * vo;
+  cluster_config_t      * cold, * cnew;
+  list_t                * co,   * cn;  
+  storage_node_config_t * sold, * snew;
+  list_t                * so,   * sn;  
+  int                     new_cid;
+  int                     new_sid;
+  int                     site_num;
+  
+  /*
+  ** Loop on new volumes 
+  */
+  list_for_each_forward(vn, &new->volumes) {
+  
+    vnew = (volume_config_t *) list_entry(vn, volume_config_t, list);
+    /*
+    ** Find out this volume in the old configuration
+    */
+    list_for_each_forward(vo, &old->volumes) {  
+
+      vold = (volume_config_t *) list_entry(vo, volume_config_t, list);
+      if (vold->vid != vnew->vid) continue;
+      
+      /*
+      ** Loop on the new clusters of this new volume
+      */
+      list_for_each_forward(cn, &vnew->clusters) {
+  
+        cnew = (cluster_config_t *) list_entry(cn, cluster_config_t, list);
+        new_cid = 1;
+
+        /*
+        ** Find out this cluster in the old configuration
+        */
+        list_for_each_forward(co,&vold->clusters) {
+
+          cold = (cluster_config_t *) list_entry(co, cluster_config_t, list);
+          if (cold->cid != cnew->cid) continue;
+           
+          new_cid = 0;
+           
+          /*
+          ** Loop on the new SID of this new cluster of this new volume
+          */
+          for (site_num = 0; site_num<ROZOFS_GEOREP_MAX_SITE; site_num++) {
+          
+            list_for_each_forward(sn, &cnew->storages[site_num]) {
+
+              snew = (storage_node_config_t *) list_entry(sn, storage_node_config_t, list);
+              new_sid = 1;
+
+              /*
+              ** Find out this SID in the old configuration
+              */
+              list_for_each_forward(so,&cold->storages[site_num]) {
+
+                sold = (storage_node_config_t *) list_entry(so, storage_node_config_t, list);
+                if (sold->sid != snew->sid) continue;
+                
+                new_sid = 0;
+                break;
+              }
+              /*
+              ** There is a new SID. We have to wait for the STORCLI to update its configuration
+              */
+              if (new_sid) return 1;
+              //info("%s SID %d/%d",new_sid?"New":"Old",cnew->cid, snew->sid);                                   
+            }
+          } 
+        }        
+        /*
+        ** There is a new CID. We have to wait for the STORCLI to update its configuration
+        */
+        if (new_cid) return 1;
+        //info("%s cluster %d",new_cid?"New":"Old",cnew->cid);
+      }
+    }
+  }      
+  /*
+  ** No new cluster no new SID. Configuration can be changed immediatly
+  */ 
+  return 0;
+}
 int econfig_read(econfig_t *config, const char *fname) {
     int status = -1;
     //const char *host;

@@ -64,7 +64,6 @@
 #include "volume.h"
 #include "export_expgw_conf.h"
 
-extern econfig_t exportd_config;
 int rozofs_no_site_file = 0;
 char     * fidString = NULL;
 uint64_t total_sectors = 0;

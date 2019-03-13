@@ -110,7 +110,6 @@ scan_index_context_t scan_context;   /**< current indexes for inode tracking    
 list_t pList_volume_cluster;         /**< ordered list of the cluster within a volume                    */
 int rebalance_trigger_score;         /**< score relative to the rozo_balancing_ctx.rebalance_threshold_trigger              */
     
-econfig_t exportd_config;            /**<exportd configuration */
 int rozofs_no_site_file = 0;
 eid_t volume_export_table[EXPGW_EID_MAX_IDX];   /**< table of eids associated with a volume  */
 
@@ -841,11 +840,11 @@ char *print_rebalance_state(int state)
 {
    switch (state)
    {
-      case CLUSTER_OVERLOADED: return  "Overloaded ";
-      case CLUSTER_UNDERLOADED: return "Underloaded";
-      case CLUSTER_IN_RANGE: return    "In range   ";
-      case CLUSTER_OFF: return         "Off        ";
-      default: return                  "Unknown?   ";
+      case CLUSTER_OVERLOADED: return  "\033[93m\033[40mOverloaded \033[0m";
+      case CLUSTER_UNDERLOADED: return "\033[33m\033[40mUnderloaded\033[0m";
+      case CLUSTER_IN_RANGE: return    "\033[92m\033[40mIn range   \033[0m";
+      case CLUSTER_OFF: return         "\033[91m\033[40mOff        \033[0m";
+      default: return                  "\033[91m\033[40mUnknown?   \033[0m";
     }
     return "Unkown?";
 }
@@ -859,16 +858,11 @@ char  *display_one_cluster_balancing_stats(export_vol_cluster_stat2_t *p,char *p
    rozo_cluster_sid_t *val2idx_p = sid2idx_table_p[p->cluster_id];
    char buffer[64];
    
-   pChar +=sprintf(pChar,"Cluster #%d nb_host = %d  nb_sid = %d score=%d \n",p->cluster_id,p->nb_host,p->nb_sid,val2idx_p->score);
-
+   pChar +=sprintf(pChar,"    {  \"cid\" : %d, \"nb_host\" : %d,  \"nb_sid\" : %d, \"score\" : %d, \n       \"sids\" : [\n",p->cluster_id,p->nb_host,p->nb_sid,val2idx_p->score);
    q = &p->sid_tab[0];
    for (i= 0; i < p->nb_sid; i++,q++)
    {
      int64_t data2mov = 0;
-     pChar +=sprintf(pChar,"  sid %d: free %d %s total sz %llu MB ",
-                   q->sid,q->free_percent, 
-		   print_rebalance_state(q->rebalance_state),
-		   ( long long unsigned int)q->total_size_bytes/1000000);
      switch (q->rebalance_state)
      {
         case  CLUSTER_OVERLOADED:
@@ -879,9 +873,14 @@ char  *display_one_cluster_balancing_stats(export_vol_cluster_stat2_t *p,char *p
 	default:
            break;
       }
-      pChar +=sprintf(pChar," data2move %s \n",display_size(data2mov,buffer));	
+      if (i!=0) pChar += sprintf(pChar,",\n");
+      pChar += sprintf(pChar,"        { \"sid\" : %3d, \"free%%\" : %2d, \"state\" : \"%s\",  \"size MB\" : %llu, \"data2move\" :  \"%s\" }",
+                   q->sid,q->free_percent, 
+		   print_rebalance_state(q->rebalance_state),
+		   ( long long unsigned int)q->total_size_bytes/1000000,
+                   display_size(data2mov,buffer));
    }
-   pChar +=sprintf(pChar,"\n");  
+   pChar +=sprintf(pChar,"\n      ]\n    }");  
    return pChar;
 }
 
@@ -899,12 +898,18 @@ char  *display_all_cluster_balancing_stats(char *pChar)
      goto out;
    }
 
-   pChar += sprintf(pChar,"average free space in volume %d\n",cluster_average.free_percent);
+   pChar += sprintf(pChar, "{\n  \"average free space in volume\" :  %d,\n",cluster_average.free_percent);
+   pChar += sprintf(pChar, "  \"clusters\" :   [\n");
    
    for (cluster_idx = 0; cluster_idx < export_rebalance_vol_stat_p->nb_cluster;cluster_idx++)
    {
+     if (cluster_idx != 0) {
+       pChar += sprintf(pChar, ",\n");
+     }
      pChar = display_one_cluster_balancing_stats(export_rebalance_cluster_stat_p[cluster_idx],pChar);
    }
+   pChar += sprintf(pChar, "\n  ]\n}\n");
+   
 out:   
    pthread_rwlock_unlock(&cluster_balance_compute_lock);
    return pChar;

@@ -27,7 +27,6 @@ char      * pPath = NULL;
 int         resultFileNum=0;
 int         countInResultFile=0;
 int         FDescr=-1;
-econfig_t   exportd_config;
 char      * configFileName = EXPORTD_DEFAULT_CONFIG;
 uint8_t     layout=-1;
 lv2_cache_t cache;

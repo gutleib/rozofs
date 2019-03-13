@@ -72,7 +72,6 @@ char *progname;
 
 static int enable_syslog=0;
 char *confname=NULL;
-econfig_t exportd_config;
 int rozofs_no_site_file = 0;
 static char extensions[MAXQUOTAS + 2][20] = INITQFNAMES;
 

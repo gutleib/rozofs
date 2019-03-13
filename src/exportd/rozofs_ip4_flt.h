@@ -371,7 +371,7 @@ static inline int rozofs_ip4_filter_add_subnet(rozofs_ip4_subnet_t * tree, uint3
 **
 ** @retval   the tree or NULL
  */
-rozofs_ip4_subnet_t * rozofs_ip4_flt_get_tree(const char * name) ;
+rozofs_ip4_subnet_t * rozofs_ip4_flt_get_tree(void * e,const char * name) ;
 /*
 **_______________________________________________________________________
 **
