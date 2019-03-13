@@ -520,7 +520,7 @@ int main(int argc, char *argv[]) {
     break;
   }
   if (layout == -1) {  
-    usage("No such eid %d configured",econfig->layout);
+    usage("No such eid %d configured",eid);
   }  
   
   /*

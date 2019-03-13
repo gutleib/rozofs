@@ -55,7 +55,7 @@ void rozofs_ll_resize_cbk(void *this,void *param) {
   int                           bufsize;
   storcli_read_ret_no_data_t    ret;
   xdrproc_t                     decode_proc = (xdrproc_t)xdr_storcli_read_ret_no_data_t;
-  ientry_t                    * ie;
+  ientry_t                    * ie=NULL;
   fuse_ino_t                    ino;
   struct stat                   o_stbuf;
   uint64_t                      old_size = 0;
@@ -295,7 +295,7 @@ void rozofs_do_resize_multiple_cbk(void *this,void *param)  {
   struct rpc_msg           rpc_reply;
   int                      trc_idx;
   fuse_ino_t               ino;
-  int                      file_idx;
+  int                      file_idx=0;
   rozofs_shared_buf_rd_hdr_t  * share_rd_p;  
   uint32_t                 cmd_idx; 
   uint32_t                 length;
@@ -322,6 +322,13 @@ void rozofs_do_resize_multiple_cbk(void *this,void *param)  {
   }  
   
   /*
+  ** Retrieve the file index in the opaque field
+  */
+  rozofs_tx_ctx_p = (rozofs_tx_ctx_t*)this;     
+  rozofs_tx_read_opaque_data(rozofs_tx_ctx_p,0,&cmd_idx);
+  rozofs_tx_read_opaque_data(rozofs_tx_ctx_p,1,(uint32_t *)&file_idx);
+  rozofs_tx_read_opaque_data(rozofs_tx_ctx_p,2,&length);
+  /*
   ** Retrieve ientry
   */
   if (!(ie = get_ientry_by_inode(ino))) {
@@ -329,14 +336,6 @@ void rozofs_do_resize_multiple_cbk(void *this,void *param)  {
     goto error;
   } 
        
-  /*
-  ** Retrieve the file index in the opaque field
-  */
-  rozofs_tx_ctx_p = (rozofs_tx_ctx_t*)this;     
-  rozofs_tx_read_opaque_data(rozofs_tx_ctx_p,0,&cmd_idx);
-  rozofs_tx_read_opaque_data(rozofs_tx_ctx_p,1,(uint32_t *)&file_idx);
-  rozofs_tx_read_opaque_data(rozofs_tx_ctx_p,2,&length);
-
   /*    
   ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
   */

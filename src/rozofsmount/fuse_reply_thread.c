@@ -99,11 +99,14 @@ static inline rozofs_fuse_thr_reply_t *rozofs_fuse_reply_get_next_slot()
 /*
 **__________________________________________________________________
 */
+#if 0
 static char * show_fuse_reply_thread_help(char * pChar) {
   pChar += sprintf(pChar,"usage:\n");
   pChar += sprintf(pChar,"fuse_reply_thread             : display threads statistics\n");  
   return pChar; 
 }
+#endif
+
 extern int rozofs_max_getattr_pending;
 extern uint64_t rozofs_max_getattr_duplicate;
 void show_fuse_reply_thread(char * argv[], uint32_t tcpRef, void *bufRef) 
@@ -111,8 +114,6 @@ void show_fuse_reply_thread(char * argv[], uint32_t tcpRef, void *bufRef)
     char *pChar = uma_dbg_get_buffer();
     fuse_reply_writeback_ctx_t       *thread_ctx_p;
     int i;
-    int value1,value2;
-    int new_val;
 
 
 #if 0
@@ -179,7 +180,7 @@ void show_fuse_reply_thread(char * argv[], uint32_t tcpRef, void *bufRef)
 
     }
     pChar +=sprintf(pChar,"+--------+-----------+-----------+-----------+-----------+-----------+-----------+\n");
-    pChar +=sprintf(pChar,"Fuse Reply payload size %u\n",sizeof(rozofs_fuse_thr_reply_t));
+    pChar +=sprintf(pChar,"Fuse Reply payload size %u\n",(unsigned int)sizeof(rozofs_fuse_thr_reply_t));
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	     
 }
 /*
@@ -196,7 +197,6 @@ void show_fuse_reply_thread(char * argv[], uint32_t tcpRef, void *bufRef)
 void *fuse_reply_thread(void *arg) {    
 
    fuse_reply_writeback_ctx_t * ctx_p = (fuse_reply_writeback_ctx_t*)arg;
-   int value= -1;
    char bufname[64];
    rozofs_fuse_thr_reply_t *job_p;
 

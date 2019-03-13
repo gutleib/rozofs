@@ -30,6 +30,18 @@
 #include "rozofs_storcli_transform.h"
 #include "rozofs_storcli.h"
 
+extern int transform_inverse_proc(uint8_t *prj_idx_table,
+                           rozofs_storcli_projection_ctx_t *prj_ctx_p,
+                           int max_psize,
+                           int layout,
+                           int user_data_block_size,
+                           int first_block_idx,
+                           int block_idx,
+                           char *data);
+
+extern int transform_forward_proc(int layout,char*data,int user_data_block_size,projection_t *projections);			   
+			   
+
 /**
 * Local variables
 */
@@ -70,8 +82,6 @@
  {
 
     int block_idx;
-    uint16_t projection_id = 0;
-    int prj_ctx_idx;
     *number_of_blocks_p = 0;    
     uint8_t rozofs_inverse = rozofs_get_rozofs_inverse(layout);
     uint8_t rozofs_forward = rozofs_get_rozofs_forward(layout);
@@ -199,7 +209,6 @@
     uint16_t projection_id = 0;
     uint32_t i = 0;    
     uint8_t rozofs_forward = rozofs_get_rozofs_forward(layout);
-    uint8_t rozofs_inverse = rozofs_get_rozofs_inverse(layout);
     int empty_block = 0;
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize);
 
