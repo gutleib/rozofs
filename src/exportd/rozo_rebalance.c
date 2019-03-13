@@ -874,7 +874,7 @@ char  *display_one_cluster_balancing_stats(export_vol_cluster_stat2_t *p,char *p
            break;
       }
       if (i!=0) pChar += sprintf(pChar,",\n");
-      pChar += sprintf(pChar,"        { \"sid\" : %3d, \"free\%\" : %2d, \"state\" : \"%s\",  \"size MB\" : %llu, \"data2move\" :  \"%s\" }",
+      pChar += sprintf(pChar,"        { \"sid\" : %3d, \"free%%\" : %2d, \"state\" : \"%s\",  \"size MB\" : %llu, \"data2move\" :  \"%s\" }",
                    q->sid,q->free_percent, 
 		   print_rebalance_state(q->rebalance_state),
 		   ( long long unsigned int)q->total_size_bytes/1000000,
@@ -899,7 +899,7 @@ char  *display_all_cluster_balancing_stats(char *pChar)
    }
 
    pChar += sprintf(pChar, "{\n  \"average free space in volume\" :  %d,\n",cluster_average.free_percent);
-   pChar += sprintf(pChar, "  \"clusters\" :   [\n",cluster_average.free_percent);
+   pChar += sprintf(pChar, "  \"clusters\" :   [\n");
    
    for (cluster_idx = 0; cluster_idx < export_rebalance_vol_stat_p->nb_cluster;cluster_idx++)
    {

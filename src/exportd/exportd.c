@@ -2127,7 +2127,6 @@ out:
 int   hup_running = 0;
 
 static void on_hup() {
-    econfig_t new;
     int       val;
     
     val = __atomic_fetch_add(&hup_running, 1, __ATOMIC_SEQ_CST);
