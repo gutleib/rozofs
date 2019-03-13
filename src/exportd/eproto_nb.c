@@ -202,7 +202,7 @@ void ep_conf_storage_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     }
 
     /* For each volume */
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
@@ -346,13 +346,13 @@ void ep_conf_expgw_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     expgw_conf_p->eid.eid_len = 0;
     expgw_conf_p->eid.eid_val = local_expgw_eid_table;
     expgw_conf_p->exportd_host = exportd_hostname;
-    strcpy(expgw_conf_p->exportd_host,exportd_config.exportd_vip);
+    strcpy(expgw_conf_p->exportd_host,exportd_config_to_show->exportd_vip);
     expgw_conf_p->exportd_port = 0;
     expgw_conf_p->gateway_port = 0;
     expgw_conf_p->gateway_host.gateway_host_len = 0;  
     expgw_conf_p->gateway_host.gateway_host_val = local_expgw_host_table;  
   
-    list_for_each_forward(iterator, &exportd_config.exports) 
+    list_for_each_forward(iterator, &exportd_config_to_show->exports) 
     {
        export_config_t *entry = list_entry(iterator, export_config_t, list);
        local_expgw_eid_table[expgw_conf_p->eid.eid_len] = entry->eid;
@@ -384,7 +384,7 @@ void ep_conf_expgw_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     {
         goto error;
     }       
-    list_for_each_forward(iterator, &exportd_config.expgw) 
+    list_for_each_forward(iterator, &exportd_config_to_show->expgw) 
     {
         expgw_config_t *entry = list_entry(iterator, expgw_config_t, list);
         expgw_conf_p->hdr.export_id = entry->daemon_id;
@@ -508,7 +508,7 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     }
 
     /* For each volume */
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
@@ -640,7 +640,7 @@ void ep_list_cluster_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
     // For each volume
 
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
@@ -722,7 +722,7 @@ void ep_list_cluster2_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
     // For each volume
 
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 

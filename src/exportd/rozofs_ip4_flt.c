@@ -39,12 +39,13 @@
 **
 ** @retval   the tree or NULL
 */
-rozofs_ip4_subnet_t * rozofs_ip4_flt_get_tree(const char * name) {
+rozofs_ip4_subnet_t * rozofs_ip4_flt_get_tree(void * cfg, const char * name) {
   list_t *p, *q;    
+  econfig_t * e = (econfig_t*) cfg;
   
   if (name == NULL) return NULL;
   
-  list_for_each_forward_safe(p, q, &exportd_config.filters) {
+  list_for_each_forward_safe(p, q, &e->filters) {
   
     filter_config_t *entry = list_entry(p, filter_config_t, list);
   
@@ -168,7 +169,7 @@ void rozofs_ip4_flt_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
   /*
   ** Retrieve the given filter tree
   */  
-  tree = rozofs_ip4_flt_get_tree(argv[1]);
+  tree = rozofs_ip4_flt_get_tree(exportd_config_to_show,argv[1]);
   if (tree == NULL) {
     pChar += sprintf(pChar, "No such tree");   
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   

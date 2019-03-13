@@ -245,7 +245,7 @@ epgw_conf_ret_t *ep_conf_storage_1_svc(epgw_conf_stor_arg_t * arg, struct svc_re
     }
 
     /* For each volume */
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
@@ -424,13 +424,13 @@ ep_gw_gateway_configuration_ret_t *ep_conf_expgw_1_svc(ep_path_t * arg, struct s
     expgw_conf_p->eid.eid_len = 0;
     expgw_conf_p->eid.eid_val = local_expgw_eid_table;
     expgw_conf_p->exportd_host = exportd_hostname;
-    strcpy(expgw_conf_p->exportd_host,exportd_config.exportd_vip);
+    strcpy(expgw_conf_p->exportd_host,exportd_config_to_show->exportd_vip);
     expgw_conf_p->exportd_port = 0;
     expgw_conf_p->gateway_port = 0;
     expgw_conf_p->gateway_host.gateway_host_len = 0;  
     expgw_conf_p->gateway_host.gateway_host_val = local_expgw_host_table;  
   
-    list_for_each_forward(iterator, &exportd_config.exports) 
+    list_for_each_forward(iterator, &exportd_config_to_show->exports) 
     {
        export_config_t *entry = list_entry(iterator, export_config_t, list);
        local_expgw_eid_table[expgw_conf_p->eid.eid_len] = entry->eid;
@@ -462,7 +462,7 @@ ep_gw_gateway_configuration_ret_t *ep_conf_expgw_1_svc(ep_path_t * arg, struct s
     {
         goto error;
     }       
-    list_for_each_forward(iterator, &exportd_config.expgw) 
+    list_for_each_forward(iterator, &exportd_config_to_show->expgw) 
     {
         expgw_config_t *entry = list_entry(iterator, expgw_config_t, list);
         expgw_conf_p->hdr.export_id = entry->daemon_id;
@@ -544,7 +544,7 @@ epgw_mount_ret_t *ep_mount_1_svc(epgw_mount_arg_t * arg, struct svc_req * req) {
     }
 
     /* For each volume */
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
@@ -700,7 +700,7 @@ epgw_mount_msite_ret_t *ep_mount_msite_1_svc(epgw_mount_arg_t * arg, struct svc_
     ret.status_gw.ep_mount_msite_ret_t_u.export.msite |= ROZOFS_EXPORT_THIN_PROVISIONNING_BIT;
 
     /* For each volume */
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
@@ -828,7 +828,7 @@ epgw_cluster_ret_t * ep_list_cluster_1_svc(epgw_cluster_arg_t * arg, struct svc_
 
     // For each volume
 
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 
@@ -902,7 +902,7 @@ epgw_cluster2_ret_t * ep_list_cluster2_1_svc(epgw_cluster_arg_t * arg, struct sv
 
     // For each volume
 
-    list_for_each_forward(p, &exportd_config.volumes) {
+    list_for_each_forward(p, &exportd_config_to_show->volumes) {
 
         volume_config_t *vc = list_entry(p, volume_config_t, list);
 

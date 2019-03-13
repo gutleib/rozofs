@@ -1989,11 +1989,8 @@ int export_reload_nb()
     }
 
     econfig_release(&exportd_config);
-
-    if (econfig_read(&exportd_config, exportd_config_file) != 0) {
-        severe("failed to parse configuration file: %s.", strerror(errno));
-        goto error;
-    }
+    econfig_move(&exportd_config,&exportd_reloaded_config);
+    exportd_config_to_show = &exportd_config;    
 
     // Reload the list of volumes
 
@@ -2127,53 +2124,79 @@ out:
   Once the new configuration has been validated, the slave exportd are
   requested to reload the new configuration
 */
+int   hup_running = 0;
 
 static void on_hup() {
     econfig_t new;
+    int       val;
+    
+    val = __atomic_fetch_add(&hup_running, 1, __ATOMIC_SEQ_CST);
+    if (val != 0) {
+      __atomic_fetch_sub(&hup_running, 1, __ATOMIC_SEQ_CST);
+      return;
+    }  
 
     info("hup signal received.");
-
+    
+    econfig_initialize(&exportd_reloaded_config);
+    
     // Check if the new exportd configuration file is valid
 
-    if (econfig_initialize(&new) != 0) {
+    if (econfig_initialize(&exportd_reloaded_config) != 0) {
         severe("can't initialize exportd config: %s.", strerror(errno));
         goto invalid_conf;
     }
 
-    if (econfig_read(&new, exportd_config_file) != 0) {
+    if (econfig_read(&exportd_reloaded_config, exportd_config_file) != 0) {
         severe("failed to parse configuration file: %s.", strerror(errno));
         goto invalid_conf;
     }
 
-    if (econfig_validate(&new) != 0) {
+    if (econfig_validate(&exportd_reloaded_config) != 0) {
         severe("invalid configuration file: %s.", strerror(errno));
         goto invalid_conf;
     }
+
     /*
-    ** compute the hash of the exportd configuration
+    ** compute the hash of the exportd configuration and show it to the clients
     */
-    if (hash_file_compute(exportd_config_file,&export_configuration_file_hash) != 0) {
-        severe("error while computing hash value of the configuration file: %s.\n",
-                strerror(errno));
-        goto error;
-    }
-
-    econfig_release(&new);
+    if (hash_file_compute(exportd_config_file,&export_configuration_file_hash) != 0) {}
+    exportd_config_to_show = &exportd_reloaded_config;
 
     /*
-    ** Stop every rebalancer
+    ** Case of the master exportd
     */
     if (expgwc_non_blocking_conf.slave == 0)
     {    
+      /*
+      ** Stop every rebalancer and propagate the signal to every slave export
+      */
       export_rebalancer(0);
+      
+      /*
+      ** reload the slave exportd
+      */
+      export_reload_all_export_slave();
     }
     
+        
+    /*
+    ** Check whether the reload requires some delay for the STORCLI to learn about it
+    */
+    if (econfig_does_new_config_requires_delay(&exportd_config, &exportd_reloaded_config) != 0) {
+       /*
+       ** Sleep 2m minutes for the export to get the new conf
+       */
+       info("reload will take place in 2 minutes");
+       sleep(130);
+    }  
+      
     /*
     ** the configuration is valid, so we reload the new configuration
     ** but for doing it we need to warn the non-blocking thread and then wait
     ** for the end of the reload
     */
-    export_reload_conf_status.done = 0;
+    export_reload_conf_status.done   = 0;
     export_reload_conf_status.status = -1;
     {
       int ret;
@@ -2183,7 +2206,7 @@ static void on_hup() {
          severe("EXPORT_LOAD_CONF: %s",strerror(errno));
          goto error;
       }
-
+      info("Switch to new configuration");
     }
     /*
     ** now wait for the end of the configuration processing
@@ -2199,6 +2222,7 @@ static void on_hup() {
        /*
        ** It think that we can put a fatal here
        */
+       info ("reload time out");
        goto error;    
     }
     if (export_reload_conf_status.status < 0)
@@ -2206,16 +2230,12 @@ static void on_hup() {
        /*
        ** It think that we can put a fatal here
        */
+       info ("reload in error");       
        goto error;    
     }
     
     if (expgwc_non_blocking_conf.slave == 0)
     {
-      /*
-      ** reload the slave exportd
-      */
-      export_reload_all_export_slave();
-      
       /*
       ** Start every rebalancer
       */
@@ -2224,16 +2244,19 @@ static void on_hup() {
 
     info("reloaded.");
     goto out;
+    
 error:
     severe("reload failed !!!");
     goto out;
+    
+    
 invalid_conf:
     severe("reload failed: invalid configuration !!!");
-out:
-    econfig_release(&new);
-    return;
-    
+    econfig_release(&exportd_reloaded_config);
 
+out:
+     __atomic_fetch_sub(&hup_running, 1, __ATOMIC_SEQ_CST);
+    return;
 }
 /*
  *_______________________________________________________________________
