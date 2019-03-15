@@ -34,6 +34,7 @@ typedef char            ep_md5_t[ROZOFS_MD5_SIZE];
 typedef string            ep_st_host_t<ROZOFS_HOSTNAME_MAX>;
 typedef string            ep_epgw_host_t<ROZOFS_PATH_MAX>;
 
+%#define STORAGES_MAX_BY_STORAGE_NODE_patch  32
 
 %#define ROZOFS_VERSION_STRING_LENGTH    32
 typedef char            ep_sftw_vers_t[ROZOFS_VERSION_STRING_LENGTH];
@@ -124,6 +125,13 @@ struct ep_storage_node_msite_t {
     uint8_t         sids[STORAGES_MAX_BY_STORAGE_NODE];
     uint16_t        cids[STORAGES_MAX_BY_STORAGE_NODE];
 };
+struct ep_storage_node_msite_patch_t {
+    ep_host_t       host;
+    uint8_t         site;
+    uint8_t         sids_nb;
+    uint8_t         sids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+    uint16_t        cids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+};
 
 
 struct ep_storage_node_t {
@@ -132,7 +140,12 @@ struct ep_storage_node_t {
     uint8_t         sids[STORAGES_MAX_BY_STORAGE_NODE];
     uint16_t        cids[STORAGES_MAX_BY_STORAGE_NODE];
 };
-
+struct ep_storage_node_patch_t {
+    ep_host_t       host;
+    uint8_t         sids_nb;
+    uint8_t         sids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+    uint16_t        cids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+};
 struct ep_export_msite_t {
     uint32_t            hash_conf;
     uint32_t            eid;
@@ -146,7 +159,19 @@ struct ep_export_msite_t {
     ep_storage_node_msite_t   storage_nodes[STORAGE_NODES_MAX];
 	
 };
-
+struct ep_export_msite_patch_t {
+    uint32_t            hash_conf;
+    uint32_t            eid;
+    uint32_t            listen_port;
+    ep_md5_t            md5;
+    ep_uuid_t           rfid;   /*root fid*/
+    uint8_t             rl;     /* rozofs layout */
+	uint8_t             msite;  /* Is it a multi site config */	
+    uint32_t            bs;     /* Block size. From enum ROZOFS_BSIZE_E */
+    uint8_t             storage_nodes_nb;
+    ep_storage_node_msite_patch_t   storage_nodes[STORAGE_NODES_MAX];
+	
+};
 struct ep_export_t {
     uint32_t            hash_conf;
     uint32_t            eid;
@@ -158,7 +183,17 @@ struct ep_export_t {
     uint8_t             storage_nodes_nb;
     ep_storage_node_t   storage_nodes[STORAGE_NODES_MAX];
 };
-
+struct ep_export_patch_t {
+    uint32_t            hash_conf;
+    uint32_t            eid;
+    uint32_t            listen_port;
+    ep_md5_t            md5;
+    ep_uuid_t           rfid;   /*root fid*/
+    uint8_t             rl;     /* rozofs layout */
+    uint32_t            bs;     /* Block size. From enum ROZOFS_BSIZE_E */
+    uint8_t             storage_nodes_nb;
+    ep_storage_node_patch_t   storage_nodes[STORAGE_NODES_MAX];
+};
 
 
 union ep_mount_msite_ret_t switch (ep_status_t status) {
@@ -166,17 +201,30 @@ union ep_mount_msite_ret_t switch (ep_status_t status) {
     case EP_FAILURE:    int          error;
     default:            void;
 };
-
+union ep_mount_msite_ret_patch_t switch (ep_status_t status) {
+    case EP_SUCCESS:    ep_export_msite_patch_t export;
+    case EP_FAILURE:    int          error;
+    default:            void;
+};
 union ep_mount_ret_t switch (ep_status_t status) {
     case EP_SUCCESS:    ep_export_t export;
     case EP_FAILURE:    int         error;
     default:            void;
 };
-
+union ep_mount_ret_patch_t switch (ep_status_t status) {
+    case EP_SUCCESS:    ep_export_patch_t export;
+    case EP_FAILURE:    int         error;
+    default:            void;
+};
 struct epgw_mount_msite_ret_t
 {
   struct ep_gateway_t hdr;
   ep_mount_msite_ret_t    status_gw;
+};
+struct epgw_mount_msite_ret_patch_t
+{
+  struct ep_gateway_t hdr;
+  ep_mount_msite_ret_patch_t    status_gw;
 };
 
 struct epgw_mount_ret_t
@@ -184,7 +232,11 @@ struct epgw_mount_ret_t
   struct ep_gateway_t hdr;
   ep_mount_ret_t    status_gw;
 };
-
+struct epgw_mount_ret_patch_t
+{
+  struct ep_gateway_t hdr;
+  ep_mount_ret_patch_t    status_gw;
+};
 
 struct ep_cnf_storage_node_t {
     string       host<ROZOFS_HOSTNAME_MAX>;
@@ -192,7 +244,12 @@ struct ep_cnf_storage_node_t {
     uint8_t         sids[STORAGES_MAX_BY_STORAGE_NODE];
     uint16_t        cids[STORAGES_MAX_BY_STORAGE_NODE];
 };
-
+struct ep_cnf_storage_node_patch_t {
+    string       host<ROZOFS_HOSTNAME_MAX>;
+    uint8_t         sids_nb;
+    uint8_t         sids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+    uint16_t        cids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+};
 struct ep_conf_export_t {
     uint32_t            hash_conf;
     uint32_t            eid;
@@ -201,20 +258,35 @@ struct ep_conf_export_t {
     uint8_t             rl;     /* rozofs layout */
     ep_cnf_storage_node_t   storage_nodes<>;
 };
-
+struct ep_conf_export_patch_t {
+    uint32_t            hash_conf;
+    uint32_t            eid;
+    ep_md5_t            md5;
+    ep_uuid_t           rfid;   /*root fid*/
+    uint8_t             rl;     /* rozofs layout */
+    ep_cnf_storage_node_patch_t   storage_nodes<>;
+};
 union ep_conf_ret_t switch (ep_status_t status) {
     case EP_SUCCESS:    ep_conf_export_t export;
     case EP_FAILURE:    int         error;
     default:            void;
 };
-
+union ep_conf_ret_patch_t switch (ep_status_t status) {
+    case EP_SUCCESS:    ep_conf_export_patch_t export;
+    case EP_FAILURE:    int         error;
+    default:            void;
+};
 
 struct epgw_conf_ret_t
 {
   struct ep_gateway_t hdr;
   ep_conf_ret_t    status_gw;
 };
-
+struct epgw_conf_ret_patch_t
+{
+  struct ep_gateway_t hdr;
+  ep_conf_ret_patch_t    status_gw;
+};
 
 struct ep_mattr_t {
     ep_uuid_t   fid;

@@ -36,6 +36,7 @@ typedef char ep_md5_t[ROZOFS_MD5_SIZE];
 typedef char *ep_st_host_t;
 
 typedef char *ep_epgw_host_t;
+#define STORAGES_MAX_BY_STORAGE_NODE_patch 32
 #define ROZOFS_VERSION_STRING_LENGTH 32
 
 typedef char ep_sftw_vers_t[ROZOFS_VERSION_STRING_LENGTH];
@@ -139,6 +140,15 @@ struct ep_storage_node_msite_t {
 };
 typedef struct ep_storage_node_msite_t ep_storage_node_msite_t;
 
+struct ep_storage_node_msite_patch_t {
+	ep_host_t host;
+	uint8_t site;
+	uint8_t sids_nb;
+	uint8_t sids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+	uint16_t cids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+};
+typedef struct ep_storage_node_msite_patch_t ep_storage_node_msite_patch_t;
+
 struct ep_storage_node_t {
 	ep_host_t host;
 	uint8_t sids_nb;
@@ -146,6 +156,14 @@ struct ep_storage_node_t {
 	uint16_t cids[STORAGES_MAX_BY_STORAGE_NODE];
 };
 typedef struct ep_storage_node_t ep_storage_node_t;
+
+struct ep_storage_node_patch_t {
+	ep_host_t host;
+	uint8_t sids_nb;
+	uint8_t sids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+	uint16_t cids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+};
+typedef struct ep_storage_node_patch_t ep_storage_node_patch_t;
 
 struct ep_export_msite_t {
 	uint32_t hash_conf;
@@ -161,6 +179,20 @@ struct ep_export_msite_t {
 };
 typedef struct ep_export_msite_t ep_export_msite_t;
 
+struct ep_export_msite_patch_t {
+	uint32_t hash_conf;
+	uint32_t eid;
+	uint32_t listen_port;
+	ep_md5_t md5;
+	ep_uuid_t rfid;
+	uint8_t rl;
+	uint8_t msite;
+	uint32_t bs;
+	uint8_t storage_nodes_nb;
+	ep_storage_node_msite_patch_t storage_nodes[STORAGE_NODES_MAX];
+};
+typedef struct ep_export_msite_patch_t ep_export_msite_patch_t;
+
 struct ep_export_t {
 	uint32_t hash_conf;
 	uint32_t eid;
@@ -174,6 +206,19 @@ struct ep_export_t {
 };
 typedef struct ep_export_t ep_export_t;
 
+struct ep_export_patch_t {
+	uint32_t hash_conf;
+	uint32_t eid;
+	uint32_t listen_port;
+	ep_md5_t md5;
+	ep_uuid_t rfid;
+	uint8_t rl;
+	uint32_t bs;
+	uint8_t storage_nodes_nb;
+	ep_storage_node_patch_t storage_nodes[STORAGE_NODES_MAX];
+};
+typedef struct ep_export_patch_t ep_export_patch_t;
+
 struct ep_mount_msite_ret_t {
 	ep_status_t status;
 	union {
@@ -182,6 +227,15 @@ struct ep_mount_msite_ret_t {
 	} ep_mount_msite_ret_t_u;
 };
 typedef struct ep_mount_msite_ret_t ep_mount_msite_ret_t;
+
+struct ep_mount_msite_ret_patch_t {
+	ep_status_t status;
+	union {
+		ep_export_msite_patch_t export;
+		int error;
+	} ep_mount_msite_ret_patch_t_u;
+};
+typedef struct ep_mount_msite_ret_patch_t ep_mount_msite_ret_patch_t;
 
 struct ep_mount_ret_t {
 	ep_status_t status;
@@ -192,17 +246,38 @@ struct ep_mount_ret_t {
 };
 typedef struct ep_mount_ret_t ep_mount_ret_t;
 
+struct ep_mount_ret_patch_t {
+	ep_status_t status;
+	union {
+		ep_export_patch_t export;
+		int error;
+	} ep_mount_ret_patch_t_u;
+};
+typedef struct ep_mount_ret_patch_t ep_mount_ret_patch_t;
+
 struct epgw_mount_msite_ret_t {
 	struct ep_gateway_t hdr;
 	ep_mount_msite_ret_t status_gw;
 };
 typedef struct epgw_mount_msite_ret_t epgw_mount_msite_ret_t;
 
+struct epgw_mount_msite_ret_patch_t {
+	struct ep_gateway_t hdr;
+	ep_mount_msite_ret_patch_t status_gw;
+};
+typedef struct epgw_mount_msite_ret_patch_t epgw_mount_msite_ret_patch_t;
+
 struct epgw_mount_ret_t {
 	struct ep_gateway_t hdr;
 	ep_mount_ret_t status_gw;
 };
 typedef struct epgw_mount_ret_t epgw_mount_ret_t;
+
+struct epgw_mount_ret_patch_t {
+	struct ep_gateway_t hdr;
+	ep_mount_ret_patch_t status_gw;
+};
+typedef struct epgw_mount_ret_patch_t epgw_mount_ret_patch_t;
 
 struct ep_cnf_storage_node_t {
 	char *host;
@@ -211,6 +286,14 @@ struct ep_cnf_storage_node_t {
 	uint16_t cids[STORAGES_MAX_BY_STORAGE_NODE];
 };
 typedef struct ep_cnf_storage_node_t ep_cnf_storage_node_t;
+
+struct ep_cnf_storage_node_patch_t {
+	char *host;
+	uint8_t sids_nb;
+	uint8_t sids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+	uint16_t cids[STORAGES_MAX_BY_STORAGE_NODE_patch];
+};
+typedef struct ep_cnf_storage_node_patch_t ep_cnf_storage_node_patch_t;
 
 struct ep_conf_export_t {
 	uint32_t hash_conf;
@@ -225,6 +308,19 @@ struct ep_conf_export_t {
 };
 typedef struct ep_conf_export_t ep_conf_export_t;
 
+struct ep_conf_export_patch_t {
+	uint32_t hash_conf;
+	uint32_t eid;
+	ep_md5_t md5;
+	ep_uuid_t rfid;
+	uint8_t rl;
+	struct {
+		u_int storage_nodes_len;
+		ep_cnf_storage_node_patch_t *storage_nodes_val;
+	} storage_nodes;
+};
+typedef struct ep_conf_export_patch_t ep_conf_export_patch_t;
+
 struct ep_conf_ret_t {
 	ep_status_t status;
 	union {
@@ -234,11 +330,26 @@ struct ep_conf_ret_t {
 };
 typedef struct ep_conf_ret_t ep_conf_ret_t;
 
+struct ep_conf_ret_patch_t {
+	ep_status_t status;
+	union {
+		ep_conf_export_patch_t export;
+		int error;
+	} ep_conf_ret_patch_t_u;
+};
+typedef struct ep_conf_ret_patch_t ep_conf_ret_patch_t;
+
 struct epgw_conf_ret_t {
 	struct ep_gateway_t hdr;
 	ep_conf_ret_t status_gw;
 };
 typedef struct epgw_conf_ret_t epgw_conf_ret_t;
+
+struct epgw_conf_ret_patch_t {
+	struct ep_gateway_t hdr;
+	ep_conf_ret_patch_t status_gw;
+};
+typedef struct epgw_conf_ret_patch_t epgw_conf_ret_patch_t;
 
 struct ep_mattr_t {
 	ep_uuid_t fid;
@@ -1213,17 +1324,29 @@ extern  bool_t xdr_epgw_cluster_ret_t (XDR *, epgw_cluster_ret_t*);
 extern  bool_t xdr_epgw_cluster2_ret_t (XDR *, epgw_cluster2_ret_t*);
 extern  bool_t xdr_epgw_cluster_arg_t (XDR *, epgw_cluster_arg_t*);
 extern  bool_t xdr_ep_storage_node_msite_t (XDR *, ep_storage_node_msite_t*);
+extern  bool_t xdr_ep_storage_node_msite_patch_t (XDR *, ep_storage_node_msite_patch_t*);
 extern  bool_t xdr_ep_storage_node_t (XDR *, ep_storage_node_t*);
+extern  bool_t xdr_ep_storage_node_patch_t (XDR *, ep_storage_node_patch_t*);
 extern  bool_t xdr_ep_export_msite_t (XDR *, ep_export_msite_t*);
+extern  bool_t xdr_ep_export_msite_patch_t (XDR *, ep_export_msite_patch_t*);
 extern  bool_t xdr_ep_export_t (XDR *, ep_export_t*);
+extern  bool_t xdr_ep_export_patch_t (XDR *, ep_export_patch_t*);
 extern  bool_t xdr_ep_mount_msite_ret_t (XDR *, ep_mount_msite_ret_t*);
+extern  bool_t xdr_ep_mount_msite_ret_patch_t (XDR *, ep_mount_msite_ret_patch_t*);
 extern  bool_t xdr_ep_mount_ret_t (XDR *, ep_mount_ret_t*);
+extern  bool_t xdr_ep_mount_ret_patch_t (XDR *, ep_mount_ret_patch_t*);
 extern  bool_t xdr_epgw_mount_msite_ret_t (XDR *, epgw_mount_msite_ret_t*);
+extern  bool_t xdr_epgw_mount_msite_ret_patch_t (XDR *, epgw_mount_msite_ret_patch_t*);
 extern  bool_t xdr_epgw_mount_ret_t (XDR *, epgw_mount_ret_t*);
+extern  bool_t xdr_epgw_mount_ret_patch_t (XDR *, epgw_mount_ret_patch_t*);
 extern  bool_t xdr_ep_cnf_storage_node_t (XDR *, ep_cnf_storage_node_t*);
+extern  bool_t xdr_ep_cnf_storage_node_patch_t (XDR *, ep_cnf_storage_node_patch_t*);
 extern  bool_t xdr_ep_conf_export_t (XDR *, ep_conf_export_t*);
+extern  bool_t xdr_ep_conf_export_patch_t (XDR *, ep_conf_export_patch_t*);
 extern  bool_t xdr_ep_conf_ret_t (XDR *, ep_conf_ret_t*);
+extern  bool_t xdr_ep_conf_ret_patch_t (XDR *, ep_conf_ret_patch_t*);
 extern  bool_t xdr_epgw_conf_ret_t (XDR *, epgw_conf_ret_t*);
+extern  bool_t xdr_epgw_conf_ret_patch_t (XDR *, epgw_conf_ret_patch_t*);
 extern  bool_t xdr_ep_mattr_t (XDR *, ep_mattr_t*);
 extern  bool_t xdr_ep_mattr_ret_t (XDR *, ep_mattr_ret_t*);
 extern  bool_t xdr_epgw_mattr_ret_t (XDR *, epgw_mattr_ret_t*);
@@ -1343,17 +1466,29 @@ extern bool_t xdr_epgw_cluster_ret_t ();
 extern bool_t xdr_epgw_cluster2_ret_t ();
 extern bool_t xdr_epgw_cluster_arg_t ();
 extern bool_t xdr_ep_storage_node_msite_t ();
+extern bool_t xdr_ep_storage_node_msite_patch_t ();
 extern bool_t xdr_ep_storage_node_t ();
+extern bool_t xdr_ep_storage_node_patch_t ();
 extern bool_t xdr_ep_export_msite_t ();
+extern bool_t xdr_ep_export_msite_patch_t ();
 extern bool_t xdr_ep_export_t ();
+extern bool_t xdr_ep_export_patch_t ();
 extern bool_t xdr_ep_mount_msite_ret_t ();
+extern bool_t xdr_ep_mount_msite_ret_patch_t ();
 extern bool_t xdr_ep_mount_ret_t ();
+extern bool_t xdr_ep_mount_ret_patch_t ();
 extern bool_t xdr_epgw_mount_msite_ret_t ();
+extern bool_t xdr_epgw_mount_msite_ret_patch_t ();
 extern bool_t xdr_epgw_mount_ret_t ();
+extern bool_t xdr_epgw_mount_ret_patch_t ();
 extern bool_t xdr_ep_cnf_storage_node_t ();
+extern bool_t xdr_ep_cnf_storage_node_patch_t ();
 extern bool_t xdr_ep_conf_export_t ();
+extern bool_t xdr_ep_conf_export_patch_t ();
 extern bool_t xdr_ep_conf_ret_t ();
+extern bool_t xdr_ep_conf_ret_patch_t ();
 extern bool_t xdr_epgw_conf_ret_t ();
+extern bool_t xdr_epgw_conf_ret_patch_t ();
 extern bool_t xdr_ep_mattr_t ();
 extern bool_t xdr_ep_mattr_ret_t ();
 extern bool_t xdr_epgw_mattr_ret_t ();

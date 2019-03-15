@@ -16,6 +16,7 @@
 #define SIG_PF void(*)(int)
 #endif
 #include <rozofs/rozofs.h>
+#define STORAGES_MAX_BY_STORAGE_NODE_patch 32
 #define ROZOFS_VERSION_STRING_LENGTH 32
 
 void

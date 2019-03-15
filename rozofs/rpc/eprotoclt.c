@@ -6,11 +6,12 @@
 #include <memory.h> /* for memset */
 #include "eproto.h"
 #include <rozofs/rozofs.h>
+#define STORAGES_MAX_BY_STORAGE_NODE_patch 32
 #define ROZOFS_VERSION_STRING_LENGTH 32
 
 /* Default timeout can be changed using clnt_control() */
 static struct timeval TIMEOUT = { 25, 0 };
-
+#include "eprotoclt_patch.c" 
 void *
 ep_null_1(void *argp, CLIENT *clnt)
 {
@@ -491,20 +492,9 @@ ep_symlink2_1(epgw_symlink2_arg_t *argp, CLIENT *clnt)
 	return (&clnt_res);
 }
 
-epgw_mount_msite_ret_t *
-ep_mount_msite_1(epgw_mount_arg_t *argp, CLIENT *clnt)
-{
-	static epgw_mount_msite_ret_t clnt_res;
+epgw_mount_msite_ret_t *ep_mount_msite_1(epgw_mount_arg_t *argp, CLIENT *clnt){return ep_mount_msite_patch_1(argp, clnt);}
 
-	memset((char *)&clnt_res, 0, sizeof(clnt_res));
-	if (clnt_call (clnt, EP_MOUNT_MSITE,
-		(xdrproc_t) xdr_epgw_mount_arg_t, (caddr_t) argp,
-		(xdrproc_t) xdr_epgw_mount_msite_ret_t, (caddr_t) &clnt_res,
-		TIMEOUT) != RPC_SUCCESS) {
-		return (NULL);
-	}
-	return (&clnt_res);
-}
+
 
 epgw_cluster2_ret_t *
 ep_list_cluster2_1(epgw_cluster_arg_t *argp, CLIENT *clnt)

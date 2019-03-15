@@ -119,6 +119,7 @@ xdr_ep_epgw_host_t (XDR *xdrs, ep_epgw_host_t *objp)
 		 return FALSE;
 	return TRUE;
 }
+#define STORAGES_MAX_BY_STORAGE_NODE_patch 32
 #define ROZOFS_VERSION_STRING_LENGTH 32
 
 bool_t
@@ -338,6 +339,27 @@ xdr_ep_storage_node_msite_t (XDR *xdrs, ep_storage_node_msite_t *objp)
 }
 
 bool_t
+xdr_ep_storage_node_msite_patch_t (XDR *xdrs, ep_storage_node_msite_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_ep_host_t (xdrs, objp->host))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->site))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sids_nb))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->sids, STORAGES_MAX_BY_STORAGE_NODE_patch,
+		sizeof (uint8_t), (xdrproc_t) xdr_uint8_t))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->cids, STORAGES_MAX_BY_STORAGE_NODE_patch,
+		sizeof (uint16_t), (xdrproc_t) xdr_uint16_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_ep_storage_node_t (XDR *xdrs, ep_storage_node_t *objp)
 {
 	//register int32_t *buf;
@@ -351,6 +373,25 @@ xdr_ep_storage_node_t (XDR *xdrs, ep_storage_node_t *objp)
 		sizeof (uint8_t), (xdrproc_t) xdr_uint8_t))
 		 return FALSE;
 	 if (!xdr_vector (xdrs, (char *)objp->cids, STORAGES_MAX_BY_STORAGE_NODE,
+		sizeof (uint16_t), (xdrproc_t) xdr_uint16_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_ep_storage_node_patch_t (XDR *xdrs, ep_storage_node_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_ep_host_t (xdrs, objp->host))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sids_nb))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->sids, STORAGES_MAX_BY_STORAGE_NODE_patch,
+		sizeof (uint8_t), (xdrproc_t) xdr_uint8_t))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->cids, STORAGES_MAX_BY_STORAGE_NODE_patch,
 		sizeof (uint16_t), (xdrproc_t) xdr_uint16_t))
 		 return FALSE;
 	return TRUE;
@@ -387,6 +428,36 @@ xdr_ep_export_msite_t (XDR *xdrs, ep_export_msite_t *objp)
 }
 
 bool_t
+xdr_ep_export_msite_patch_t (XDR *xdrs, ep_export_msite_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_uint32_t (xdrs, &objp->hash_conf))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->eid))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->listen_port))
+		 return FALSE;
+	 if (!xdr_ep_md5_t (xdrs, objp->md5))
+		 return FALSE;
+	 if (!xdr_ep_uuid_t (xdrs, objp->rfid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->rl))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->msite))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->bs))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->storage_nodes_nb))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->storage_nodes, STORAGE_NODES_MAX,
+		sizeof (ep_storage_node_msite_patch_t), (xdrproc_t) xdr_ep_storage_node_msite_patch_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_ep_export_t (XDR *xdrs, ep_export_t *objp)
 {
 	//register int32_t *buf;
@@ -415,6 +486,34 @@ xdr_ep_export_t (XDR *xdrs, ep_export_t *objp)
 }
 
 bool_t
+xdr_ep_export_patch_t (XDR *xdrs, ep_export_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_uint32_t (xdrs, &objp->hash_conf))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->eid))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->listen_port))
+		 return FALSE;
+	 if (!xdr_ep_md5_t (xdrs, objp->md5))
+		 return FALSE;
+	 if (!xdr_ep_uuid_t (xdrs, objp->rfid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->rl))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->bs))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->storage_nodes_nb))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->storage_nodes, STORAGE_NODES_MAX,
+		sizeof (ep_storage_node_patch_t), (xdrproc_t) xdr_ep_storage_node_patch_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_ep_mount_msite_ret_t (XDR *xdrs, ep_mount_msite_ret_t *objp)
 {
 	//register int32_t *buf;
@@ -428,6 +527,28 @@ xdr_ep_mount_msite_ret_t (XDR *xdrs, ep_mount_msite_ret_t *objp)
 		break;
 	case EP_FAILURE:
 		 if (!xdr_int (xdrs, &objp->ep_mount_msite_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_ep_mount_msite_ret_patch_t (XDR *xdrs, ep_mount_msite_ret_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case EP_SUCCESS:
+		 if (!xdr_ep_export_msite_patch_t (xdrs, &objp->ep_mount_msite_ret_patch_t_u.export))
+			 return FALSE;
+		break;
+	case EP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->ep_mount_msite_ret_patch_t_u.error))
 			 return FALSE;
 		break;
 	default:
@@ -459,6 +580,28 @@ xdr_ep_mount_ret_t (XDR *xdrs, ep_mount_ret_t *objp)
 }
 
 bool_t
+xdr_ep_mount_ret_patch_t (XDR *xdrs, ep_mount_ret_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case EP_SUCCESS:
+		 if (!xdr_ep_export_patch_t (xdrs, &objp->ep_mount_ret_patch_t_u.export))
+			 return FALSE;
+		break;
+	case EP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->ep_mount_ret_patch_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
 xdr_epgw_mount_msite_ret_t (XDR *xdrs, epgw_mount_msite_ret_t *objp)
 {
 	//register int32_t *buf;
@@ -471,6 +614,18 @@ xdr_epgw_mount_msite_ret_t (XDR *xdrs, epgw_mount_msite_ret_t *objp)
 }
 
 bool_t
+xdr_epgw_mount_msite_ret_patch_t (XDR *xdrs, epgw_mount_msite_ret_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_ep_mount_msite_ret_patch_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_epgw_mount_ret_t (XDR *xdrs, epgw_mount_ret_t *objp)
 {
 	//register int32_t *buf;
@@ -478,6 +633,18 @@ xdr_epgw_mount_ret_t (XDR *xdrs, epgw_mount_ret_t *objp)
 	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
 		 return FALSE;
 	 if (!xdr_ep_mount_ret_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_epgw_mount_ret_patch_t (XDR *xdrs, epgw_mount_ret_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_ep_mount_ret_patch_t (xdrs, &objp->status_gw))
 		 return FALSE;
 	return TRUE;
 }
@@ -496,6 +663,25 @@ xdr_ep_cnf_storage_node_t (XDR *xdrs, ep_cnf_storage_node_t *objp)
 		sizeof (uint8_t), (xdrproc_t) xdr_uint8_t))
 		 return FALSE;
 	 if (!xdr_vector (xdrs, (char *)objp->cids, STORAGES_MAX_BY_STORAGE_NODE,
+		sizeof (uint16_t), (xdrproc_t) xdr_uint16_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_ep_cnf_storage_node_patch_t (XDR *xdrs, ep_cnf_storage_node_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	//int i;
+	 if (!xdr_string (xdrs, &objp->host, ROZOFS_HOSTNAME_MAX))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->sids_nb))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->sids, STORAGES_MAX_BY_STORAGE_NODE_patch,
+		sizeof (uint8_t), (xdrproc_t) xdr_uint8_t))
+		 return FALSE;
+	 if (!xdr_vector (xdrs, (char *)objp->cids, STORAGES_MAX_BY_STORAGE_NODE_patch,
 		sizeof (uint16_t), (xdrproc_t) xdr_uint16_t))
 		 return FALSE;
 	return TRUE;
@@ -523,6 +709,27 @@ xdr_ep_conf_export_t (XDR *xdrs, ep_conf_export_t *objp)
 }
 
 bool_t
+xdr_ep_conf_export_patch_t (XDR *xdrs, ep_conf_export_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_uint32_t (xdrs, &objp->hash_conf))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->eid))
+		 return FALSE;
+	 if (!xdr_ep_md5_t (xdrs, objp->md5))
+		 return FALSE;
+	 if (!xdr_ep_uuid_t (xdrs, objp->rfid))
+		 return FALSE;
+	 if (!xdr_uint8_t (xdrs, &objp->rl))
+		 return FALSE;
+	 if (!xdr_array (xdrs, (char **)&objp->storage_nodes.storage_nodes_val, (u_int *) &objp->storage_nodes.storage_nodes_len, ~0,
+		sizeof (ep_cnf_storage_node_patch_t), (xdrproc_t) xdr_ep_cnf_storage_node_patch_t))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_ep_conf_ret_t (XDR *xdrs, ep_conf_ret_t *objp)
 {
 	//register int32_t *buf;
@@ -545,6 +752,28 @@ xdr_ep_conf_ret_t (XDR *xdrs, ep_conf_ret_t *objp)
 }
 
 bool_t
+xdr_ep_conf_ret_patch_t (XDR *xdrs, ep_conf_ret_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case EP_SUCCESS:
+		 if (!xdr_ep_conf_export_patch_t (xdrs, &objp->ep_conf_ret_patch_t_u.export))
+			 return FALSE;
+		break;
+	case EP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->ep_conf_ret_patch_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
 xdr_epgw_conf_ret_t (XDR *xdrs, epgw_conf_ret_t *objp)
 {
 	//register int32_t *buf;
@@ -552,6 +781,18 @@ xdr_epgw_conf_ret_t (XDR *xdrs, epgw_conf_ret_t *objp)
 	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
 		 return FALSE;
 	 if (!xdr_ep_conf_ret_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_epgw_conf_ret_patch_t (XDR *xdrs, epgw_conf_ret_patch_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_ep_conf_ret_patch_t (xdrs, &objp->status_gw))
 		 return FALSE;
 	return TRUE;
 }
