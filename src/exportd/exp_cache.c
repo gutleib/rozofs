@@ -544,7 +544,7 @@ out:
   @retval == NULL : no attribute returned for the object (see errno for details)
 */
 
-inline lv2_entry_t *lv2_cache_put_forced_internal(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p,ext_mattr_t *slave_inode_p) {
+static inline lv2_entry_t *lv2_cache_put_forced_internal(lv2_cache_t *cache, fid_t fid,ext_mattr_t *attr_p,ext_mattr_t *slave_inode_p) {
     lv2_entry_t *entry;
     int count=0;
 
