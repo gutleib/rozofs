@@ -71,7 +71,6 @@ trash_proc_conf_t conf;
 scan_index_context_t scan_context;   /**< current indexes for inode tracking                             */
 
     
-econfig_t exportd_config;            /**<exportd configuration */
 int rozofs_no_site_file = 0;
 int rozo_trash_non_blocking_thread_started = 0;  /**< flag that indicates that the non-blocking thread is started  */
 rozo_trash_ctx_t rozo_trash_ctx;         /**< trash context of the process */

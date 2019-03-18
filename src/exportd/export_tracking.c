@@ -1775,7 +1775,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     ** Retrieve filter tree to use for this export from its name
     ** when name does not exist tree is NULL and IP is allowed.
     */
-    e->filter_tree = rozofs_ip4_flt_get_tree(filter_name);   
+    e->filter_tree = rozofs_ip4_flt_get_tree(&exportd_config,filter_name);   
     
     e->load_trash_thread = 0;
     

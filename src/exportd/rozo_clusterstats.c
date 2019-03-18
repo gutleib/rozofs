@@ -16,6 +16,7 @@
 #include "export.h"
 #include "rozo_inode_lib.h"
 #include "exp_cache.h"
+#include "econfig.h"
 
 int rozofs_no_site_file = 0;
 
@@ -55,7 +56,6 @@ lv2_cache_t cache;
 
 rz_cids_stats_t *cids_tab_p[ROZOFS_CLUSTERS_MAX];
 
-econfig_t       exportd_config;
 char *          configFileName = EXPORTD_DEFAULT_CONFIG;
 int             eid = -1;
 rozofs_layout_t layout = -1;

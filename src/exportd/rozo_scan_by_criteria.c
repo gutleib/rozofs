@@ -20,7 +20,6 @@
 #include "mdirent.h"
 
 int rozofs_no_site_file = 0;
-econfig_t exportd_config;
 char * configFileName = EXPORTD_DEFAULT_CONFIG;
 lv2_cache_t            cache;
 mdirents_name_entry_t  bufferName;

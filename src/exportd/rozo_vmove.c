@@ -49,7 +49,6 @@
 int                destination = ROZOFS_VMOVE_UNDEFINED;
 int                cluster[ROZOFS_CLUSTERS_MAX] = {ROZOFS_VMOVE_UNDEFINED};
 list_t             cluster_distributor;
-econfig_t          exportd_config;
 export_config_t  * econfig = NULL;
 
 uint64_t  scanned_match   = 0;
