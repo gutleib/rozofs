@@ -839,7 +839,7 @@ int rozofs_stcmoj_thread_intf_create(char * hostname,int eid,int storcli_idx, in
   /*
   ** Create the pool of buffer
   */
-  rozofs_storcli_moj_req_pool_p = xmalloc(sizeof(rozofs_stcmoj_thread_msg_t)*(ROZOFS_MOJETTE_QUEUE_RING_SZ));
+  rozofs_storcli_moj_req_pool_p = xmalloc(sizeof(rozofs_stcmoj_thread_msg_t)*(ROZOFS_MOJETTE_QUEUE_BUF_COUNT));
   if (rozofs_storcli_moj_req_pool_p == NULL)
   {
      severe("Cannot allocated memory for Mojette threads \n");
