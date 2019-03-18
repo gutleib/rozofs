@@ -1823,16 +1823,30 @@ int64_t write_buf_multiple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const c
         args.flags |= STORCLI_FLAGS_NO_END_REREAD;    
       }
     }
-
-    slave_inode_p = rozofs_get_slave_inode_from_ie(ie);
-    if (slave_inode_p == NULL)
+    /*
+    ** Check the case of the default mode using that API because the read length exceeds the buffer
+    ** size of the storcli at storio level
+    */    
+    if (ie->attrs.multi_desc.common.master != 0)
     {
-      fuse_save_ctx_p->multiple_errno = EPROTO;
-      severe("ientry has no slave inode pointer (%p)",ie);
-      goto error;
+      slave_inode_p = rozofs_get_slave_inode_from_ie(ie);
+      if (slave_inode_p == NULL)
+      {
+	fuse_save_ctx_p->multiple_errno = EPROTO;
+	severe("ientry has no slave inode pointer (%p)",ie);
+	goto error;
+      }
+      striping_unit_bytes = rozofs_get_striping_size_from_ie(ie);
+      striping_factor = rozofs_get_striping_factor_from_ie(ie);
     }
-    striping_unit_bytes = rozofs_get_striping_size_from_ie(ie);
-    striping_factor = rozofs_get_striping_factor_from_ie(ie);
+    else
+    {
+       /*
+       ** case of the file without striping
+       */
+      striping_unit_bytes = ROZOFS_MAX_FILE_BUF_SZ_READ;
+      striping_factor = 1;            
+    }
     /*
     **___________________________________________________________________
     **         build the  write vector
@@ -1875,11 +1889,10 @@ int64_t write_buf_multiple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const c
       share_wr_p->cmd[args.cmd_idx].xid = 0;
       share_wr_p->cmd[args.cmd_idx].write_len = entry_p->len;       
       share_wr_p->cmd[args.cmd_idx].offset_in_buffer = entry_p->byte_offset_in_shared_buf;    
-
       /*
-      ** Get the FID storage, cid and sids lists for the current file index
+      ** Get the FID storage, cid and sids lists for the current file index: the file_idx MUST be 0 for file without striping
       */
-      ret = rozofs_fill_storage_info_multiple(ie,&args.cid,args.dist_set,args.fid,entry_p->file_idx);
+      ret = rozofs_fill_storage_info_multiple(ie,&args.cid,args.dist_set,args.fid,(slave_inode_p == NULL)?0:entry_p->file_idx);
       /*
       ** Trace individual write request
       */
@@ -1903,9 +1916,9 @@ int64_t write_buf_multiple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const c
       args.off = entry_p->off;
       args.data.data_len = entry_p->len;
       /*
-      ** Update the size in the ientry for that slave inode
+      ** Update the size in the ientry for that slave inode: Just for the case of the file that are configured with striping
       */
-      rozofs_slave_inode_update_size_write(ie,entry_p->file_idx,entry_p->off+entry_p->len);
+      if (slave_inode_p != NULL) rozofs_slave_inode_update_size_write(ie,entry_p->file_idx,entry_p->off+entry_p->len);
       /*
       ** allocate a transaction context
       */
@@ -2398,6 +2411,406 @@ error:
 }
 
 void rozofs_ll_read_cbk(void *this,void *param);
+
+/*
+**__________________________________________________________________
+*/
+/** Send a request to the export server to know the file size
+ *  adjust the write buffer to write only whole data blocks,
+ *  reads blocks if necessary (incomplete blocks)
+ *  and uses the function write_blocks to write data
+ 
+    The opaque fields of the transaction context are used as follows:
+    
+     - opaque[0]: command index (index within the shared buffer=
+     - opaque[1]: index of the file
+     - opaque[2]: requested length
+ *
+ * @param *f: pointer to the file structure
+ * @param off: offset to write from
+ * @param *buf: pointer where the data are be stored
+ * @param len: length to write
+*/
+ 
+int read_buf_multitple__no_strip_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char *buf, uint32_t len) 
+{
+    storcli_read_arg_t  args;
+    int ret;
+    int storcli_idx;
+    ientry_t *ie;
+//    rozofs_slave_inode_t *slave_inode_p = NULL;
+    uint32_t striping_unit_bytes;
+    uint32_t striping_factor;
+    rozofs_iov_multi_t vector;
+    int shared_buf_idx = -1;
+    uint32_t length;
+    void *shared_buf_ref;
+    rozofs_shared_buf_rd_hdr_t  *share_rd_p;  
+    int nb_vect;
+    void              *xmit_buf = NULL;
+    rozofs_tx_ctx_t   *rozofs_tx_ctx_p = NULL;
+    uint8_t           *arg_p;
+    uint32_t          *header_size_p;
+    int lbg_id;
+    XDR               xdrs;    
+    struct rpc_msg   call_msg;
+    int               position;
+    int               bufsize;
+    int               opcode;
+    uint32_t          vers;    
+    uint32_t          prog;
+    uint32_t         null_val = 0;    
+    rozofs_fuse_save_ctx_t *fuse_save_ctx_p=NULL;
+    fuse_end_tx_recv_pf_t  callback;
+    uint64_t         storcli_ino = 0;
+    uint64_t         ino;
+    int use_page_cache;
+
+    int bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);    
+    int trc_idx;
+
+    RESTORE_FUSE_PARAM(fuse_ctx_p,trc_idx);
+    /*
+    ** Restore the ino value that might be needed by storcli to perfrom a direct write in the 
+    ** page cache during mojette transform
+    */
+    RESTORE_FUSE_PARAM(fuse_ctx_p,ino);    
+    RESTORE_FUSE_PARAM(fuse_ctx_p,use_page_cache);   
+    /*
+    ** Check if the inode must be filled in the storcli request in order to have a direct write in the
+    ** page cache of Linux
+    */
+    if (use_page_cache) storcli_ino = ino;
+    /*
+    ** Get the pointer to the rozofs fuse context 
+    */
+    fuse_save_ctx_p = (rozofs_fuse_save_ctx_t*)ruc_buf_getPayload(fuse_ctx_p);
+    fuse_save_ctx_p->multiple_errno   = 0; 
+    fuse_save_ctx_p->multiple_pending = 0; 
+    
+    /*
+    **______________________________________________________________________________
+    **  Allocation of a shared buffer that will be used to carry the data to write
+    **______________________________________________________________________________
+    */            
+    shared_buf_idx = -1;
+    shared_buf_ref = rozofs_alloc_shared_storcli_buf(SHAREMEM_IDX_READ);
+    if (shared_buf_ref == NULL)
+    {
+       /*
+       ** should not occur
+       */
+       fatal("Out of shared buffer (Write)");
+       return -1;
+    }
+    share_rd_p = (rozofs_shared_buf_rd_hdr_t*)ruc_buf_getPayload(shared_buf_ref);
+    
+    SAVE_FUSE_PARAM(fuse_ctx_p,shared_buf_ref);
+    shared_buf_idx = rozofs_get_shared_storcli_payload_idx(shared_buf_ref,SHAREMEM_IDX_READ,&length);
+    if (shared_buf_idx < 0)
+    {
+       /*
+       ** should not occur
+       */
+       fatal("Bad buffer index (Write)");
+       return -1;
+    } 
+    args.spare     = 'S';
+    args.shared_buf_idx = shared_buf_idx;	 
+    /*
+    **________________________________________________________________________________________________
+    ** Save the callback that should be called up the end of processing of the last multiple command
+    **________________________________________________________________________________________________
+    */
+    callback = rozofs_ll_read_cbk;
+    SAVE_FUSE_CALLBACK_MULTIPLE(fuse_ctx_p ,callback);
+       
+    /*
+    ** get the pointer to the internal representation of the rozofs inode
+    */
+    ie = f->ie; 
+    /*
+    **________________________________
+    ** Update the bandwidth statistics
+    **________________________________
+    */
+    rozofs_fuse_read_write_stats_buf.read_req_cpt++;
+
+    striping_unit_bytes = ROZOFS_MAX_FILE_BUF_SZ_READ;
+    striping_factor = 1;
+    /*
+    **___________________________________________________________________
+    **         build the  write vector
+    **  The return vector indicates how many commands must be generated)
+    **____________________________________________________________________
+    */
+    rozofs_build_multiple_offset_vector(off, len,&vector,striping_unit_bytes,striping_factor,0);
+
+
+//    rozofs_print_multi_vector(&vector,bufall_debug);
+//    info("FDL \n%s",bufall_debug);
+    /*
+    ** Common arguments for the write
+    */
+    args.layout = f->export->layout;
+    args.bsize = exportclt.bsize;
+    args.shared_buf_idx = shared_buf_idx;
+    
+    opcode = STORCLI_READ;
+    vers = STORCLI_VERSION;
+    prog = STORCLI_PROGRAM;
+
+    share_rd_p->cmd[0].xid = 0;
+    share_rd_p->cmd[0].received_len = 0;   
+    share_rd_p->cmd[0].inode = storcli_ino;
+    share_rd_p->cmd[0].f_offset = off;
+    /*
+    **___________________________________________________________________
+    **   Build the individual storcli read command
+    **____________________________________________________________________
+    */
+    
+    
+    rozofs_multi_vect_t *entry_p = &vector.vectors[0];
+    for (nb_vect = 0; nb_vect < vector.nb_vectors;nb_vect++,entry_p++)    
+    {
+      rozofs_tx_ctx_p = NULL;
+      args.cmd_idx = nb_vect+1;
+
+      share_rd_p->cmd[args.cmd_idx].xid = 0;
+      share_rd_p->cmd[args.cmd_idx].received_len = 0;       
+      share_rd_p->cmd[args.cmd_idx].offset_in_buffer = entry_p->byte_offset_in_shared_buf;  
+      share_rd_p->cmd[args.cmd_idx].inode = storcli_ino;  
+      share_rd_p->cmd[args.cmd_idx].f_offset = off+ entry_p->byte_offset_in_shared_buf;  
+      /*
+      ** Get the FID storage, cid and sids lists for the current file index
+      */
+      ret = rozofs_fill_storage_info_multiple(ie,&args.cid,args.dist_set,args.fid,0);
+      /*
+      ** Trace the individual read
+      */
+      rozofs_trc_req_io_multiple(trc_idx,srv_rozofs_ll_read,(fuse_ino_t)f,args.fid,entry_p->len,entry_p->off,entry_p->file_idx);
+#if 0      
+{
+      char bufall_debug[1024];
+      rozofs_fid2string(args.fid,bufall_debug);
+      info("FDL fid %s off %llu/%u  file idx %d striping_unit %u striping_factor %u off %llu len %u",bufall_debug,off,len,entry_p->file_idx,striping_unit_bytes,striping_factor,entry_p->off,entry_p->len);
+}
+#endif
+      if (ret < 0)
+      {
+	severe("FDL bad storage information encoding");
+	fuse_save_ctx_p->multiple_errno = EINVAL;
+	goto error;
+      }  
+      args.bid = entry_p->off/bbytes;
+      args.nb_proj = entry_p->len/bbytes;
+      /*
+      ** allocate a transaction context
+      */
+      rozofs_tx_ctx_p = rozofs_tx_alloc();  
+      if (rozofs_tx_ctx_p == NULL) 
+      {
+	 /*
+	 ** out of context
+	 ** --> put a pending list for the future to avoid repluing ENOMEM
+	 */
+	 TX_STATS(ROZOFS_TX_NO_CTX_ERROR);
+	 errno = ENOMEM;
+	 fuse_save_ctx_p->multiple_errno = errno;
+	 goto error;
+      }
+      /*
+      ** save the index of the command in the opaque[0] field of the transaction context
+      */      
+      rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,0,args.cmd_idx);
+      /*
+      ** save the file index  in the opaque[1] field of the transaction context
+      */        
+      rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,1,entry_p->file_idx);
+      /*
+      ** save the requested length  in the opaque[2] field of the transaction context
+      */  
+      rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,2,entry_p->len);
+      /*
+      ** get the storcli to use for the transaction: it uses the STORIO fid as a primary key
+      */
+      storcli_idx = stclbg_storcli_idx_from_fid(args.fid);   
+      if (common_config.storcli_read_parallel == 0)
+      {
+	/*
+	** Insert this transaction so that every other following trasnactions
+	** for the same FID will follow the same path
+	*/
+	stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,args.fid,storcli_idx); 
+      }    
+      /*
+      ** Get the load balancing group reference associated with the storcli
+      */
+      lbg_id = storcli_lbg_get_load_balancing_reference(storcli_idx);        
+      /*
+      ** allocate an xmit buffer
+      */  
+      xmit_buf = ruc_buf_getBuffer(ROZOFS_TX_LARGE_TX_POOL);
+      if (xmit_buf == NULL)
+      {
+	/*
+	** something rotten here, we exit we an error
+	** without activating the FSM
+	*/
+	TX_STATS(ROZOFS_TX_NO_BUFFER_ERROR);
+	errno = ENOMEM;
+	fuse_save_ctx_p->multiple_errno = errno;
+	goto error;
+      }         
+      /*
+      ** store the reference of the xmit buffer in the transaction context: might be useful
+      ** in case we want to remove it from a transmit list of the underlying network stacks
+      */
+      rozofs_tx_save_xmitBuf(rozofs_tx_ctx_p,xmit_buf);
+      /*
+      **________________________
+      ** RPC Message encoding
+      **________________________
+      */
+      /*
+      ** get the pointer to the payload of the buffer
+      */
+      header_size_p  = (uint32_t*) ruc_buf_getPayload(xmit_buf);
+      arg_p = (uint8_t*)(header_size_p+1);  
+      /*
+      ** create the xdr_mem structure for encoding the message
+      */
+      bufsize = ruc_buf_getMaxPayloadLen(xmit_buf);
+      bufsize -= sizeof(uint32_t); /* skip length*/   
+      xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
+      /*
+      ** fill in the rpc header
+      */
+      call_msg.rm_direction = CALL;
+      /*
+      ** allocate a xid for the transaction 
+      */
+      call_msg.rm_xid             = rozofs_tx_alloc_xid(rozofs_tx_ctx_p);     
+      share_rd_p->cmd[args.cmd_idx].xid = call_msg.rm_xid;
+
+	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
+	/* XXX: prog and vers have been long historically :-( */
+	call_msg.rm_call.cb_prog = (uint32_t)prog;
+	call_msg.rm_call.cb_vers = (uint32_t)vers;
+	if (! xdr_callhdr(&xdrs, &call_msg))
+    {
+       /*
+       ** THIS MUST NOT HAPPEN
+       */
+       TX_STATS(ROZOFS_TX_ENCODING_ERROR);
+       errno = EPROTO;
+       fuse_save_ctx_p->multiple_errno = errno;
+       goto error;	
+    }
+    /*
+    ** insert the procedure number, NULL credential and verifier
+    */
+    XDR_PUTINT32(&xdrs, (int32_t *)&opcode);
+    XDR_PUTINT32(&xdrs, (int32_t *)&null_val);
+    XDR_PUTINT32(&xdrs, (int32_t *)&null_val);
+    XDR_PUTINT32(&xdrs, (int32_t *)&null_val);
+    XDR_PUTINT32(&xdrs, (int32_t *)&null_val);
+        
+    /*
+    ** ok now call the procedure to encode the message
+    */
+    if (xdr_storcli_read_arg_t(&xdrs,(storcli_read_arg_t *)&args) == FALSE)
+    {
+       TX_STATS(ROZOFS_TX_ENCODING_ERROR);
+       errno = EPROTO;
+       fuse_save_ctx_p->multiple_errno = errno;
+       goto error;
+    }
+    /*
+    ** Now get the current length and fill the header of the message
+    */
+    position = XDR_GETPOS(&xdrs);
+    /*
+    ** update the length of the message : must be in network order
+    */
+    *header_size_p = htonl(0x80000000 | position);
+    /*
+    ** set the payload length in the xmit buffer
+    */
+    int total_len = sizeof(*header_size_p)+ position;
+    ruc_buf_setPayloadLen(xmit_buf,total_len);
+    /*
+    ** store the receive call back and its associated parameter
+    */
+    rozofs_tx_ctx_p->recv_cbk   = read_buf_multiple_nb_cbk;
+    rozofs_tx_ctx_p->user_param = fuse_ctx_p;    
+   /*
+   **__________________________________________________________________________
+   ** Submit the RPC message to the selected load balancing group (storcli)
+   **___________________________________________________________________________
+   */
+   
+    /*
+    ** increment the number of pending request towards the storcli
+    ** increment also the number of pending requests on the rozofs fuse context
+    */
+    fuse_save_ctx_p->multiple_pending++; 
+    rozofs_storcli_pending_req_count++;
+    ret = north_lbg_send(lbg_id,xmit_buf);
+    if (ret < 0)
+    {
+       if (rozofs_storcli_pending_req_count > 0) rozofs_storcli_pending_req_count--;
+       /*
+       ** decrement the number of pending request and assert the multiple_errno
+       */
+       
+       fuse_save_ctx_p->multiple_pending--;
+       TX_STATS(ROZOFS_TX_SEND_ERROR);
+       errno = EFAULT;
+       fuse_save_ctx_p->multiple_errno = errno;
+      goto error;  
+    }
+    TX_STATS(ROZOFS_TX_SEND);
+
+    /*
+    ** OK, so now finish by starting the guard timer: not needed with storcli
+    */
+
+//    rozofs_tx_start_timer(rozofs_tx_ctx_p,timeout_sec);      
+  }
+  /*
+  ** The error will be processed by the callback, so do it as it was OK
+  */
+  f->buf_read_pending++;
+
+  return 0;
+
+
+error:
+  /* 
+  ** Release the any pending transaction context 
+  */
+  if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);  
+
+  errno = fuse_save_ctx_p->multiple_errno;
+  rozofs_trc_rsp(srv_rozofs_ll_read,(fuse_ino_t)f,NULL,(errno==0)?0:1,trc_idx);
+  /*
+  ** check if the pending is 0 in the fuse context
+  */
+  if (fuse_save_ctx_p->multiple_pending != 0)
+  {
+    /*
+    ** The error will be processed by the callback, so do it as it was OK
+    */
+    f->buf_read_pending++;
+    return 0;
+  }
+
+  return -1;
+}      
+
+
 /*
 **__________________________________________________________________
 */
@@ -2521,16 +2934,31 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
     **________________________________
     */
     rozofs_fuse_read_write_stats_buf.read_req_cpt++;
-
-    slave_inode_p = rozofs_get_slave_inode_from_ie(ie);
-    if (slave_inode_p == NULL)
+    /*
+    ** Check the case of the default mode using that API because the read length exceeds the buffer
+    ** size of the storcli at storio level
+    */
+    
+    if (ie->attrs.multi_desc.common.master != 0)
     {
-      fuse_save_ctx_p->multiple_errno = EPROTO;
-      severe("ientry has no slave inode pointer (%p)",ie);
-      goto error;
+      slave_inode_p = rozofs_get_slave_inode_from_ie(ie);
+      if (slave_inode_p == NULL)
+      {
+	fuse_save_ctx_p->multiple_errno = EPROTO;
+	severe("ientry has no slave inode pointer (%p)",ie);
+	goto error;
+      }
+      striping_unit_bytes = rozofs_get_striping_size_from_ie(ie);
+      striping_factor = rozofs_get_striping_factor_from_ie(ie);
     }
-    striping_unit_bytes = rozofs_get_striping_size_from_ie(ie);
-    striping_factor = rozofs_get_striping_factor_from_ie(ie);
+    else
+    {
+       /*
+       ** case of the file without striping
+       */
+      striping_unit_bytes = ROZOFS_MAX_FILE_BUF_SZ_READ;
+      striping_factor = 1;    
+    }
     /*
     **___________________________________________________________________
     **         build the  write vector
@@ -2584,9 +3012,9 @@ int read_buf_multitple_nb(void *fuse_ctx_p,file_t * f, uint64_t off, const char 
       share_rd_p->cmd[args.cmd_idx].inode = storcli_ino;  
       share_rd_p->cmd[args.cmd_idx].f_offset = off+ entry_p->byte_offset_in_shared_buf;  
       /*
-      ** Get the FID storage, cid and sids lists for the current file index
+      ** Get the FID storage, cid and sids lists for the current file index: the file_idx MUST be 0 for file without striping
       */
-      ret = rozofs_fill_storage_info_multiple(ie,&args.cid,args.dist_set,args.fid,entry_p->file_idx);
+      ret = rozofs_fill_storage_info_multiple(ie,&args.cid,args.dist_set,args.fid,(slave_inode_p == NULL)?0:entry_p->file_idx);
       /*
       ** Trace the individual read
       */
@@ -3433,7 +3861,7 @@ int truncate_buf_multitple_nb(void *fuse_ctx_p,ientry_t *ie, uint64_t size)
     /*
     ** OK, so now finish by starting the guard timer
     */
-    rozofs_tx_start_timer(rozofs_tx_ctx_p,timeout_sec);      
+//    rozofs_tx_start_timer(rozofs_tx_ctx_p,timeout_sec);      
   }
 
   return 0;

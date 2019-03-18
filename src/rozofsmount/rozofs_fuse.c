@@ -1318,7 +1318,7 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
      ** get the receive buffer size for former channel in order to create the request distributor:
      ** note: by default the fuse buffer is 4K+128K: for RozoFS the payload can reach 512K (x4)
      */
-     int bufsize = fuse_chan_bufsize(ch)*4;
+     int bufsize = fuse_chan_bufsize(ch)*8;
      rozofs_fuse_ctx_p->bufsize = bufsize;
      /*
      ** create the distributor fro receiving data from fuse kernel
@@ -1568,9 +1568,10 @@ void rozofs_fuse_share_mem_init()
 
   errno = 0;
   fuse_sharemem_init_done =1;
+#if 0
   ret = fuse_lowlevel_notify_store(rozofs_fuse_ctx_p->ch, ino,
 			     offset, &bufvec_fake,
 			     0);
   info("Fuse share memory init %s",(ret==0)?"Success":strerror(errno));
- 
+#endif 
 }

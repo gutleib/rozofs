@@ -399,6 +399,7 @@ typedef enum _ROZOFS_BSIZE_E {
 #define ROZOFS_BSIZE_NB         (ROZOFS_BSIZE_MAX+1)
 #define ROZOFS_BSIZE_BYTES(val) ((4*1024)<<val)
 // Maximum number of block per message 
+#define ROZOFS_DEFAULT_KERNEL_BUF_SZ (512*1024)
 #define ROZOFS_MAX_FILE_BUF_SZ_READ (512*1024)
 #define ROZOFS_MAX_BLOCK_PER_MSG ((ROZOFS_MAX_FILE_BUF_SZ_READ/4096)+1)
 

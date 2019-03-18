@@ -75,7 +75,7 @@ typedef struct _rozofs_fuse_read_write_stats
 
 #define ROZOFS_PAGE_SZ  4096
 
-#define ROZOFS_FUSE_NB_OF_BUSIZE_SECTION_MAX  ((512*1024)/ROZOFS_PAGE_SZ) /**< 64 sections of BUFSIZE  */
+#define ROZOFS_FUSE_NB_OF_BUSIZE_SECTION_MAX  ((1024*1024)/ROZOFS_PAGE_SZ) /**< 64 sections of BUFSIZE  */
 extern uint64_t rozofs_write_buf_section_table[];
 extern uint64_t rozofs_read_buf_section_table[];
 extern rozofs_fuse_read_write_stats  rozofs_fuse_read_write_stats_buf;

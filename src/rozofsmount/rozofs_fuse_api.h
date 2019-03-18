@@ -186,7 +186,7 @@ typedef enum {
 
 
 
-#define ROZOFS_FUSE_RECV_BUF_COUNT 8
+#define ROZOFS_FUSE_RECV_BUF_COUNT 4
 typedef struct _rozofs_fuse_rcv_buf_t
 {
    list_t  list; /**< pnext & pprev */

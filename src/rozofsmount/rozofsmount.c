@@ -253,9 +253,28 @@ enum {
     KEY_HELP,
     KEY_VERSION,
     KEY_DEBUG_PORT,
+    KEY_MAX_READ,    
+    KEY_MAX_WRITE,
 };
 
 #define MYFS_OPT(t, p, v) { t, offsetof(struct rozofsmnt_conf, p), v }
+
+void rozofs_scan_max_read_write_for_kernel(char *args)
+{
+   int ret;
+
+   if (strncmp(args,"max_read",strlen("max_read")) == 0)
+   {
+     ret = sscanf(args,"max_read=%u",&conf.kernel_max_read);
+     if (ret <=0) conf.kernel_max_read = 0;
+     return;
+   }
+   if (strncmp(args,"max_write",strlen("max_write")) == 0)
+   {
+     ret = sscanf(args,"max_write=%u",&conf.kernel_max_write);
+     if (ret <=0) conf.kernel_max_write = 0;   
+   }
+}
 
 static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("exporthost=%s", host, 0),
@@ -322,8 +341,10 @@ static struct fuse_opt rozofs_opts[] = {
 static int myfs_opt_proc(void *data, const char *arg, int key,
         struct fuse_args *outargs) {
     (void) data;
+    info("FDLXXX : key %d fuse OPT %s\n",key,arg);
     switch (key) {
         case FUSE_OPT_KEY_OPT:
+	    rozofs_scan_max_read_write_for_kernel((char*)arg);
             return 1;
         case FUSE_OPT_KEY_NONOPT:
             return 1;
@@ -470,6 +491,8 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(rozofs_bypass_size);
   DISPLAY_UINT32_CONFIG(idx_fuse_profile);
   DISPLAY_UINT32_CONFIG(pagecache);  
+  DISPLAY_UINT32_CONFIG(kernel_max_read);  
+  DISPLAY_UINT32_CONFIG(kernel_max_write);  
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
 /*__________________________________________________________________________
@@ -2190,8 +2213,8 @@ int fuseloop(struct fuse_args *args, int fg) {
        */
        int key_instance = conf.instance<<SHAREMEM_PER_FSMOUNT_POWER2 | i;
        uint32_t buf_sz;
-       if (SHAREMEM_IDX_READ == i) buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ;
-       else buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ;
+       if (SHAREMEM_IDX_READ == i) buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ*2;
+       else buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ*2;
        ret = rozofs_create_shared_memory(key_instance,i,rozofs_max_storcli_tx,(buf_sz)+4096);
        if (ret < 0)
        {
@@ -2341,7 +2364,10 @@ int main(int argc, char *argv[]) {
     int fg = 0;
     int res;
     struct rlimit core_limit;
+    char bufargs[2048];
+    char *bufargs_p;
     
+    bufargs_p = bufargs;
     memset(&exportclt,0,sizeof(exportclt_t ));
     
     rozofsmount_main_ready = 0;
@@ -2406,12 +2432,13 @@ int main(int argc, char *argv[]) {
     conf.noReadFaultTolerant = 0; // Give back blocks with 0 on read for corrupted block instead of EIO
     conf.wbcache = 0;
     conf.nb_writeThreads = 0;
+    conf.kernel_max_read = 0;
+    conf.kernel_max_write = 0;
     conf.pagecache = 0;
     conf.idx_fuse_profile = ROZOFS_DEFAULT_FUSE_PROFILE;
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
     }
-
     /*
     ** read common config file
     */
@@ -2665,32 +2692,49 @@ int main(int argc, char *argv[]) {
     if (fuse_version() < 28) {
         if (conf.wbcache)
 	{
-          if (fuse_opt_add_arg(&args, "-o" FUSE27_DEFAULT_OPTIONS_WB) == -1) {
-              fprintf(stderr, "fuse_opt_add_arg failed\n");
-              return 1;
-	  }
-	}
-	else
-        {	
-          if (fuse_opt_add_arg(&args, "-o" FUSE27_DEFAULT_OPTIONS) == -1) {
-              fprintf(stderr, "fuse_opt_add_arg failed\n");
-              return 1;
-	  }
-        }
-    } else {
-        if (conf.wbcache)
-	{        
-          if (fuse_opt_add_arg(&args, "-o" FUSE28_DEFAULT_OPTIONS_WB) == -1) {
-              fprintf(stderr, "fuse_opt_add_arg failed\n");
-              return 1;
-          }
+	   bufargs_p+=sprintf(bufargs_p,"%s","-o" FUSE27_DEFAULT_OPTIONS_WB);
 	}
 	else
 	{
-          if (fuse_opt_add_arg(&args, "-o" FUSE28_DEFAULT_OPTIONS) == -1) {
-              fprintf(stderr, "fuse_opt_add_arg failed\n");
-              return 1;
-          }		
+	   bufargs_p+=sprintf(bufargs_p,"%s","-o" FUSE27_DEFAULT_OPTIONS);	
+	}
+	if (conf.kernel_max_read == 0)
+	{
+	  bufargs_p+=sprintf(bufargs_p,",max_read=%u",ROZOFS_DEFAULT_KERNEL_BUF_SZ);
+	  conf.kernel_max_read = ROZOFS_DEFAULT_KERNEL_BUF_SZ;  
+        }
+	if (conf.kernel_max_write == 0)
+	{
+	  bufargs_p+=sprintf(bufargs_p,",max_write=%u",ROZOFS_DEFAULT_KERNEL_BUF_SZ);
+	  conf.kernel_max_write = ROZOFS_DEFAULT_KERNEL_BUF_SZ;  
+        }	
+        if (fuse_opt_add_arg(&args, bufargs) == -1) {
+            fprintf(stderr, "fuse_opt_add_arg failed\n");
+            exit(1);
+	}
+
+    } else {
+        if (conf.wbcache)
+	{
+	   bufargs_p+=sprintf(bufargs_p,"%s","-o" FUSE28_DEFAULT_OPTIONS_WB);
+	}
+	else
+	{
+	   bufargs_p+=sprintf(bufargs_p,"%s","-o" FUSE28_DEFAULT_OPTIONS);	
+	}
+	if (conf.kernel_max_read == 0)
+	{
+	  bufargs_p+=sprintf(bufargs_p,",max_read=%u",ROZOFS_DEFAULT_KERNEL_BUF_SZ);
+	  conf.kernel_max_read = ROZOFS_DEFAULT_KERNEL_BUF_SZ;  
+        }
+	if (conf.kernel_max_write == 0)
+	{
+	  bufargs_p+=sprintf(bufargs_p,",max_write=%u",ROZOFS_DEFAULT_KERNEL_BUF_SZ);
+	  conf.kernel_max_write = ROZOFS_DEFAULT_KERNEL_BUF_SZ;  
+        }	
+        if (fuse_opt_add_arg(&args, bufargs) == -1) {
+            fprintf(stderr, "fuse_opt_add_arg failed\n");
+            exit(1);
 	}
     } 
     /*

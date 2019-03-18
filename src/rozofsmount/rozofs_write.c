@@ -960,7 +960,7 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
    /*
    ** Check the case of the multifile mode: there is a master inode with several slave inodes associated with it
    */
-   if (ie->attrs.multi_desc.common.master != 0)
+   if ((ie->attrs.multi_desc.common.master != 0) || (len > ROZOFS_MAX_FILE_BUF_SZ_READ))
    {   
       return  write_buf_multiple_nb(buffer_p,f,off,buf,len,0);
    }  

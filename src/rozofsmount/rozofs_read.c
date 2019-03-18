@@ -100,13 +100,7 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
    */
    RESTORE_FUSE_PARAM(buffer_p,ino);
    RESTORE_FUSE_PARAM(buffer_p,use_page_cache);
-   // Nb. of the first block to read
-   bid = off / bbytes;
-   nb_prj = len / bbytes;
-   if (nb_prj > max_prj)
-   {
-     severe("bad nb_prj %d max %d bid %llu off %llu len %u",nb_prj,max_prj,(long long unsigned int)bid,(long long unsigned int)off,len);   
-   }
+
    /*
    ** Check the case of the multifile mode: there is a master inode with several slave inodes associated with it
    */
@@ -114,6 +108,17 @@ static int read_buf_nb(void *buffer_p,file_t * f, uint64_t off, char *buf, uint3
    if (ie->attrs.multi_desc.common.master != 0)
    {   
       return  read_buf_multitple_nb(buffer_p,f, off, buf,len);
+   }
+   if (len > ROZOFS_MAX_FILE_BUF_SZ_READ)
+   {
+     return read_buf_multitple_nb(buffer_p,f, off, buf,len);
+   }
+   // Nb. of the first block to read
+   bid = off / bbytes;
+   nb_prj = len / bbytes;
+   if (nb_prj > max_prj)
+   {
+     severe("bad nb_prj %d max %d bid %llu off %llu len %u",nb_prj,max_prj,(long long unsigned int)bid,(long long unsigned int)off,len);   
    }
    /*
    ** default case: only the master inode with no slave inodes
