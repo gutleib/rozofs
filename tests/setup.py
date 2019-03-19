@@ -1077,11 +1077,12 @@ class rozofs_class:
     self.mkfscmd = None
     self.multiple_unit = 0
     self.multiple_factor = 0
+    self.standalone = False
     
   def set_multiple(self,unit=0,factor=0):
     self.multiple_unit = unit
-    self.multiple_factor = factor
-      
+    self.multiple_factor = factor  
+  def set_standalone(self,val): self.standalone = val       
   def set_trashed_file_per_run(self,val): rozofs.trashed_file_per_run = val
   def set_min_metadata_inodes(self,val): self.min_metadata_inodes = val
   def set_min_metadata_MB(self,val): self.min_metadata_MB = val
@@ -1342,6 +1343,7 @@ class rozofs_class:
     if rozofs.min_metadata_MB != None:
       display_config_int("min_metadata_MB",rozofs.min_metadata_MB)
     display_config_int("nb_trash_thread",8)
+    display_config_bool("standalone",rozofs.standalone)
     
   def create_common_config(self):
     if not os.path.exists("/usr/local/etc/rozofs"): os.system("mkdir -p /usr/local/etc/rozofs")  
