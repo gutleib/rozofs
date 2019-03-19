@@ -186,7 +186,17 @@ void  storio_north_userDiscCallBack(void *userRef,uint32_t socket_context_ref,vo
       ** Check the key
       */
       rozofs_storio_share_mem_ctx_t *sharemem_p = (rozofs_storio_share_mem_ctx_t*) userRef;
-      if (sharemem_p->key_stdalone == ROZOFS_STORIO_STANDALONE_KEY) free(sharemem_p);
+      if (sharemem_p->key_stdalone == ROZOFS_STORIO_STANDALONE_KEY) {
+        /*
+        ** detach share memory segment and then free the context
+        */
+        if (sharemem_p->addr_p != NULL) {
+          if (shmdt((const void*)sharemem_p->addr_p) != 0) {
+            severe("Can not detach shmid %x at @ %p",sharemem_p->shmid,sharemem_p->addr_p);
+          } 
+        }   
+        free(sharemem_p);
+      }  
    }
     /*
     ** release the current buffer if significant
