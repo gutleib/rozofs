@@ -192,7 +192,6 @@ mapper     = 1
 redundancy = 1
 
 
-
 # default is to have one mount point per site and export
 clients_nb = 1
 # Define default layout

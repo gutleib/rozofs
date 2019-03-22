@@ -73,6 +73,12 @@ static int volume_storage_compare(list_t * l1, list_t *l2) {
 static int cluster_compare_capacity(list_t *l1, list_t *l2) {
     cluster_t *e1 = list_entry(l1, cluster_t, list);
     cluster_t *e2 = list_entry(l2, cluster_t, list);
+    /*
+    ** Put non in service clusters at the end of the list
+    */
+    if (e1->adminStatus != rozofs_cluster_admin_status_in_service) return 1;
+    if (e2->adminStatus != rozofs_cluster_admin_status_in_service) return 0;
+
     return e1->free < e2->free;
 }
 
@@ -100,10 +106,12 @@ void volume_storage_release(volume_storage_t *vs) {
 }
 
 void cluster_initialize(cluster_t *cluster, cid_t cid, uint64_t size,
-        uint64_t free) {
+        uint64_t free,
+        rozofs_cluster_admin_status_e adminStatus) {
     DEBUG_FUNCTION;
     int i;
     cluster->cid = cid;
+    cluster->adminStatus = adminStatus;
     cluster->size = size;
     cluster->free = free;
     for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) list_init(&cluster->storages[i]);
@@ -243,7 +251,7 @@ int volume_safe_copy(volume_t *to, volume_t *from) {
         cluster_t *to_cluster = xmalloc(sizeof (cluster_t));
         cluster_t *from_cluster = list_entry(p, cluster_t, list);
         cluster_initialize(to_cluster, from_cluster->cid, from_cluster->size,
-                from_cluster->free);
+                from_cluster->free, from_cluster->adminStatus);
 	int i;
 	for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) {
 	  to_cluster->nb_host[i] = from_cluster->nb_host[i];
@@ -318,7 +326,7 @@ int volume_safe_from_list_copy(volume_t *to, list_t *from) {
         cluster_t *to_cluster = xmalloc(sizeof (cluster_t));
         cluster_t *from_cluster = list_entry(p, cluster_t, list);
         cluster_initialize(to_cluster, from_cluster->cid, from_cluster->size,
-                from_cluster->free);
+                from_cluster->free, from_cluster->adminStatus);
 	int i;
 	for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) {
 	  to_cluster->nb_host[i] = from_cluster->nb_host[i];
@@ -369,7 +377,7 @@ int volume_safe_to_list_copy(volume_t *from, list_t *to) {
         cluster_t *to_cluster = xmalloc(sizeof (cluster_t));
         cluster_t *from_cluster = list_entry(p, cluster_t, list);
         cluster_initialize(to_cluster, from_cluster->cid, from_cluster->size,
-                from_cluster->free);
+                from_cluster->free, from_cluster->adminStatus);
 	int i;
 	for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) {
 	  to_cluster->nb_host[i] = from_cluster->nb_host[i];
@@ -660,6 +668,7 @@ void * rozofs_cluster_distributor_create_wsid(list_t *cluster_list) {
     ** Get cluster
     */
     cluster_t *volume_cluster = list_entry(p, cluster_t, list);
+    if (volume_cluster->adminStatus != rozofs_cluster_admin_status_in_service) continue;
 
     /*
     ** Fill working structure
@@ -711,6 +720,7 @@ void * rozofs_cluster_distributor_create_round_robin(list_t *cluster_list) {
     ** Get cluster
     */
     cluster_t *volume_cluster = list_entry(p, cluster_t, list);
+    if (volume_cluster->adminStatus != rozofs_cluster_admin_status_in_service) continue;
 
     /*
     ** Fill working structure
@@ -757,6 +767,7 @@ void * rozofs_cluster_distributor_create_wfsz(list_t *cluster_list) {
     ** Get cluster
     */
     cluster_t *volume_cluster = list_entry(p, cluster_t, list);
+    if (volume_cluster->adminStatus != rozofs_cluster_admin_status_in_service) continue;
 
     /*
     ** Fill workind structure

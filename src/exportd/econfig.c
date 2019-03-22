@@ -68,6 +68,7 @@
 #define ETHIN       "thin-provisioning"
 #define ENODEID     "nodeid"
 #define EFLOCKP     "flockp"
+#define EADMIN      "admin"
 
 #define ESTRIPPING     "striping" // Multi file striping configuration
 #define ESTRIPUNIT     "unit"      // Multi file striping size in bytes = 256KB * (1<<unit)
@@ -117,11 +118,12 @@ void storage_node_config_release(storage_node_config_t *s) {
     return;
 }
 
-int cluster_config_initialize(cluster_config_t *c, cid_t cid) {
+int cluster_config_initialize(cluster_config_t *c, cid_t cid, rozofs_cluster_admin_status_e adminStatus) {
     DEBUG_FUNCTION;
     int i;
     memset(c,0,sizeof(cluster_config_t));
     c->cid = cid;
+    c->adminStatus = adminStatus;
     for (i = 0; i <ROZOFS_GEOREP_MAX_SITE; i++) list_init(&c->storages[i]);
     list_init(&c->list);
     return 0;
@@ -544,6 +546,9 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
             struct config_setting_t *stor_set;
             struct config_setting_t *clu_set;
             cluster_config_t *cconfig;
+            rozofs_cluster_admin_status_e   adminStatus;
+            const char            * adminStatusString;
+
 
             // Get settings for this cluster
             if ((clu_set = config_setting_get_elem(clu_list_set, c)) == NULL) {
@@ -559,9 +564,23 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
                 goto out;
             }
 
+            /*
+            ** Read admin status if set
+            */
+            adminStatus = rozofs_cluster_admin_status_in_service; /* Default value is IN SERVICE */
+            adminStatusString = NULL;
+            if (config_setting_lookup_string(clu_set, EADMIN, &adminStatusString) != CONFIG_FALSE) {
+               adminStatus = string2rozofs_cluster_admin_status_e(adminStatusString);
+               if (adminStatus == -1) {
+                 errno = EINVAL;
+            	 severe("Bad admin value for cid %d \"%s\" assuming \"in service\"", cid, adminStatusString);
+                 adminStatus = rozofs_cluster_admin_status_in_service;
+               } 
+            }
+        
             // Allocate a new cluster_config
             cconfig = (cluster_config_t *) xmalloc(sizeof (cluster_config_t));
-            if (cluster_config_initialize(cconfig, (cid_t) cid) != 0) {
+            if (cluster_config_initialize(cconfig, (cid_t) cid, adminStatus) != 0) {
                 severe("can't initialize cluster config.");
             }
 

@@ -213,6 +213,7 @@ int monitor_volume(volume_t *volume, uint32_t volume_idx) {
         cluster_t *cluster = list_entry(p, cluster_t, list);
 	nb_sid_in_cluster = list_size((&cluster->storages[local_site]));
         dprintf(fd, "    cluster: %u\n", cluster->cid);
+        dprintf(fd, "      admin: %s\n", rozofs_cluster_admin_status_e2String(cluster->adminStatus));        
         dprintf(fd, "      nb_storages: %d\n", nb_sid_in_cluster);
         dprintf(fd, "      size: %"PRIu64"\n", cluster->size);
         dprintf(fd, "      free: %"PRIu64"\n", cluster->free);
@@ -242,7 +243,7 @@ int monitor_volume(volume_t *volume, uint32_t volume_idx) {
 
             gprofiler->vstats[volume_idx].sstats[nb_storages].cid = cluster->cid;
             gprofiler->vstats[volume_idx].sstats[nb_storages].sid = storage->sid;
-            gprofiler->vstats[volume_idx].sstats[nb_storages].status = storage->status;
+            gprofiler->vstats[volume_idx].sstats[nb_storages].status = (cluster->adminStatus<<4) | storage->status;
 	    strcpy(gprofiler->vstats[volume_idx].sstats[nb_storages].host,storage->host);
             gprofiler->vstats[volume_idx].sstats[nb_storages].size = storage->stat.size;
             gprofiler->vstats[volume_idx].sstats[nb_storages].free = storage->stat.free;
@@ -304,7 +305,7 @@ int monitor_volume(volume_t *volume, uint32_t volume_idx) {
 
               gprofiler->vstats[volume_idx].sstats[nb_storages].cid = cluster->cid;
               gprofiler->vstats[volume_idx].sstats[nb_storages].sid = storage->sid;
-              gprofiler->vstats[volume_idx].sstats[nb_storages].status = storage->status;
+              gprofiler->vstats[volume_idx].sstats[nb_storages].status = (cluster->adminStatus<<4) | storage->status;
 	      strcpy(gprofiler->vstats[volume_idx].sstats[nb_storages].host,storage->host);
               gprofiler->vstats[volume_idx].sstats[nb_storages].size = storage->stat.size;
               gprofiler->vstats[volume_idx].sstats[nb_storages].free = storage->stat.free;
@@ -395,7 +396,7 @@ int monitor_volume_slave(volume_t *volume, uint32_t volume_idx) {
 
             gprofiler->vstats[volume_idx].sstats[nb_storages].cid = cluster->cid;
             gprofiler->vstats[volume_idx].sstats[nb_storages].sid = storage->sid;
-            gprofiler->vstats[volume_idx].sstats[nb_storages].status = storage->status;
+            gprofiler->vstats[volume_idx].sstats[nb_storages].status = (cluster->adminStatus<<4) | storage->status;
 	    strcpy(gprofiler->vstats[volume_idx].sstats[nb_storages].host,storage->host);
             gprofiler->vstats[volume_idx].sstats[nb_storages].size = storage->stat.size;
             gprofiler->vstats[volume_idx].sstats[nb_storages].free = storage->stat.free;
@@ -412,7 +413,7 @@ int monitor_volume_slave(volume_t *volume, uint32_t volume_idx) {
 
               gprofiler->vstats[volume_idx].sstats[nb_storages].cid = cluster->cid;
               gprofiler->vstats[volume_idx].sstats[nb_storages].sid = storage->sid;
-              gprofiler->vstats[volume_idx].sstats[nb_storages].status = storage->status;
+              gprofiler->vstats[volume_idx].sstats[nb_storages].status = (cluster->adminStatus<<4) | storage->status;
 	      strcpy(gprofiler->vstats[volume_idx].sstats[nb_storages].host,storage->host);
               gprofiler->vstats[volume_idx].sstats[nb_storages].size = storage->stat.size;
               gprofiler->vstats[volume_idx].sstats[nb_storages].free = storage->stat.free;

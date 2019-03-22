@@ -1490,7 +1490,7 @@ static int load_volumes_conf() {
 
             // Memory allocation for this cluster
             cluster_t *cluster = (cluster_t *) xmalloc(sizeof (cluster_t));
-            cluster_initialize(cluster, cconfig->cid, 0, 0);
+            cluster_initialize(cluster, cconfig->cid, 0, 0, cconfig->adminStatus);
 			flipflop = cconfig->cid & 0x3;
             for (i = 0; i <ROZOFS_GEOREP_MAX_SITE; i++) {
 	          cluster->nb_host[i] = cconfig->nb_host[i];

@@ -489,6 +489,12 @@ int rozofs_vmove_distribute_round_robin(rozofs_mover_job_t * job) {
 static int cluster_compare_capacity(list_t *l1, list_t *l2) {
     cluster_t *e1 = list_entry(l1, cluster_t, list);
     cluster_t *e2 = list_entry(l2, cluster_t, list);
+    /*
+    ** Put non in service clusters at the end of the list
+    */
+    if (e1->adminStatus != rozofs_cluster_admin_status_in_service) return 1;
+    if (e2->adminStatus != rozofs_cluster_admin_status_in_service) return 0;
+
     return e1->free < e2->free;
 } 
 /*
@@ -859,7 +865,7 @@ void rozofs_upgrade_storage_size(vid_t vid_slow) {
 ** @param vid_slow    Slow volume vid
 **_______________________________________________________________________
 */
-void rozofs_build_cluster_list(vid_t fid_fast, vid_t vid_slow) {
+void rozofs_build_cluster_list(vid_t vid_fast, vid_t vid_slow) {
   list_t                * v=NULL;
   volume_config_t       * vconfig;
   list_t                * c=NULL;  
@@ -882,10 +888,10 @@ void rozofs_build_cluster_list(vid_t fid_fast, vid_t vid_slow) {
   list_for_each_forward(v, &exportd_config.volumes) {
   
     vconfig = list_entry(v, volume_config_t, list);
-    if ((vconfig->vid == fid_fast)||(vconfig->vid == vid_slow)) {
+    if ((vconfig->vid == vid_fast)||(vconfig->vid == vid_slow)) {
       
       
-      if (vconfig->vid == fid_fast) val = ROZOFS_VMOVE_FAST;
+      if (vconfig->vid == vid_fast) val = ROZOFS_VMOVE_FAST;
       else                          val = ROZOFS_VMOVE_SLOW;
       
       /*
@@ -893,8 +899,14 @@ void rozofs_build_cluster_list(vid_t fid_fast, vid_t vid_slow) {
       */
       list_for_each_forward(c, &vconfig->clusters) {
       
-        cconfig = list_entry(c, cluster_config_t, list);
+        cconfig = list_entry(c, cluster_config_t, list);        
         cluster[cconfig->cid] = val;
+        
+        /*
+        ** Whe cluster is frozen, no file has to be distributed on it
+        */
+        if (cconfig->adminStatus != rozofs_cluster_admin_status_in_service) continue;
+        
         
         /*
         ** For the destination volume, setup a structure for distributing the files
@@ -903,7 +915,8 @@ void rozofs_build_cluster_list(vid_t fid_fast, vid_t vid_slow) {
         
           pCluster = malloc(sizeof(cluster_t));
           memset(pCluster,0,sizeof(cluster_t));
-          pCluster->cid = cconfig->cid;
+          pCluster->cid         = cconfig->cid;
+          pCluster->adminStatus = cconfig->adminStatus;
           list_init(&pCluster->list);
           list_init(&pCluster->storages[0]);
           
@@ -1122,7 +1135,7 @@ int main(int argc, char *argv[]) {
         break;
                 
       default:
-        usage("Unexpected argument \"%s\"",c);
+        usage("Unexpected argument");
         break;
     }
   }
