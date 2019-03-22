@@ -49,6 +49,13 @@ grammar.
                - must be an integer.
                - must be unique for each cluster managed by this exportd.
 
+       admin: (cluster administrative status)
+               - must be a string within:
+                 - "in service",
+                 - "frozen".
+               - default value is "in service".
+               - when set to frozen, no more file is allocated within the cluster.
+
        sid: (storage identifier)
                - must be an integer (between 1 and 255).
                - must be unique within a cluster.

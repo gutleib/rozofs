@@ -55,7 +55,18 @@ static __inline__ unsigned long long rdtsc(void)
 
 }
 
-
+/*
+**_____________________________________________________________________________
+** 
+** Cluster administrative status
+**
+*/
+typedef enum _rozofs_cluster_admin_status_e {
+  rozofs_cluster_admin_status_undefined = 0,
+  rozofs_cluster_admin_status_in_service,
+  rozofs_cluster_admin_status_frozen
+} rozofs_cluster_admin_status_e;
+#include <rozofs/rozofs_cluster_admin_status_e2String.h>
 
 
 /*

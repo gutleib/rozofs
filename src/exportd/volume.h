@@ -75,6 +75,7 @@ void volume_storage_release(volume_storage_t *vs);
  */
 typedef struct cluster {
     cid_t cid; ///< cluster identifier
+    rozofs_cluster_admin_status_e adminStatus;
     uint64_t size; ///< cluster size
     uint64_t free; ///< free space on cluster
     list_t storages[ROZOFS_GEOREP_MAX_SITE]; ///< list of storages managed in the cluster
@@ -88,9 +89,11 @@ typedef struct cluster {
  * @param cid: the id to set
  * @param size: the size to set
  * @param free: free space to set
+ * @param adminStatus: Administrative status of the cluster
  */
 void cluster_initialize(cluster_t *cluster, cid_t cid, uint64_t size,
-        uint64_t free);
+        uint64_t free,
+        rozofs_cluster_admin_status_e  adminStatus);
 
 /** release a cluster
  *
