@@ -40,6 +40,7 @@ typedef struct storage_node_config {
 
 typedef struct cluster_config {
     cid_t cid;
+    rozofs_cluster_admin_status_e adminStatus;
     list_t storages[ROZOFS_GEOREP_MAX_SITE];
     uint8_t nb_host[ROZOFS_GEOREP_MAX_SITE];
     uint8_t nb_sites;

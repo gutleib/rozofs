@@ -183,12 +183,12 @@ xtraSID = 0
 xtraDevice = 0
 
 #-------------- NB devices per sid
-devices    = 2
-mapper     = 2
-redundancy = 2
+devices    = 1
+mapper     = 1
+redundancy = 1
 
 # Nb cluster per volume
-nbclusters = 2
+nbclusters = 4
 
 # default is to have one mount point per site and export
 clients_nb = 2

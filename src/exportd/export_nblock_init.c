@@ -603,7 +603,7 @@ void show_vfstat(char * argv[], uint32_t tcpRef, void *bufRef) {
         pbuf+=sprintf(pbuf, "-------+--------+----------------------+----------------------+\n");
         for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
             pbuf+=sprintf(pbuf, "%6d | %-6s | %20"PRIu64" | %20"PRIu64" |\n", gprofiler->vstats[i].sstats[j].sid,
-                    (gprofiler->vstats[i].sstats[j].status==1)?"UP":"DOWN", gprofiler->vstats[i].sstats[j].size,
+                    (gprofiler->vstats[i].sstats[j].status & 0x1)?"UP":"DOWN", gprofiler->vstats[i].sstats[j].size,
                     gprofiler->vstats[i].sstats[j].free);
         }
 	if (gprofiler->vstats[i].georep)
@@ -612,7 +612,7 @@ void show_vfstat(char * argv[], uint32_t tcpRef, void *bufRef) {
 	  int k = gprofiler->vstats[i].nb_storages;
           for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
               pbuf+=sprintf(pbuf, "%6d | %-6s | %20"PRIu64" | %20"PRIu64" |\n", gprofiler->vstats[i].sstats[j+k].sid,
-                      (gprofiler->vstats[i].sstats[j+k].status==1)?"UP":"DOWN", gprofiler->vstats[i].sstats[j+k].size,
+                      (gprofiler->vstats[i].sstats[j+k].status & 0x1)?"UP":"DOWN", gprofiler->vstats[i].sstats[j+k].size,
                       gprofiler->vstats[i].sstats[j+k].free);
           }
 	}
@@ -681,29 +681,32 @@ void show_vfstat_stor(char * argv[], uint32_t tcpRef, void *bufRef) {
 
     for (i = 0; i < gprofiler->nb_volumes; i++) {
  
-        pbuf+=sprintf(pbuf, "\n%-6s | %-6s | %-6s | %-6s | %-20s | %-20s | %-8s |\n","Vid", "Cid", "Sid", "Status", "Capacity(B)","Free(B)","Free(%)");
-        pbuf+=sprintf(pbuf, "-------+--------+--------+--------+----------------------+----------------------+----------+\n");
+        pbuf+=sprintf(pbuf, "\n%-6s | %-6s | %-6s | %-6s | %-20s | %-20s | %-8s | %-10s |\n","Vid", "Cid", "Sid", "Status", "Capacity(B)","Free(B)","Free(%)","Admin");
+        pbuf+=sprintf(pbuf, "-------+--------+--------+--------+----------------------+----------------------+----------+------------+\n");
         for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
-            pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %20"PRIu64" | %20"PRIu64" | %8d |\n",
+            pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %20"PRIu64" | %20"PRIu64" | %8d | %-10s |\n",
                    gprofiler->vstats[i].vid,gprofiler->vstats[i].sstats[j].cid,
                    gprofiler->vstats[i].sstats[j].sid,
-                   (gprofiler->vstats[i].sstats[j].status==1)?"UP":"DOWN", 
+                   (gprofiler->vstats[i].sstats[j].status & 0x1)?"UP":"DOWN", 
                    gprofiler->vstats[i].sstats[j].size,
                    gprofiler->vstats[i].sstats[j].free,
-                   (int)((gprofiler->vstats[i].sstats[j].size==0)? 0:gprofiler->vstats[i].sstats[j].free*100/gprofiler->vstats[i].sstats[j].size));
+                   (int)((gprofiler->vstats[i].sstats[j].size==0)? 0:gprofiler->vstats[i].sstats[j].free*100/gprofiler->vstats[i].sstats[j].size),
+                   rozofs_cluster_admin_status_e2String(gprofiler->vstats[i].sstats[j].status>>4));
         }
 	if (gprofiler->vstats[i].georep)
 	{
         pbuf+=sprintf(pbuf, "-------+--------+--------+--------+----------------------+----------------------+----------+\n");
 	  int k = gprofiler->vstats[i].nb_storages;
           for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
-            pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %20"PRIu64" | %20"PRIu64" | %8d |\n",
+            pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %20"PRIu64" | %20"PRIu64" | %8d | %-10s |\n",
                    gprofiler->vstats[i].vid,gprofiler->vstats[i].sstats[j+k].cid,
                    gprofiler->vstats[i].sstats[j+k].sid,
-                   (gprofiler->vstats[i].sstats[j+k].status==1)?"UP":"DOWN", 
+                   (gprofiler->vstats[i].sstats[j+k].status & 0x1)?"UP":"DOWN", 
                    gprofiler->vstats[i].sstats[j+k].size,
                    gprofiler->vstats[i].sstats[j+k].free,
-                   (int)((gprofiler->vstats[i].sstats[j+k].size==0)? 0:gprofiler->vstats[i].sstats[j+k].free*100/gprofiler->vstats[i].sstats[j+k].size));
+                   (int)((gprofiler->vstats[i].sstats[j+k].size==0)? 0:gprofiler->vstats[i].sstats[j+k].free*100/gprofiler->vstats[i].sstats[j+k].size),
+                   rozofs_cluster_admin_status_e2String(gprofiler->vstats[i].sstats[j].status>>4));
+
           }
 	}
         pbuf+=sprintf(pbuf, "\n");
@@ -773,8 +776,8 @@ void show_geo_vfstat_stor(char * argv[], uint32_t tcpRef, void *bufRef) {
             pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %-6s |\n",
                    gprofiler->vstats[i].vid,gprofiler->vstats[i].sstats[j].cid,
                    gprofiler->vstats[i].sstats[j].sid,
-                   (gprofiler->vstats[i].sstats[j].status==1)?"UP":"DOWN", 
-                   (gprofiler->vstats[i].sstats[j+k].status==1)?"UP":"DOWN");
+                   (gprofiler->vstats[i].sstats[j].status & 0x1 )?"UP":"DOWN", 
+                   (gprofiler->vstats[i].sstats[j+k].status & 0x1)?"UP":"DOWN");
         }
         pbuf+=sprintf(pbuf, "\n");
     }

@@ -135,7 +135,34 @@ void *rozofs_export_p = NULL;
 char * utility_name=NULL;
 
 time_t rebalance_config_file_mtime = 0;
+/*
+**_______________________________________________________________________
+*/
+/** Find out the export root path from its eid reading the configuration file
+*   
+    @param  vid : volume identifier
+    
+    @retval 0 found
+    @retval <0 not found
+*/
+cluster_config_t * get_cluster_config(cid_t cid) {
+  list_t           * v;
+  volume_config_t  * vconfig;
+  list_t           * c;
+  cluster_config_t * cconfig;
 
+  list_for_each_forward(v, &exportd_config.volumes) {
+
+    vconfig = list_entry(v, volume_config_t, list);
+
+    list_for_each_forward(c, &vconfig->clusters) {
+
+      cconfig = list_entry(c, cluster_config_t, list);
+      if (cconfig->cid == cid) return cconfig;
+    }    
+  }
+  return NULL;
+}
 /*
 *______________________________________________________________________
 * Create a directory, recursively creating all the directories on the path 
@@ -187,9 +214,11 @@ out:
 *_______________________________________________________________________________
 */
 void cluster_initialize(cluster_t *cluster, cid_t cid, uint64_t size,
-        uint64_t free) {
+        uint64_t free,
+        rozofs_cluster_admin_status_e adminStatus) {
     int i;
     cluster->cid = cid;
+    cluster->adminStatus = adminStatus;
     cluster->size = size;
     cluster->free = free;
     for (i = 0; i < ROZOFS_GEOREP_MAX_SITE;i++) list_init(&cluster->storages[i]);
@@ -200,6 +229,11 @@ void cluster_initialize(cluster_t *cluster, cid_t cid, uint64_t size,
 static int cluster_compare_capacity(list_t *l1, list_t *l2) {
     cluster_t *e1 = list_entry(l1, cluster_t, list);
     cluster_t *e2 = list_entry(l2, cluster_t, list);
+    /*
+    ** Put non in service clusters at the end of the list
+    */
+    if (e1->adminStatus != rozofs_cluster_admin_status_in_service) return 1;
+    if (e2->adminStatus != rozofs_cluster_admin_status_in_service) return 0;
     return e1->free < e2->free;
 }
 
@@ -397,6 +431,9 @@ cluster_t * allocate_cluster_in_memory(export_vol_cluster_stat2_t *clusterbalanc
     int host_rank=0;
     int found = 0;
     int k;
+    cluster_config_t * cconfig;
+    rozofs_cluster_admin_status_e  adminStatus;
+      
     /*
     ** need to compute the nb_host for the cluster and the nb_rank of each storage
     */
@@ -419,7 +456,17 @@ cluster_t * allocate_cluster_in_memory(export_vol_cluster_stat2_t *clusterbalanc
     
     // Memory allocation for this cluster
     cluster_t *cluster = (cluster_t *) xmalloc(sizeof (cluster_t));
-    cluster_initialize(cluster, clusterbalance_p->cluster_id, clusterbalance_p->total_size_bytes,clusterbalance_p->free_size_bytes);
+    
+    /*
+    ** Retrieve administrative status from configuration
+    */
+    cconfig = get_cluster_config(clusterbalance_p->cluster_id);
+    adminStatus = rozofs_cluster_admin_status_undefined;
+    if (cconfig) {
+      adminStatus = cconfig->adminStatus;
+    }
+
+    cluster_initialize(cluster, clusterbalance_p->cluster_id, clusterbalance_p->total_size_bytes,clusterbalance_p->free_size_bytes, adminStatus);
     for (i = 0; i <ROZOFS_GEOREP_MAX_SITE; i++) 
     {
 	  cluster->nb_host[i] = clusterbalance_p->nb_host;

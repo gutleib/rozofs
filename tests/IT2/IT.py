@@ -2712,6 +2712,108 @@ def usage():
   exit(0)
 
 
+#___________________________________________________
+def get_tst_list(name):
+#___________________________________________________
+  global rebuildCheck
+  
+  new_list = []
+  
+  if name == "all" or name == "basic" :
+    new_list.extend(TST_BASIC)
+  
+  if name == "all" or name == "trash" :    
+    new_list.extend(TST_TRASH)
+    
+  if name == "all" or name == "flock" :        
+    new_list.extend(TST_FLOCK)
+
+  if name == "all" or name == "rebuild" :        
+    if rebuildCheck == True:
+      new_list.extend(TST_REBUILDCHECK)
+    else:  
+      new_list.extend(TST_REBUILD)
+
+  if name == "all" or name == "compil" :              
+    new_list.extend(TST_COMPIL)  
+    
+  if name == "all" or name == "rw" :                    
+    new_list.extend(TST_RW)
+
+  if name == "all" or name == "storageFailed" :                        
+    append_circumstance_test_list(new_list,TST_RW,'storageFailed')
+    
+  if name == "all" or name == "storageReset" :                        
+    append_circumstance_test_list(new_list,TST_RW,'storageReset') 
+    
+  if name == "storcliReset" :                        
+    append_circumstance_test_list(new_list,TST_RW,arg)
+    
+  if name == "ifUpDown":
+    append_circumstance_test_list(new_list,TST_RW,arg)  
+     
+  if len(new_list) == 0: 
+    new_list.append(name)
+  return new_list
+  
+#___________________________________________________
+def make_test_list(args):
+#___________________________________________________
+  global rebuildCheck
+
+  test_list = [] 
+  new_list  = []
+
+  #
+  # Add requested tests to the list
+  #  
+  excludeTest = False
+  for arg in args: 
+ 
+    #
+    # Next test is excluded
+    #
+    if arg == "NO" : 
+      excludeTest = True 
+      continue
+
+    #
+    # This test is exclude
+    #
+    if excludeTest == True:
+      excludeTest = False
+      continue
+
+    #
+    # This test is to be added
+    #
+    new_list = get_tst_list(arg)
+    test_list.extend(new_list) 
+        
+
+  #
+  # Remove excluded tests from the list
+  #  
+  excludeTest = False    
+  for arg in args:  
+
+    #
+    # Next test is excluded
+    #
+    if arg == "NO" : 
+      excludeTest = True 
+      continue
+
+    #
+    # This test is exclude
+    #
+    if excludeTest == False: continue
+    excludeTest = False
+
+    new_list = get_tst_list(arg)
+    for tst in new_list:
+      if tst in test_list: test_list.remove(tst)
+  return test_list  
 
 #___________________________________________________
 # MAIN
@@ -2822,49 +2924,9 @@ if options.snipper != None:
 #TST_REBUILD=TST_REBUILD+['rebuild_delete']
 
 # Build list of test 
-list=[] 
-for arg in args:  
-  if arg == "all":
-    list.extend(TST_BASIC)
-    list.extend(TST_TRASH)
-    list.extend(TST_FLOCK)
-    if rebuildCheck == True:
-      list.extend(TST_REBUILDCHECK)
-    else:  
-      list.extend(TST_REBUILD)
-    list.extend(TST_COMPIL)    
-    list.extend(TST_RW)
-    append_circumstance_test_list(list,TST_RW,'storageFailed')
-    append_circumstance_test_list(list,TST_RW,'storageReset') 
-    if int(ifnumber) > int(1):
-      append_circumstance_test_list(list,TST_RW,'ifUpDown')
-       
-#re    append_circumstance_test_list(list,TST_RW,'storcliReset')   
-  elif arg == "rw":
-    list.extend(TST_RW)
-  elif arg == "storageFailed":
-    append_circumstance_test_list(list,TST_RW,arg)
-  elif arg == "storageReset":
-    append_circumstance_test_list(list,TST_RW,arg)
-  elif arg == "storcliReset":
-    append_circumstance_test_list(list,TST_RW,arg)
-  elif arg == "ifUpDown":
-    append_circumstance_test_list(list,TST_RW,arg)   
-  elif arg == "basic":
-    list.extend(TST_BASIC)
-  elif arg == "trash":
-    list.extend(TST_TRASH)
-  elif arg == "rebuild":
-    if rebuildCheck == True:
-      list.extend(TST_REBUILDCHECK)
-    else:  
-      list.extend(TST_REBUILD)
-  elif arg == "flock":
-    list.extend(TST_FLOCK)  
-  elif arg == "compil":
-    list.extend(TST_COMPIL)  
-  else:
-    list.append(arg)              
+list =[]
+list = make_test_list(args)
+            
 # No list of test. Print usage
 if len(list) == 0:
   usage()
