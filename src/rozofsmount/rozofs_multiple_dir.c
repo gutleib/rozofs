@@ -79,7 +79,8 @@ int get_size_value(char *str,uint64_t *value)
             }
 	    err = 1;
 	    break;
-	  } 
+	  }
+	  if ((str[1] == 'B') || (str[1] == 'b')) str++;	  
 	  if (str[1] != 0) err=1;     
       }
       if (err )
@@ -94,28 +95,21 @@ int get_size_value(char *str,uint64_t *value)
 
 static void usage() {
 
-printf ("RozoFS multifile configuration \n");
+printf ("\nRozoFS hybrid/striping configuration \n\n");
+printf("  That tool enables to modify the hybrid/striping configuration at directory level.\n"); 
+printf("  It has precedence over the striping configured at either volume or exportd level.\n\n"); 
 printf("\nUsage: rozo_multifile [OPTIONS] path..\n\n");
-printf (" Set configuration : rozo_multifile -s -m <striping_factor>  [-u <striping-unit>] -f <0|1> [-z <hybrid_size>[k|K|m|M]] [-i] dir_1..dir_n\n");
+printf (" Set configuration : rozo_multifile -s -m <striping_count>  [-u <striping-unit>] -f <0|1> [-z <hybrid_size>[k|K|m|M]] [-i] dir_1..dir_n\n");
 printf (" Get configuration : rozo_multifile -g path_1..path_n\n");
 printf("\nParameters:\n");
-printf("  -s                   : To set the multiple configuration of a directory. The striping unit might be omitted if the striping factor is 0.\n");
+printf("  -s                    : To set the hybrid/striping configuration of a directory. The striping unit might be omitted if the <striping_count> is 1.\n");
 printf("\n");
-printf("  -m <striping_factor> : The striping factor must be in the range of [0..7]. It defines the number of files that will be allocated\n");
-printf("                         at the file creation time:\n");
-printf("                           - 0: no striping\n");
-printf("                           - 1: 2 files striping\n");
-printf("                           - 2: 3 files striping\n");
-printf("                           - 3: 4 files striping\n");
-printf("                           - 4: 5 files striping\n");
-printf("                           - 5: 6 files striping\n");
-printf("                           - 6: 7 files striping\n");
-printf("                           - 7: 8 files striping\n");
-printf("                         A striping factor of 0, indicates that there will not be not file striping. It has precedence over the\n"); 
-printf("                         striping configured at either volume or exportd level.\n");
+printf("  -m <striping_count>   : The <striping_count> is the number of RozoFS internal files on which the user file is striped.\n"); 
+printf("                          It is applied at the creation time, and the value must be in the [1..8] range.\n");
+printf("                          A <striping_count> of 1, indicates that there is no file striping.\n");
 printf("\n");
 printf(" -u <striping_unit>    : The value is given in power of 2 [0..7]. The default unit is 256KB. It permits to configure the maximum unit\n");
-printf("                         size before using the next file according to the striping factor. The value are:\n");
+printf("                         size before using the next file according to the <striping_count> value. The value are:\n");
 printf("                           - 0: 256KB\n");
 printf("                           - 1: 512KB\n");
 printf("                           - 2: 1MB\n");
@@ -124,7 +118,7 @@ printf("                           - 4: 4MB\n");
 printf("                           - 5: 8MB\n");
 printf("                           - 6: 16MB\n");
 printf("                           - 7: 32MB\n");
-printf("                          The striping unit might be omitted when the striping_factor is 0.\n");
+printf("                          The striping unit might be omitted when the <striping_count> is 1.\n");
 printf("\n");
 printf(" -f <0|1>              : that parameter indicates if the hybrid mode is enabled for the directory\n");
 printf("                           - 0: disabled\n");
@@ -260,7 +254,6 @@ int get_multifile(char *dirpath)
 	   else
 	   {
 	     striping_factor = factor_value-1;
-//	     printf("striping factor :%d (%lld Files)\n",striping_factor,factor_value);
 	   }
 	   break;
 	 }
@@ -399,7 +392,7 @@ int get_multifile(char *dirpath)
 	  if (hybrid_sz == 0)
 	    hybrid_value = unit_value;        
 	}
-	printf("  - default hybrid size     :%d (%lld Bytes)\n",hybrid_sz,hybrid_value);
+	printf("  - default hybrid size     :%lld Bytes\n",hybrid_value);
       }
       else
       {
@@ -416,16 +409,16 @@ int get_multifile(char *dirpath)
       {
 	if (redundancy == 0)
 	{
-	  printf("    %s -s -m %d  %s\n",module_name,striping_factor,dirpath);
+	  printf("    %s -s -m %d  %s\n",module_name,striping_factor+1,dirpath);
 	}
 	else
 	{
-	  printf("    %s -s -m %d -r %s\n",module_name,striping_factor,dirpath);   
+	  printf("    %s -s -m %d -r %s\n",module_name,striping_factor+1,dirpath);   
 	}
       }
       return 0;         
    }
-   printf("  - striping factor :%d (%lld Files)\n",striping_factor,factor_value);  
+   printf("  - striping count :%lld Files\n",factor_value);  
    printf("  - striping unit   :%d (%lld Bytes)\n",striping_unit,unit_value);
    if (hybrid == 0)
    {
@@ -437,22 +430,22 @@ int get_multifile(char *dirpath)
      if (hybrid_sz == 0)
        hybrid_value = unit_value;        
    }
-   printf("  - hybrid size     :%d (%lld Bytes)\n",hybrid_sz,hybrid_value);
+   printf("  - hybrid size     :%lld Bytes\n",hybrid_value);
    if (mode == ROZOFS_MODE_DIR) printf("  - striping_inherit: %s\n",redundancy==1?"Yes":"No");
    if (mode == ROZOFS_MODE_DIR)
    {
 
      if (hybrid == 0)
      {
-       printf("    %s -s -m %d -u %d -f 0 %s %s\n",module_name,striping_factor,striping_unit,(redundancy == 0)?" ":"-i",dirpath);
+       printf("    %s -s -m %d -u %d -f 0 %s %s\n",module_name,striping_factor+1,striping_unit,(redundancy == 0)?" ":"-i",dirpath);
        return 0;
      }
      if (hybrid_sz == 0)
      {
-       printf("    %s -s -m %d -u %d -f 1 %s %s\n",module_name,striping_factor,striping_unit,(redundancy == 0)?" ":"-i",dirpath);
+       printf("    %s -s -m %d -u %d -f 1 %s %s\n",module_name,striping_factor+1,striping_unit,(redundancy == 0)?" ":"-i",dirpath);
        return 0;              
      }
-     printf("    %s -s -m %d -u %d -f 1 -z %dK %s %s\n",module_name,striping_factor,striping_unit,(int)(hybrid_value/1024),(redundancy == 0)?" ":"-i",dirpath);
+     printf("    %s -s -m %d -u %d -f 1 -z %dK %s %s\n",module_name,striping_factor+1,striping_unit,(int)(hybrid_value/1024),(redundancy == 0)?" ":"-i",dirpath);
      return 0;
 
    }
@@ -509,16 +502,17 @@ int main(int argc, char **argv) {
               usage();
               exit(EXIT_FAILURE);			  
             }  
-	    if ((striping_factor < 0) || (striping_factor > 4))
+	    if ((striping_factor < 1) || (striping_factor > 8))
 	    {
-              printf("Out of range striping factor: %s (must be in the [0..4] range)\n",optarg);	
+              printf("Out of range striping count: %s (must be in the [1..7] range)\n",optarg);	
               usage();
               exit(EXIT_FAILURE);			  
-            }  	      	                
+            } 
+	    striping_factor--; 	      	                
 	    break;
           case 'u':
             if (sscanf(optarg,"%d",&striping_unit)!= 1) {
-              printf("Bad striping factor: %s\n",optarg);	
+              printf("Bad striping unit: %s\n",optarg);	
               usage();
               exit(EXIT_FAILURE);			  
             }  
@@ -586,7 +580,7 @@ int main(int argc, char **argv) {
        */
        if ( striping_factor == -1)
        {
-         printf(" striping_factor is missing\n");     
+         printf(" striping_count is missing\n");     
 	 usage();
 	 exit(EXIT_FAILURE);			  
        }
