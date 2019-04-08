@@ -204,6 +204,8 @@ typedef struct _rozofs_qc_th_t
   int rpc_buf_count2alloc;    /**< contains the number of RPC buffer that must be allocated : for SRQ management only  */
   uint64_t comp_events_completed;
   uint64_t async_events_completed;
+  uint64_t max_wc_poll_count;
+  uint64_t ack_count;
   int cqe;     /**< number of entries in the completion queue */
 } rozofs_qc_th_t;
 

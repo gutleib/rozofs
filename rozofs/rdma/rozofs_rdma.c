@@ -496,15 +496,15 @@ out:
 
 char *rozofs_rdma_printcq_stats_header(char *pChar)
 {
-  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+\n");
-  pChar += sprintf(pChar,"|  CQ_ID   |   IBV_SEND     |   IBV_RECV     |  IBV_RDMA_READ | IBV_RDMA_WRITE |    ADDRESS     |  NB ENTRIES    |\n");
-  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+\n");
+  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+----------------+------------+----------------+----------------+---------------+\n");
+  pChar += sprintf(pChar,"|  CQ_ID   |   IBV_SEND     |   IBV_RECV     |  IBV_RDMA_READ | IBV_RDMA_WRITE |    ADDRESS     |  NB ENTRIES    |    SYNC_EVT    | ASYNC_EVT  |  POST_SND_CNT  |  MAX_POLL_CNT  |  ACK_COUNT    |\n");
+  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+----------------+------------+----------------+----------------+---------------+\n");
   return pChar;
 }
 
-char *rozofs_rdma_printcq_stats(char *pChar,int adaptor,int id,int recv,rozofs_cq_th_stat_t *stats,struct ibv_cq *cq_p,uint64_t post_send_counter)
+char *rozofs_rdma_printcq_stats(char *pChar,int adaptor,int id,int recv,rozofs_cq_th_stat_t *stats,struct ibv_cq *cq_p,uint64_t post_send_counter,uint64_t max_poll_count,uint64_t ack_count)
 {
-  pChar += sprintf(pChar,"| %d/%d-%s    |  %12llu  |  %12llu  |  %12llu  |  %12llu  |  %12llx  |  %12d  |  %12u/%12u  |  %12llu  |\n",adaptor,id,(recv==0)?"S":"R",
+  pChar += sprintf(pChar,"| %d/%d-%s    |  %12llu  |  %12llu  |  %12llu  |  %12llu  |  %12llx  |  %12d  |  %12u/%12u  |  %12llu  |  %12llu  |  %12llu  |\n",adaptor,id,(recv==0)?"S":"R",
           (long long unsigned int) stats->ibv_wc_send_count,
           (long long unsigned int)stats->ibv_wc_recv_count,
           (long long unsigned int)stats->ibv_wc_rdma_read_count,
@@ -513,10 +513,12 @@ char *rozofs_rdma_printcq_stats(char *pChar,int adaptor,int id,int recv,rozofs_c
 	  cq_p->cqe,
 	  cq_p->comp_events_completed,
 	  cq_p->async_events_completed,
-	  (long long unsigned int)post_send_counter
-	  	  
+	  (long long unsigned int)post_send_counter,
+	  (long long unsigned int)max_poll_count,	  	  
+	  (long long unsigned int)ack_count	  	  
+
 	  );
-  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+----------------+\n"); 
+  pChar += sprintf(pChar,"+----------+----------------+----------------+----------------+----------------+----------------+----------------+----------------+------------+----------------+----------------+---------------+\n"); 
   return pChar; 
 }
 
@@ -547,12 +549,12 @@ void show_rdma_cq_threads(char * argv[], uint32_t tcpRef, void *bufRef) {
      for (j= 0; j < ROZOFS_CQ_THREAD_NUM; j++)
      {
        th_p = ctx->rozofs_cq_th_post_send[j];
-       pChar = rozofs_rdma_printcq_stats(pChar,i,j,0,&th_p->stats,ctx->cq[j],ctx->post_send_stat[j]);
+       pChar = rozofs_rdma_printcq_stats(pChar,i,j,0,&th_p->stats,ctx->cq[j],ctx->post_send_stat[j],th_p->max_wc_poll_count,th_p->ack_count);
      }
      for (j= 0; j < ROZOFS_CQ_THREAD_NUM; j++)
      {
        th_p = ctx->rozofs_cq_th_post_recv[j];
-       pChar = rozofs_rdma_printcq_stats(pChar,i,j,1,&th_p->stats,ctx->cq_rpc[j],0);
+       pChar = rozofs_rdma_printcq_stats(pChar,i,j,1,&th_p->stats,ctx->cq_rpc[j],0,0,0);
      }       
   }   
    
@@ -2231,10 +2233,16 @@ void * rozofs_poll_cq_th(void *ctx)
   rozofs_rmda_ibv_cxt_t *s_ctx = (rozofs_rmda_ibv_cxt_t*)th_ctx_p->ctx_p;
   struct ibv_cq *cq;
   struct ibv_wc wc;
-//  int wc_to_ack = 0;
+  uint64_t max_wc_poll_count = 0;
+  int wc_to_ack = 0;
   
   info("CQ thread#%d started \n",th_ctx_p->thread_idx);
   uma_dbg_thread_add_self("CQ_Th_rw");
+  /*
+  ** Clear the statistics
+  */
+  th_ctx_p->max_wc_poll_count = 0;
+  th_ctx_p->ack_count = 0;
 #if 1
     {
       struct sched_param my_priority;
@@ -2274,11 +2282,30 @@ void * rozofs_poll_cq_th(void *ctx)
 #if 1
   while (1) {
     TEST_NZ(ibv_get_cq_event(s_ctx->comp_channel[th_ctx_p->thread_idx], &cq, &ctx));
-    ibv_ack_cq_events(cq, 1);
+    wc_to_ack = 0;
+//    ibv_ack_cq_events(cq, 1);
+//    th_ctx_p->ack_count++;
     TEST_NZ(ibv_req_notify_cq(cq, 0));
-
+    max_wc_poll_count = 0;
     while (ibv_poll_cq(cq, 1, &wc))
+    {
+      max_wc_poll_count++;
+      wc_to_ack++;
       rozofs_on_completion2(&wc,th_ctx_p);
+      if (wc_to_ack == 16) 
+      {
+	ibv_ack_cq_events(cq, wc_to_ack);
+	th_ctx_p->ack_count +=wc_to_ack;
+	wc_to_ack = 0;
+      }
+    }
+    if (wc_to_ack != 0)
+    {
+	ibv_ack_cq_events(cq, wc_to_ack);
+	th_ctx_p->ack_count +=wc_to_ack;
+	wc_to_ack = 0;    
+    }
+    if (th_ctx_p->max_wc_poll_count < max_wc_poll_count) th_ctx_p->max_wc_poll_count = max_wc_poll_count;
   }
 #else
   while (1) {
@@ -2301,6 +2328,7 @@ void * rozofs_poll_cq_th(void *ctx)
 
 #endif
 error:
+  severe("FDL RDMA exit from thread");
   return NULL;
 }
 /*
@@ -2838,8 +2866,30 @@ int rozofs_rdma_srv_on_connect_request(struct rdma_cm_id *id,struct rdma_cm_even
      attr.retry_cnt = 2;
      attr.rnr_retry = 2;
      attr.min_rnr_timer = 14;
-     if (ibv_modify_qp(id->qp, &attr,IBV_QP_RETRY_CNT|IBV_QP_RNR_RETRY| IBV_QP_MIN_RNR_TIMER)< 0) goto error;
+     attr.port_num = 2;
+     if (ibv_modify_qp(id->qp, &attr,IBV_QP_RETRY_CNT|IBV_QP_RNR_RETRY| IBV_QP_MIN_RNR_TIMER| IBV_QP_PORT )< 0) goto error;
   }
+#if 0
+  /*
+  ** that function does not make sense since the connectX4/5 are able to handle the case of the bonding driver and
+  ** to balance the QP traffic on each port in a round robin way
+  */
+  {
+    struct ibv_exp_qp_attr attr;
+
+         memset(&attr, 0, sizeof(attr));
+         attr.flow_entropy = 1;
+	 attr.port_num = 1;
+	 attr.qp_state = IBV_QPS_INIT;
+	
+	 if (ibv_exp_modify_qp(id->qp, &attr,IBV_QP_STATE|IBV_QP_PORT|IBV_EXP_QP_FLOW_ENTROPY )< 0) 
+	 {
+	    severe(" FDL cest la MERDE !!!!!!!");
+	 }
+	 
+	 
+  }
+#endif
   /*
   ** post receive is intended to fill up some context for the case of WRITE_SEND (not used by RozoFS)
   */
@@ -4640,6 +4690,8 @@ static void print_async_event(struct ibv_context *ctx,
 	/* CQ events */
 	case IBV_EVENT_CQ_ERR:
 		warning("CQ error for CQ with handle %p\n", event->element.cq);
+		severe("FATAL: Storio is going to be restarted because of Mellanox issue");
+		fatal("See you soon!!"); 
 		break;
  
 	/* SRQ events */
