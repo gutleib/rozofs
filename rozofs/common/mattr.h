@@ -646,10 +646,11 @@ static inline int rozofs_build_multiple_offset_vector(uint64_t off, uint64_t len
    uint64_t offset_in_block;
    uint64_t file_idx;
    uint32_t byte_offset_in_shared_buf = alignment;
+
    
    vector_p->nb_vectors = 0;
    p = &vector_p->vectors[0];
-   
+
    /*
    ** Get the number of entries to create: it depends on the striping_size 
    */
@@ -665,13 +666,22 @@ static inline int rozofs_build_multiple_offset_vector(uint64_t off, uint64_t len
        if ((offset_in_block +len) > striping_unit_bytes)
        {
 	  p->len = striping_unit_bytes - offset_in_block;
+	  if (p->len > ROZOFS_MAX_FILE_BUF_SZ_READ) p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
 	  len -= p->len;
 	  off +=p->len;
        }
        else
        {
-	  p->len = len;
-	  len = 0;
+	  if (len > ROZOFS_MAX_FILE_BUF_SZ_READ) 
+	  {
+	    p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
+	    len -= p->len;
+	    off +=p->len;
+	  }
+	  else {
+	    p->len = len;
+	    len = 0;
+	  }
        }
        byte_offset_in_shared_buf +=p->len;
        p++;
@@ -681,6 +691,7 @@ static inline int rozofs_build_multiple_offset_vector(uint64_t off, uint64_t len
    vector_p->nb_vectors = i;
    return 0;  
 }   
+
 
 /*
 **__________________________________________________________________
@@ -713,7 +724,7 @@ static inline int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint6
    p = &vector_p->vectors[0];
 
    
-   if (off < hybrid_size_bytes)
+   while (off < hybrid_size_bytes)
    {
         offset_in_block = off%hybrid_size_bytes;
         p->file_idx = 0;
@@ -722,24 +733,29 @@ static inline int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint6
 	if ((offset_in_block +len) > hybrid_size_bytes)
 	{
 	   p->len = hybrid_size_bytes - offset_in_block;
+	  if (p->len > ROZOFS_MAX_FILE_BUF_SZ_READ) p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
 	   len -= p->len;
 	   off +=p->len;
 	}
 	else
 	{
-	   p->len = len;
-	   len = 0;
+	  if (len > ROZOFS_MAX_FILE_BUF_SZ_READ) 
+	  {
+	    p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
+	    len -= p->len;
+	    off +=p->len;
+	  }
+	  else {
+	    p->len = len;
+	    len = 0;
+	  }
 	}
-	off = off -  hybrid_size_bytes + striping_unit_bytes;
         byte_offset_in_shared_buf +=p->len;
 	p++;
-	i++;      
+	i++; 
+	if (len == 0) break;
    }
-   else
-   {
-	off = off -  hybrid_size_bytes + striping_unit_bytes;   
-   }
-   
+   off = off -  hybrid_size_bytes + striping_unit_bytes;   
    /*
    ** Get the number of entries to create: it depends on the striping_size 
    */
@@ -756,13 +772,22 @@ static inline int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint6
 	if ((offset_in_block +len) > striping_unit_bytes)
 	{
 	   p->len = striping_unit_bytes - offset_in_block;
+	   if (p->len > ROZOFS_MAX_FILE_BUF_SZ_READ) p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
 	   len -= p->len;
 	   off +=p->len;
 	}
 	else
 	{
-	   p->len = len;
-	   len = 0;
+	  if (len > ROZOFS_MAX_FILE_BUF_SZ_READ) 
+	  {
+	    p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
+	    len -= p->len;
+	    off +=p->len;
+	  }
+	  else {
+	    p->len = len;
+	    len = 0;
+	  }
 	}
      }
      else
@@ -777,13 +802,22 @@ static inline int rozofs_build_multiple_offset_vector_hybrid(uint64_t off, uint6
 	 if ((offset_in_block +len) > striping_unit_bytes)
 	 {
 	    p->len = striping_unit_bytes - offset_in_block;
+	    if (p->len > ROZOFS_MAX_FILE_BUF_SZ_READ) p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
 	    len -= p->len;
 	    off +=p->len;
 	 }
 	 else
 	 {
-	    p->len = len;
-	    len = 0;
+	   if (len > ROZOFS_MAX_FILE_BUF_SZ_READ) 
+	   {
+	     p->len = ROZOFS_MAX_FILE_BUF_SZ_READ;
+	     len -= p->len;
+	     off +=p->len;
+	   }
+	   else {
+	     p->len = len;
+	     len = 0;
+	   }
 	 }
        }
      }
