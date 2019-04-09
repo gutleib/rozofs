@@ -2512,74 +2512,74 @@ int rozofs_visit_junk(void *exportd,void *inode_attr_p,void *p)
   ** This inode is valid
   */
   nb_matched_entries++;
-  if (name_format == name_format_none) {
-    return 1;
-  }
-  
-  
-  pDisplay = display_buffer;
+  if (name_format != name_format_none) {
+    
+    pDisplay = display_buffer;
 
-  
-  if (display_json) {
-    if (first_entry) {
-      first_entry = 0;
+
+    if (display_json) {
+      if (first_entry) {
+        first_entry = 0;
+      }
+      else {
+        pDisplay += rozofs_string_append(pDisplay,",");
+      }   
+      pDisplay += rozofs_string_append(pDisplay,"\n    {  \"name\" : \"");
+      pDisplay += rozofs_fid_append(pDisplay,rmentry->trash_inode);
+      pDisplay += rozofs_string_append(pDisplay,"\"");
     }
-    else {
-      pDisplay += rozofs_string_append(pDisplay,",");
-    }   
-    pDisplay += rozofs_string_append(pDisplay,"\n    {  \"name\" : \"");
-    pDisplay += rozofs_fid_append(pDisplay,rmentry->trash_inode);
-    pDisplay += rozofs_string_append(pDisplay,"\"");
-  }
-  else {  
-    pDisplay += rozofs_fid_append(pDisplay,rmentry->trash_inode);
-  }
-
-  IF_DISPLAY(display_size) {
-    NEW_FIELD(size);       
-    pDisplay += rozofs_u64_append(pDisplay,rmentry->size);        
-  }  
-
-  IF_DISPLAY(display_distrib) {
-    NEW_FIELD(cid); 
-    pDisplay += rozofs_u32_append(pDisplay,rmentry->cid);
-    NEW_FIELD(sid); 
-
-    pDisplay += rozofs_string_append(pDisplay,"[");
-    int sid_idx;
-    for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
-      if (rmentry->current_dist_set[sid_idx] == 0) break;
-      if (sid_idx != 0) pDisplay += rozofs_string_append(pDisplay,",");
-      pDisplay += rozofs_u32_append(pDisplay,rmentry->current_dist_set[sid_idx]);
-    }          
-    pDisplay += rozofs_string_append(pDisplay,"]");
-  }     
-  
-  IF_DISPLAY(display_id) {
-    NEW_QUOTED_FIELD(fid);  
-    pDisplay += rozofs_fid_append(pDisplay,rmentry->fid);    
-    pDisplay += rozofs_string_append(pDisplay,"\"");   
-  }        
-
-  if (display_json) {
-     pDisplay += rozofs_string_append(pDisplay,"  }");    
-  }
-  else {   
-    cur_entry_per_line++;
-    if (cur_entry_per_line >= entry_per_line) {
-      cur_entry_per_line = 0;
-       pDisplay += rozofs_string_append(pDisplay,"\n");
+    else {  
+      pDisplay += rozofs_fid_append(pDisplay,rmentry->trash_inode);
     }
-    else {
-      pDisplay += rozofs_string_append(pDisplay," ");
-      pDisplay += rozofs_string_append(pDisplay,separator);
+
+    IF_DISPLAY(display_size) {
+      NEW_FIELD(size);       
+      pDisplay += rozofs_u64_append(pDisplay,rmentry->size);        
+    }  
+
+    IF_DISPLAY(display_distrib) {
+      NEW_FIELD(cid); 
+      pDisplay += rozofs_u32_append(pDisplay,rmentry->cid);
+      NEW_FIELD(sid); 
+
+      pDisplay += rozofs_string_append(pDisplay,"[");
+      int sid_idx;
+      for (sid_idx=0; sid_idx<ROZOFS_SAFE_MAX_STORCLI; sid_idx++) {
+        if (rmentry->current_dist_set[sid_idx] == 0) break;
+        if (sid_idx != 0) pDisplay += rozofs_string_append(pDisplay,",");
+        pDisplay += rozofs_u32_append(pDisplay,rmentry->current_dist_set[sid_idx]);
+      }          
+      pDisplay += rozofs_string_append(pDisplay,"]");
+    }     
+
+    IF_DISPLAY(display_id) {
+      NEW_QUOTED_FIELD(fid);  
+      pDisplay += rozofs_fid_append(pDisplay,rmentry->fid);    
+      pDisplay += rozofs_string_append(pDisplay,"\"");   
+    }        
+
+    if (display_json) {
+       pDisplay += rozofs_string_append(pDisplay,"  }");    
+    }
+    else {   
+      cur_entry_per_line++;
+      if (cur_entry_per_line >= entry_per_line) {
+        cur_entry_per_line = 0;
+         pDisplay += rozofs_string_append(pDisplay,"\n");
+      }
+      else {
+        pDisplay += rozofs_string_append(pDisplay," ");
+        pDisplay += rozofs_string_append(pDisplay,separator);
+      } 
     } 
-  } 
+
+    printf("%s",display_buffer);
+  }
   
   if (nb_matched_entries >= max_display) {
     rozo_lib_stop_var = 1;
   }    
-  printf("%s",display_buffer);
+
   return 1;
 }
 /*
