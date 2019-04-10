@@ -51,13 +51,17 @@ int                cluster[ROZOFS_CLUSTERS_MAX] = {ROZOFS_VMOVE_UNDEFINED};
 list_t             cluster_distributor;
 export_config_t  * econfig = NULL;
 
-uint64_t  scanned_match   = 0;
+uint64_t  scanned_match_path   = 0;
 uint64_t  scanned_hybrid  = 0;
 uint64_t  scanned_already = 0;
 uint64_t  scanned_to_move = 0;
 uint64_t  scanned_error   = 0;
-uint64_t  scanned_directories  = 0;
+uint64_t  scanned_directories = 0;
+uint64_t  scanned_over_sized  = 0;
+uint64_t  scanned_under_sized = 0;
 
+long long unsigned int  size_over  = 0;
+long long unsigned int  size_under  = 0xFFFFFFFFFFFFFFFF;
 
 int rozofs_no_site_file = 0;
 
@@ -571,7 +575,7 @@ static int rozofs_vmove_distribute(rozofs_mover_job_t * job) {
 **
 ** RozoFS specific function for visiting a file. We have to check whether
 ** this is an hybrid file under one of the directory listed in pFidTable
-** that needs its hybrid chunk to be moved
+** that needs its hybrid stride to be moved
 **
 ** @param exportd       pointer to exporthd data structure
 ** @param inode_attr_p  pointer to the inode data
@@ -623,7 +627,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   /*
   ** It is under the tree 
   */
-  scanned_match++;
+  scanned_match_path++;
   
   /*
   ** Check whether it needs to be moved
@@ -647,6 +651,16 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     return 0;
   }  
 
+  if (inode_p->s.attrs.size > size_under) {
+    scanned_over_sized++;
+    return 0;
+  }
+  if (inode_p->s.attrs.size < size_over) {
+    scanned_under_sized++;
+    return 0;
+  }
+  
+
   scanned_to_move++;
   
   /*
@@ -656,7 +670,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   memset(job,0,sizeof(rozofs_mover_job_t));
 
   /*
-  ** Get size of the hybrid chunk
+  ** Get size of the hybrid stride
   */
   vector.vectors[0].len = 0;
   rozofs_get_multiple_file_sizes(inode_p, &vector);
@@ -961,11 +975,11 @@ static void usage(char * fmt, ...) {
   }
   
   printf("RozoFS hybrid volume mover - %s\n", VERSION);    
-  printf("Move hybrid chunks of hybrid files betwwen slow and fast volumes.\n");
+  printf("Move hybrid stride of hybrid files between slow and fast volumes.\n");
   printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory FID>|--name <directory name>|--eid <eid>} [--recursive] [--throughput <MiB>]"ROZOFS_COLOR_NONE"\n");
   printf("The direction of the move is defined by one of the following mandatory parameter:\n");
-  printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\t\tMove hybrid chunks from slow volume to fast volume.\n");
-  printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\t\tMove hybrid chunks from fast volume to slow volume.\n");
+  printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\t\tMove hybrid stride from slow volume to fast volume.\n");
+  printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\t\tMove hybrid stride from fast volume to slow volume.\n");
   printf("The files to move are defined as follow:\n");
   printf(ROZOFS_COLOR_BOLD"\t-n, --name <directory name>"ROZOFS_COLOR_NONE"\tRoot directory name on which the move applies.\n");  
   printf(ROZOFS_COLOR_BOLD"\t-F, --fid <directory FID>"ROZOFS_COLOR_NONE"\tRoot directory FID on which the move applies.\n");  
@@ -975,6 +989,8 @@ static void usage(char * fmt, ...) {
   printf(ROZOFS_COLOR_BOLD"\t-t, --throughput"ROZOFS_COLOR_NONE"\t\tThroughput limitation of the mover.\n");
   printf(ROZOFS_COLOR_BOLD"\t-h, --help"ROZOFS_COLOR_NONE"\t\t\tprint this message.\n");
   printf(ROZOFS_COLOR_BOLD"\t-c, --config <filename>"ROZOFS_COLOR_NONE"\t\tExportd configuration file name (when different from %s)\n",EXPORTD_DEFAULT_CONFIG);  
+  printf(ROZOFS_COLOR_BOLD"\t-o, --over <size>"ROZOFS_COLOR_NONE"\t\tMove files with total size over the given size\n");  
+  printf(ROZOFS_COLOR_BOLD"\t-u, --under <size>"ROZOFS_COLOR_NONE"\t\tMove files with total size under the given size\n");   
   printf("\n");
   exit(EXIT_SUCCESS); 
 }
@@ -1069,6 +1085,8 @@ int main(int argc, char *argv[]) {
       {"fid", required_argument, 0, 'F'},
       {"eid", required_argument, 0, 'e'},
       {"recursive", no_argument, 0, 'r'},
+      {"over", required_argument, 0, 'o'},
+      {"under", required_argument, 0, 'u'},
       {0, 0, 0, 0}
   };
 
@@ -1076,7 +1094,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = -1;
-    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:", long_options, &option_index);
+    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:o:u:", long_options, &option_index);
 
     if (c == -1)
         break;
@@ -1133,6 +1151,18 @@ int main(int argc, char *argv[]) {
           usage("Bad throughput format \"%s\"",optarg);
         }  
         break;
+        
+      case 'o':
+        if (sscanf(optarg,"%llu",&size_over) != 1) {
+          usage("Bad --over format \"%s\"",optarg);
+        }  
+        break;
+        
+      case 'u':
+        if (sscanf(optarg,"%llu",&size_under) != 1) {
+          usage("Bad --under format \"%s\"",optarg);
+        }  
+        break;
                 
       default:
         usage("Unexpected argument");
@@ -1145,6 +1175,10 @@ int main(int argc, char *argv[]) {
   }
   if (destination == ROZOFS_VMOVE_UNDEFINED) {  
     usage("Missing either --fast or --slow option");
+  }
+  
+  if (size_under <= size_over) {
+    usage("--under must be greater than --over");
   }
 
   /*
@@ -1251,8 +1285,10 @@ int main(int argc, char *argv[]) {
   printf("     \"throughput MB\"  : %llu,\n", throughput);  
   printf("     \"directories\"    : %llu,\n",(long long unsigned int)scanned_directories);
   printf("     \"hybridFiles\"    : %llu,\n",(long long unsigned int)scanned_hybrid);
-  printf("     \"match\"          : %llu,\n",(long long unsigned int)scanned_match);
+  printf("     \"match path\"     : %llu,\n",(long long unsigned int)scanned_match_path);
   printf("     \"alreadyInPlace\" : %llu,\n",(long long unsigned int)scanned_already);
+  printf("     \"under sized\"    : %llu,\n",(long long unsigned int)scanned_under_sized);
+  printf("     \"over sized\"     : %llu,\n",(long long unsigned int)scanned_over_sized);
   printf("     \"errors\"         : %llu,\n",(long long unsigned int)scanned_error);
   printf("     \"toMove\"         : %llu,\n",(long long unsigned int)scanned_to_move);
   printf("}}\n");
