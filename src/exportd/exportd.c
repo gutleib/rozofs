@@ -2154,9 +2154,7 @@ static void on_hup() {
     }  
 
     info("hup signal received.");
-    
-    econfig_initialize(&exportd_reloaded_config);
-    
+        
     // Check if the new exportd configuration file is valid
 
     if (econfig_initialize(&exportd_reloaded_config) != 0) {
@@ -2189,24 +2187,21 @@ static void on_hup() {
       ** Stop every rebalancer and propagate the signal to every slave export
       */
       export_rebalancer(0);
-      
-      /*
-      ** reload the slave exportd
-      */
-      export_reload_all_export_slave();
     }
     
         
-    /*
-    ** Check whether the reload requires some delay for the STORCLI to learn about it
-    */
-    if (econfig_does_new_config_requires_delay(&exportd_config, &exportd_reloaded_config) != 0) {
-       /*
-       ** Sleep 2m minutes for the export to get the new conf
-       */
-       info("reload will take place in 2 minutes");
-       sleep(130);
-    }  
+    if (expgwc_non_blocking_conf.slave != 0) {    
+      /*
+      ** Check whether the reload requires some delay for the STORCLI to learn about it
+      */
+      if (econfig_does_new_config_requires_delay(&exportd_config, &exportd_reloaded_config) != 0) {
+         /*
+         ** Sleep 2m minutes for the export to get the new conf
+         */
+         info("reload will take place in 2 minutes");
+         sleep(130);
+      }  
+    }
       
     /*
     ** the configuration is valid, so we reload the new configuration
@@ -2253,6 +2248,12 @@ static void on_hup() {
     
     if (expgwc_non_blocking_conf.slave == 0)
     {
+      
+      /*
+      ** reload the slave exportd
+      */
+      export_reload_all_export_slave();
+      
       /*
       ** Start every rebalancer
       */
