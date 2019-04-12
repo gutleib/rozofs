@@ -15,29 +15,32 @@
 #include "rozo_inode_lib.h"
 #include "exp_cache.h"
 
-#define RZ_FILE_128K  (1024*128)
-#define RZ_FILE_1M  (1024*1024)
 
-typedef enum _rs_file_sz_e
-{
-   FILE_128K_E = 0,
-   FILE_1M_E,
-   FILE_10M_E,
-   FILE_100M_E,
-   FILE_1G_E,
-   FILE_10G_E,
-   FILE_100G_E,
-   FILE_1T_E,
-   FILE_SUP_1T_E,
-   FILE_MAX_T_E
-} rs_file_sz_e;
-  
+/*
+** Input values that define the ranges
+*/
+#define ROZOFS_MAX_RANGES   128
+static long long unsigned rozofs_ranges[ROZOFS_MAX_RANGES] = {
+                              128*1024ULL,
+                              512*1024ULL,
+                              1024ULL*1024ULL,
+                              1024ULL*1024ULL*16,
+                              1024ULL*1024ULL*128,
+                              1024ULL*1024ULL*512,
+                              1024ULL*1024ULL*1024ULL,
+                              1024ULL*1024ULL*1024ULL*16,
+                              1024ULL*1024ULL*1024ULL*128,                              
+                              1024ULL*1024ULL*1024ULL*1024ULL};
+static           int      nb_ranges = 10;
+
+uint64_t total_files[ROZOFS_MAX_RANGES];
+uint64_t total_size[ROZOFS_MAX_RANGES];
 
 typedef struct _rz_sids_stats_t
 {
     uint64_t nb_files;  
     uint64_t byte_size;
-    uint64_t tab_size[FILE_MAX_T_E];
+    uint64_t tab_size[ROZOFS_MAX_RANGES];
 } rz_sids_stats_t;
 
 
@@ -50,61 +53,72 @@ typedef struct _rz_cids_stats_t
 lv2_cache_t cache;
 
 rz_cids_stats_t *cids_tab_p[ROZOFS_CLUSTERS_MAX];
-/*
-**_______________________________________________________________________
-*/
-#define SUFFIX(var) sprintf(suffix,"%s",var);
-char  *display_size(long long unsigned int number,char *buffer)
-{
-    double tmp = number;
-    char suffix[64];
-        SUFFIX(" B ");
 
-        if (tmp >= 1024) { tmp = tmp / 1024;  SUFFIX( " KB"); }
-        if (tmp >= 1024) { tmp = tmp / 1024;  SUFFIX( " MB"); }
-        if (tmp >= 1024) { tmp = tmp / 1024;  SUFFIX( " GB"); }
-        if (tmp >= 1024) { tmp = tmp / 1024;  SUFFIX( " TB"); }
-        if (tmp >= 1024) { tmp = tmp / 1024;  SUFFIX( " PB"); }
-    sprintf(buffer,"%10.2f%s", tmp,suffix);
-    return buffer;
-}
 /*
 **_______________________________________________________________________
 */
-char *rozo_display_one_sid(rz_sids_stats_t *sid_p,int i,char *pbuf)
-{
-  char buffer[128];
-  int k;
-  pbuf +=sprintf(pbuf," %3.3d | %12llu  | %s |",i,(long long unsigned int)sid_p->nb_files,
-                                                         display_size((long long unsigned int)sid_p->byte_size,buffer));
-  for (k = 0; k < FILE_MAX_T_E; k ++)
-  {
-    pbuf +=sprintf(pbuf," %10llu |",(long long unsigned int)sid_p->tab_size[k]);
+char * rozo_display_size(uint64_t size, char * str) {
+  if (size >= (1024ULL*1024ULL*1024ULL*1024ULL)) {
+    str += sprintf(str,"%4lluTB",size/(1024ULL*1024ULL*1024ULL*1024ULL));
+    return str;
+  }  
+  if (size >= (1024ULL*1024ULL*1024ULL)) {
+    str += sprintf(str,"%4lluGB",(unsigned long long)size/(1024ULL*1024ULL*1024ULL));
+    return str;
   }
-  sprintf(pbuf,"\n");
-  return pbuf;
- 
-}
+  if (size >= (1024ULL*1024ULL)) {
+    str += sprintf(str,"%4lluMB",(unsigned long long)size/(1024ULL*1024ULL));
+    return str;
+  } 
+  if (size >= (1024ULL)) {
+    str += sprintf(str,"%4lluKB",(unsigned long long)size/1024ULL);
+    return str;
+  }     
+  str += sprintf(str,"%6llu",(unsigned long long)size);
+  return str;
+}    
 /*
 **_______________________________________________________________________
 */
 void rozo_display_one_cluster(rz_cids_stats_t *cid_p,int i)
 {
-   char buffer[1024];
    int sid;
    rz_sids_stats_t *sid_p;
-   printf("Cluster %d:\n",i);
-   printf(" sid |   bins files  |   total size  |    0-128K  |   128K-1M  |    1-10M   |   10-100M  |   100-1000M|     1-10G  |    10-100G |   100-1000G|      > 1TB |\n");
-   printf(" ----+---------------+---------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+\n");
+   int    idx;
+   char   sizeString[16];
+   
+   
+   printf("\nCluster %d:\n",i);
+   printf(" sid |   bins files  |   total size  |");
+   for (idx=0; idx<nb_ranges;idx++) {
+     rozo_display_size(rozofs_ranges[idx],sizeString);
+     printf("  <=%6s  |",sizeString);
+   }  
+   printf("  > %6s  |",sizeString);
+   
+   printf("\n ----+---------------+---------------+");
+   for (idx=0; idx<=nb_ranges;idx++) {
+     printf("------------+");
+   }  
+   
    for (sid=0; sid < SID_MAX; sid++)
    {
       sid_p = &cid_p->sid_tab[sid];
       if (sid_p->nb_files == 0) continue;
-      rozo_display_one_sid(sid_p,sid,buffer);
-      printf("%s",buffer);   
+      rozo_display_size(sid_p->byte_size,sizeString);
+      printf("\n %3d | %12llu  | %12s  |",
+              sid,(long long unsigned int)sid_p->nb_files,sizeString);
+      for (idx=0; idx<=nb_ranges;idx++) {
+        printf(" %10llu |",(long long unsigned int)sid_p->tab_size[idx]);
+      } 
+         
    }
-   printf(" ----+---------------+---------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+\n");
+   printf("\n ----+---------------+---------------+");
+   for (idx=0; idx<=nb_ranges;idx++) {
+     printf("------------+");
+   }  
    printf("\n");
+   
 }
 
 /*
@@ -113,6 +127,11 @@ void rozo_display_one_cluster(rz_cids_stats_t *cid_p,int i)
 void rozo_display_all_cluster()
 {
    int cid;
+   int idx;
+   char   sizeString[16];
+   uint64_t  sum_file;
+   uint64_t  sum_size;
+
    
    for (cid=0; cid < ROZOFS_CLUSTERS_MAX; cid++)
    {
@@ -120,8 +139,113 @@ void rozo_display_all_cluster()
       rozo_display_one_cluster(cids_tab_p[cid],cid);
    }
 
+   printf("\n   User files                        |");   
+   for (idx=0; idx<nb_ranges;idx++) {
+     rozo_display_size(rozofs_ranges[idx],sizeString);
+     printf("  <=%6s  |",sizeString);
+   }  
+   printf("  > %6s  |   Total    |",sizeString);
+ 
+   printf("\n ------------------------------------+");
+   for (idx=0; idx<=nb_ranges+1;idx++) {
+     printf("------------+");
+   }     
+   
+   printf("\n   Number of files                   |");
+   sum_file = 0;
+   for (idx=0; idx<=nb_ranges;idx++) {
+     sum_file +=  total_files[idx];
+     printf(" %10llu |",(long long unsigned int)total_files[idx]);
+   }    
+   printf(" %10llu |",(long long unsigned int)sum_file);
+
+   printf("\n   Number of file percent            |");
+   for (idx=0; idx<=nb_ranges;idx++) {
+     if (sum_file) {
+       printf(" %8.1f %% |",((float)total_files[idx]*100)/sum_file);
+     }
+     else {
+       printf(" %8.1f %% |",0.0);
+     }  
+   }       
+   printf(" %8.1f %% |",100.0);
+
+   printf("\n   Cumulated size                    |");
+   sum_size = 0;
+   for (idx=0; idx<=nb_ranges;idx++) {
+     sum_size +=  total_size[idx];
+     rozo_display_size(total_size[idx],sizeString);
+     printf(" %10s |",sizeString);
+   }    
+   rozo_display_size(sum_size,sizeString);
+   printf(" %10s |",sizeString);
+
+   printf("\n   Cumulated size percent            |");
+   for (idx=0; idx<=nb_ranges;idx++) {
+     if (sum_size) {
+       printf(" %8.1f %% |",((float)total_size[idx]*100)/sum_size);
+     }
+     else {
+       printf(" %8.1f %% |",0.0);
+     }  
+   }       
+   printf(" %8.1f %% |",100.0);
+
+   printf("\n   Average   size                    |");
+   for (idx=0; idx<=nb_ranges;idx++) {
+     if (total_files[idx]) {
+       rozo_display_size(total_size[idx]/total_files[idx],sizeString);
+     }
+     else {
+       rozo_display_size(0,sizeString);
+     }  
+     printf(" %10s |",sizeString);
+   }   
+   if (sum_file) {
+     rozo_display_size(sum_size/sum_file,sizeString);
+   }
+   else {
+     rozo_display_size(0,sizeString);
+   }     
+   printf(" %10s |",sizeString);
+   
+   printf("\n ------------------------------------+");
+   for (idx=0; idx<=nb_ranges+1;idx++) {
+     printf("------------+");
+   }   
    printf("\n");
 }
+/*
+ *_______________________________________________________________________
+ ** Get the counter number where the input size should be added
+ ** @param size    The size to find the counter for
+ */ 
+static int get_counter_rank(uint64_t size) {
+  int idx;
+  
+  for (idx=0; idx<nb_ranges; idx++) {
+    if (size <= rozofs_ranges[idx] ) return idx;
+  }
+  return nb_ranges;
+}  
+/*
+ *_______________________________________________________________________
+ ** Insert a value in the ordered list of bondaries
+ ** @param size    The size to find the counter for
+ */ 
+static void insert_in_range(uint64_t size) {
+  int        idx;
+  uint64_t   save;  
+  for (idx=0; idx<nb_ranges; idx++) {
+    if (size < rozofs_ranges[idx]) {
+      save = rozofs_ranges[idx];
+      rozofs_ranges[idx] = size;
+      size = save;
+    }  
+  }
+  rozofs_ranges[nb_ranges] = size;
+  nb_ranges++;
+}  
 /*
 **_______________________________________________________________________
 */
@@ -220,6 +344,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
    ext_mattr_t *inode_p = inode_attr_p;
    rz_cids_stats_t  *cid_p;
    rz_sids_stats_t  *sid_p;
+   int rank;
    
    /*
    ** Do not process symlink
@@ -271,82 +396,133 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       memset(cids_tab_p[inode_p->s.attrs.cid],0,sizeof(rz_cids_stats_t));
     }
     cid_p = cids_tab_p[inode_p->s.attrs.cid];
-    uint64_t size;
-    uint64_t size2 = inode_p->s.attrs.size;
-    size2 = size2/divider;
+    uint64_t size  = inode_p->s.attrs.size;
+    uint64_t size2 = size/divider;
     if (size2/blocksize == 0) size2 = blocksize;
+
+    rank = get_counter_rank(size);
+    total_files[rank] ++;       
+    total_size[rank] += size;       
+
     for (i = 0; i < rozofs_fwd; i++)
     {
        sid_p = &cid_p->sid_tab[inode_p->s.attrs.sids[i]];
        sid_p->nb_files++;
        sid_p->byte_size+=size2;
-       while(1)
-       {
-	 if (inode_p->s.attrs.size/RZ_FILE_128K == 0)
-	 {
-           sid_p->tab_size[FILE_128K_E]++;
-	   break;
-	 }
-	 size = inode_p->s.attrs.size;
-	 size = size/RZ_FILE_1M;
-	 if (size == 0)
-	 {
-           sid_p->tab_size[FILE_1M_E]++;
-	   break;
-	 }       
-	 size = size/10;
-	 if (size == 0)
-	 {
-           sid_p->tab_size[FILE_10M_E]++;
-	   break;
-	 } 
-	 size = size/10;
-	 if (size == 0)
-	 {
-           sid_p->tab_size[FILE_100M_E]++;
-	   break;
-	 } 
-	 size = size/10;
-	 if (size == 0)
-	 {
-           sid_p->tab_size[FILE_1G_E]++;
-	   break;
-	 } 
-	 size = size/10;
-	 if (size == 0)
-	 {
-           sid_p->tab_size[FILE_10G_E]++;
-	   break;
-	 } 
-	 size = size/10;
-	 if (size == 0)
-	 {
-           sid_p->tab_size[FILE_100G_E]++;
-	   break;
-	 } 
-	 size = size/10;
-	 if (size == 0)
-	 {
-           sid_p->tab_size[FILE_1T_E]++;
-	   break;
-	 } 
-	 sid_p->tab_size[FILE_SUP_1T_E]++;
-	 break;
-       }
-  }
+       sid_p->tab_size[rank]++;
+    }
+
   return ret;
 }
+/*
+ *_______________________________________________________________________
+ ** Parse a string that defines the ranges to sort the files
+ ** @param range    The range string
+ */ 
+static int parse_ranges(char * range) {
+  char     * pChar;
+  char     * unitString;
+  uint64_t   unit64;   
+  long long unsigned int   value;
+    
+      
+  if (range == NULL) return -1;
+  
+  /*
+  ** Skip beginning spaces
+  */
+  while(*range == ' ') range++;
+  
+  nb_ranges = 0;
+  memset(rozofs_ranges,0,sizeof(rozofs_ranges));
+  
+  /*
+  ** Count the number of '-' in the string
+  */
+  pChar = range;
+  while (*pChar!=0) {
+  
+    unitString = pChar;
 
+    /*
+    ** Skip numbers to get point to the units
+    */
+    while ((*unitString >= '0')&&(*unitString <= '9')) unitString++; 
 
+    /*
+    ** Check the unit string
+    */
+    if ((*unitString=='T')||(*unitString=='t')) {
+      unit64 = (1024ULL*1024ULL*1024ULL*1024ULL);
+      unitString++;
+    }  
+    else if ((*unitString=='G')||(*unitString=='g')) {
+      unit64 = (1024ULL*1024ULL*1024ULL);
+      unitString++;
+    }  
+    else if ((*unitString=='M')||(*unitString=='m')) {
+      unit64 = (1024ULL*1024ULL);
+      unitString++;
+    }  
+    else if ((*unitString=='K')||(*unitString=='k')) {
+      unit64 = 1024ULL;
+      unitString++;
+    }  
+    else if ((*unitString=='B')||(*unitString=='b')||(*unitString=='-')||(*unitString==0)) {
+      unit64 = 1;
+    }
+    else {    
+      printf("\nBad units in value #%d \"%s\"\n", nb_ranges+1, range);
+      return -1;
+    }
+    
+    /*
+    ** Bytes may be specified
+    */
+    if ((*unitString=='B')||(*unitString=='b')) {
+      unitString++;
+    }  
+    /*
+    ** Then comes a separator or the end of the string
+    */
+    if ((*unitString!=0)&&(*unitString!='-')) {
+      printf("\nBad units in value #%d \"%s\"\n", nb_ranges+1, range);
+      return -1;
+    }  
+    
+    /*
+    ** Read the numbers
+    */
+    if (sscanf(pChar,"%llu",&value) != 1) {
+      printf("\nBad value in value #%d \"%s\"\n", nb_ranges+1, range);
+      return -1;
+    }  
+    /*
+    ** Apply the units and insert the value in the range array
+    */  
+    value *= unit64;
+    insert_in_range(value);
+        
+    if (*unitString == '-')  unitString++;
+    pChar = unitString;
+  }
+    
+  return nb_ranges;
+   
+}
 /*
  *_______________________________________________________________________
  */
 static void usage() {
-    printf("Usage: ./rzsave [OPTIONS]\n\n");
-    printf("\t-h, --help\tprint this message.\n");
+    printf("Usage: rozo_clusterstats -p <export_root_path> [OPTIONS]\n");
     printf("\t-p,--path <export_root_path>\t\texportd root path \n");
+    printf("OPTIONS:\n");
+    printf("\t-h,--help                   \t\tprint this message.\n");
     printf("\t-v,--verbose                \t\tDisplay some execution statistics\n");
-
+    printf("\t-r,--ranges <bondaries>     \t\tTo define the file size bondaries.\n");
+    printf("\t                            \t\t  examples -r 1Tb-1M-1g-1kB or -r 128K-256K-512K\n");
+    printf("\t                            \t\t  or -r 1M-2M-3M-4M-5M-6M-7M-8M-9M-10M\n");
+    exit(1);
 };
 
 
@@ -362,7 +538,8 @@ int main(int argc, char *argv[]) {
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"path", required_argument, 0, 'p'},
-        {"verbose", required_argument, 0, 'v'},
+        {"verbose", no_argument, 0, 'v'},
+        {"ranges", required_argument, 0, 'r'},
         {0, 0, 0, 0}
     };
     
@@ -370,7 +547,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "hvlrc:p:", long_options, &option_index);
+      c = getopt_long(argc, argv, "hvp:r:", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -384,6 +561,12 @@ int main(int argc, char *argv[]) {
           case 'p':
               root_path = optarg;
               break;
+          case 'r':
+              if (parse_ranges(optarg) <= 0) {
+                printf("Bad range \"%s\"\n",optarg);
+                usage();
+              }  
+              break;                        
           case 'v':
               verbose = 1;
               break;    
@@ -409,6 +592,8 @@ int main(int argc, char *argv[]) {
   {
      cids_tab_p[i] = NULL;  
   }
+   memset(total_files,0,sizeof(total_files));
+   memset(total_size,0,sizeof(total_size));
 
   /*
   ** init of the RozoFS data structure on export
