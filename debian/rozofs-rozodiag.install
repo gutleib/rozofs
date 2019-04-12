@@ -5,3 +5,4 @@
 /usr/bin/rozo_node_status.py
 /usr/bin/rozo_dumpcnf
 /usr/bin/rozo_memdump
+/usr/bin/rozo_roce
