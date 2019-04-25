@@ -80,7 +80,7 @@ void show_quota_cache(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 static char * rw_quota_help(char * pChar) {
   pChar += sprintf(pChar,"usage:\n");
-  pChar += sprintf(pChar,"quota_get eid <eid> {group|user} <value>: get user or group quota within an eid\n");
+  pChar += sprintf(pChar,"quota_get eid <eid> {group|user|project} <value>: get user, group or project quota within an eid\n");
   return pChar; 
 }
 
@@ -155,6 +155,10 @@ void rw_quota_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
            type = SHRQUOTA;
 	   break;
       }      
+      if (strcmp(argv[3],"project")==0) {   
+           type = SHRQUOTA;
+	   break;
+      }         
       rw_quota_help(pChar);	
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;  
@@ -963,7 +967,7 @@ int rozofs_qt_block_update(int eid,int user_id,int grp_id,uint64_t size,int acti
    }
    if (grp_id != -1)
    {
-      rozofs_qt_dqot_block_update(p->quota_inode[GRPQUOTA],eid,GRPQUOTA,user_id,size,action,
+      rozofs_qt_dqot_block_update(p->quota_inode[GRPQUOTA],eid,GRPQUOTA,grp_id,size,action,
                                   &p->quota_super[GRPQUOTA]);
    }
    if (share !=0)
