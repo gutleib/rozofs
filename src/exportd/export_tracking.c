@@ -2067,6 +2067,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     {
         fid_t fid_direct;
 	int ret;
+        rozofs_inode_t * inode_p =  (rozofs_inode_t *) fid_direct;
 	
 	ret = rozofs_uuid_parse(&name[13],fid_direct);
 	if (ret < 0)
@@ -2074,6 +2075,15 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
 	  errno = EINVAL;
 	  goto out;
 	}
+        
+        /*
+        ** Check whether this FID actually belongs to this export
+        */
+        if (inode_p->s.eid != e->eid) {
+	  errno = EMEDIUMTYPE;
+	  goto out;
+	}
+        
 	lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid_direct);
 	if (lv2 == NULL)
 	{
@@ -2429,8 +2439,10 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     lv2_entry_t *lv2 = 0;
     int bbytes = ROZOFS_BSIZE_BYTES(e->bsize);
     lv2_entry_t *plv2 = NULL;    
-    int quota_uid=-1;
-    int quota_gid=-1;
+    int quota_old_uid=-1;
+    int quota_old_gid=-1;
+    int quota_new_uid=-1;
+    int quota_new_gid=-1;
     uint64_t nrb_new = 0;
     uint64_t nrb_old = 0;
     int      sync = 0;
@@ -2520,12 +2532,15 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     }
     if (to_set & EXPORT_SET_ATTR_UID)
     {
-        quota_uid = lv2->attributes.s.attrs.uid;
-        lv2->attributes.s.attrs.uid = attrs->uid;
+        quota_old_uid               = lv2->attributes.s.attrs.uid;
+        quota_new_uid               = attrs->uid;
+        lv2->attributes.s.attrs.uid = quota_new_uid;
     }
-    if (to_set & EXPORT_SET_ATTR_GID){
-        quota_gid = lv2->attributes.s.attrs.gid;
-        lv2->attributes.s.attrs.gid = attrs->gid; 
+    if (to_set & EXPORT_SET_ATTR_GID)
+    {
+        quota_old_gid               = lv2->attributes.s.attrs.gid;
+        quota_new_gid               = attrs->gid;
+        lv2->attributes.s.attrs.gid = quota_new_gid; 
     }   
     if (to_set & EXPORT_SET_ATTR_ATIME)
         lv2->attributes.s.attrs.atime = attrs->atime;
@@ -2536,14 +2551,14 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     /*
     ** check the case of the quota: accounting only
     */
-    if ((quota_gid !=-1) || (quota_uid!=-1))
+    if ((quota_old_gid !=-1) || (quota_old_uid!=-1))
     {
-       rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC,0);
-       rozofs_qt_inode_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,1,ROZOFS_QT_INC,0);
+       rozofs_qt_inode_update(e->eid,quota_old_uid,quota_old_gid,1,ROZOFS_QT_DEC,0);
+       rozofs_qt_inode_update(e->eid,quota_new_uid,quota_new_gid,1,ROZOFS_QT_INC,0);
        if (S_ISREG(lv2->attributes.s.attrs.mode))
        {
-	 rozofs_qt_block_update(e->eid,quota_uid,quota_gid,lv2->attributes.s.attrs.size,ROZOFS_QT_DEC,0);
-	 rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,lv2->attributes.s.attrs.size,ROZOFS_QT_INC,0);       
+	 rozofs_qt_block_update(e->eid,quota_old_uid,quota_old_gid,lv2->attributes.s.attrs.size,ROZOFS_QT_DEC,0);
+	 rozofs_qt_block_update(e->eid,quota_new_uid,quota_new_gid,lv2->attributes.s.attrs.size,ROZOFS_QT_INC,0);       
        }       
     }
     /*
