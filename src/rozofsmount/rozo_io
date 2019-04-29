@@ -158,7 +158,7 @@ def check_netmwork_filters(address):
     for low in NipLowArray:
       high = NipHighArray[idx]
       if ip >= low and ip <= high: 
-        if options.detail: print RED+"%s rejected %s"%(address,NipRule[idx])+NORMAL 
+        if options.verbose: print RED+"%s rejected %s"%(address,NipRule[idx])+NORMAL 
         return False
       idx += 1
           
@@ -167,14 +167,14 @@ def check_netmwork_filters(address):
     for low in ipLowArray:
       high = ipHighArray[idx]
       if ip >= low and ip <= high: 
-        if options.detail: print GREEN+"%s accepted %s"%(address,ipRule[idx])+NORMAL     
+        if options.verbose: print GREEN+"%s accepted %s"%(address,ipRule[idx])+NORMAL     
         return True
       idx += 1
   else:
-    if options.detail: print GREEN+"%s accepted"%(address)+NORMAL 
+    if options.verbose: print GREEN+"%s accepted"%(address)+NORMAL 
     return True
     
-  if options.detail: print RED+"%s rejected"%(address)+NORMAL 
+  if options.verbose: print RED+"%s rejected"%(address)+NORMAL 
   return False
   
 #______________________________
@@ -307,9 +307,12 @@ color_list=[CYAN,YELLOW,GREEN,PURPLE,LIGHTCYAN,RED, DARKGREEN,BLUE,ORANGE,LIGHTB
 time_unit_list=["s","m","h"]
 
 parser = OptionParser()
+parser.add_option("-d","--delay", action="store",type="string", dest="delay", help="Delay in hours for periodic mode (default is infinite)")
+parser.add_option("-n","--natural", action="store_true",default=False, dest="natural", help="Natural time flow (old->new left->right).")
+parser.add_option("-R","--reverse", action="store_true",default=False, dest="reverse", help="Reverse time flow (new->old left->right).")
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
 parser.add_option("-s","--short", action="store_true",dest="short", help="Display only 30 sec")
-parser.add_option("-d","--detail", action="store_true",default=False, dest="detail", help="Detailed per client throughput display.")
+parser.add_option("-v","--verbose", action="store_true",default=False, dest="verbose", help="Verbose mode for debug.")
 parser.add_option("-H","--history", action="store_true",default=False, dest="history", help="Display a 60 minutes and 60 hours history.")
 parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange", help="Allowed IP range (one IP address or a range like 192.168.1.21-192.168.1.28)")
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
@@ -320,13 +323,26 @@ total_watched_clients = int(0)
 total_nb_clients = int(0)
 
 (options, args) = parser.parse_args()
-period  = int(15)
+period = int(60)
+if options.short == True:
+  period = int(30)
+  
 if options.period != None:
   try:
     period = int(options.period)
   except:
     syntax( "Bad period value %s"%(options.period))
 
+
+natural_time_order = True
+if options.natural == True:
+  natural_time_order = True
+  if options.reverse == True:
+    syntax("--natural and --reverse are incompatible")
+if options.reverse:
+  natural_time_order = False
+  
+  
 what = ""    
 if options.what != None:
   for w in options.what:
@@ -382,6 +398,17 @@ if options.Niprange != None:
     NipLowArray.append(ipLow)
     NipHighArray.append(ipHigh)      
     NipRule.append(iprange)
+  
+#
+# Check limit number of run
+# 
+max_run = int(2147483647)   
+if options.delay != None:
+  try :
+    max_run = int(options.delay) * int(3600) / int(period)   
+  except:
+    syntax( "--delay must be an integer \"%s\""%(options.delay))  
+nb_run = int(0)
         
 # 
 # Find the eid this path is connected to and then get the list of RozoFS
@@ -411,6 +438,12 @@ print
 #
 os.chdir("/")  
 history = ""
+if options.history == True:
+  #
+  # 1rst loop will display per minute history
+  #
+  history = " m"
+
 loop = int(0)
 while True : 
 
@@ -431,11 +464,6 @@ while True :
   # Run the rozodiag command against all clients
   #
   string="rozodiag %s -c io col 1 %s"%(clients,what)
-  if options.history == True: 
-    if history == "": 
-      history = " m"
-    else:      
-      history = " h"
   string += history  
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -518,6 +546,10 @@ while True :
     LINE = LINE + " - Last " + REVERSE + "60 minutes" + NORMAL + " history."  
   elif history == " h": 
     LINE = LINE + " - Last " + REVERSE + "60 hours" + NORMAL + " history."
+  if natural_time_order == True:
+    LINE += "    NATURAL TIME FLOW: left->right & UP->down"
+  else:
+    LINE += "    REVERSE TIME FLOW: left<-right & UP<-down"
   print LINE
       
   LINE = ""
@@ -528,23 +560,30 @@ while True :
             
   print UPLINE 
     
-  for t in range(30):
-  
+  for raw in range(30):
+    if natural_time_order == True:
+      IDX = SIZE - 1 - raw
+    else:
+      IDX = raw  
     LINE = ""
     
     for column in range(nbColumn):
       color = get_color_code(column)
       if max_val[column] != int(0):
-        if time_col_val[t][column] == max_val[column]: color = color + REVERSE
-      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[t][column])) + NORMAL
+        if time_col_val[IDX][column] == max_val[column]: color = color + REVERSE
+      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[IDX][column])) + NORMAL
     LINE = LINE + "| " 
     
-    if SIZE == int(60):      
+    if SIZE == int(60):    
+      if natural_time_order == True:
+        IDX -= 30
+      else:
+        IDX += 30  
       for column in range(nbColumn):      
         color = get_color_code(column)
         if max_val[column] != int(0):
-          if time_col_val[t+int(30)][column] == max_val[column]: color = color + REVERSE
-        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[t+int(30)][column])) + NORMAL
+          if time_col_val[IDX][column] == max_val[column]: color = color + REVERSE
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[IDX][column])) + NORMAL
       LINE = LINE + '|' 
        
     print LINE  
@@ -565,9 +604,36 @@ while True :
     print LINE
     # print BOTTOM
   sys.stdout.flush()
-
+    
+  #
+  # Go out after history per hour displey
+  #  
   if history == " h": break;
-  if history != " m": 
-    if period == 0: break
-    time.sleep(period)
+  
+  #
+  # Reloop after history per minute, in order to
+  # now display history per hour
+  #
+  if history == " m": 
+    history = " h"
+    continue  
+    
+  #
+  # Not periodic so go out
+  #
+  if period == 0: break
+    
+  #
+  # Periodic, but with a limited count
+  #  
+  if options.verbose == True: print "Run %s/%s"%(nb_run,max_run)
+  if options.delay != None:
+    if int(nb_run) >= int(max_run): 
+      history = " m"
+      continue
+    nb_run = nb_run + int(1)
+  #
+  # Sleep before reloop
+  #  
+  time.sleep(period)
     
