@@ -183,7 +183,7 @@ def check_netmwork_filters(address):
     for low in NipLowArray:
       high = NipHighArray[idx]
       if ip >= low and ip <= high: 
-        if options.detail: print RED+"%s rejected %s"%(address,NipRule[idx])+NORMAL 
+        if options.verbose: print RED+"%s rejected %s"%(address,NipRule[idx])+NORMAL 
         return False
       idx += 1
           
@@ -192,14 +192,14 @@ def check_netmwork_filters(address):
     for low in ipLowArray:
       high = ipHighArray[idx]
       if ip >= low and ip <= high: 
-        if options.detail: print GREEN+"%s accepted %s"%(address,ipRule[idx])+NORMAL     
+        if options.verbose: print GREEN+"%s accepted %s"%(address,ipRule[idx])+NORMAL     
         return True
       idx += 1
   else:
-    if options.detail: print GREEN+"%s accepted"%(address)+NORMAL 
+    if options.verbose: print GREEN+"%s accepted"%(address)+NORMAL 
     return True
     
-  if options.detail: print RED+"%s rejected"%(address)+NORMAL 
+  if options.verbose: print RED+"%s rejected"%(address)+NORMAL 
   return False
   
 #______________________________
@@ -301,8 +301,11 @@ color_list=["red","green","yellow","blue","purple","cyan","white","orange"]
 time_unit_list=["s","m","h"]
 
 parser = OptionParser()
+parser.add_option("-n","--natural", action="store_true",default=False, dest="natural", help="Natural time flow (old->new left->right).")
+parser.add_option("-R","--reverse", action="store_true",default=False, dest="reverse", help="Reverse time flow (new->old left->right).")
+parser.add_option("-d","--delay", action="store",type="string", dest="delay", help="Delay in hours for periodic mode (default is infinite)")
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
-parser.add_option("-d","--detail", action="store_true",default=False, dest="detail", help="Detailed per client throughput display.")
+parser.add_option("-v","--verbose", action="store_true",default=False, dest="verbose", help="Verbose mode for debug.")
 parser.add_option("-o","--output", action="store",type="string", dest="output", help="Output file")
 parser.add_option("-r","--readcolor", type = "choice", action="store",dest ="rcol", choices = color_list, default = "cyan", help = "Read color within %s."% (color_list))
 parser.add_option("-w","--writecolor", type = "choice", action="store",dest ="wcol", choices = color_list, default = "yellow", help = "Write color within %s."% (color_list))
@@ -311,14 +314,20 @@ parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
 
 (options, args) = parser.parse_args()
-period  = int(30)
+period  = int(60)
 if options.period != None:
   try:
     period = int(options.period)
   except:
     syntax( "Bad period value %s"%(options.period))
 
-
+natural_time_order = True
+if options.natural == True:
+  natural_time_order = True
+  if options.reverse == True:
+    syntax("--natural and --reverse are incompatible")
+if options.reverse:
+  natural_time_order = False
 # 
 # Choosen colors
 # 
@@ -331,6 +340,7 @@ ipRule      = []
 NipLowArray  = []
 NipHighArray = []
 NipRule      = []
+
 
 if options.iprange != None:
   for iprange in options.iprange:
@@ -369,6 +379,17 @@ if options.Niprange != None:
     NipLowArray.append(ipLow)
     NipHighArray.append(ipHigh)      
     NipRule.append(iprange)
+  
+#
+# Check limit number of run
+# 
+max_run = int(2147483647)   
+if options.delay != None:
+  try :
+    max_run = int(options.delay) * int(3600) / int(period)   
+  except:
+    syntax( "--delay must be an integer \"%s\""%(options.delay))  
+nb_run = int(0)
 
 #
 # input RozoFS mount point is either in args or current path
@@ -393,12 +414,19 @@ if options.output != None:
 # Change current directory 
 # Not to block the file system
 #
-os.chdir("/")  
+os.chdir("/") 
+
+ 
 history = ""
+if options.history == True:
+  #
+  # 1rst loop will display per minute history
+  #
+  history = " m"
 
 loop = int(0)
 while True :   
-
+    
   #
   # Every 10 loops, rebuild the list of clients
   #
@@ -444,21 +472,16 @@ while True :
     # Run the rozodiag command against all cliets
     #
     string="rozodiag %s -c throughput col 6 avg "%(clients)
-    if options.history == True: 
-      if history == "": 
-        history = " m"
-      else:      
-        history = " h"
     string += history
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
+    
     #
     # Parse output and cumulate the throughputs
     #
     for line in cmd.stdout:
       line = line.split('\n')[0]
-      if options.detail == True: print "%s"%(line)
+      if options.verbose == True: print "%s"%(line)
       line = line.split('|')
       if len(line) < 23: continue 
       idx = get_line_index(line[1])  
@@ -544,14 +567,20 @@ while True :
       LINE += common_bytes_with_unit(max_read) + NORMAL + '/' +  WRITECOLOR  
       if is_write_max == True: LINE += REVERSE
       LINE += common_bytes_with_unit(max_write) + NORMAL
+    if natural_time_order == True:
+      LINE += "    NATURAL TIME FLOW: left->right & UP->down"
+    else:
+      LINE += "    REVERSE TIME FLOW: left<-right & UP<-down"
+        
     print LINE  
 
     print " __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_  __Read__ __Write_ "
 
-    for idx in range(10):
+    for raw in range(10):
       LINE=""
       for cols in range(6):
-        IDX = idx + cols*10
+        IDX = raw + cols*10
+        if natural_time_order == True: IDX = int(59) - IDX 
         LINE += "|"
         val = READCOLOR + " %6s "%(common_bytes_with_unit(read[IDX]))  
         if read[IDX] == 0:                     LINE += val  
@@ -570,7 +599,11 @@ while True :
 
     LINE=""
 
-    for IDX in range(6):
+    for cols in range(6):
+      if natural_time_order == True: 
+        IDX = int(5) - cols 
+      else:
+        IDX = cols
       LINE += "|"
       val = READCOLOR + " %6s "%(common_bytes_with_unit(read_avg[IDX])) 
       if read_avg[IDX] == 0:                    LINE += val    
@@ -589,8 +622,35 @@ while True :
     max_read_list[index]  = max_read
     max_write_list[index] = max_write  
     
+  #
+  # Go out after history per hour displey
+  #  
   if history == " h": break;
-  if history != " m": 
-    if period == 0: break
-    time.sleep(period)
+  
+  #
+  # Reloop after history per minute, in order to
+  # now display history per hour
+  #
+  if history == " m": 
+    history = " h"
+    continue  
+    
+  #
+  # Not periodic so go out
+  #
+  if period == 0: break
+    
+  #
+  # Periodic, but with a limited count
+  #  
+  if options.verbose == True: print "Run %s/%s"%(nb_run,max_run)
+  if options.delay != None:
+    if int(nb_run) >= int(max_run): 
+      history = " m"
+      continue
+    nb_run = nb_run + int(1)
+  #
+  # Sleep before reloop
+  #  
+  time.sleep(period)
     
