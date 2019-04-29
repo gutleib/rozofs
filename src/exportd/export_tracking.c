@@ -2497,11 +2497,23 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	}       
 	if (plv2!=NULL) share= plv2->attributes.s.attrs.cid;
 	
+        /*
+        ** Update quota
+        */
+        if (attrs->size > lv2->attributes.s.attrs.size) {
+          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,
+                                 attrs->size-lv2->attributes.s.attrs.size,ROZOFS_QT_INC,share); 
+        }
+        else {                         
+          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,
+                                 lv2->attributes.s.attrs.size-attrs->size,ROZOFS_QT_DEC,share); 
+        }                         	
+        
         nrb_new = ((attrs->size + bbytes - 1) / bbytes);
         nrb_old = ((lv2->attributes.s.attrs.size + bbytes - 1) / bbytes);
+        
 	if (nrb_new > nrb_old)
 	{
-          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_new-nrb_old)*bbytes,ROZOFS_QT_INC,share); 
 	  /*
 	  ** adjust the directory statistics
 	  */
@@ -2509,7 +2521,6 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	}
 	else
 	{
-          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_old-nrb_new)*bbytes,ROZOFS_QT_DEC,share); 	
 #ifdef ROZOFS_DIR_STATS
 	  /*
 	  ** adjust the directory statistics
@@ -6567,6 +6578,8 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	
         // The entry (to replace) is an existing directory
         if (S_ISDIR(lv2_to_replace->attributes.s.attrs.mode)) {
+	    fid_t fake_fid;
+	    struct inode_internal_t  fake_pattr;
 
             // The entry to rename must be a directory
             if (!S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
@@ -6579,46 +6592,13 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
                 errno = ENOTEMPTY;
                 goto out;
             }
-            // Update parent directory
-            lv2_new_parent->attributes.s.attrs.nlink--;
-            lv2_new_parent->attributes.s.attrs.children--;
-
-            // We'll write attributes of parents after
-
-            // Update export files
-            if (export_update_files(e, -1) != 0)
-                goto out;
-
-            char lv2_path[PATH_MAX];
-            char lv3_path[PATH_MAX];
-
-            if (export_lv2_resolve_path(e, lv2_to_replace->attributes.s.attrs.fid, lv2_path) != 0)
-                goto out;
-
-            sprintf(lv3_path, "%s/%s", lv2_path, MDIR_ATTRS_FNAME);
-
-            if (unlink(lv3_path) != 0)
-                goto out;
-
-            if (rmdir(lv2_path) != 0)
-                goto out;
-
-            // Remove the dir to replace from the cache (will be closed and freed)
-            if (export_attr_thread_check_context(lv2_to_replace)==0)lv2_cache_del(e->lv2_cache, fid_to_replace);
-	    lv2_to_replace = 0;
-            
-            /**
-            * release the inode allocated for storing the directory attributes
+            /*
+            ** Use export_rmdir to cleanup every thing related to the destination directory  
             */
-            if (exp_attr_delete(e->trk_tb_p,fid_to_replace) < 0)
-            {
-               char fidstr[40];
-               rozofs_fid_append(fidstr,fid_to_replace);
-	       severe("error on inode %s rename : %s",fidstr,strerror(errno));
+            if (export_rmdir(e,npfid, newname, fake_fid,&fake_pattr) != 0) {
+                goto out;
             }
-
-            // Return the fid of deleted directory
-            memcpy(fid, fid_to_replace, sizeof (fid_t));
+            lv2_to_replace = 0;
 
         } else {
 	    /*
@@ -6635,7 +6615,9 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	       ** use the regular export_unlink function since it addresses the case of the trash and mover
 	       ** However, we that call, the parent attributes will be written twice (in async mode)
 	       */
-               export_unlink(e,npfid, newname,fake_fid,&fake_pattr);	    
+               if (export_unlink(e,npfid, newname,fake_fid,&fake_pattr) != 0) {
+                  goto out;
+               }	    
 	    }
             lv2_to_replace = 0;
         }
