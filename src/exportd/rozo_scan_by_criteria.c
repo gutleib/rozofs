@@ -26,6 +26,8 @@ mdirents_name_entry_t  bufferName;
 
 uint64_t nb_scanned_entries = 0;
 uint64_t nb_matched_entries = 0;
+uint64_t sum_file_size = 0;
+uint64_t total_block_number = 0;
 uint64_t max_display = -1;
 
 
@@ -2008,6 +2010,10 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   ** This inode is valid
   */
   nb_matched_entries++;
+  if (S_ISREG(inode_p->s.attrs.mode)) { 
+    sum_file_size      += inode_p->s.attrs.size;
+    total_block_number += ((inode_p->s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1)/ROZOFS_BSIZE_BYTES(e->bsize));
+  }
     
   switch(name_format) {
 
@@ -4290,6 +4296,8 @@ int main(int argc, char *argv[]) {
     printf("\n  ],\n");
     printf("  \"scanned entries\" : %llu,\n", (long long unsigned int)nb_scanned_entries);
     printf("  \"matched entries\" : %llu,\n", (long long unsigned int)nb_matched_entries);
+    printf("  \"sum file size\"   : %llu,\n", (long long unsigned int)sum_file_size);
+    printf("  \"total blocks\"    : %llu,\n", (long long unsigned int)total_block_number);
 
     gettimeofday(&stop,(struct timezone *)0); 
     usecs   = stop.tv_sec  * 1000000 + stop.tv_usec;
