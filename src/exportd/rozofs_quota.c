@@ -33,7 +33,15 @@
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/rpc/export_profiler.h>
  
+//#define DO_QUOTA_TRACE_BLOCK
+#ifdef DO_QUOTA_TRACE_BLOCK
+#define QUOTA_TRACE_BLOCK(fmt, ...) info(fmt, ##__VA_ARGS__)
+#else
+#define QUOTA_TRACE_BLOCK(fmt,...)
+#endif 
+
 /*
+
 ** quota file default names
 */ 
 char *quotatypes[] = INITQFNAMES;
@@ -895,10 +903,17 @@ static inline int rozofs_qt_dqot_block_update(disk_table_header_t *disk_p,
       }
       if (action == ROZOFS_QT_INC)
       {
+        QUOTA_TRACE_BLOCK("QT: eid %d %5s id %5d %10llu + %llu", eid, quotatypes[type], qid, 
+                          (long long unsigned int) dquot->dquot.quota.dqb_curspace, 
+                          (long long unsigned int) count);                     
         dquot->dquot.quota.dqb_curspace +=count; 
       }  
       else
       {
+        QUOTA_TRACE_BLOCK("QT: eid %d %5s id %5d %10llu - %llu", eid, quotatypes[type], qid, 
+                          (long long unsigned int) dquot->dquot.quota.dqb_curspace, 
+                          (long long unsigned int) count); 
+                    
         dquot->dquot.quota.dqb_curspace -=count; 
 	if (dquot->dquot.quota.dqb_curspace<0)
 	{
@@ -941,6 +956,7 @@ int rozofs_qt_block_update(int eid,int user_id,int grp_id,uint64_t size,int acti
    /*
    ** get the pointer to the quota context associated with the eid
    */
+   if (size == 0) return 0;
    
    /*
    ** check if the entry already exists: this is done to address the case of the exportd reload
