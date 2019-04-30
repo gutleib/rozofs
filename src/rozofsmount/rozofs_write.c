@@ -1114,7 +1114,11 @@ error:
 
 }
 
-
+/*
+** That flag comes from fuse_i.h
+   When it is asserted it indicates that the client is using fuse IOCTL 5 to get the data to write
+*/
+#define ROZOFS_BIG_WRITE_FLAG  (1 << 1)
 
 /*
 **__________________________________________________________________
@@ -1193,12 +1197,19 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
     ** check the case of a big write
     */
 //    info("FDL opcode %d buf %p lock_owner %p padding %x off %llu size %u ",fuse_in_hdr_p->opcode,buf,fuse_kern_wr_p->lock_owner,fuse_kern_wr_p->padding,off,size);
-    if (fuse_kern_wr_p->padding)
+    if (fuse_kern_wr_p->padding & ROZOFS_BIG_WRITE_FLAG)
     {
        ioctl_big_wr_t data;
        int status;
        
        kernel_fuse_write_request = (void*)fuse_kern_wr_p->lock_owner; 
+       if (kernel_fuse_write_request == NULL)
+       {
+          /*
+	  ** that situation must not occur
+	  */
+	  severe("RozoFS Fuse IOCTL 5: request is missing !! (buf_sz %u)",size);
+       }
        /*
        ** The size must be greater than the one of the buffer associated with the file context
        */
