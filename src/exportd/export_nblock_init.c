@@ -1278,6 +1278,7 @@ int expgwc_start_nb_blocking_th(void *args) {
     uma_dbg_addTopic("quota_wb_thread",show_wbcache_quota_thread);
     uma_dbg_addTopic("quota_cache",show_quota_cache);
     uma_dbg_addTopic("quota_get",rw_quota_entry);
+    uma_dbg_addTopicAndMan("quota_fix",rozofs_quota_diag_fix,NULL,UMA_DBG_OPTION_HIDE);
     uma_dbg_addTopic("fstat_thread",show_export_fstat_thread);
  
     uma_dbg_addTopic("vfstat", show_vfstat);
