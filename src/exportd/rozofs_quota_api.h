@@ -133,6 +133,19 @@ void show_wbcache_quota_thread(char * argv[], uint32_t tcpRef, void *bufRef);
   @retval none
 */
 void rw_quota_entry(char * argv[], uint32_t tcpRef, void *bufRef);
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   Fix quota through rozodiag
+
+  @param argv : standard argv[] params of debug callback
+  @param tcpRef : reference of the TCP debug connection
+  @param bufRef : reference of an output buffer 
+  
+  @retval none
+*/
+void rozofs_quota_diag_fix(char * argv[], uint32_t tcpRef, void *bufRef);
 
 char *quota_wbcache_display_stats(char *pChar);
 #endif
