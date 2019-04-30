@@ -424,4 +424,26 @@ int rozofs_qt_set_quotainfo(int eid,int type,int identifier,int sqa_cmd, sq_dqbl
     @retval-1 on error: see errno for details
  */
 int rozofs_qt_set_quotastate(int eid,int type,int cmd);
+/*
+**__________________________________________________________________
+*/
+/**
+*   Fix an entry in the quota cache
+
+    @param  cache:  pointer to the cache context
+    @param  disk_p: quota disk table associated with the type
+    @param  quota_info_p pointer to the quota info
+    @param  entry : pointer to the cache entry that contains the quota
+    @param  inode : new number of inode
+    @param  size  : new size
+    
+    @retval 0 on success -1 in case of error
+*/
+int rozofs_qt_cache_fix(rozofs_qt_cache_t       * cache,
+                        disk_table_header_t     * disk_p,
+                        rozofs_quota_info_t     * quota_info_p,
+                        rozofs_qt_cache_entry_t * entry,
+                        uint64_t                  inode,
+			uint64_t                  size);
+
 #endif

@@ -1,0 +1,159 @@
+#!/bin/bash
+tmp="/tmp/rozo_quota_fix.$$"
+
+#
+# isplay syntax
+#
+syntax() {
+  echo "syntax is:"
+  echo "  rozo_quota_fix <eid> user <userId>"
+  echo "  rozo_quota_fix <eid> group <groupId>"
+  echo "  rozo_quota_fix <eid> project <projectId>"
+  echo "  rozo_quota_fix <eid> all"
+  rm -f ${tmp}
+  exit 1
+}   
+#
+# Fix one user quota
+#
+export_quota_cache_fix_one_user() {
+  printf "eid %2s %7s #%5s inodes $1 size $2\n" ${eid} "user"  ${userid}
+#  rozodiag -T export:${expIdx} -c quota_get eid ${eid} user ${userid} 
+  rozodiag -T export:${expIdx} -c quota_fix eid ${eid} user ${userid} $1 $2 > /dev/null
+#  rozodiag -T export:${expIdx} -c quota_get eid ${eid} user ${userid}  
+}
+do_quota_fix_one_user() {
+  case "$1" in
+    "") syntax;;
+    *)  userid=$1;;
+  esac    
+  #
+  # Scan directories
+  #
+  rozo_scan_by_criteria -e ${eid} -d -o json,none --uid --eq ${userid} >  ${tmp}
+  dirs=`awk '{if (($1=="\"matched") && ($2=="entries\"")) print $4;}' ${tmp} | awk -F',' '{print $1}'`
+  
+  #
+  # Scan files
+  #
+  rozo_scan_by_criteria -e ${eid} -o json,none --uid --eq ${userid} >  ${tmp}
+  files=`awk '{if (($1=="\"matched") && ($2=="entries\"")) print $4;}' ${tmp} | awk -F',' '{print $1}'`
+  size=`awk '{if (($1=="\"sum") && ($2=="file") && ($3=="size\"")) print $5;}' ${tmp} | awk -F',' '{print $1}'`
+  inodes=$((files+dirs))
+  
+  export_quota_cache_fix_one_user ${inodes} ${size}
+}
+#
+# Fix one group quota 
+#
+export_quota_cache_fix_one_group() {
+  printf "eid %2s %7s #%5s inodes $1 size $2\n" ${eid} "group"  ${groupid}
+#  rozodiag -T export:${expIdx} -c quota_get eid ${eid} group ${groupid} 
+  rozodiag -T export:${expIdx} -c quota_fix eid ${eid} group ${groupid} $1 $2 > /dev/null
+#  rozodiag -T export:${expIdx} -c quota_get eid ${eid} group ${groupid}   
+}
+do_quota_fix_one_group() {
+  case "$1" in
+    "") syntax;;
+    *)  groupid=$1;;
+  esac    
+  #
+  # Scan directories
+  #
+  rozo_scan_by_criteria -e ${eid} -d -o json,none --gid --eq ${groupid} >  ${tmp}
+  dirs=`awk '{if (($1=="\"matched") && ($2=="entries\"")) print $4;}' ${tmp} | awk -F',' '{print $1}'`
+  
+  #
+  # Scan files
+  #
+  rozo_scan_by_criteria -e ${eid} -o json,none --gid --eq ${groupid} >  ${tmp}
+  files=`awk '{if (($1=="\"matched") && ($2=="entries\"")) print $4;}' ${tmp} | awk -F',' '{print $1}'`
+  size=`awk '{if (($1=="\"sum") && ($2=="file") && ($3=="size\"")) print $5;}' ${tmp} | awk -F',' '{print $1}'`
+  inodes=$((files+dirs))
+  
+  export_quota_cache_fix_one_group ${inodes} ${size}
+}
+#
+# Fix one project quota
+#
+export_quota_cache_fix_one_project() {
+  printf "eid %2s %7s #%5s inodes $1 size $2\n" ${eid} "project"  ${projectid}
+#  rozodiag -T export:${expIdx} -c quota_get eid ${eid} project ${projectid}  
+  rozodiag -T export:${expIdx} -c quota_fix eid ${eid} project ${projectid} $1 $2  > /dev/null
+#  rozodiag -T export:${expIdx} -c quota_get eid ${eid} project ${projectid}
+}
+do_quota_fix_one_project() {
+  case "$1" in
+    "") syntax;;
+    *)  projectid=$1;;
+  esac    
+  #
+  # Scan directories
+  #
+  rozo_scan_by_criteria -e ${eid} -d -o json,none --project --eq ${projectid} >  ${tmp}
+  dirs=`awk '{if (($1=="\"matched") && ($2=="entries\"")) print $4;}' ${tmp} | awk -F',' '{print $1}'`
+  
+  #
+  # Scan files
+  #
+  rozo_scan_by_criteria -e ${eid} -o json,none --project --eq ${projectid} >  ${tmp}
+  files=`awk '{if (($1=="\"matched") && ($2=="entries\"")) print $4;}' ${tmp} | awk -F',' '{print $1}'`
+  size=`awk '{if (($1=="\"sum") && ($2=="file") && ($3=="size\"")) print $5;}' ${tmp} | awk -F',' '{print $1}'`
+  inodes=$((files+dirs))
+  case "${inodes}" in
+    "0");;
+    *) inodes=$((inodes-1));;
+  esac  
+  
+  export_quota_cache_fix_one_project ${inodes} ${size}
+}
+#
+# Fix all quotas
+#
+do_quota_fix_all() {
+  type=""
+  rozo_repquota -nugs ${eid} | while read -r -a words;
+  do
+    case "${words[0]}" in
+      user)          func=do_quota_fix_one_user;    continue;;
+      group)         func=do_quota_fix_one_group;   continue;;
+      share|project) func=do_quota_fix_one_project; continue;;
+      Block) continue;;
+      *) ;;
+    esac
+    
+    id=${words[0]}
+    case "${id:0:1}" in
+      "#") ${func} ${id:1:128};;
+    esac  
+  done
+}
+#
+# M A I N
+#
+
+#
+# Verbose
+#
+case "$1" in
+  "-v") set -x; shift 1;;
+esac  
+
+#
+# EID 
+#
+case "$1" in 
+  "") syntax;;
+esac
+eid=$1
+expIdx=$(((eid-1)%8+1))
+shift 1
+  
+case "$1" in
+  "user")    do_quota_fix_one_user $2;;
+  "group")   do_quota_fix_one_group $2;;
+  "project") do_quota_fix_one_project $2;;
+  "all")     do_quota_fix_all;;
+  *) syntax;;
+esac
+rm -f ${tmp}

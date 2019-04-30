@@ -226,7 +226,156 @@ void rw_quota_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
     }
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   Fix quota for user, group or project
 
+  @param argv : standard argv[] params of debug callback
+  @param tcpRef : reference of the TCP debug connection
+  @param bufRef : reference of an output buffer 
+  
+  @retval none
+*/
+void rozofs_quota_diag_fix(char * argv[], uint32_t tcpRef, void *bufRef) {
+  
+    char *pChar = uma_dbg_get_buffer();
+    int eid;
+    int type;
+    int qid;
+    rozofs_qt_cache_entry_t *dquot=NULL;
+    rozofs_quota_key_t key;
+    rozofs_qt_export_t *p;
+    int ret;
+    uint64_t inode_number;
+    uint64_t total_size;
+
+    *pChar = 0;
+
+    if (argv[1] == NULL) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;  	  
+    }
+
+    if (strcmp(argv[1],"eid") != 0) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;       
+    }  
+    
+    if (argv[2] == NULL) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;  	  
+    }
+    
+    ret = sscanf(argv[2], "%d", &eid);
+    if (ret != 1)  {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;   
+    }
+
+    if (argv[3] == NULL) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;  	  
+    }
+    
+    if (strcmp(argv[3],"user")==0) {   
+      type = USRQUOTA;
+    }
+    else if (strcmp(argv[3],"group")==0) {   
+      type = GRPQUOTA;
+    }      
+    else if (strcmp(argv[3],"share")==0) {   
+      type = SHRQUOTA;
+    }      
+    else if (strcmp(argv[3],"project")==0) {   
+      type = SHRQUOTA;
+    }
+    else {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;  	  
+    }
+
+    /*
+    ** check the id
+    */
+    if (argv[4] == NULL) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;  	  
+    }
+    
+    ret = sscanf(argv[4], "%d", &qid);
+    if (ret != 1) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;   
+    }
+
+    /*
+    ** check the inode number
+    */
+    if (argv[5] == NULL) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;  	  
+    }
+    
+    ret = sscanf(argv[5], "%llu", (long long unsigned int*) &inode_number);
+    if (ret != 1) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;   
+    }
+
+    /*
+    ** check the inode number
+    */
+    if (argv[6] == NULL) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;  	  
+    }
+    
+    ret = sscanf(argv[6], "%llu", (long long unsigned int*) &total_size);
+    if (ret != 1) {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;   
+    }
+            
+    /*
+    ** check the presence of the exportd
+    */
+    if (rozofs_qt_init_done == 0)
+    {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;
+    }
+    
+    if (eid > EXPGW_EID_MAX_IDX)
+    {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;
+    }
+    if (export_quota_table[eid]== NULL)
+    {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;
+    }
+    
+    /*
+    ** attempt to read the quota
+    */
+    p = export_quota_table[eid];
+    key.u64 = 0;
+    key.s.qid = qid;
+    key.s.eid = eid;
+    key.s.type = type;    
+    dquot = rozofs_qt_cache_get (&rozofs_qt_cache,p->quota_inode[type],&key);
+    if (dquot == NULL)
+    {
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+      return;
+    }
+        
+    rozofs_qt_cache_fix(&rozofs_qt_cache, p->quota_inode[type], &p->quota_super[type], dquot, inode_number, total_size);
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
 /**
  * hashing function used to find lv2 entry in the cache
  */
@@ -345,6 +494,61 @@ void rozofs_qt_cache_release(rozofs_qt_cache_t *cache) {
     }
 }
 
+/*
+**__________________________________________________________________
+*/
+/**
+*   Fix an entry in the quota cache
+
+    @param  cache:  pointer to the cache context
+    @param  disk_p: quota disk table associated with the type
+    @param  quota_info_p pointer to the quota info
+    @param  entry : pointer to the cache entry that contains the quota
+    @param  inode : new number of inode
+    @param  size  : new size
+    
+    @retval 0 on success -1 in case of error
+*/
+int rozofs_qt_cache_fix(rozofs_qt_cache_t       * cache,
+                        disk_table_header_t     * disk_p,
+                        rozofs_quota_info_t     * quota_info_p,
+                        rozofs_qt_cache_entry_t * entry,
+                        uint64_t                  inode,
+			uint64_t                  size) {
+   
+  if ((entry->dquot.quota.dqb_curinodes == inode) && (entry->dquot.quota.dqb_curspace == size)) {  
+    info("quota fix eid %2llu %7s #%5llu ALREADY UPTODATE inodes %llu size %llu", 
+         (long long unsigned int) entry->dquot.key.s.eid, 
+         quotatypes[entry->dquot.key.s.type],  
+         (long long unsigned int) entry->dquot.key.s.qid,
+         (long long unsigned int) entry->dquot.quota.dqb_curinodes,
+         (long long unsigned int) entry->dquot.quota.dqb_curspace);
+    return 0;       
+  } 
+
+  info("quota fix eid %2llu %7s #%5llu        TO UPDATE inodes %llu->%llu size %llu->%llu", 
+         (long long unsigned int) entry->dquot.key.s.eid, 
+         quotatypes[entry->dquot.key.s.type],  
+         (long long unsigned int) entry->dquot.key.s.qid,
+         (long long unsigned int) entry->dquot.quota.dqb_curinodes,
+         (long long unsigned int) inode,
+         (long long unsigned int) entry->dquot.quota.dqb_curspace,
+         (long long unsigned int) size);          
+
+  entry->dquot.quota.dqb_curinodes = inode; 
+  entry->dquot.quota.dqb_curspace  = size;
+
+  /*
+  ** update the grace period if needed
+  */
+  rozofs_quota_update_grace_times_inodes(&entry->dquot.quota,quota_info_p);  
+      
+  /*
+  ** let's write qota on disk
+  */ 
+  rozofs_qt_cache_put(cache,disk_p,entry);  
+  return 0;
+}
 /*
 **__________________________________________________________________
 */
