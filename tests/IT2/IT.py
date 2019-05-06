@@ -295,7 +295,7 @@ def export_all_sid_available (total):
     if "UP" in line:
       match=match+1
       
-  log("export:1 %s sid up"%(match))    
+  log("export:1 %s/%s sid up"%(match,total))    
   if match != total: return False
   return True
 #___________________________________________________
@@ -346,7 +346,7 @@ def storcli_all_sid_available (total):
       words=line.split('|')
       if len(words) >= 11:
         if 'YES' in words[6] and 'UP' in words[4]: match=match+1         
-    log("mount:%s:%s : %s sid up"%(instance, storcli, match))       
+    log("mount:%s:%s : %s/%s sid up"%(instance, storcli, match, total))       
     if match != total: return False
   time.sleep(1)  
   log("mount:%s all sid up"%(instance))        
