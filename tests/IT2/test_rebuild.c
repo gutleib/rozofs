@@ -269,8 +269,13 @@ int check() {
     for (loop=0; loop < LOOP_NB; loop++) {
     
       update_block(loop);
-      
-      if (memcmp(&readblock[loop*BLKSIZE],refblock,BLKSIZE)!=0) {
+      if ((loop % 10)==0) {
+        if (memcmp(&readblock[loop*BLKSIZE],emptyBlock,BLKSIZE)!=0) {
+	  printf("CHECK %s block %d is not empty.\n", fname, loop);
+	  exit(-1);  
+        }       
+      }
+      else if (memcmp(&readblock[loop*BLKSIZE],refblock,BLKSIZE)!=0) {
 	printf("CHECK memcmp(%s) bad content block %d\n", fname, loop);
 	exit(-1);  
       } 
@@ -302,7 +307,7 @@ int check() {
       }
       else {
         if (memcmp(&readblock[loop*BLKSIZE],emptyBlock,BLKSIZE)!=0) {
-	  printf("CHECK memcmp(%s) bad content block %d\n", fname, loop);
+	  printf("CHECK %s block %d is not empty.\n", fname, loop);
 	  exit(-1);  
         }       
       }
@@ -327,7 +332,12 @@ int create() {
 	printf("CREATE open(%s) loop %d %s\n", fname,loop, strerror(errno));
 	exit(-1);
       }
-      ret = pwrite(fd, refblock, BLKSIZE, loop*BLKSIZE);
+      if ((loop % 10)==0) {
+        ret = pwrite(fd, emptyBlock, BLKSIZE, loop*BLKSIZE);      
+      }
+      else {
+        ret = pwrite(fd, refblock, BLKSIZE, loop*BLKSIZE);
+      }
       if (ret != BLKSIZE) {
 	printf("CREATE write(%s) size %d offset %d %s\n", fname, BLKSIZE, loop, strerror(errno));
 	exit(-1);

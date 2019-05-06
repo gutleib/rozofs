@@ -418,6 +418,7 @@ static inline uint64_t stspare_restore_compute_last_block(uint64_t speedMB, uint
   /*
   ** Speed limit
   */
+  if (speedMB == 0) speedMB = 400;
   if (speedMB > 400) {
     speedMB = 400;
   }
@@ -448,8 +449,74 @@ static inline uint64_t stspare_restore_compute_last_block(uint64_t speedMB, uint
 /*
 **____________________________________________________
 **
-** One spare file with only holes restoring
+** CRebuild the spare file hoping it will desappear
 **
+** @param fidCtx       The FID cache context of the spare file
+**
+**
+** @retval  the last block to rebuild from start in 
+**          a run
+**____________________________________________________
+*/
+static inline void stspare_rebuild_spare_file(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char * fidString) {
+  char                           cmd[512];
+  int                            ret;
+  int                            result;
+  int                            idx;
+  uint8_t                        fwd;
+
+  /*
+  ** Get the forward number of projection for this layout
+  */
+  fwd = rozofs_get_rozofs_forward(fidCtx->data.layout);
+
+  /*
+  ** Check that every sid of the distribution is up before rebuilding the spare file
+  */
+  for (idx=1; idx<=fwd; idx++) {
+
+    if ((sidBitMap & (1L<<fidCtx->data.dist[idx-1])) == 0) {
+      return ;
+    }
+  }
+  
+  stspare_current_working_file.start = 0;
+  stspare_current_working_file.stop  = -1;
+  stspare_current_working_file.prj   = -1;
+  stspare_current_working_file.sid   = fidCtx->data.key.sid;
+  stspare_current_working_file.time  = time(NULL); 
+  stspare_stat.rebuild_spare_attempt++;
+      
+  /*
+  ** Since every thing has been rebuilt, rebuild the spare file it self hopping it will disappear
+  */	
+  sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+           spare_restore_read_throughput,
+	   fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
+	   fidCtx->data.key.chunk, 0, -1);
+  ret    = system(cmd);
+  result = WEXITSTATUS(ret);
+
+  /*
+  ** Update statistics
+  */    
+  usleep(100000);
+  if (result==0) {
+    stspare_stat.rebuild_spare_success++;
+  }     
+  else {
+    stspare_stat.rebuild_spare_failure++;      
+  }  
+  /*
+  ** Release context
+  */      
+  stspare_fid_cache_release(fidCtx);      
+}  
+/*
+**____________________________________________________
+**
+** One spare file with only holes restoring
+**, 
 ** @param fidCtx       The FID cache context of the spare file
 **
 ** @retval 0 when FID context is completly processed
@@ -469,12 +536,11 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
   */
   fwd = rozofs_get_rozofs_forward(fidCtx->data.layout);
 
-  if (fidCtx->data.prj_bitmap == 0) {
+  if ((fidCtx->data.prj_bitmap & 0x1) == 0) {
     /*
-    ** Abnormal case. Forget about this context,
-    ** we will see later.
+    ** No hole to restore
     */
-    goto release;   
+    return 0;   
   }
   /*
   ** One must rebuild every projections since we do not know which sid is
@@ -501,6 +567,7 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
   ** One must rebuild every projections
   */
   for (idx=1; idx<=fwd; idx++) {
+  
     stspare_current_working_file.prj  = idx - 1;
     stspare_current_working_file.sid  = fidCtx->data.dist[idx-1];
     stspare_current_working_file.time = time(NULL); 
@@ -522,7 +589,46 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
     ** Update statistics
     */
     if (result==0) {
+    
       stspare_stat.rebuild_nominal_success++;
+      /*
+      ** If some specific projection where to be rebuilt in the hole interval
+      ** no need any more to rebuild them
+      **           |==================|
+      **   +--+    |                  |
+      **   +-------|......+           |          1)
+      **   +-------|------------------|----+
+      **           |   +..........+   |          2)
+      **           |   +..............|--------+ 3)
+      **           |                  |   +---+      
+      */
+      if ((fidCtx->data.prj_bitmap & (1 << idx)) != 0) {
+      
+        if (fidCtx->data.prj[idx].start<fidCtx->data.prj[0].start) {
+          if (fidCtx->data.prj[idx].stop<=fidCtx->data.prj[0].start) {
+            continue;
+          }  
+          if (fidCtx->data.prj[idx].stop<=fidCtx->data.prj[0].stop) {
+            /*
+            ** 1) 
+            */
+            fidCtx->data.prj[idx].stop = fidCtx->data.prj[0].start;
+          }          
+        }
+        else if (fidCtx->data.prj[idx].stop<=fidCtx->data.prj[0].stop) {
+          /* 
+          ** 2)
+          */
+          fidCtx->data.prj_bitmap &= ~(1 << idx);
+	  fidCtx->data.nb_prj --;  
+        }
+        else if (fidCtx->data.prj[idx].start<=fidCtx->data.prj[0].stop) {
+          /* 
+          ** 3) 
+          */
+          fidCtx->data.prj[idx].start = fidCtx->data.prj[0].stop;
+        }
+      }       
     } 
     else {
       stspare_stat.rebuild_nominal_failure++;      
@@ -530,42 +636,7 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
     usleep(100000);    
   } 
 
-  stspare_current_working_file.prj  = -1;
-  stspare_current_working_file.sid  = fidCtx->data.key.sid;
-  stspare_current_working_file.time = time(NULL); 
-  stspare_stat.rebuild_spare_attempt++;
-  
-  /*
-  ** Then let's rebuild the spare file it self hopping it will disappear
-  */	
-  sprintf(cmd,"storage_rebuild --nolog  -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-          spare_restore_read_throughput,  
-	  fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
-	  fidCtx->data.key.chunk, fidCtx->data.prj[0].start, fidCtx->data.prj[0].stop);
-  ret    = system(cmd);
-  result = WEXITSTATUS(ret);
-
-  /*
-  ** Update statistics
-  */    
-  if (result==0) {
-    stspare_stat.rebuild_spare_success++;
-  }     
-  else {
-    stspare_stat.rebuild_spare_failure++;      
-  }   
-  usleep(100000); 
-
-  /*
-  ** Everything that could be done has been done
-  */
-  
-release:
-  /*
-  ** Release context
-  */      
-  stspare_fid_cache_release(fidCtx);   
-  return 0;     
+  return 0;
 }
 /*
 **____________________________________________________
@@ -711,45 +782,6 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
     return 1;
   }
   
-  /*
-  ** Check that every sid of the distribution is up before rebuilding the spare file
-  */
-  for (idx=1; idx<=fwd; idx++) {
-
-    if ((sidBitMap & (1L<<fidCtx->data.dist[idx-1])) == 0) {
-      return 1;
-    }
-  }
-  stspare_current_working_file.start = 0;
-  stspare_current_working_file.stop  = -1;
-  stspare_current_working_file.prj   = -1;
-  stspare_current_working_file.sid   = fidCtx->data.key.sid;
-  stspare_current_working_file.time  = time(NULL); 
-  stspare_stat.rebuild_spare_attempt++;
-      
-  /*
-  ** Since every thing has been rebuilt, rebuild the spare file it self hopping it will disappear
-  */	
-  sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
-           spare_restore_read_throughput,
-	   fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
-	   fidCtx->data.key.chunk, 0, -1);
-  ret    = system(cmd);
-  result = WEXITSTATUS(ret);
-
-
-  /*
-  ** Update statistics
-  */      
-  if (result==0) {
-    stspare_stat.rebuild_spare_success++;
-  }     
-  usleep(100000);
-
-  /*
-  ** Release context
-  */      
-  stspare_fid_cache_release(fidCtx);   
   return 0;     
 }
 /*
@@ -796,23 +828,23 @@ int stspare_restore_one_file(stspare_fid_cache_t * fidCtx) {
     }
   }
 #endif  
-
+ 
   /*
-  ** No projection is present in the spare file : it contains only holes
+  ** Restore holes if any
   */
-  if (fidCtx->data.nb_prj == 0) {
-    ret =  stspare_restore_hole(fidCtx, sidBitMap, fidString);
-    stspare_current_working_file.cid = 0;
-    return ret;
-  }
-    
-
+  ret =  stspare_restore_hole(fidCtx, sidBitMap, fidString);
+  stspare_current_working_file.cid = 0;  
+  if (ret != 0) return ret;
+     
   /*
   ** Some projections are present in the spare file. Try to rebuild them
   ** on the sid that should normaly have them.
   */
   ret = stspare_restore_projections(fidCtx, sidBitMap, fidString);
   stspare_current_working_file.cid = 0;
+  if (ret != 0) return ret;
+
+  stspare_rebuild_spare_file(fidCtx, sidBitMap, fidString);
   return ret;
 }
 /*
