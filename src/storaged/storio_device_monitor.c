@@ -578,6 +578,7 @@ static inline int storio_device_monitor_get_free_space(storage_t   * st,
   char          path[FILENAME_MAX];
   char        * pChar = path;
   uint64_t      threashold;
+  int           ret;
 
   *rebuild_required = 0;
     
@@ -589,7 +590,8 @@ static inline int storio_device_monitor_get_free_space(storage_t   * st,
   /*
   ** Check that the device is writable
   */
-  if (access(path,W_OK) != 0) {
+  ret = access(path,W_OK);
+  if (ret != 0) {
     if (errno == EACCES) {
       *diagnostic = DEV_DIAG_READONLY_FS;
     }
@@ -597,15 +599,18 @@ static inline int storio_device_monitor_get_free_space(storage_t   * st,
       *diagnostic = DEV_DIAG_FAILED_FS;
     }    
     *rebuild_required = 1;
+    storage_umount(path);
     return -1;
   }
 
   /*
   ** Get statistics
   */
-  if (statfs(path, &sfs) != 0) {
+  ret = statfs(path, &sfs);
+  if (ret != 0) {
     *diagnostic = DEV_DIAG_FAILED_FS;    
     *rebuild_required = 1;
+    storage_umount(path);
     return -1;
   }  
 
