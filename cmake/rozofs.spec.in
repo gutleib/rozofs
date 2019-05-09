@@ -356,7 +356,7 @@ fi
 * Thu May 09 2019 RozoFS <devel@rozofs.org> 4.0.alpha30
 - Fix RPM packaging changelog
 
-* Thu Feb 18 2019 RozoFS <devel@rozofs.org> 4.0
+* Mon Feb 18 2019 RozoFS <devel@rozofs.org> 4.0
 - Remove geo replication
 
 * Mon Oct 22 2018 RozoFS <devel@rozofs.org> 3.0.alpha60-1
