@@ -173,6 +173,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_trashd
 %{_bindir}/rozo_du
 %{_bindir}/rozo_export_send_stats
+%{_bindir}/rozo_vmove
 %config(noreplace) %{_sysconfdir}/rozofs/export.conf
 %{_sysconfdir}/rozofs/export.conf.sample
 %if 0%{?rhel} >= 7

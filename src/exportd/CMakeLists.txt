@@ -303,7 +303,7 @@ target_link_libraries(rozo_vmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_L
 #________________________________________________________
 add_executable(rozo_rcmd_server
     rozofs_rcmd_server.c 
-    ../../rozofs/core/rozofs_rcmd.h     
+    ${CMAKE_SOURCE_DIR}/rozofs/core/rozofs_rcmd.h
 )
 target_link_libraries(rozo_rcmd_server rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
 
