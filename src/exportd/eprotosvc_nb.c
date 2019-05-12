@@ -21,8 +21,58 @@
 #include <rozofs/rpc/rozofs_rpc_util.h>
 #include "eproto_nb.h"
 #include "eprotosvc_nb.h"
+/*
+**__________________________________________________________________________
+*/
+/**
+   Write block decoder with compatibility with releases 2.xx ans 3.xx 
+   where the write_error filed do not exist
+   
+   @param xdrs        The decoder context
+   @param objp        The decoded message
+ 
+   @retval : TRUE when decoded. FALSE on error
+*/
+bool_t
+rozofs_epgw_write_block_arg_t (XDR *xdrs, epgw_write_block_arg_t *objp)
+{
+	//register int32_t *buf;
 
-
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->arg_gw.eid))
+		 return FALSE;
+	 if (!xdr_ep_uuid_t (xdrs, objp->arg_gw.fid))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->arg_gw.bid))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->arg_gw.nrb))
+		 return FALSE;
+	 if (!xdr_uint16_t (xdrs, &objp->arg_gw.dist))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->arg_gw.offset))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->arg_gw.length))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->arg_gw.geo_wr_start))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->arg_gw.geo_wr_end))
+		 return FALSE;
+                                  
+	 if (!xdr_uint32_t (xdrs, &objp->arg_gw.write_error)) {
+            /*
+            ** In releases 2.xx and 3.xx this filed does not exist
+            ** But a len of 1 tells a write error occurd
+            */
+            if (objp->arg_gw.length & 1) {
+              objp->arg_gw.write_error = 1;
+            }
+            else {
+              objp->arg_gw.write_error = 0;
+            }                
+         }
+	return TRUE;
+}
 
 /*
 **__________________________________________________________________________
@@ -224,7 +274,7 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     break;
 
      case EP_WRITE_BLOCK:
-	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_write_block_arg_t;
+	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) rozofs_epgw_write_block_arg_t;
 	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_mattr_ret_t;
 	     local =  ep_write_block_1_svc_nb;
 	     size = sizeof(epgw_write_block_arg_t);
