@@ -2215,7 +2215,11 @@ int fuseloop(struct fuse_args *args, int fg) {
        uint32_t buf_sz;
        if (SHAREMEM_IDX_READ == i) buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ*2;
        else buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ*2;
-       ret = rozofs_create_shared_memory(key_instance,i,rozofs_max_storcli_tx,(buf_sz)+4096);
+       /*
+       ** Add 2 times 4KB to the shared buffer. The first is for the protocol part and the
+       ** second for extra data when the required offset is not aligned on a page cache (case of the direct_io)
+       */
+       ret = rozofs_create_shared_memory(key_instance,i,rozofs_max_storcli_tx,(buf_sz)+4096*2);
        if (ret < 0)
        {
          fatal("Cannot create the shared memory for storcli %d\n",i);
