@@ -12,55 +12,15 @@ import syslog
 import datetime
 
 rozofs_devices = []
-#___________________________
-# converts string <inBytes> to integer 
-# in the unit given by <to>.
-# <inBytes>  is 
-# [<spaces>]<numeric>[{.|,}<numeric>][<spaces>]<unit>
-# <unit> is {B|K|KB|M|MB|G|GB|T|TB|P|PB}
-# <to> is <unit>
-def common_convert_Bytes(inBytes,to="B"):
-  inBytes = inBytes.replace(" ", "")
 
-  if "." in inBytes:
-    before = int(inBytes.split('.')[0])
-    after  = inBytes.split('.')[1]
-    unit   = re.split('(\d+)',after)[2]
-    after  = re.split('(\d+)',after)[1]
-  elif "," in inBytes:
-    before = int(inBytes.split(',')[0])
-    after  = inBytes.split(',')[1]
-    unit   = re.split('(\d+)',after)[2]
-    after  = re.split('(\d+)',after)[1]
-  else:
-    unit   = re.split('(\d+)',inBytes)[2]
-    before = re.split('(\d+)',inBytes)[1]
-    after = "0"
-
-  if   len(after) == 1: after=int(after)*100
-  elif len(after) == 2: after=int(after)*10
-  elif len(after) == 3: after=int(after)
-
-  if   unit == "KB" or unit == "K": val = (int(before)*1000 + after)
-  elif unit == "MB" or unit == "M": val = (int(before)*1000 + after) * 1000
-  elif unit == "GB" or unit == "G": val = (int(before)*1000 + after) * 1000000
-  elif unit == "TB" or unit == "T": val = (int(before)*1000 + after) * 1000000000
-  elif unit == "PB" or unit == "P": val = (int(before)*1000 + after) * 1000000000000
-  else: val = int(before)
-  
-  if to == "K" or to =="KB": return val/1000
-  if to == "M" or to =="MB": return val/1000000  
-  if to == "G" or to =="GB": return val/1000000000
-  if to == "T" or to =="TB": return val/1000000000000
-  if to == "P" or to =="PB": return val/1000000000000000
-  return val
 #___________________________  
-def common_bytes_with_unit(inBytes):
-  if inBytes < 0: sign = "-"
-  else:           sign = ""
-  
-  string="%s"%(inBytes)
-  value = common_convert_Bytes(string,"B")
+def KB_to_other_unit(inBytes):
+  if inBytes < 0: 
+    sign  = "-"
+    value = - int(inBytes)*1024
+  else:           
+    sign = ""
+    value = int(inBytes)*1024
 
   if value < 1000: return "%s%4d  "%(sign,value)
   
@@ -89,6 +49,47 @@ def common_bytes_with_unit(inBytes):
     if value >=  (10*1000000000000000): return "%s%2d.%1d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
   
   return "%s%1s.%2.2d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
+#___________________________  
+def delta_KB(inBytes):
+
+  if inBytes == 0: return "       " 
+
+  if inBytes < 0: 
+    sign  = "-"
+    color = ORANGE
+    value = -(inBytes*1024)
+  else:           
+    sign = "+"
+    color = DARKGREEN
+    value = inBytes*1024
+
+  if value < 1000: return color + "%s%4d  "%(sign,value) + NORMAL
+  
+  if value < 1000000:
+    if value >= (100*1000): return color + "%s%4d K"%(sign,value/1000) + NORMAL
+    if value >=  (10*1000): return color + "%s%2d.%1d K"%(sign,value/1000,(value % 1000) / 100) + NORMAL
+    return color + "%s%1d.%2.2d K"%(sign,value/1000,(value % 1000) / 10) + NORMAL 
+  
+  if value < 1000000000:  
+    if value >= (100*1000000): return color + "%s%4d M"%(sign,value/1000000) + NORMAL
+    if value >=  (10*1000000): return color + "%s%2d.%1d M"%(sign,value/1000000,(value % 1000000) / 100000) + NORMAL
+    return color + "%s%1d.%2.2d M"%(sign,value/1000000,(value % 1000000) / 10000) + NORMAL  
+  
+  if value < 1000000000000:  
+    if value >= (100*1000000000): return color + BOLD + "%s%4d G"%(sign,value/1000000000) + NORMAL
+    if value >=  (10*1000000000): return color + BOLD +"%s%2d.%1d G"%(sign,value/1000000000,(value % 1000000000) / 100000000) + NORMAL
+    return color + BOLD + "%s%1d.%2.2d G"%(sign,value/1000000000,(value % 1000000000) / 10000000) + NORMAL  
+  
+  if value < 1000000000000000:  
+    if value >= (100*1000000000000): return color + REVERSE + "%s%4d T"%(sign,value/1000000000000) + NORMAL
+    if value >=  (10*1000000000000): return color + REVERSE + "%s%2d.%1d T"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000) + NORMAL
+    return color + REVERSE + "%s%1d.%2.2d T"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)  + NORMAL 
+  
+  if value < 1000000000000000000:  
+    if value >= (100*1000000000000000): return color + REVERSE + "%s%4d P"%(sign,value/1000000000000000)+ NORMAL
+    if value >=  (10*1000000000000000): return color + REVERSE + "%s%2d.%1d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000) + NORMAL
+  
+  return "color + REVERSE + %s%1s.%2.2d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   + NORMAL
 
 
 #___________________________________
@@ -148,13 +149,8 @@ class rozofs_device:
      except:  
        options.freeSpace = True
 
-   display_free = "%6s "%(common_bytes_with_unit(self.free+"K"))    
-   if int(self.free) == int(self.old_free):
-     display_free += "        "
-   elif int(self.free) > int(self.old_free):
-     display_free += GREEN + "(+%6s) "%(common_bytes_with_unit("%sK"%(int(self.free)-int(self.old_free)))) + NORMAL
-   else: 
-     display_free += ORANGE + "(-%6s) "%(common_bytes_with_unit("%sK"%(int(self.old_free)-int(self.free)))) + NORMAL
+   display_free = "%6s "%(KB_to_other_unit(self.free))    
+   display_free += " %7s  "%(delta_KB(int(self.free)-int(self.old_free)))
 
    LINE = "%12s  "%(self.name) 
    #
@@ -178,12 +174,8 @@ class rozofs_device:
    #
    # Compare free space
    else:   
-     if int(self.free) == int(self.old_free):
-       display_free = "%6s        "%(common_bytes_with_unit(self.free+"K"))
-     elif int(self.free) > int(self.old_free):
-       display_free = "%6s(+%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.free)-int(self.old_free))))
-     else: 
-       display_free = "%6s(-%6s)"%(common_bytes_with_unit(self.free+"K"),common_bytes_with_unit("%sK"%(int(self.old_free)-int(self.free))))
+     display_free = "%6s"%(KB_to_other_unit(self.free))
+     display_free += " %7s  "%(delta_KB(int(self.free)-int(self.old_free))) 
 
      delta = float(self.total) * float(threshold)
      delta /= float(100)
@@ -202,7 +194,7 @@ class rozofs_device:
        color = NORMAL 
      LINE += "%5.1f%% "%(percent) + color + " %-17s"%(display_free) + NORMAL 
          
-   LINE += "/ %7s  "%(common_bytes_with_unit(self.total+"K"))   
+   LINE += "/ %7s  "%(KB_to_other_unit(self.total))   
    if self.time > int(1):   
      LINE = LINE + RED + BOLD + "%s"%(self.mount) + NORMAL 
      if self.time > int(8): self.delete()
@@ -218,9 +210,7 @@ def do_one_df():
   total_free   = 0
   total_size   = 0
   total_device = 0
-  
-  now = datetime.datetime.now()
-    
+      
   string = "df "
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -258,14 +248,11 @@ def do_one_df():
   else:     
     average_free = int(total_free) /  int(total_device)
     good_percent = float(total_free)*100/float(total_size)
-    
-  good_range = " %5.1f%% [%2.1f%%..%2.1f%%]"%(good_percent, float(good_percent)-float(threshold),  float(good_percent)+float(threshold))
-  
-  print "____________________ %s ____________________%s"%(now.strftime("%Y-%m-%d %H:%M:%S"),good_range)
+      
   if options.freeSpace == False:
-    print "        NAME  " + CYAN + "   % " + NORMAL + "   FREE            /    SIZE  MOUNT POINT" 
+    print " _______NAME______" + CYAN + "%" + NORMAL + "____FREE________________SIZE___MOUNTPOINT______________________" 
   else:   
-    print "        NAME     % " + CYAN + "   FREE            " + NORMAL + "/    SIZE  MOUNT POINT" 
+    print " _______NAME______%____" + CYAN + "FREE" + NORMAL + "________________SIZE___MOUNTPOINT______________________" 
       
 
 RED='\033[91m\033[40m'
@@ -276,6 +263,7 @@ PURPLE='\033[95m\033[40m'
 CYAN='\033[96m\033[40m'
 WHITE='\033[97m\033[40m'
 ORANGE='\033[33m\033[40m'
+DARKGREEN='\033[32m\033[40m'
 
 BOLD='\033[1m'
 REVERSE='\033[7m'
@@ -306,11 +294,27 @@ if options.period != None:
     sys.exit(-1)
 
 while True:
+  
+  now = datetime.datetime.now()
+
   do_one_df()
   for dev in rozofs_devices:  
     if dev.name == "rozofs": dev.display()
-  for dev in rozofs_devices:  
-    if dev.name != "rozofs": dev.display()
+
+  print "____________________ %s _________________________________________"%(now.strftime("%Y-%m-%d %H:%M:%S"))
+
+  total_delta  = int(0)  
+  total_free   = int(0)
+  total_device = int(0)
+  total_size   = int(0)
+  for dev in rozofs_devices:   
+    if dev.name != "rozofs": 
+      total_delta  = total_delta + int(dev.free) - int(dev.old_free)
+      total_free   = total_free + int(dev.free)      
+      total_device = total_device + int(1)
+      total_size   = total_size + int(dev.total)    
+      dev.display()
+  print " ________%3d  %5.1f%% %6s  %7s  / %7s  _________________________________ "%(total_device,good_percent,KB_to_other_unit(total_free), delta_KB(total_delta), KB_to_other_unit(total_size)) 
   if period == 0: sys.exit(0)
   time.sleep(int(period))
 
