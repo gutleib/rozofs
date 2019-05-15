@@ -334,6 +334,7 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
   int    rank;
   int    idx,line,col;
   rozofs_thr_1_cnt_t *p;
+  rozofs_thr_1_cnt_t *relative;
 
   int      value;
   uint64_t count;
@@ -446,19 +447,54 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
             p = &(counters[value]->second[idx]);
 	    if (p->ts != (t-line-(col*LINES))) p->count = 0;
             count = p->count;	
+            if (count == 0) break;            
+
+            if (counters[value]->mode != ROZOFS_MODE_AVERAGE) break;
+                        
+            relative = &counters[counters[value]->relative_idx]->second[idx];
+            if (relative->count == 0) {
+              count = 0;
+              break;
+            }
+            count /= relative->count;                        
             break; 
+            
           case rozofs_thr_unit_minute: 
             p = &(counters[value]->minute[idx]);
             if (p->ts != (t-line-(col*LINES))) p->count = 0;	
-            count = p->count;	
-            if (PERSTEP==0) count /= 60;
+            count = p->count;
+            if (count == 0) break;    
+               
+            if (counters[value]->mode != ROZOFS_MODE_AVERAGE) {
+              if (PERSTEP==0) count /= 60;
+              break;
+            }   
+   
+            relative = &counters[counters[value]->relative_idx]->minute[idx];
+            if (relative->count == 0) {
+              count = 0;
+              break;
+            }
+            count /= relative->count;
             break; 
 
           case rozofs_thr_unit_hour: 
             p = &(counters[value]->hour[idx]);
             if (p->ts != (t-line-(col*LINES))) p->count = 0;
             count = p->count;	
-            if (PERSTEP==0) count /= 3600;
+            if (count == 0) break;    
+               
+            if (counters[value]->mode != ROZOFS_MODE_AVERAGE) {
+              if (PERSTEP==0) count /= 3600;
+              break;
+            }   
+   
+            relative = &counters[counters[value]->relative_idx]->hour[idx];
+            if (relative->count == 0) {
+              count = 0;
+              break;
+            }
+            count /= relative->count;            
             break;    
              
           default:
