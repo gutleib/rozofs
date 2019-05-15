@@ -279,7 +279,7 @@ def find_dev(dev):
     
 class rozo_device:
 
-  def __init__(self,dev,size,fs,mount,label,uuid,model,path,scheduler,rota,ra):
+  def __init__(self,dev,size,fs,mount,label,uuid,model,scheduler,rota,ra,slot):
     self.dev   = dev
     self.size  = size
     self.fs    = fs
@@ -287,10 +287,10 @@ class rozo_device:
     self.label = label
     self.uuid  = uuid
     self.model = model
-    self.path  = path
     self.scheduler = scheduler
     self.rota  = rota
     self.ra    = ra
+    self.slot  = slot
     #
     # Insert in the list
     #
@@ -311,17 +311,17 @@ class rozo_device:
     if idx == len(rozo_device_list)-1:           
       rozo_device_list.append(self)       
     
-  def update(self,size,fs,mount,label,uuid,model,path,scheduler,rota,ra):  
+  def update(self,size,fs,mount,label,uuid,model,scheduler,rota,ra,slot):  
     self.size  = size
     self.fs    = fs
     self.mount = mount
     self.label = label
     self.uuid  = uuid
     self.model = model
-    self.path  = path
     self.scheduler = scheduler
     self.rota  = rota
     self.ra    = ra
+    if slot != "" : self.slot = slot
      
 #_____________________________________________  
 #
@@ -340,9 +340,12 @@ def list_devices():
     device = line.split('"')[1].strip()
      
     try: 
-      path = os.readlink("/sys/block/%s"%(device)).replace("../devices/","").replace("/block/%s"%(device),"")
+      slot = ""
+      for slotPath in glob.glob("/sys/class/block/%s/device/enclosure_device:*"%(device)):
+        slot = slotPath.split('enclosure_device:')[1].rstrip()
+        break;
     except:
-      continue
+      continue            
             
     label     = line.split('"')[3].strip()
     fs         = line.split('"')[5].strip()
@@ -366,9 +369,9 @@ def list_devices():
          
     d = find_dev(device)
     if d == None:
-      rozo_device(device,size,fs,mountpoint,label,uuid,model+'['+vendor+']',path,scheduler,rota,ra)
+      rozo_device(device,size,fs,mountpoint,label,uuid,model+'['+vendor+']',scheduler,rota,ra,slot)
     else:
-      d.update(size,fs,mountpoint,label,uuid,model+'['+vendor+']',path,scheduler,rota,ra)
+      d.update(size,fs,mountpoint,label,uuid,model+'['+vendor+']',scheduler,rota,ra,slot)
          
 #_____________________________________________  
 #
@@ -376,7 +379,7 @@ def list_devices():
 # associated to a device when these data are 
 # meaningfull
 #
-def rozo_list_all_block_devices(blockDev=None, pathDisplay=False) :
+def rozo_list_all_block_devices(blockDev=None) :
 
   list_devices()
   previous_uuid="UNKNOWN"
@@ -389,27 +392,24 @@ def rozo_list_all_block_devices(blockDev=None, pathDisplay=False) :
   
   idx += 1
   d.set_column(idx,"Dev",color)
-  if pathDisplay == False:
-    idx += 1
-    d.set_column(idx,"size",color)
-    idx += 1
-    d.set_column(idx,"FS",color)      
+  idx += 1
+  d.set_column(idx,"size",color)
+  idx += 1
+  d.set_column(idx,"FS",color)      
+  idx += 1
+  d.set_column(idx,"Slot",color)      
   idx += 1
   d.set_column(idx,"Mount",color)
   idx += 1
   d.set_column(idx,"Label",color)
-  if pathDisplay == True:  
-    idx += 1
-    d.set_column(idx,"path",color)
-  else:
-    idx += 1
-    d.set_column(idx,"Model[Vendor]",color)
-    idx += 1
-    d.set_column(idx,"Sch",color)
-    idx += 1
-    d.set_column(idx,"Rota",color)
-    idx += 1
-    d.set_column(idx,"R.A",color)
+  idx += 1
+  d.set_column(idx,"Model[Vendor]",color)
+  idx += 1
+  d.set_column(idx,"Sch",color)
+  idx += 1
+  d.set_column(idx,"Rota",color)
+  idx += 1
+  d.set_column(idx,"R.A",color)
   d.end_separator()   
   for dev in  rozo_device_list:
 
@@ -438,27 +438,24 @@ def rozo_list_all_block_devices(blockDev=None, pathDisplay=False) :
   
     idx += 1
     d.set_column(idx,dev.dev,color)  
-    if pathDisplay == False:
-      idx += 1
-      d.set_column(idx,size,None)   
-      idx += 1
-      d.set_column(idx,fs,None)
+    idx += 1
+    d.set_column(idx,size,None)   
+    idx += 1
+    d.set_column(idx,fs,None)
+    idx += 1
+    d.set_column(idx,dev.slot,None)   
     idx += 1
     d.set_column(idx,dev.mount,None)   
     idx += 1
     d.set_column(idx,label,None)  
-    if pathDisplay == True:
-      idx += 1
-      d.set_column(idx,dev.path,color)   
-    else:
-      idx += 1
-      d.set_column(idx,dev.model,color)   
-      idx += 1
-      d.set_column(idx,dev.scheduler,color)   
-      idx += 1
-      d.set_column(idx,dev.rota,color)   
-      idx += 1
-      d.set_column(idx,dev.ra,color)   
+    idx += 1
+    d.set_column(idx,dev.model,color)   
+    idx += 1
+    d.set_column(idx,dev.scheduler,color)   
+    idx += 1
+    d.set_column(idx,dev.rota,color)   
+    idx += 1
+    d.set_column(idx,dev.ra,color)   
     
   d.display() 
 
@@ -860,7 +857,6 @@ parser.add_option("-r","--read_expire", action="store",type="string",dest="read_
 parser.add_option("-w","--write_expire", action="store",type="string",dest="write_expire", help="write_expire value to set.")
 parser.add_option("-a","--read_ahead", action="store",type="string",dest="read_ahead", help="read ahead KB value to set.")
 parser.add_option("-l","--led", action="store",type="string", dest="led", help="The led requested status (on/off).")
-parser.add_option("-p","--path", action="store_true",dest="path", default=False,help="Display path")
 
 (options, args) = parser.parse_args()
 
@@ -980,7 +976,7 @@ if options.format != None:
 if len(blockdev) != 0:
   rozo_list_some_block_device(blockdev)
 else:    
-  rozo_list_all_block_devices(pathDisplay=options.path)
+  rozo_list_all_block_devices()
 exit(0)    
 
   
