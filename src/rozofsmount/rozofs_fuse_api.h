@@ -1017,7 +1017,19 @@ static inline void *rozofs_profiler_map(char *path,int size)
     gprofiler->the_probe[P_ELAPSE] += (timeAfter-time); \
   }\
 }
-
+#define PROFILING_MICRO(buffer,val)\
+{ \
+  unsigned long long timeAfter,time;\
+  struct timeval     timeDay;  \
+  if (buffer != NULL)\
+  { \
+    gettimeofday(&timeDay,(struct timezone *)0);  \
+    timeAfter = MICROLONG(timeDay); \
+    RESTORE_FUSE_PARAM(buffer,time);\
+    val = (timeAfter-time); \
+  }\
+  else val = 0;\
+}
 
 /**
 * API for creation a transaction towards an exportd

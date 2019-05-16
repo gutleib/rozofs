@@ -1448,6 +1448,17 @@ void rozofs_ll_write_cbk(void *this,void *param)
       fuse_reply_write(req, size);
       write_flush_stat.synchroneous_success++;      
     }    
+
+    /*
+    ** Update the latency statistics
+    */
+    {
+      uint64_t delta;
+      PROFILING_MICRO(param,delta);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT], 1);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY],delta);  
+      //info("rozofs_ll_write_cbk %llu", (long long unsigned int)delta);
+    }   
     /*
     ** no error, so get the length of the data part
     */
@@ -1706,7 +1717,7 @@ int rozofs_asynchronous_flush(struct fuse_file_info *fi) {
   */
   SAVE_FUSE_STRUCT(buffer_p,fi,sizeof( struct fuse_file_info));    
   SAVE_FUSE_CALLBACK(buffer_p,rozofs_asynchronous_flush_cbk)
-
+  START_PROFILING_NB(buffer_p,rozofs_ll_flush);
 
   /*
   ** flush to disk and wait for the response
@@ -1833,6 +1844,17 @@ void rozofs_asynchronous_flush_cbk(void *this,void *param)
     */
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);
 //    fuse_reply_err(req, 0);
+
+    /*
+    ** Update the latency statistics
+    */
+    {
+      uint64_t delta;
+      PROFILING_MICRO(param,delta);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT], 1);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY],delta);  
+      //info("rozofs_asynchronous_flush_cbk %llu", (long long unsigned int)delta);
+    }  
     /*
     ** Keep the fuse context since we need to trigger the update of 
     ** the metadata of the file
@@ -1988,6 +2010,18 @@ void rozofs_ll_flush_cbk(void *this,void *param)
     rozofs_trc_rsp(srv_rozofs_ll_flush,(fuse_ino_t)file,(file==NULL)?NULL:file->fid,(errno==0)?0:1,trc_idx);
     rozofs_tx_free_from_ptr(rozofs_tx_ctx_p); 
     ruc_buf_freeBuffer(recv_buf); 
+
+    /*
+    ** Update the latency statistics
+    */
+    {
+      uint64_t delta;
+      PROFILING_MICRO(param,delta);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT], 1);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY],delta);  
+      //info("rozofs_ll_flush_cbk %llu", (long long unsigned int)delta);
+    }  
+
     /*
     ** force the flush on disk
     */
@@ -2343,6 +2377,18 @@ void rozofs_ll_release_cbk(void *this,void *param)
     ** no error, so get the length of the data part
     */
     xdr_free((xdrproc_t) decode_proc, (char *) &ret);
+
+    /*
+    ** Update the latency statistics
+    */
+    {
+      uint64_t delta;
+      PROFILING_MICRO(param,delta);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT], 1);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY],delta);  
+      //info("rozofs_ll_release_cbk %llu", (long long unsigned int)delta);
+    }  
+
     /*
     ** It might be possible that the write triggered on the close is not the last one since
     ** write are performed in parallel by the storcli.

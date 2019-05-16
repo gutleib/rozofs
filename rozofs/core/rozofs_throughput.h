@@ -33,8 +33,14 @@ typedef struct _rozofs_thr_1_cnt_t {
 } rozofs_thr_1_cnt_t;
 
    
+#define ROZOFS_MODE_COUNTER     0
+#define ROZOFS_MODE_AVERAGE     1
+
+   
 typedef struct _rozofs_thr_cnts_t {
   char                   * name;
+  uint16_t                 mode;         // Whether this is a counter or average
+  uint16_t                 relative_idx; // for average the relative counter index
   rozofs_thr_1_cnt_t       second[ROZOFS_THR_CNTS_NB];
   rozofs_thr_1_cnt_t       minute[ROZOFS_THR_CNTS_NB];
   rozofs_thr_1_cnt_t       hour[ROZOFS_THR_CNTS_NB];  
@@ -157,6 +163,35 @@ static inline rozofs_thr_cnts_t * rozofs_thr_cnts_allocate(rozofs_thr_cnts_t * c
   if (counters == NULL) {
     counters = memalign(32,sizeof(rozofs_thr_cnts_t));
     counters->name = strdup(name);
+    counters->mode = ROZOFS_MODE_COUNTER;
+    counters->relative_idx = -1;      
+  }
+    
+  /*
+  ** Reset counters
+  */
+  rozofs_thr_cnts_reset(counters);
+
+  return counters;
+}
+/*_______________________________________________________________________
+* Initialize an average measurement structure
+*
+* @param counters     The structure to initialize of NULL if it is to be allocated
+* @paramindex         The index of the associated count that should be used to divide this counter
+*
+* @retval the initialized structure address
+*/
+static inline rozofs_thr_cnts_t * rozofs_thr_average_allocate(rozofs_thr_cnts_t * counters, char * name, uint16_t index) {
+
+  /*
+  ** Allocate counters when needed
+  */
+  if (counters == NULL) {
+    counters = memalign(32,sizeof(rozofs_thr_cnts_t));
+    counters->name = strdup(name);
+    counters->mode = ROZOFS_MODE_AVERAGE;
+    counters->relative_idx = index;      
   }
     
   /*
