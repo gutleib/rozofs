@@ -403,8 +403,8 @@ static inline void man_io (char * pChar) {
   PCHAR_STRING_BLD(" io [with|exclude] [col <#col>] [avg] [s|m|h|a] [persec]\n");
   PCHAR_STRING_BLD("    with    = [r|w|l|c|d|a|x|o]\n");
   PCHAR_STRING_BLD("    exclude = [nr|nw|nl|nc|nd|na|nx|no]\n");
-  PCHAR_STRING    ("      . r(nr) to (not to) display read IO count\n");
-  PCHAR_STRING    ("      . w(nw) to (not to) display write IO count\n");
+  PCHAR_STRING    ("      . r(nr) to (not to) display read counts\n");
+  PCHAR_STRING    ("      . w(nw) to (not to) display write counts\n");
   PCHAR_STRING    ("      . l(nl) to (not to) display lookup count\n");
   PCHAR_STRING    ("      . c(nc) to (not to) display creation count\n");
   PCHAR_STRING    ("      . d(nd) to (not to) display deletion count\n");
@@ -510,22 +510,22 @@ void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
       continue;
     }   
     if (strcasecmp(argv[i],"r")==0) {
-      requested |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR));
+      requested |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR)|(1<<ROZOFSMOUNT_COUNTER_READ_LATENCY));
       i++;
       continue;
     } 
     if (strcasecmp(argv[i],"nr")==0) {
-      excluded |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR));
+      excluded |= ((1<<ROZOFSMOUNT_COUNTER_READ_IO)|(1<<ROZOFSMOUNT_COUNTER_READ_THR)|(1<<ROZOFSMOUNT_COUNTER_READ_LATENCY));
       i++;
       continue;
     }     
     if (strcasecmp(argv[i],"w")==0) {
-      requested |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR));
+      requested |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR)|(1<<ROZOFSMOUNT_COUNTER_WRITE_LATENCY));
       i++;
       continue;
     }     
     if (strcasecmp(argv[i],"nw")==0) {
-      excluded |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR));
+      excluded |= ((1<<ROZOFSMOUNT_COUNTER_WRITE_IO)|(1<<ROZOFSMOUNT_COUNTER_WRITE_THR)|(1<<ROZOFSMOUNT_COUNTER_WRITE_LATENCY));
       i++;
       continue;
     }      
@@ -597,6 +597,11 @@ void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
       requested |= (1<<i);
     }  
     requested ^= excluded;
+    /*
+    ** ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT is needed to compute ROZOFSMOUNT_COUNTER_WRITE_LATENCY 
+    ** but must not be displayed 
+    */
+    requested ^= (1<<ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT) ; 
   }
   
   pChar = rozofs_thr_display_bitmask(pChar, rozofs_thr_counter, requested, unit);
@@ -617,6 +622,9 @@ void rozofs_throughput_counter_init(void) {
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR]= rozofs_thr_cnts_allocate(NULL, "Write B");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO]= rozofs_thr_cnts_allocate(NULL, "Rd I/O");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_IO]= rozofs_thr_cnts_allocate(NULL, "Wr I/O");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY]= rozofs_thr_average_allocate(NULL, "Rd us", ROZOFSMOUNT_COUNTER_READ_IO);
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY]= rozofs_thr_average_allocate(NULL, "Wr us", ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT);
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_LATENCY_COUNT]= rozofs_thr_cnts_allocate(NULL, "XXXXXX");  
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FCR8]= rozofs_thr_cnts_allocate(NULL, "F.CR8");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FDEL]= rozofs_thr_cnts_allocate(NULL, "F.DEL");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DCR8]= rozofs_thr_cnts_allocate(NULL, "D.CR8");

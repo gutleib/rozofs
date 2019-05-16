@@ -860,11 +860,6 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     int trc_idx = rozofs_trc_req_io(srv_rozofs_ll_read,(fuse_ino_t)file,file->fid,size,off);
 
     /*
-    ** Update the IO statistics
-    */
-    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
-
-    /*
     ** allocate a context for saving the fuse parameters
     */
     buffer_p = _rozofs_fuse_alloc_saved_context("rozofs_ll_read_nb");
@@ -925,7 +920,18 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
          goto error;
      fuse_reply_buf(req, (char *) buff, length);
      file->current_pos = (off+length);
-     goto out;           
+     
+    /*
+    ** Update the bandwidth/IO statistics
+    */
+    {
+      uint64_t delta;
+      PROFILING_MICRO(buffer_p,delta);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)length);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY],delta);  
+    }   
+    goto out;           
 
 error:
     fuse_reply_err(req, errno);
@@ -1146,9 +1152,16 @@ void rozofs_ll_read_cbk(void *this,void *param)
       position = XDR_GETPOS(&xdrs);
     }
     /*
-    ** Update the bandwidth statistics
+    ** Update the bandwidth/IO statistics
     */
-    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)received_len);
+    {
+      uint64_t delta;
+      PROFILING_MICRO(param,delta);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)received_len);
+      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY],delta);  
+    }   
+
     /*
     ** check the length: caution, the received length can
     ** be zero by it might be possible that the information 
