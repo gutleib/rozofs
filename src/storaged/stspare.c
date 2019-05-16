@@ -1214,7 +1214,7 @@ void stspare_restore_pending_files() {
 void stspare_scan_all_spare_files() {
   int             stidx;
   storage_t     * st;
-  char            pathname[256];
+  char            pathname[1024];
   DIR *           sliceDir;
   int             slice;
   struct dirent * pep;  
@@ -1240,8 +1240,15 @@ void stspare_scan_all_spare_files() {
       ** Loop on every slice
       */
       for (slice=0; slice<common_config.storio_slice_number; slice++) {
-      
-        sprintf(pathname,"%s/%d/bins_1/%d",st->root, dev, slice);
+        char * p = pathname;
+
+        p += rozofs_string_append(p, st->root);
+        *p++ = '/';         
+        p += rozofs_u32_append(p, dev);
+        p += rozofs_string_append(p, "/bins_1/");
+        p += rozofs_u32_append(p, slice);
+        p += rozofs_string_append(p, "/");
+        
         sliceDir = opendir(pathname);
         if (sliceDir == NULL) continue;
 
@@ -1275,7 +1282,8 @@ void stspare_scan_all_spare_files() {
           /*
 	  ** Let's scan this file if not yet done
 	  */
-          sprintf(pathname,"%s/%d/bins_1/%d/%s",st->root, dev, slice,pep->d_name);
+          rozofs_string_append(p,pep->d_name);
+          
 	  fidCtx = stspare_scan_one_spare_file(st,fid,chunk,pathname,now);
 	  if (fidCtx != NULL) {
 	    /*
