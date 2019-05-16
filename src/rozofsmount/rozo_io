@@ -186,6 +186,8 @@ def get_client_list(exports,eid):
   total_nb_clients = 0
 
   active_export = get_active_export(exports)
+  if active_export == None:
+    return None
     
   idx = int(eid) % 8
   clients=""
@@ -267,7 +269,7 @@ def build_upline(titles,total_column):
 def delta_time(minute,sec,minus):
   if int(sec) >= int(minus):
     return int(minute),int(sec)-int(minus)
-  if int(minute) > int(1):
+  if int(minute) > int(0):
     return int(minute)-int(1),int(60)+int(sec)-int(minus)
   return int(59),int(60)+int(sec)-int(minus)    
 
