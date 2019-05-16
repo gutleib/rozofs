@@ -89,6 +89,9 @@ typedef enum _INT_VALUE_FOR_STRING_ENUM {
   DEFINE_INT_FOR_INPUT_STRING(sctime)
   DEFINE_INT_FOR_INPUT_STRING(hctime)
   DEFINE_INT_FOR_INPUT_STRING(ctime)
+  DEFINE_INT_FOR_INPUT_STRING(satime)
+  DEFINE_INT_FOR_INPUT_STRING(hatime)
+  DEFINE_INT_FOR_INPUT_STRING(atime)  
   DEFINE_INT_FOR_INPUT_STRING(smod)
   DEFINE_INT_FOR_INPUT_STRING(hmod)
   DEFINE_INT_FOR_INPUT_STRING(mod)
@@ -148,6 +151,9 @@ static struct option long_options[] = {
     INPUT_STRING_NO_ARG_TO_INT(ctime)
     INPUT_STRING_NO_ARG_TO_INT(hctime)
     INPUT_STRING_NO_ARG_TO_INT(sctime)
+    INPUT_STRING_NO_ARG_TO_INT(atime)
+    INPUT_STRING_NO_ARG_TO_INT(hatime)
+    INPUT_STRING_NO_ARG_TO_INT(satime)
     INPUT_STRING_NO_ARG_TO_INT(size)
     INPUT_STRING_NO_ARG_TO_INT(uid)
     INPUT_STRING_NO_ARG_TO_INT(gid)       
@@ -400,6 +406,13 @@ uint64_t    ctime_lower  = LONG_VALUE_UNDEF;
 uint64_t    ctime_bigger = LONG_VALUE_UNDEF;
 uint64_t    ctime_equal  = LONG_VALUE_UNDEF;
 uint64_t    ctime_diff   = LONG_VALUE_UNDEF;
+/*
+** access time 
+*/
+uint64_t    atime_lower  = LONG_VALUE_UNDEF;
+uint64_t    atime_bigger = LONG_VALUE_UNDEF;
+uint64_t    atime_equal  = LONG_VALUE_UNDEF;
+uint64_t    atime_diff   = LONG_VALUE_UNDEF;
 /*
 ** creation time 
 */
@@ -1341,6 +1354,46 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       return 0;
     }
   }
+  
+  /*
+  ** Access time
+  */
+  /*
+  ** Must have an access time bigger than atime_bigger
+  */ 
+  if (atime_bigger != LONG_VALUE_UNDEF) {
+    if (inode_p->s.attrs.atime < atime_bigger) {
+      return 0;
+    }
+  }  
+
+  /*
+  ** Must have an access time lower than atime_lower
+  */    
+  if (atime_lower != LONG_VALUE_UNDEF) {
+    if (inode_p->s.attrs.atime > atime_lower) {
+      return 0;
+    }
+  }     
+
+  /*
+  ** Must have an access time equal to atime_equal
+  */    
+  if (atime_equal != LONG_VALUE_UNDEF) {
+    if (inode_p->s.attrs.atime != atime_equal) {
+      return 0;
+    }
+  } 
+  
+  /*
+  ** Must have an access time different from atime_diff
+  */    
+  if (atime_diff != LONG_VALUE_UNDEF) {
+    if (inode_p->s.attrs.atime == atime_diff) {
+      return 0;
+    }
+  }    
+  
   /* 
   ** Privileges
   */
@@ -2650,6 +2703,8 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m--smod\033[0m\t\t\tmodification date in seconds..\n"); 
   printf("\t\033[1m--hctime\033[0m\t\tchange date in human readable format.\n"); 
   printf("\t\033[1m--sctime\033[0m\t\tchange date in seconds.\n"); 
+  printf("\t\033[1m--hatime\033[0m\t\taccess date in human readable format (only valid in trash).\n"); 
+  printf("\t\033[1m--satime\033[0m\t\taccess date in seconds (only valid in trash).\n"); 
   printf("\t\033[1m--hupdate\033[0m\t\tdirectory update date in human readable format (directory only).\n"); 
   printf("\t\033[1m--supdate\033[0m\t\tdirectory update date in seconds (directory only).\n"); 
   printf("\t\033[1m--link\033[0m\t\t\tnumber of links (file only).\n"); 
@@ -3581,6 +3636,13 @@ int main(int argc, char *argv[]) {
               NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_sctime);
               date_criteria_is_set = 1;
               break;
+          case INT_VALUE_FOR_STRING_hatime:
+          case INT_VALUE_FOR_STRING_atime:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_hatime);
+              break;
+          case INT_VALUE_FOR_STRING_satime:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_satime);
+              break;
           case INT_VALUE_FOR_STRING_hupdate:
           case INT_VALUE_FOR_STRING_update:          
               NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_hupdate);
@@ -3713,6 +3775,12 @@ int main(int argc, char *argv[]) {
                 case INT_VALUE_FOR_STRING_sctime:
                   SCAN_U64(ctime_lower)    
                   break; 
+                case INT_VALUE_FOR_STRING_hatime:
+                  SCAN_DATE(atime_lower)    
+                  break; 
+                case INT_VALUE_FOR_STRING_satime:
+                  SCAN_U64(atime_lower)    
+                  break; 
                 case INT_VALUE_FOR_STRING_hupdate:
                   SCAN_DATE(update_lower)    
                   break;                     
@@ -3782,7 +3850,15 @@ int main(int argc, char *argv[]) {
                 case INT_VALUE_FOR_STRING_sctime:
                   SCAN_U64(ctime_lower)
                   ctime_lower--;    
-                  break;  
+                  break; 
+                case INT_VALUE_FOR_STRING_hatime:
+                  SCAN_DATE(atime_lower)
+                  atime_lower--;    
+                  break;                    
+                case INT_VALUE_FOR_STRING_satime:
+                  SCAN_U64(atime_lower)
+                  atime_lower--;    
+                  break;                    
                 case INT_VALUE_FOR_STRING_hupdate:
                   SCAN_DATE(update_lower)
                   update_lower--;    
@@ -3867,6 +3943,12 @@ int main(int argc, char *argv[]) {
                 case INT_VALUE_FOR_STRING_sctime:
                   SCAN_U64(ctime_bigger)    
                   break;                    
+                case INT_VALUE_FOR_STRING_hatime:
+                  SCAN_DATE(atime_bigger)    
+                  break;                   
+                case INT_VALUE_FOR_STRING_satime:
+                  SCAN_U64(atime_bigger)    
+                  break;                    
                 case INT_VALUE_FOR_STRING_hupdate:
                   SCAN_DATE(update_bigger)    
                   break;                  
@@ -3940,6 +4022,14 @@ int main(int argc, char *argv[]) {
                   SCAN_U64(ctime_bigger) 
                   ctime_bigger++;  
                   break;
+                case INT_VALUE_FOR_STRING_hatime:
+                  SCAN_DATE(atime_bigger) 
+                  atime_bigger++;  
+                  break;
+                case INT_VALUE_FOR_STRING_satime:
+                  SCAN_U64(atime_bigger) 
+                  atime_bigger++;  
+                  break;
                  case INT_VALUE_FOR_STRING_hupdate:
                   SCAN_DATE(update_bigger) 
                   update_bigger++;  
@@ -4011,6 +4101,12 @@ int main(int argc, char *argv[]) {
                   break;                    
                 case INT_VALUE_FOR_STRING_sctime:
                   SCAN_U64(ctime_equal)                   
+                  break;                     
+                case INT_VALUE_FOR_STRING_hatime:
+                  SCAN_DATE(atime_equal)                   
+                  break;                    
+                case INT_VALUE_FOR_STRING_satime:
+                  SCAN_U64(atime_equal)                   
                   break;                     
                 case INT_VALUE_FOR_STRING_hupdate:
                   SCAN_DATE(update_equal)                   
@@ -4146,6 +4242,12 @@ int main(int argc, char *argv[]) {
                   break;                   
                 case INT_VALUE_FOR_STRING_sctime:
                   SCAN_U64(ctime_diff)                   
+                  break; 
+                case INT_VALUE_FOR_STRING_hatime:
+                  SCAN_DATE(atime_diff)                   
+                  break;                   
+                case INT_VALUE_FOR_STRING_satime:
+                  SCAN_U64(atime_diff)                   
                   break; 
                 case INT_VALUE_FOR_STRING_hupdate:
                   SCAN_DATE(update_diff)                   

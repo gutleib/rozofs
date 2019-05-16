@@ -527,8 +527,6 @@ void close_all() {
   sid_info_t     * pSid;
   char             fname[ROZOFS_FILENAME_MAX];
   int              fd;
-  char             msg[512];
-  char           * pChar = msg;
     
   for (cid=0; cid<ROZOFS_CLUSTERS_MAX; cid++) {
   
@@ -555,8 +553,6 @@ void close_all() {
 	}  
       }
 	
-      pChar += sprintf(pChar,"[%d-%d",cid+1,sid+1);
-
       if (file_type != rbs_file_type_spare) {
 	sprintf(fname,"%s/cid%d_sid%d_%d/count",pDir,cid+1,sid+1,rbs_file_type_nominal);
 	fd = open(fname, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC,ALLRIGHTS);
@@ -571,11 +567,7 @@ void close_all() {
           severe("write(%d,%s) %s\n",fd,fname,strerror(errno));	  
 	}	
 	close(fd);
-
-	pChar += sprintf(pChar,"/%llu nom %lluB",
-	      (unsigned long long)pSid->nominal.count,
-	      (unsigned long long)pSid->nominal.size);
-      }
+     }
 
       if (file_type != rbs_file_type_nominal) {    
 	sprintf(fname,"%s/cid%d_sid%d_%d/count",pDir,cid+1,sid+1,rbs_file_type_spare);
@@ -591,15 +583,9 @@ void close_all() {
           severe("write(%d,%s) %s\n",fd,fname,strerror(errno));	  
 	}
 	close(fd);
-
-	pChar += sprintf(pChar,"/%llu sp %lluB",
-	      (unsigned long long)pSid->spare.count,
-	      (unsigned long long)pSid->spare.size);
       }
-      pChar += sprintf(pChar,"]");	      	   	
     }   
   }
-  info("%s",msg);   
 }
 /*-----------------------------------------------------------------------------
 **
