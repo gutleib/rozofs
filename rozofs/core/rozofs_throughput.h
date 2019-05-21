@@ -118,17 +118,6 @@ static inline void rozofs_thr_cnt_update(rozofs_thr_cnts_t * counters, uint64_t 
   if (counters == NULL) return;
   rozofs_thr_cnt_update_with_time(counters,count,rozofs_get_ticker_s());
 }
-
-/*_______________________________________________________________________
-* Display throughput counters
-*
-* @param pChar    Where to format the ouput
-* @param pChar    The counters
-* @param nb       The number of counters
-* @param unit     The unit to display
-*/
-char * rozofs_thr_display_unit(char * pChar, rozofs_thr_cnts_t * counters[], int nb, rozofs_thr_unit_e unit);
-
 /*_______________________________________________________________________
 * Display throughput counters
 *
