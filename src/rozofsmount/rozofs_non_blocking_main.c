@@ -380,15 +380,18 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
        
   switch (what) {
     case 1:
-      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],1, unit);
+      pChar = rozofs_thr_display_bitmask(pChar, rozofs_thr_counter, 1<<ROZOFSMOUNT_COUNTER_READ_THR, unit);
+      //pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     case 2:
-      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR],1, unit);
+      pChar = rozofs_thr_display_bitmask(pChar, rozofs_thr_counter, 1<<ROZOFSMOUNT_COUNTER_WRITE_THR, unit);
+//      pChar = rozofs_thr_display_unit(pChar, &rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     default:
-      pChar = rozofs_thr_display_unit(pChar, rozofs_thr_counter, 2, unit);
+      pChar = rozofs_thr_display_bitmask(pChar, rozofs_thr_counter, (1<<ROZOFSMOUNT_COUNTER_READ_THR) | (1<<ROZOFSMOUNT_COUNTER_WRITE_THR), unit);
+//      pChar = rozofs_thr_display_unit(pChar, rozofs_thr_counter, 2, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer()); 
       return; 
   }       
