@@ -60,9 +60,13 @@ int storio_disk_thread_create(char * hostname, int nb_threads, int instance_id) 
 
 
 int storio_throughput_enable = 0;
-#define STORIO_RD_CNT 0
-#define STORIO_WR_CNT 1
-rozofs_thr_cnts_t * storio_cnts[2] = {0};
+typedef enum _rozofs_storio_counter_e {
+   STORIO_RD_CNT,
+   STORIO_WR_CNT,
+   STORIO_COUNTER_MAX
+} rozofs_mount_counter_e;
+
+rozofs_thr_cnts_t * storio_cnts[STORIO_COUNTER_MAX] = {0};
 
 /*_______________________________________________________________________
 * Update a read thoughput counter
@@ -210,15 +214,19 @@ void display_throughput (char * argv[], uint32_t tcpRef, void *bufRef) {
   
   switch (what) {
     case 1:
-      pChar = rozofs_thr_display_unit(pChar, &storio_cnts[STORIO_RD_CNT],1, unit);
+      pChar = rozofs_thr_display_bitmask(pChar, storio_cnts, 1<<STORIO_RD_CNT, unit);
+      //pChar = rozofs_thr_display_unit(pChar, &storio_cnts[STORIO_RD_CNT],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     case 2:
-      pChar = rozofs_thr_display_unit(pChar, &storio_cnts[STORIO_WR_CNT],1, unit);
+      pChar = rozofs_thr_display_bitmask(pChar, storio_cnts, 1<<STORIO_WR_CNT, unit);    
+      //pChar = rozofs_thr_display_unit(pChar, &storio_cnts[STORIO_WR_CNT],1, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
     default:
-      pChar = rozofs_thr_display_unit(pChar, storio_cnts, 2, unit);
+      pChar = rozofs_thr_display_bitmask(pChar, storio_cnts, (1<<STORIO_WR_CNT) + (1<<STORIO_RD_CNT), unit);    
+
+//      pChar = rozofs_thr_display_unit(pChar, storio_cnts, 2, unit);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer()); 
       return; 
   }    
