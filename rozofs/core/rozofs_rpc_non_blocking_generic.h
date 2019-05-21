@@ -49,6 +49,8 @@ extern "C" {
 /**
 *  Macro rpc stats: start non blocking case
 */
+#if 0
+
 #define START_PROFILING_RPC_GENERIC(buffer,probe)\
 { \
   unsigned long long time;\
@@ -59,7 +61,7 @@ extern "C" {
    if (buffer->profiler_probe != NULL)\
    { \
      probe[P_COUNT]++;\
-     /*gettimeofday(&timeDay,(struct timezone *)0); */ \
+     gettimeofday(&timeDay,(struct timezone *)0); \
      time = MICROLONG(timeDay); \
      buffer->profiler_time =(uint64_t)time ;\
    }\
@@ -76,12 +78,18 @@ extern "C" {
   struct timeval     timeDay;  \
   if (buffer->profiler_probe != NULL)\
   { \
-    /*gettimeofday(&timeDay,(struct timezone *)0); */ \
+    gettimeofday(&timeDay,(struct timezone *)0); \
     timeAfter = MICROLONG(timeDay); \
     buffer->profiler_probe[P_ELAPSE] += (timeAfter-buffer->profiler_time); \
     buffer->profiler_probe = NULL;\
   }\
 }
+#else 
+#define START_PROFILING_RPC_GENERIC(buffer,probe)
+#define STOP_PROFILING_RPC_GENERIC(buffer)
+#endif
+
+
 
 
 /**
