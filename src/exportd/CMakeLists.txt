@@ -301,6 +301,18 @@ add_executable(rozo_vmove
 )
 target_link_libraries(rozo_vmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 #________________________________________________________
+add_executable(rozo_cmove
+    rozo_cmove.c  
+    econfig.c     
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h        
+    rozofs_mover_thread.c  
+    rozofs_mover.h
+    volume.c
+)
+target_link_libraries(rozo_cmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+
+#________________________________________________________
 add_executable(rozo_rcmd_server
     rozofs_rcmd_server.c 
     ${CMAKE_SOURCE_DIR}/rozofs/core/rozofs_rcmd.h
