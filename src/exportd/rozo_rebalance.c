@@ -135,6 +135,15 @@ void *rozofs_export_p = NULL;
 char * utility_name=NULL;
 
 time_t rebalance_config_file_mtime = 0;
+
+
+/*
+** This indicator may be given on rebalancer command to tell that the nodes are unbalanced
+** They may not have the same number of SID and/or not the device size.
+** When this indicator is set and the number of nodes is 6, the 6th projection is put on the same
+** node as the 1rst one.
+*/
+static int unbalancedNodes = 0;
 /*
 **_______________________________________________________________________
 */
@@ -1458,6 +1467,12 @@ int do_cluster_distribute_size_balancing(uint8_t layout,int site_idx, sid_t *sid
 		//info("selection done");
 		goto success;
       }	  
+      /* When unbalanced nodes, the last projection is taken to balance the nodes no matter if the same node is taken 2 times */
+      if ((unbalancedNodes) && (nb_selected==(rozofs_forward-1))){
+        location_collision = rozofs_safe;
+        break;
+      }
+
     }
     //info("end loop %d nb_selected %d location_collision %d", loop, nb_selected, location_collision);
     
@@ -1787,6 +1802,7 @@ static void usage() {
           display_size_not_aligned(REBALANCE_MAX_MOVE_SIZE,bufall));
     printf("\t--throughput <value> \t\tfile move througput in MBytes/s (default:%d MB/s)\n",REBALANCE_DEFAULT_THROUGPUT);
     printf("\t--cfg <fileName> \t\tThe rebalance configuration file name.\n");
+    printf("\t--unbalancedNodes \t\tFor the case of 6 unbalanced nodes (not the same SID number and/or disk size).\n");
     printf("\n");
 };
 
@@ -1899,6 +1915,7 @@ int main(int argc, char *argv[]) {
         {"cfg", required_argument, &long_opt_cur, 10},
         {"minfilesz", required_argument, &long_opt_cur, 11},
         {"maxfilesz", required_argument, &long_opt_cur, 12},
+        {"unbalancedNodes", no_argument, &long_opt_cur, 13},
 
         {0, 0, 0, 0}
     };
@@ -2032,6 +2049,10 @@ int main(int argc, char *argv[]) {
         	   exit(EXIT_FAILURE);     
 		}                
                 rozo_balancing_ctx.max_filesize_config = val64;
+		break; 
+                                 
+	      case 13:
+		unbalancedNodes = 1;
 		break;                  
                 
 	      default:
