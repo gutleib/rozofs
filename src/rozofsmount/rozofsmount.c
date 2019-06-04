@@ -1361,7 +1361,7 @@ void show_trc_fuse_buffer(uint32_t tcpRef, void *bufRef)
               pChar+=sprintf(pChar,"%s (0%o)\n",str,p->flags);
 	      break;
 	    case rozofs_trc_type_io:
-              pChar+=sprintf(pChar,"%s %8llu/%d\n",str,(unsigned long long int)p->par.io.off,(int)p->par.io.size);
+              pChar+=sprintf(pChar,"%s %8llu/%llu\n",str,(unsigned long long int)p->par.io.off,(unsigned long long int)p->par.io.size);
 	      break;	
 	    case rozofs_trc_type_name:
               pChar+=sprintf(pChar,"%s\n",p->par.name.name);
