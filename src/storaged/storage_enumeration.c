@@ -1019,6 +1019,9 @@ int storage_enumerate_devices(char * workDir, int unmount) {
 		MS_NOATIME | MS_NODIRATIME | MS_SILENT, 
 		common_config.device_automount_option);
     if (ret != 0) {
+      if (errno == EBUSY) {
+        CONT;
+      }
       warning("mount(%s,%s,%s) %s",
               pDevName->name,workDir,common_config.device_automount_option,
 	      strerror(errno));

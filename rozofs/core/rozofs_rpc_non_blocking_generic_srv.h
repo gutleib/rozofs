@@ -47,15 +47,15 @@
 */
 #define START_PROFILING_ROZORPC_SRV(buffer,the_probe)\
 { \
-  unsigned long long time;\
-  struct timeval     timeDay;  \
+  /*unsigned long long time;*/\
+  /*struct timeval     timeDay;*/  \
   if (buffer != NULL)\
   { \
    gprofiler.the_probe[P_COUNT]++;\
    buffer->profiler_probe = &gprofiler.the_probe[0]; \
    /*gettimeofday(&timeDay,(struct timezone *)0); */ \
-   time = MICROLONG(timeDay); \
-   buffer->profiler_time =(uint64_t)time ;\
+   /*time = MICROLONG(timeDay);*/ \
+   /*buffer->profiler_time =(uint64_t)time ;*/\
   }\
 }
 
@@ -64,13 +64,13 @@
 */
 #define STOP_PROFILING_ROZORPC_SRV(buffer)\
 { \
-  unsigned long long timeAfter;\
-  struct timeval     timeDay;  \
+  /*unsigned long long timeAfter;*/\
+  /*struct timeval     timeDay;  */\
   if (buffer->profiler_probe != NULL)\
   { \
     /*gettimeofday(&timeDay,(struct timezone *)0); */ \
-    timeAfter = MICROLONG(timeDay); \
-    buffer->profiler_probe[P_ELAPSE] += (timeAfter-buffer->profiler_time); \
+    /*timeAfter = MICROLONG(timeDay); */\
+    /*buffer->profiler_probe[P_ELAPSE] += (timeAfter-buffer->profiler_time); */\
     buffer->profiler_probe = NULL;\
   }\
 }
