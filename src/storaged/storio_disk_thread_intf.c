@@ -836,6 +836,7 @@ void af_unix_disk_pool_socket_on_receive_buffer_depletion()
     rozo_fd_set  localRdFdSet;   
     int nbrSelect;
     uint32_t free_count;
+    struct timeval timeout;
     /*
     ** erase the Fd receive set
     */
@@ -846,16 +847,23 @@ void af_unix_disk_pool_socket_on_receive_buffer_depletion()
        /*
        ** we are in deep shit!!
        */
+       severe("TCP out of receive buffer whiule there no read/write pending");       
        fatal("TCP out of receive buffer whiule there no read/write pending");       
     } 
    
     while(1)
     {        
-    /*
+      /*
       ** wait for event 
       */
       FD_SET(af_unix_disk_south_socket_ref,&localRdFdSet);   	  
-      nbrSelect=select(af_unix_disk_south_socket_ref+1,(fd_set *)&localRdFdSet,(fd_set *)NULL,NULL, NULL);
+      /*
+      ** Set a 10 seconds time out
+      */
+      timeout.tv_sec  = 10;
+      timeout.tv_usec = 0;
+      
+      nbrSelect=select(af_unix_disk_south_socket_ref+1,(fd_set *)&localRdFdSet,(fd_set *)NULL,NULL, &timeout);
       if (nbrSelect < 0) 
       {
          if (errno == EINTR) 
@@ -866,6 +874,17 @@ void af_unix_disk_pool_socket_on_receive_buffer_depletion()
          
          fatal("Buffer depletion case. Error on select(%s)",strerror(errno));
          return;
+      }
+      /*
+      ** Time out
+      */
+      if (nbrSelect == 0) {
+        free_count  = ruc_buf_getFreeBufferCount(storage_receive_buffer_pool_p);  
+        severe("Buffer depletion timeout free count %u pending requests %d", free_count, af_unix_disk_pending_req_count);
+        if (free_count < 16) {
+          fatal("Buffer depletion");
+        }
+        return;
       }
       /*
       ** attempt to process a message from disk Thread queue
