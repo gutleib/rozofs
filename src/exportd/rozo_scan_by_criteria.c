@@ -3391,10 +3391,10 @@ int main(int argc, char *argv[]) {
     void *rozofs_export_p;
     char *root_path=NULL;
     uint64_t   eid = LONG_VALUE_UNDEF;
-    char *comp;
+    char *comp = "?";
     int   expect_comparator = 0;
     char *criteria_string = NULL;
-    char  criteria_char;
+    char  criteria_char = '?';
     int   date_criteria_is_set = 0;
     check_inode_pf_t date_criteria_cbk;
     char  regex[1024];
