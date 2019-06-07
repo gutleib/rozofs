@@ -953,17 +953,50 @@ static void usage(char * fmt, ...) {
   
   printf("RozoFS Cluster mover - %s\n", VERSION);    
   printf("Move files from frozen Clusters within a Volume\n");
-  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_cmove --vid <vid> [--threads <count>] [--throughput <MiB>] [--mount <eid>:<path> ... --mount <eid>:<path>]"ROZOFS_COLOR_NONE"\n");
+  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_cmove --vid <vid> [--threads <count>] [--throughput <MiB>] [--mount <path> ... --mount <path>]"ROZOFS_COLOR_NONE"\n");
 
   printf(ROZOFS_COLOR_BOLD"\t-v, --vid <vid>"ROZOFS_COLOR_NONE"\t\t\tVolume to which the Cluster move applies\n");  
   printf("Miscellaneous options:\n");
   printf(ROZOFS_COLOR_BOLD"\t-t, --throughput"ROZOFS_COLOR_NONE"\t\tThroughput limitation of the mover.\n");
-  printf(ROZOFS_COLOR_BOLD"\t-m, --mount"ROZOFS_COLOR_NONE"\t\t\tThe mountpoint to use for one eid\n");
+  printf(ROZOFS_COLOR_BOLD"\t-m, --mount"ROZOFS_COLOR_NONE"\t\t\tA mountpoint to use for one eid\n");
   printf(ROZOFS_COLOR_BOLD"\t-T, --threads"ROZOFS_COLOR_NONE"\t\t\tThe number of threads of the file mover (default %u)\n",ROZOFS_MAX_MOVER_THREADS);
   printf(ROZOFS_COLOR_BOLD"\t-h, --help"ROZOFS_COLOR_NONE"\t\t\tprint this message.\n");
   printf(ROZOFS_COLOR_BOLD"\t-c, --config <filename>"ROZOFS_COLOR_NONE"\t\tExportd configuration file name (when different from %s)\n",EXPORTD_DEFAULT_CONFIG);  
   printf("\n");
   exit(EXIT_SUCCESS); 
+}
+/*
+**_______________________________________________________________________
+**
+** Get eid valie from mount point path
+**
+** @param mountpath     Mount point path name
+**
+** @retval -1 in case of error / eid value on success
+**_______________________________________________________________________
+*/
+int rozofs_vmove_get_eid_from_path(char * mountpath) {
+  int    ret;
+  char   xattrValue[1024];
+  char * p=xattrValue;
+  int    eid;
+  
+  ret = getxattr(mountpath,"user.rozofs.export",xattrValue,sizeof(xattrValue));
+  if (ret <= 0) {
+    return -1;
+  } 
+  if (ret >= sizeof(xattrValue)) {
+    ret = sizeof(xattrValue)-1;
+  }
+  xattrValue[ret] = 0;
+  
+  while ((*p!=0) && (*p!= ' ')) p++;
+  if (*p == 0) return -1;
+  
+   ret = sscanf(p, "%d",&eid);
+   if (ret != 1) return -1;
+   
+   return eid;
 }
 /*
 **_______________________________________________________________________
@@ -1008,14 +1041,11 @@ void rozofs_vmove_get_fid_from_name(char * dname, fid_t fid) {
 int main(int argc, char *argv[]) {
   int                c;
   char             * configFileName = EXPORTD_DEFAULT_CONFIG;
-  long long unsigned int throughput = 0;
   int                ret;
   int                start;
   char              *root_path=NULL; 
   uint32_t           eid; 
-  char              *mount_p;
   char               mover_path[1024];
-  char              *mv_path_p;
   
   memset(&rozo_cmove_ctx,0,sizeof(rozo_cmove_ctx));
   rozo_cmove_ctx.nb_threads = ROZOFS_MAX_MOVER_THREADS;
@@ -1032,8 +1062,6 @@ int main(int argc, char *argv[]) {
   
   sprintf(mover_path,"%s/mover",ROZOFS_KPI_ROOT_PATH);
   ret = rozofs_kpi_mkpath(mover_path);
-  if (ret < 0) mv_path_p = NULL;
-  else mv_path_p = mover_path;
   /*
   ** Check user is root
   */
@@ -1097,17 +1125,17 @@ int main(int argc, char *argv[]) {
         break;
         
       case 'm':
-        if (sscanf(optarg,"%u:", &eid)!= 1) {
-          usage("Bad eid number %s", optarg);
-        }
-	if ((eid == 0)|| (eid >=  EXPGW_EID_MAX_IDX)) {
-          usage("out of range eid number %s", optarg);	
-	}
-	mount_p = optarg;
-	while (*mount_p != ':') mount_p++;
-	mount_p++;
-	mount_path[eid] = mount_p;
-	 
+        /*
+        ** Find out eid from the given mount path
+        */
+        eid = rozofs_vmove_get_eid_from_path(optarg);
+        if (eid == -1) {
+          usage("Bad RozoFS mount point \"%s\"",optarg);
+        }     
+        if (mount_path[eid] != NULL) {
+          usage("2 RozoFS mount points for eid %d : \"%s and \"%s\"",eid,optarg,mount_path[eid]);
+        }     
+	mount_path[eid] = optarg;	 
         break;
       case 't':
         if (sscanf(optarg,"%llu",&rozo_cmove_ctx.throughput) != 1) {
