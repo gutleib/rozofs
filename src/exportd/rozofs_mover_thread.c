@@ -244,28 +244,38 @@ void rozofs_cmove_read_throughput()
   ** mtime has changed so read the file
   */
   fp = fopen(throughput_file.path,"r");
+  if (fp == NULL) {
+    severe("fopen(%s) %s",throughput_file.path,strerror(errno));
+    return;
+  }  
+
   ret = fscanf(fp,"%d\n",&throughput);
-  if ((ret == EOF) || ret == 0)
-  {
-     /*
-     ** rewrite with the current throughput
-     */
-     rewind(fp);
-     throughput = (int)rozofs_mover_throughput;
-     fprintf(fp,"%d\n",throughput);
-     /*
-     ** Close the file and register the mtime
-     */
-     fclose(fp);     
-     ret = stat(throughput_file.path,&statbuf);
-     if (ret < 0)
-     {
-       return ;
-     } 
-     throughput_file.mtime = statbuf.st_mtime;
-  }
-  rozofs_mover_throughput_update_request((uint64_t)throughput);
   
+  /*
+  ** Read succesfull
+  */
+  if (ret == 1) {
+    fclose(fp);
+    throughput_file.mtime = statbuf.st_mtime;
+    rozofs_mover_throughput_update_request((uint64_t)throughput);
+    return;
+  }
+  
+  /*
+  ** rewrite with the current throughput
+  */
+  rewind(fp);
+  fprintf(fp,"%d\n",(int)rozofs_mover_throughput);
+  /*
+  ** Close the file and register the mtime
+  */
+  fclose(fp);     
+  ret = stat(throughput_file.path,&statbuf);
+  if (ret < 0)
+  {
+    return ;
+  } 
+  throughput_file.mtime = statbuf.st_mtime;
 }
 
 /*
@@ -276,8 +286,6 @@ void rozofs_cmove_read_throughput()
 int rozofs_cmove_init_stats(char *rootpath)
 {
    FILE *fp;
-   int ret;
-   struct stat statbuf;  
    char buffer[1024]; 
    
    if (rootpath == NULL) return 0;
@@ -376,11 +384,10 @@ int rozofs_cmove_init_nb_threads(char *rootpath,int nb_threads)
 */
 void rozofs_cmove_read_nb_threads()
 {
-
-   FILE *fp;
-   int ret;
-   struct stat statbuf;   
-   int nb_threads;
+  FILE *fp;
+  int ret;
+  struct stat statbuf;   
+  int nb_threads;
    
   if (nb_threads_file.path == NULL) return;
 
@@ -397,31 +404,39 @@ void rozofs_cmove_read_nb_threads()
   ** mtime has changed so read the file
   */
   fp = fopen(nb_threads_file.path,"r");
-  ret = fscanf(fp,"%d",&nb_threads);
-  if ((ret == EOF) || ret == 0)
-  {
-     /*
-     ** rewrite with the current nb_threads
-     */
-     rewind(fp);
-     nb_threads = (int)fmove_stats_p->nb_threads;
-     fprintf(fp,"%d\n",nb_threads);
-     /*
-     ** Close the file and register the mtime
-     */
-     fclose(fp);     
-     ret = stat(nb_threads_file.path,&statbuf);
-     if (ret < 0)
-     {
-       return ;
-     } 
-     nb_threads_file.mtime = statbuf.st_mtime;
+  if (fp == NULL) {
+    severe("fopen(%s) %s",nb_threads_file.path,strerror(errno));
+    return;
+  }  
+
+  ret = fscanf(fp,"%d\n",&nb_threads);
+  
+  /*
+  ** Read succesfull
+  */
+  if (ret == 1) {
+    if (nb_threads <= 0) nb_threads = 1;
+    if (nb_threads > ROZOFS_MAX_MOVER_THREADS) nb_threads = ROZOFS_MAX_MOVER_THREADS;    
+    fmove_stats_p->nb_threads = nb_threads;
   }
-  if (nb_threads == 0) nb_threads =1;
-  if (nb_threads > ROZOFS_MAX_MOVER_THREADS) nb_threads = ROZOFS_MAX_MOVER_THREADS;
   
-  fmove_stats_p->nb_threads = nb_threads;
+  /*
+  ** rewrite with the current nb_threads
+  */
+  rewind(fp);
+  fprintf(fp,"%d\n",fmove_stats_p->nb_threads);
   
+  /*
+  ** Close the file and register the mtime
+  */
+  fclose(fp);     
+
+  ret = stat(nb_threads_file.path,&statbuf);
+  if (ret < 0)
+  {
+     return ;
+  } 
+  nb_threads_file.mtime = statbuf.st_mtime;
 }
 /*
 **__________________________________________________________________
@@ -751,10 +766,6 @@ int create_response_thread() {
 */
 void *mover_thread_periodic(void * ctx)
 {
-
-  int fd_bytes = -1;
-  int fd_filecount= -1;
-  int fd_throughput = -1;
 
   struct timespec ts = {3, 0};
 
@@ -1214,7 +1225,7 @@ int rozofs_mover_create_mount_point(char * export_hosts, char * export_path, cha
   ** Prepare the rozofsmount command 
   */
   pChar += sprintf(pChar,"rozofsmount -H %s -E %s %s", export_hosts, export_path, mnt_path);
-  pChar += sprintf(pChar," -o rozofsexporttimeout=60,rozofsstoragetimeout=40,rozofsstorclitimeout=50,rozofsnbstorcli=1,auto_unmount,noReadFaultTolerant");
+  pChar += sprintf(pChar," -o rozofsexporttimeout=60,rozofsstoragetimeout=40,rozofsstorclitimeout=50,rozofsnbstorcli=8,auto_unmount,noReadFaultTolerant");
   pChar += sprintf(pChar,",instance=%d",mnt_instance);
 
   /*
