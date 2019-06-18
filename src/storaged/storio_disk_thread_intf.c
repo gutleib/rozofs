@@ -864,34 +864,39 @@ out:
 */
 void af_unix_disk_pool_socket_on_receive_buffer_depletion()
 {
-    rozo_fd_set  localRdFdSet;   
-    int nbrSelect;
-    uint32_t free_count;
+    rozo_fd_set    localRdFdSet;   
+    int            nbrSelect;
+    uint32_t       free_count;
     struct timeval timeout;
+    uint32_t       initial_pending_count;
+
+    /*
+    ** Nothing is expected from the disk threads
+    */    
+    if (af_unix_disk_pending_req_count <= 0) return;
+    
     /*
     ** erase the Fd receive set
     */
     memset(&localRdFdSet,0,sizeof(localRdFdSet));
-    
-    if (af_unix_disk_pending_req_count == 0)
-    {
-       /*
-       ** we are in deep shit!!
-       */
-       severe("TCP out of receive buffer whiule there no read/write pending");       
-       fatal("TCP out of receive buffer whiule there no read/write pending");       
-    } 
+    initial_pending_count = af_unix_disk_pending_req_count;
    
-    while(1)
+    /*
+    ** Some buffers may be sent to the disk threads, while some others may be chained on 
+    ** a congested TCP congestion. So try to get some requests back from the disk threads 
+    ** if any is pending. This may free some buffers and anyway during this time the 
+    ** congestions may be fixed.
+    */   
+    while(af_unix_disk_pending_req_count > 0)
     {        
       /*
       ** wait for event 
       */
       FD_SET(af_unix_disk_south_socket_ref,&localRdFdSet);   	  
       /*
-      ** Set a 10 seconds time out
+      ** Set a 15 seconds time out
       */
-      timeout.tv_sec  = 10;
+      timeout.tv_sec  = 15;
       timeout.tv_usec = 0;
       
       nbrSelect=select(af_unix_disk_south_socket_ref+1,(fd_set *)&localRdFdSet,(fd_set *)NULL,NULL, &timeout);
@@ -907,31 +912,38 @@ void af_unix_disk_pool_socket_on_receive_buffer_depletion()
          return;
       }
       /*
-      ** Time out
+      ** No responses within 15 seconds...
       */
       if (nbrSelect == 0) {
         free_count  = ruc_buf_getFreeBufferCount(storage_receive_buffer_pool_p);  
-        severe("Buffer depletion timeout free count %u pending requests %d", free_count, af_unix_disk_pending_req_count);
-        if (free_count < 16) {
+        severe("Buffer depletion timeout free count %u pending requests %d initial pending requests %u", 
+               free_count, 
+               af_unix_disk_pending_req_count, 
+               initial_pending_count);
+        if (af_unix_disk_pending_req_count == initial_pending_count) {
+          /*
+          ** No response has been received from the disk threads although some are expected
+          */
           fatal("Buffer depletion");
-        }
+        }      
+        /*
+        ** Some responses have been previously received from the disk threads
+        */
         return;
       }
       /*
-      ** attempt to process a message from disk Thread queue
+      ** attempt to process a response from the disk thread queue
       */
       af_unix_disk_rcvMsgsock(NULL,af_unix_disk_south_socket_ref);
       /*
-      ** Check if we have been able to recover some buffer for TCP
-      */      
-      free_count  = ruc_buf_getFreeBufferCount(storage_receive_buffer_pool_p);  
-      if (free_count < 16) continue;
-      /*
-      ** We have at least 16 buffers, so we can rework with TCP
+      ** When 16 responses have been received from the disk threads, go on
       */
-      break;
+      if ((initial_pending_count - af_unix_disk_pending_req_count) >= 16) return;
     }
-
+    
+    /*
+    ** Nothing is expected any more from the disk threads
+    */    
 }
 
 
