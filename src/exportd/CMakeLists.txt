@@ -282,7 +282,7 @@ add_executable(rozo_rebalance
     econfig.c     
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h        
-    rozofs_mover.c  
+    rozofs_mover_thread.c  
     rozofs_mover.h
     rebalance_config.c
     rebalance_config.h
@@ -295,7 +295,7 @@ add_executable(rozo_vmove
     econfig.c     
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h        
-    rozofs_mover.c  
+    rozofs_mover_thread.c  
     rozofs_mover.h
     volume.c
 )

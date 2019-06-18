@@ -21,7 +21,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 
-#define REBALANCE_PATH "/var/run/rozo_rebalance/"
+#define REBALANCE_PATH "/var/run/rozofs/rebalance/"
 #define REBALANCE_DEFAULT_FREQ_SEC 30
 #define ROZO_BALANCE_DBG_BUF_SIZE (1024*384)
 #define REBALANCE_MAX_SCANNED 10
@@ -62,6 +62,7 @@ typedef struct _rozo_balancing_ctx_t
   int continue_on_balanced_state;    /**< assert to one if the process should continue while reaching balanced state */
   int verbose;                       /**< assert to one for verbose mode */
   int throughput;                    /**< file throughput in MBytes/s */
+  int nb_threads;                    /**< Nb of threads of the mover */
   int file_mode;                     /**< either relative/absolute or fid node (see rebalance_file_mode_e) */
   /*
   ** statistics 

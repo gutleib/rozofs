@@ -41,6 +41,9 @@
 #include "rozofs_mover.h"
 #include "export_volume_stat.h"
 
+
+#define ROZO_VMOVE_PATH "/var/run/rozofs/vmove/"
+
 #define ROZOFS_VMOVE_UNDEFINED  0
 #define ROZOFS_VMOVE_FAST       1
 #define ROZOFS_VMOVE_SLOW       2
@@ -991,6 +994,7 @@ static void usage(char * fmt, ...) {
   printf(ROZOFS_COLOR_BOLD"\t-c, --config <filename>"ROZOFS_COLOR_NONE"\t\tExportd configuration file name (when different from %s)\n",EXPORTD_DEFAULT_CONFIG);  
   printf(ROZOFS_COLOR_BOLD"\t-o, --over <size>"ROZOFS_COLOR_NONE"\t\tMove files with total size over the given size\n");  
   printf(ROZOFS_COLOR_BOLD"\t-u, --under <size>"ROZOFS_COLOR_NONE"\t\tMove files with total size under the given size\n");   
+  printf(ROZOFS_COLOR_BOLD"\t-T, --threads <nb_threads>"ROZOFS_COLOR_NONE"\tThe number of threads of the file mover (default %u)\n",20);
   printf("\n");
   exit(EXIT_SUCCESS); 
 }
@@ -1042,6 +1046,9 @@ int main(int argc, char *argv[]) {
   rozofs_inode_t   * ino_p;
   long long unsigned int throughput = 0;
   fid_t              parent;
+  char               path[1024];
+  int                ret;
+  int                nb_threads=20;
   
   /*
   ** Change local directory to "/"
@@ -1056,6 +1063,17 @@ int main(int argc, char *argv[]) {
   if (getuid() != 0) {
     usage("You need to be root");
   }      
+
+  /*
+  ** create the path toward the directory where result file is stored
+  */
+  strcpy(path,ROZO_VMOVE_PATH);
+  ret = rozofs_mkpath ((char*)path,S_IRUSR | S_IWUSR | S_IXUSR);
+  if (ret < 0)
+  {
+    printf("Error while creating path towards result file (path:%s):%s",ROZO_VMOVE_PATH,strerror(errno));
+    exit(EXIT_FAILURE);
+  }
 
   /*
   ** read common config file
@@ -1073,8 +1091,6 @@ int main(int argc, char *argv[]) {
   */
   rozofs_signals_declare(utility_name, common_config.nb_core_file); 
 
-  rozofs_mover_init();        
-
   static struct option long_options[] = {
       {"help", no_argument, 0, 'h'},
       {"fast", no_argument, 0, 'f'},
@@ -1087,6 +1103,7 @@ int main(int argc, char *argv[]) {
       {"recursive", no_argument, 0, 'r'},
       {"over", required_argument, 0, 'o'},
       {"under", required_argument, 0, 'u'},
+      {"threads", required_argument, 0, 'T'},
       {0, 0, 0, 0}
   };
 
@@ -1094,7 +1111,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = -1;
-    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:o:u:", long_options, &option_index);
+    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:o:u:T:", long_options, &option_index);
 
     if (c == -1)
         break;
@@ -1163,7 +1180,21 @@ int main(int argc, char *argv[]) {
           usage("Bad --under format \"%s\"",optarg);
         }  
         break;
-                
+        
+      case 'T':
+        if (sscanf(optarg,"%d",&nb_threads) != 1) {
+          usage("Bad threads parameter \"%s\"",optarg);
+        } 
+	if (nb_threads <= 0)
+	{
+          usage("Bad threads parameter \"%s\"",optarg);	
+	} 
+	if (nb_threads > ROZOFS_MAX_MOVER_THREADS)
+	{
+          nb_threads = ROZOFS_MAX_MOVER_THREADS;	
+	} 
+        break; 
+                            
       default:
         usage("Unexpected argument");
         break;
@@ -1205,7 +1236,7 @@ int main(int argc, char *argv[]) {
   }  
   
   /*
-  ** Find out this edi in the configuration
+  ** Find out this eid in the configuration
   */
   econfig = rozofs_get_eid_configuration(eid); 
   if (econfig == NULL) {
@@ -1214,6 +1245,16 @@ int main(int argc, char *argv[]) {
   if (econfig->vid_fast == 0xFFFF) {
     usage("eid %d only uses volume %d and no fast volume",eid,econfig->vid);
   }
+  
+  sprintf(path,"%seid_%d_dir_%s",ROZO_VMOVE_PATH,eid,directory);
+  ret = rozofs_mkpath ((char*)path,S_IRUSR | S_IWUSR | S_IXUSR);
+  if (ret < 0)
+  {
+     printf("Error while creating path towards result file (path:%s):%s",path,strerror(errno));
+      exit(EXIT_FAILURE);
+  }
+  rozofs_mover_init_th(path,throughput,nb_threads);       
+  
   /*
   ** Build list of cluster of each volumes
   */
@@ -1270,7 +1311,11 @@ int main(int argc, char *argv[]) {
     /*
     ** Move the inut files
     */
-    rozofs_do_move_one_export_fid_mode("localhost", econfig->root, throughput, &jobs); 
+    rozofs_do_move_one_export_fid_mode_multithreaded_mounted("localhost", 
+                                                              econfig->root, 
+                                                              throughput, 
+                                                              &jobs,
+                                                              NULL); 
     rozofs_mover_print_stat(printfBuffer);
     printf("%s",printfBuffer);       
 

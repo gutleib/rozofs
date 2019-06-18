@@ -1641,7 +1641,7 @@ void print_resultat_buffer_success(char *p)
   @retval 0 on success
   @retval -1 on error
 */  
-int rozo_bal_write_result_file()
+int rozo_bal_write_result_file(char * path)
 {
   char pathname[1024];
   FILE *fd;
@@ -1653,7 +1653,7 @@ int rozo_bal_write_result_file()
      */
      return -1;
   }
-  sprintf(pathname,"%s/result_vol_%d",REBALANCE_PATH,rozo_balancing_ctx.volume_id);
+  sprintf(pathname,"%s/result",path);
   if ((fd = fopen(pathname,"w")) == NULL)
   {
      return -1;
@@ -1793,6 +1793,7 @@ static void usage() {
     printf("\t--throughput <value> \t\tfile move througput in MBytes/s (default:%d MB/s)\n",REBALANCE_DEFAULT_THROUGPUT);
     printf("\t--cfg <fileName> \t\tThe rebalance configuration file name.\n");
     printf("\t--unbalancedNodes \t\tFor the case of 6 unbalanced nodes (not the same SID number and/or disk size).\n");
+    printf("\t-T, --threads <nb_threads>\tThe number of threads of the file mover (default %u)\n",20);
     printf("\n");
 };
 
@@ -1863,10 +1864,7 @@ int main(int argc, char *argv[]) {
     ** init of the lock on cluster statistics
     */
     pthread_rwlock_init(&cluster_stats_lock,NULL);
-    pthread_rwlock_init(&cluster_balance_compute_lock,NULL);
-    
-    rozofs_mover_init();
-    
+    pthread_rwlock_init(&cluster_balance_compute_lock,NULL);    
     
     memset(&rozo_balancing_ctx,0,sizeof(rozo_balancing_ctx_t));
     rozo_balancing_ctx.rebalance_frequency = REBALANCE_DEFAULT_FREQ_SEC;
@@ -1883,6 +1881,7 @@ int main(int argc, char *argv[]) {
     rozo_balancing_ctx.continue_on_balanced_state = 0;
     rozo_balancing_ctx.throughput = REBALANCE_DEFAULT_THROUGPUT;
     rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
+    rozo_balancing_ctx.nb_threads = 20;
            
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -1906,6 +1905,7 @@ int main(int argc, char *argv[]) {
         {"minfilesz", required_argument, &long_opt_cur, 11},
         {"maxfilesz", required_argument, &long_opt_cur, 12},
         {"unbalancedNodes", no_argument, &long_opt_cur, 13},
+        {"threads", required_argument, 0, 'T'},
 
         {0, 0, 0, 0}
     };
@@ -1914,7 +1914,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "hlrc:p:f:v:t:a:", long_options, &option_index);
+      c = getopt_long(argc, argv, "hlrc:p:f:v:t:a:T:", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -2077,6 +2077,21 @@ int main(int argc, char *argv[]) {
               exit(EXIT_FAILURE);	
 	    }       
 	    break;
+            
+          case 'T':
+            if (sscanf(optarg,"%d",&rozo_balancing_ctx.nb_threads) != 1) {
+              usage("Bad threads parameter \"%s\"",optarg);
+            } 
+	    if (rozo_balancing_ctx.nb_threads <= 0)
+	    {
+              usage("Bad threads parameter \"%s\"",optarg);	
+	    } 
+	    if (rozo_balancing_ctx.nb_threads > ROZOFS_MAX_MOVER_THREADS)
+	    {
+              rozo_balancing_ctx.nb_threads = ROZOFS_MAX_MOVER_THREADS;	
+	    } 
+            break; 
+            
           case 'c':
               rozo_balancing_ctx.configFileName = optarg;
               break;	
@@ -2126,7 +2141,18 @@ int main(int argc, char *argv[]) {
      }    
   
   }
-  sprintf(path,"%sresult_vol_%d",REBALANCE_PATH,rozo_balancing_ctx.volume_id);
+
+    
+  sprintf(path,"%svol_%d",REBALANCE_PATH,rozo_balancing_ctx.volume_id);
+  ret = mkpath ((char*)path,S_IRUSR | S_IWUSR | S_IXUSR);
+  if (ret < 0)
+  {
+     printf("Error while creating path towards result file (path:%s):%s",path,strerror(errno));
+      exit(EXIT_FAILURE);
+  }
+  rozofs_mover_init_th(path,rozo_balancing_ctx.throughput,rozo_balancing_ctx.nb_threads);       
+
+
   printf("Result will be found in: %s\n",path);
   /*
   ** clear the cluster table
@@ -2201,7 +2227,7 @@ int main(int argc, char *argv[]) {
       /*
       ** wait for some delay before looking at the volume statistics
       */
-      rozo_bal_write_result_file();    
+      rozo_bal_write_result_file(path);    
 
       if (start == 0) sleep(rozo_balancing_ctx.rebalance_frequency);
       start = 0;
@@ -2354,10 +2380,11 @@ reloop:
       {
         if (rozo_balancing_ctx.verbose) info("%d file to move\n",scanned_current_count);
         all_export_scanned_count +=scanned_current_count;
-	rozofs_do_move_one_export_fid_mode("localhost", 
+	rozofs_do_move_one_export_fid_mode_multithreaded_mounted("localhost", 
                               current_export->root, 
 			      rozo_balancing_ctx.throughput, 
-			      &jobs); 
+			      &jobs,
+                              NULL); 
       }
       
       if (rozo_lib_is_scanning_stopped()== 0)
@@ -2453,7 +2480,7 @@ reloop:
 end:
     print_resultat_buffer_success(debug_buffer);
     printf("%s\n",debug_buffer);
-    rozo_bal_write_result_file();    
+    rozo_bal_write_result_file(path);    
 //  rozo_display_all_cluster();
 
   exit(EXIT_SUCCESS);  
