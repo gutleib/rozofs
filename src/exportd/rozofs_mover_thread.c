@@ -1302,7 +1302,16 @@ int rozofs_do_move_one_export_fid_mode_multithreaded_mounted(char * exportd_host
   else
   {
     dynamic_mount = 0;
-    strcpy(mount_path,mount_path_in);        
+    strcpy(mount_path,mount_path_in);    
+    /*
+    ** Remove trailing / if any because the check rozofs_mover_is_mounted() 
+    ** fails with a trailing /
+    */   
+    int last_char_idx = strlen(mount_path)-1;
+    if (mount_path[last_char_idx] == '/') {
+      mount_path[last_char_idx] = 0;
+    }
+      
     /*
     ** Change local directory to the mount point
     */
