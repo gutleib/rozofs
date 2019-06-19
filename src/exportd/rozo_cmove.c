@@ -652,36 +652,136 @@ int rozofs_visit_single(void *exportd,void *inode_attr_p,void *p) {
   
 }
 
+typedef enum _INODE_TYPE_E {
+  INODE_TYPE_SINGLE,
+  INODE_TYPE_HYBRID_MASTER,
+  INODE_TYPE_HYBRID_SLAVE,
+  INODE_TYPE_SLAVE,
+} INODE_TYPE_E;
+/*
 /*
 **_______________________________________________________________________
 **
-** RozoFS specific function for visiting a file. We have to check whether
-** this is an hybrid file under one of the directory listed in pFidTable
-** that needs its hybrid stride to be moved
-**
-** @param exportd       pointer to exporthd data structure
-** @param inode_attr_p  pointer to the inode data
-** @param p             always NULL
+** RozoFS specific function for visiting a sub-file. 
+** 
+** @param inode_type     The type of visited inode
+** @param master_p       pointer to the master inode where information such as 
+**                       mode, dates are relevent
+** @param slave_p        pointer to the sub-file (may be the master inode)
+**                       where cid/sid are relevent
 **  
 ** @retval 0 no match
 ** @retval 1 when match
 **_______________________________________________________________________
 */
-int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
-  ext_mattr_t        * inode_p = inode_attr_p;
+int rozofs_do_visit(INODE_TYPE_E inode_type,ext_mattr_t *master_p,ext_mattr_t * slave_p, uint64_t size) {
+
+  rozofs_mover_job_t * job;
+
+
+  if (cluster[slave_p->s.attrs.cid] != ROZOFS_CMOVE_FROZEN) {
+    /*
+    ** Not a frozen cluster, so ignore it
+    */
+    return 0;
+  }
+  rozo_cmove_ctx.current_scanned_file_cpt++;   
+  
+  /*
+  ** Allocate a job for the mover
+  */
+  job = malloc(sizeof(rozofs_mover_job_t));
+  memset(job,0,sizeof(rozofs_mover_job_t));
+  job->size = size;
+
 
   /*
-  ** Simple file case
+  ** Get a new distribution
+  */
+  int retval = rozofs_cmove_distribute(job);
+  if (retval < 0) {
+    rozo_cmove_ctx.scanned_error++;
+    char fidstr[40];
+    rozofs_fid_append(fidstr,slave_p->s.attrs.fid);
+    warning("rozofs_cmove_distribute %s\n",fidstr);
+    free(job); 
+    return 0;   
+  }
+  
+  job->name = malloc(sizeof(fid_t));
+  memcpy(job->name,slave_p->s.attrs.fid,sizeof(fid_t));
+  
+  scanned_current_count++;  
+  list_push_back(&jobs,&job->list);
+
+  if (scanned_current_count > rozo_cmove_ctx.max_scanned)
+  {  
+    rozo_lib_stop_scanning();
+  } 
+
+  return 1;
+}
+/*
+**_______________________________________________________________________
+*/
+/**
+*   RozoFS specific function for visiting
+
+   @param inode_attr_p: pointer to the inode data
+   @param exportd : pointer to exporthd data structure
+   @param p: always NULL
+   
+   @retval 0 no match
+   @retval 1 match
+*/
+
+int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
+  ext_mattr_t *inode_p = inode_attr_p;
+  ext_mattr_t *slave_p = inode_p;  
+  int          idx;
+  int          nb_slave;
+  int          match = 0;
+  rozofs_iov_multi_t vector; 
+
+  /*
+  ** get the size of each section
+  */
+  rozofs_get_multiple_file_sizes(inode_p,&vector);
+   
+  /*
+  ** Is this file hybrid or striped...
   */
   if (inode_p->s.multi_desc.byte == 0) {
-    
-    return rozofs_visit_single(exportd,inode_attr_p,p);  
+    /*
+    ** Regular file without striping
+    ** inode_attr_p and slave_p are the same
+    */
+    match += rozofs_do_visit(INODE_TYPE_SINGLE,inode_attr_p,slave_p, vector.vectors[0].len);
+  }  
+  else if (inode_p->s.multi_desc.common.master == 1) {
+    /*
+    ** When not in hybrid mode 1st inode has no distribution
+    */
+    if (inode_p->s.hybrid_desc.s.no_hybrid== 0) {
+      match += rozofs_do_visit(INODE_TYPE_HYBRID_MASTER,inode_attr_p,slave_p, vector.vectors[0].len);
+    }  
+    /*
+    ** Check every slave
+    */
+    slave_p ++;
+    nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+    for (idx=0; idx<nb_slave; idx++,slave_p++) {
+      if (inode_p->s.hybrid_desc.s.no_hybrid==0) {
+         match += rozofs_do_visit(INODE_TYPE_HYBRID_SLAVE,inode_attr_p,slave_p, vector.vectors[idx+1].len);
+      }  
+      else{
+         match += rozofs_do_visit(INODE_TYPE_SLAVE,inode_attr_p,slave_p,vector.vectors[idx+1].len);
+      }  
+    }  
   }
-  /*
-  ** Multi file not yet handled
-  */
-  return 0;  
-}
+  if(match) return 1;
+  return 0;
+}  
 /*
 **_______________________________________________________________________
 **
