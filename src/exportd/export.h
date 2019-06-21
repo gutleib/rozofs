@@ -91,7 +91,7 @@
 #define RM_BINS_PTHREAD_FREQUENCY_SEC 2
 /** File size treshold: if a removed file is bigger than or equel to this size
  *  it will be push in front of list */
-#define RM_FILE_SIZE_TRESHOLD 0x40000000LL
+#define RM_FILE_SIZE_TRESHOLD 0x1000000000LL
 #define TRACKING_PTHREAD_FREQUENCY_SEC 60  /**< default polling period of tracking thread */
 
 /*
@@ -160,6 +160,7 @@ typedef struct _rmfentry_disk_t {
  */
 typedef struct rmfentry {
     fid_t trash_inode;      /**< reference of the trash inode */
+    uint64_t size; ///<  file size
     fid_t fid; ///<  unique file id.
     cid_t cid; /// unique cluster id where the file is stored.
     sid_t initial_dist_set[ROZOFS_SAFE_MAX];
@@ -1052,11 +1053,12 @@ char *export_get_config_file_path();
 */
 /** Allocate a rmfentry_t structure to chain the deletion job
  *
+ * @param e               The export context pointer
  * @param trash_entry     The disk context of removed file
  * 
- * @return: the address of the allocated structure
+ * @return: none
  */
-rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry);
+void export_alloc_rmentry(export_t * e, rmfentry_disk_t * trash_entry);
 /*
 **__________________________________________________________________
 

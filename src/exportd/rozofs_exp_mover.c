@@ -591,7 +591,6 @@ int rozofs_mover_put_trash(export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_t *tr
      */
      return 0;
   }
-  uint32_t hash = rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid);  
   /*
   ** prepare the trash entry
   */
@@ -616,33 +615,10 @@ int rozofs_mover_put_trash(export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_t *tr
      severe("error on trash insertion from mover: %s",strerror(errno)); 
   }
   /*
-  ** Preparation of the rmfentry
+  ** Allocate and chain a rmfentry to be processed by the trash threads
   */
-  rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
-  /* 
-  ** Acquire lock on bucket trash list
-  */
-  if ((errno = pthread_rwlock_wrlock
-          (&e->trash_buckets[hash].rm_lock)) != 0) {
-      severe("pthread_rwlock_wrlock failed: %s", strerror(errno));
-      // Best effort
-  }
-  /*
-  ** Check size of file 
-  */
-  if (lv2->attributes.s.attrs.size >= RM_FILE_SIZE_TRESHOLD) {
-      // Add to front of list
-      list_push_front(&e->trash_buckets[hash].rmfiles, &rmfe->list);
-  } else {
-      // Add to back of list
-      list_push_back(&e->trash_buckets[hash].rmfiles, &rmfe->list);
-  }
-
-  if ((errno = pthread_rwlock_unlock
-          (&e->trash_buckets[hash].rm_lock)) != 0) {
-      severe("pthread_rwlock_unlock failed: %s", strerror(errno));
-      // Best effort
-  }
+  export_alloc_rmentry(e,&trash_entry);
+  
   return 0;
 }
 /*
