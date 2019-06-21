@@ -60,6 +60,7 @@
 int loop_fdl = 0;
 
 extern uint64_t export_rm_bins_reload_count;
+extern uint64_t export_rm_bins_reloaded_size;
 int export_load_rmfentry(export_t * e) 
 {
    int ret=0;
@@ -159,6 +160,7 @@ int export_load_rmfentry(export_t * e)
 #endif
             memcpy(rmfe->fid, trash_entry.fid, sizeof (fid_t));
             rmfe->cid = trash_entry.cid;
+            rmfe->size = trash_entry.size;
             memcpy(rmfe->initial_dist_set, trash_entry.initial_dist_set,
                     sizeof (sid_t) * ROZOFS_SAFE_MAX);
             memcpy(rmfe->current_dist_set, trash_entry.current_dist_set,
@@ -170,6 +172,9 @@ int export_load_rmfentry(export_t * e)
 	    **  Compute hash value for this fid
 	    */
             uint32_t hash = rozofs_storage_fid_slice(trash_entry.fid);
+
+            export_rm_bins_reload_count++;
+            export_rm_bins_reloaded_size += rmfe->size;
 	  
             /* Acquire lock on bucket trash list
 	    */
@@ -189,7 +194,6 @@ int export_load_rmfentry(export_t * e)
                 // Add to back of list
                 list_push_back(&e->trash_buckets[hash].rmfiles, &rmfe->list);
             }
-            export_rm_bins_reload_count++;
             if ((errno = pthread_rwlock_unlock
                     (&e->trash_buckets[hash].rm_lock)) != 0) {
                 severe("pthread_rwlock_unlock failed: %s", strerror(errno));
