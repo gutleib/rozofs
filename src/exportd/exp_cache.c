@@ -285,7 +285,23 @@ int exp_meta_get_object_attributes(export_tracking_table_t *trk_tb_p,fid_t fid,l
    if (ret < 0)
    { 
      return -1;
-   }  
+   } 
+  /*
+   ** Check that the FID in the read attribute matches the input FID
+   */
+   {
+     rozofs_inode_t * read_inode_p = (rozofs_inode_t *) entry_p->attributes.s.attrs.fid;
+     if ((read_inode_p->s.eid     != fake_inode->s.eid) 
+     ||  (read_inode_p->s.usr_id  != fake_inode->s.usr_id) 
+     ||  (read_inode_p->s.file_id != fake_inode->s.file_id) 
+     ||  (read_inode_p->s.idx     != fake_inode->s.idx)) {
+       /*
+       ** The read inode does not match the input inode
+       */
+       errno = ENOENT;
+       return -1;
+     } 
+   }     
    /*
    ** Check the case of a regular file with slave inodes (multiple file mode)
    */
