@@ -501,6 +501,8 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     struct stat o_stbuf;
     uint32_t readahead = 0;
     uint64_t buf_flush_offset;
+    int      striping_factor;
+    
     /*
     ** Update the IO statistics
     */
@@ -575,7 +577,13 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       */
 
       // Check file size 
-      if (attr.size >= ROZOFS_FILESIZE_MAX) {
+      if (ie->attrs.multi_desc.common.master != 0) {
+        striping_factor = rozofs_get_striping_factor_from_ie(ie);
+      }
+      else {
+        striping_factor = 1;
+      }  
+      if (attr.size >= (ROZOFS_FILESIZE_MAX*striping_factor)) {
         errno = EFBIG;
         goto error;
       } 

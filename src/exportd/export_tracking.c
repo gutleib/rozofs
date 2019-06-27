@@ -2715,6 +2715,7 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     uint64_t nrb_old = 0;
     int      sync = 0;
     uint16_t share = 0;
+    int       striping_factor;
        
     START_PROFILING(export_setattr);
 
@@ -2752,7 +2753,13 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     if ((to_set & EXPORT_SET_ATTR_SIZE) && S_ISREG(lv2->attributes.s.attrs.mode)) {
         
         // Check new file size
-        if (attrs->size >= ROZOFS_FILESIZE_MAX) {
+        if (lv2->attributes.s.multi_desc.common.master != 0) {
+          striping_factor = lv2->attributes.s.multi_desc.master.striping_factor+1;
+        }
+        else {
+          striping_factor = 1;
+        }  
+        if (attrs->size >= (ROZOFS_FILESIZE_MAX*striping_factor)) {
             errno = EFBIG;
             goto out;
         }
@@ -9278,7 +9285,14 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     return 0;
   }
   if (sscanf(p," size = %llu", (long long unsigned int *) &valu64) == 1) {
-    if (valu64 >= ROZOFS_FILESIZE_MAX) {
+    // Check new file size
+    if (lv2->attributes.s.multi_desc.common.master == 0) {
+      striping_factor = lv2->attributes.s.multi_desc.master.striping_factor+1;
+    }
+    else {
+      striping_factor = 1;
+    }  
+    if (valu64 >= (ROZOFS_FILESIZE_MAX*striping_factor)) {
       errno = EFBIG;
       return -1;            
     }
