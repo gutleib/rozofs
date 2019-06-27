@@ -68,7 +68,7 @@ typedef struct _rozo_cmove_ctx_t
 } rozo_cmove_ctx_t;
 
 
-#define ROZOFS_CMOVE_MAX_SCANNED_DEFAULT  200
+#define ROZOFS_CMOVE_MAX_SCANNED_DEFAULT  1000
 
 #define ROZOFS_VMOVE_UNDEFINED  0
 #define ROZOFS_CMOVE_FROZEN       1
