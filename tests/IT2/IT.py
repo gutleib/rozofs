@@ -1004,11 +1004,8 @@ def run_mapper_corruption(cid,sid,mapper,crcfile):
     report("%s has not been truncated"%(mapper))
     return -1
 
-  # Reset storages
-  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-  wait_until_all_sid_up()
-
   # Reread the file
+  clean_cache()
   os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
 
   # Check mapper file has been repaired
@@ -1029,13 +1026,9 @@ def run_mapper_corruption(cid,sid,mapper,crcfile):
 
   backline("Corrupt mapper/header file %s "%(mapper))
 
-  # Reset storage
-  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-  wait_until_all_sid_up()
-
   # Reread the file
+  clean_cache()
   os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
-  #if filecmp.cmp(crcfile,"./ref") == False: report("%s and %s differ"%(crcfile,"./ref"))
 
   # Check file has been re written
   f = open(mapper, "rb")      
@@ -1093,26 +1086,14 @@ def run_bins_corruption(cid,sid,bins,crcfile):
   # Clear error counter
   reset_storcli_counter()
 
-  # Reset storages
-  os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
-  wait_until_all_sid_up() 
-
   # Reread the file
-  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
-    
+  clean_cache()
+  os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile)) 
+   
   # Reread the file
-  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
-    report("1 !!! %s and %s differ"%(crcfile,"./ref"))
-    return 1 
-  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
-    report("2 !!! %s and %s differ"%(crcfile,"./ref"))
-    return 1
-  time.sleep(1)     
-  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
-    report("3 !!! %s and %s differ"%(crcfile,"./ref"))
-    return 1   
-  if filecmp.cmp(crcfile,"./ref",shallow=False) == False: 
-    report("4 !!! %s and %s differ"%(crcfile,"./ref"))
+  clean_cache()
+  if filecmp.cmp(crcfile,"./ref10M",shallow=False) == False: 
+    report("1 !!! %s and %s differ"%(crcfile,"./ref10M"))
     return 1 
   
   if check_storcli_crc(True) == True:
@@ -1141,7 +1122,7 @@ def crc32():
   crcfile="%s/crc32"%(exepath)
   # Create a file
   if os.path.exists(crcfile): os.remove(crcfile)      
-  os.system("cp ./ref %s"%(crcfile))  
+  os.system("cp ./ref10M %s"%(crcfile))  
   
   # Clear error counter
   reset_storcli_counter()
