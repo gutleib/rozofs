@@ -586,6 +586,8 @@ class mount_point_class:
 
     os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_name(),self.get_mount_path(),options))
     os.system("chmod 0777 %s"%(self.get_mount_path()))
+    if self.eid.striping_cmd != "":
+      os.system("rozo_multifile -s -i %s %s > /dev/null"%(self.eid.striping_cmd,self.get_mount_path()))
           
   def stop(self):
     try: self.nfs(False)
@@ -644,27 +646,24 @@ class mount_point_class:
     d = adaptative_tbl(2,"Mount points") 
     d.new_center_line()
     d.set_column(1,"Instance")
-    d.set_column(2,"Volume")      
-    d.set_column(3,"Export")
-    d.set_column(4,"layout")
-    d.set_column(5,"Block")
-    d.set_column(6,"Site") 
-    d.set_column(7,"Mount path") 
+    d.set_column(2,"Export")
+    d.set_column(3,"layout")
+    d.set_column(4,"Block")
+    d.set_column(5,"Site") 
+    d.set_column(6,"Mount path") 
     d.new_center_line()
-    d.set_column(2,"id")      
-    d.set_column(3,"id")
-    d.set_column(5,"size")
-    d.set_column(6,"number") 
+    d.set_column(2,"id")
+    d.set_column(4,"size")
+    d.set_column(5,"number") 
     d.end_separator()    
     for m in mount_points:
       d.new_line()
       d.set_column(1,"%s"%(m.instance))
-      d.set_column(2,"%s"%(m.eid.volume.vid))      
-      d.set_column(3,"%s"%(m.eid.eid))
-      d.set_column(4,"%s"%(m.layout))
-      d.set_column(5,"%s"%(rozofs.bsize(m.eid.bsize))) 
-      d.set_column(6,"%s"%(m.site))   
-      d.set_column(7,"%s"%(m.get_mount_path())) 
+      d.set_column(2,"%s"%(m.eid.eid))
+      d.set_column(3,"%s"%(m.layout))
+      d.set_column(4,"%s"%(rozofs.bsize(m.eid.bsize))) 
+      d.set_column(5,"%s"%(m.site))   
+      d.set_column(6,"%s"%(m.get_mount_path())) 
     d.display()
     
   def process(self,opt):
@@ -690,6 +689,7 @@ class mount_point_class:
     return  
 #____________________________________
 def check_export_id_is_free(eid):
+  global exports
   for e in exports:
     if e.eid == eid: return False
   return True 
@@ -726,7 +726,12 @@ class export_class:
       self.failures = rozofs.failures(layout)   
     else:
       self.failures = volume.get_failures()
+    self.striping_cmd = ""  
+    exports.append(self)
 
+  def striping(self,cmd):
+    self.striping_cmd = cmd
+    
   def set_vid_fast(self,vid):
     self.vid_fast = vid
     
@@ -836,12 +841,11 @@ class volume_class:
     sys.stdout = save_stdout      
 
   def display(self):
+    global exports
     d = adaptative_tbl(2,"Volumes") 
     d.new_center_line()
     d.set_column(1,"Vid")
     d.set_column(2,"Cid")      
-    d.set_column(3,"Export")
-    d.set_column(4,"layout")
     d.end_separator()    
     for v in volumes:
       d.new_line()
@@ -849,10 +853,6 @@ class volume_class:
       string=""
       for c in v.cid: string += "%s "%(c.cid)
       d.set_column(2,"%s"%(string))
-      string=""
-      for e in v.eid: string += "%s "%(e.eid)
-      d.set_column(3,"%s"%(string))
-      d.set_column(4,"%s"%(rozofs.layout(v.layout)))
     d.display()
 
 #____________________________________
@@ -863,6 +863,8 @@ class exportd_class:
   def __init__(self,hosts="192.168.100.50/192.168.100.51"):
     self.export_host=hosts  
 
+  def get_hosts(self): return self.export_host
+  
   def get_config_name(self): return "%s/export.conf"%(rozofs.get_config_path())
 
   def delete_config(self):
@@ -939,7 +941,6 @@ class exportd_class:
     global volumes
     
     print "layout = 1;"
-    print "striping = { unit = %s; factor = %s; };"%(rozofs.multiple_unit,rozofs.multiple_factor)
     print "volumes ="
     print "("
     nextv=" "
@@ -1015,9 +1016,26 @@ class exportd_class:
 	nexte=","	
     print ");"
 
-  def display(self): 
-    console("EXPORTD : %s"%(self.export_host))    
-
+  def display(self):     
+    d = adaptative_tbl(2,"exports %s"%(self.export_host))
+    d.new_center_line()
+    d.set_column(1,"eid")
+    d.set_column(2,"vid")      
+    d.set_column(3,"fast")
+    d.set_column(4,"layout")
+    d.set_column(5,"striping")
+    d.end_separator()    
+    for e in exports:
+      d.new_line()
+      d.set_column(1,"%s"%(e.eid))
+      d.set_column(2,"%s"%(e.volume.vid))
+      if e.vid_fast != "":
+        d.set_column(3,"%s"%(e.vid_fast.vid))
+      else:
+        d.set_column(3,"%s"%(e.vid_fast))
+      d.set_column(4,"%s"%(e.layout))  
+      d.set_column(5,"%s"%(e.striping_cmd))
+    d.display()
 
   
 def display_config_string(name,val):
@@ -1075,13 +1093,8 @@ class rozofs_class:
     self.min_metadata_inodes = None
     self.min_metadata_MB = None
     self.mkfscmd = None
-    self.multiple_unit = 0
-    self.multiple_factor = 0
     self.standalone = False
     
-  def set_multiple(self,unit=0,factor=0):
-    self.multiple_unit = unit
-    self.multiple_factor = factor  
   def set_standalone(self,val): self.standalone = val       
   def set_trashed_file_per_run(self,val): rozofs.trashed_file_per_run = val
   def set_min_metadata_inodes(self,val): self.min_metadata_inodes = val
@@ -1379,10 +1392,10 @@ class rozofs_class:
         print line[:-1]
     
   def display(self):
-    exportd.display()        
     for v in volumes:
       v.display()  
-      break  
+      break 
+    exportd.display()   
     if len(hosts) != int(0):
       hosts[0].display()
     if len(mount_points) != int(0):      
@@ -1406,6 +1419,7 @@ class rozofs_class:
     for h in hosts: h.start()
     exportd.start()
     for m in mount_points: m.start() 
+    self.display()
 
   def create_devices(self):
     # Case of a loop device for metadata
