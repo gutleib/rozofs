@@ -216,24 +216,34 @@ if config_choice == "multiple":
   rozofs.set_multiple(1,1)
 
   vol = setVolumeHosts(nbHosts = 4, nbclusters = 5)
+  exp = addExport(vol,layout=1,eid=1)
+  exp.striping("-f none -m 3 -u 2")
 
-  multiple = addExport(vol,layout=1,eid=1)
   
 #_________________________________________________
 # Hybrid 
 # 
 if config_choice == "hybrid":
 
-  rozofs.set_multiple(1,1)
-
   vfast = setVolumeHosts(nbHosts = 4, nbclusters = 3)
   vol   = setVolumeHosts(nbHosts = 4, nbclusters = 4)
 
-  hybrid = addExport(vol,layout=1,eid=1)
-  hybrid.set_vid_fast(vfast)
+  exp = addExport(vol,layout=1,eid=1)
+  exp.set_vid_fast(vfast)
+  exp.striping("-f hybrid -m 3 -u 2 -z 512k")
   
-  multiple = addExport(vol,layout=1,eid=2)
+#_________________________________________________
+# aging 
+# 
+if config_choice == "aging":
 
+  vfast = setVolumeHosts(nbHosts = 4, nbclusters = 4)
+  vol   = setVolumeHosts(nbHosts = 4, nbclusters = 4)
+
+  exp = addExport(vol,layout=1,eid=1)
+  exp.set_vid_fast(vfast)
+  exp.striping("-f aging -m 3 -u 2")
+  
 
 
 # Set thin provisionning
