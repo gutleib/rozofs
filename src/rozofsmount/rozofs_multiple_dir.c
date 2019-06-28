@@ -27,6 +27,9 @@
 #include <limits.h>
 #include <rozofs/common/mattr.h>
 
+#define ROZOFS_FAST_VOL_NONE    0
+#define ROZOFS_FAST_VOL_HYBRID  1
+#define ROZOFS_FAST_VOL_AGING   2
 
 
 /*
@@ -95,19 +98,35 @@ int get_size_value(char *str,uint64_t *value)
 
 static void usage() {
 
-printf ("\nRozoFS hybrid/striping configuration \n\n");
-printf("  That tool enables to modify the hybrid/striping configuration at directory level.\n"); 
-printf("  It has precedence over the striping configured at either volume or exportd level.\n\n"); 
-printf("\nUsage: rozo_multifile [OPTIONS] path..\n\n");
-printf (" Set configuration : rozo_multifile -s -m <striping_count>  [-u <striping-unit>] -f <0|1> [-z <hybrid_size>[k|K|m|M]] [-i] dir_1..dir_n\n");
-printf (" Get configuration : rozo_multifile -g path_1..path_n\n");
+printf ("\nRozoFS hybrid/aging/striping configuration tools.\n");
+printf("    That tool enables to modify the hybrid/aging/striping configuration at directory level.\n"); 
+printf("    It has precedence over the striping configured at either volume or exportd level.\n"); 
+printf("\nUsage: \n");
+printf ("   Getting configuration : \n");
+printf ("        rozo_multifile -g path_1..path_n\n");
+printf ("   Setting configuration : \n");
+printf ("        rozo_multifile -s [-i] [-f none]  -m <striping_count> [-u <striping-unit>] dir_1..dir_n\n");
+printf ("        rozo_multifile -s [-i] -f hybrid  -m <striping_count> [-u <striping-unit>] [-z <hybrid_size>[k|K|m|M]] dir_1..dir_n\n");
+printf ("        rozo_multifile -s [-i] -f aging -m <striping_count> [-u <striping-unit>] dir_1..dir_n\n");
 printf("\nParameters:\n");
-printf("  -s                    : To set the hybrid/striping configuration of a directory. The striping unit might be omitted if the <striping_count> is 1.\n");
-printf("\n");
-printf("  -m <striping_count>   : The <striping_count> is the number of RozoFS internal files on which the user file is striped.\n"); 
-printf("                          It is applied at the creation time, and the value must be in the [1..8] range.\n");
-printf("                          A <striping_count> of 1, indicates that there is no file striping.\n");
-printf("\n");
+printf(" -g                    : To get the current multifile configuration of either a directory or regular file\n");
+printf(" -s                    : To set the hybrid/aging/striping configuration of a directory.\n");
+printf(" -f                    : That parameter indicates how the fast volume is used for this directory\n");
+printf("                         - none\n");
+printf("                             No fast volume is used. The files are striped on the slow volume following parameters\n");
+printf("                             defined by -u and -m options.\n");
+printf("                         - hybrid\n");
+printf("                             The 1rst part of each file is allocated on the fast volume, while the rest of the file\n");
+printf("                             is striped on the slow volume following parameters defined by -u and -m options.\n");
+printf("                             The size of the chunk on the fast volume is defined thanks to -z <hybrid_size>,\n");
+printf("                             or -u <striping_unit> when -z option is omitted.\n");
+printf("                         - aging\n");
+printf("                             The files are created on the fast volume, and can later be moved to the slow volume.\n");
+printf("                             The files are striped on fast volume as well as slow volume following parameters defined\n");
+printf("                             by -u and -m options.\n");
+printf(" -m <striping_count>   : The <striping_count> is the number of RozoFS internal files on which the user file is striped.\n"); 
+printf("                         It is applied at the creation time, and the value must be in the [1..8] range.\n");
+printf("                         A <striping_count> of 1, indicates that there is no file striping.\n");
 printf(" -u <striping_unit>    : The value is given in power of 2 [0..7]. The default unit is 256KB. It permits to configure the maximum unit\n");
 printf("                         size before using the next file according to the <striping_count> value. The value are:\n");
 printf("                           - 0: 256KB\n");
@@ -118,21 +137,12 @@ printf("                           - 4: 4MB\n");
 printf("                           - 5: 8MB\n");
 printf("                           - 6: 16MB\n");
 printf("                           - 7: 32MB\n");
-printf("                          The striping unit might be omitted when the <striping_count> is 1.\n");
-printf("\n");
-printf(" -f <0|1>              : that parameter indicates if the hybrid mode is enabled for the directory\n");
-printf("                           - 0: disabled\n");
-printf("                           - 1: enabled\n");
-printf("                             When it is enabled, it might be possible to defined an <hybrid_size>. If that parameter is omitted, RozoFS uses\n");
-printf("                           the size defined in the <striping_unit> for the hybrid section\n");
-printf("\n");
-printf(" -z <hybrid_size>      : When provided, that parameter gives the size of the hybrid section either in Bytes, KB or MB\n");
-printf("                          The provided value is round up to the next %d KB boundary\n",ROZOFS_HYBRID_UNIT_BASE/1024);
-printf("                          The maximun size of the hybrid section is  %d KB \n",(ROZOFS_HYBRID_UNIT_BASE/1024)*127);
-printf("\n");
-printf(" -i                    : When provided, it indicates that the child directory will inherit of the configuration of the parent directory\n");
-printf(" -g                     : To get the current multifile configuration of either a directory or regular file\n");
-printf(" -h                     : This message\n\n");
+printf("                         The striping unit might be omitted when the <striping_count> is 1.\n");
+printf(" -z <hybrid_size>      : This parameter is only valid in hybrid mode. When provided, that parameter gives the size of the hybrid section either \n");
+printf("                         in Bytes, KB or MB. The provided value is rounded up to the next %d KB boundary\n",ROZOFS_HYBRID_UNIT_BASE/1024);
+printf("                         The maximun size of the hybrid section is  %d KB \n",(ROZOFS_HYBRID_UNIT_BASE/1024)*127);
+printf(" -i                    : When provided, it indicates that the child directories will inherit of the configuration of the parent directory\n");
+printf(" -h                    : This message\n\n");
 
 }
 
@@ -143,13 +153,13 @@ char *module_name;
 /*
 **__________________________________________________________________
 */
-int set_multifile(char *dirpath,int striping_factor,int striping_unit,int redundancy,int hybrid,int hybrid_sz)
+int set_multifile(char *dirpath,int striping_factor,int striping_unit,int inheritance,int fast_vol_mode,int hybrid_sz)
 {
    char bufall[128];
    int ret;
 
    
-   sprintf(bufall,"striping = %d,%d,%d,%d,%d",striping_factor,striping_unit,redundancy,hybrid,hybrid_sz);
+   sprintf(bufall,"striping = %d,%d,%d,%d,%d",striping_factor,striping_unit,inheritance,fast_vol_mode,hybrid_sz);
    
    ret = setxattr(dirpath,"rozofs",bufall,strlen(bufall),0);
    if (ret < 0)
@@ -177,7 +187,7 @@ int get_multifile(char *dirpath)
 
    int striping_factor = -1;
    int striping_unit =-1;
-   int redundancy = -1;
+   int inheritance = -1;
    int hybrid = -1;
    int hybrid_sz = -1;
    int multi_f = -1;
@@ -190,6 +200,7 @@ int get_multifile(char *dirpath)
    long long int hybrid_value;
    int striping = -1;
    int mode = -1;
+   int aging = -1;
    
    
    
@@ -320,8 +331,26 @@ int get_multifile(char *dirpath)
 	   break;	  
          } 
        }
+       if (aging == -1)
+       {   
+	 ret = strncmp(token,"AGING   :",strlen("AGING   :"));
+	 if (ret == 0) 
+	 {
+	   value_p = token+strlen("AGING   :");
+	   if (strcmp(" Yes",value_p) == 0)
+	   {
+	     aging = 1;
+	   }
+	   else
+	   {
+	     aging = 0;
+	   }  
+//	   printf("hybrid: %s\n",hybrid==1?"Yes":"No");
+	   break;	  
+         } 
+       }
 
-       if (redundancy == -1)
+       if (inheritance == -1)
        {   
 	 ret = strncmp(token,"INHERIT :",strlen("INHERIT :"));
 	 if (ret == 0) 
@@ -329,13 +358,13 @@ int get_multifile(char *dirpath)
 	   value_p = token+strlen("INHERIT :");
 	   if (strcmp(" Yes",value_p) == 0)
 	   {
-	     redundancy = 1;
+	     inheritance = 1;
 	   }
 	   else
 	   {
-	     redundancy = 0;
+	     inheritance = 0;
 	   }  
-//	   printf("striping_inherit: %s\n",redundancy==1?"Yes":"No");
+//	   printf("striping_inherit: %s\n",inheritance==1?"Yes":"No");
 	   break;	  
          } 
        }
@@ -351,7 +380,7 @@ int get_multifile(char *dirpath)
 	   {
 	     striping_factor = 0;
 	   }
-//	   printf("STRIPING Found: %s\n",redundancy==1?"Yes":"No");
+//	   printf("STRIPING Found: %s\n",inheritance==1?"Yes":"No");
 	   break;	  
          } 
        }
@@ -400,14 +429,14 @@ int get_multifile(char *dirpath)
       }
       return 0;
    }
-   if (redundancy == -1) redundancy = 0;
+   if (inheritance == -1) inheritance = 0;
    if (striping_factor == 0)
    {
       printf("  - no striping has been forced for that directory\n");
-      printf("  - striping_inherit: %s\n",redundancy==1?"Yes":"No");
+      printf("  - striping_inherit: %s\n",inheritance==1?"Yes":"No");
       if (mode == ROZOFS_MODE_DIR)
       {
-	if (redundancy == 0)
+	if (inheritance == 0)
 	{
 	  printf("    %s -s -m %d  %s\n",module_name,striping_factor+1,dirpath);
 	}
@@ -431,21 +460,26 @@ int get_multifile(char *dirpath)
        hybrid_value = unit_value;        
    }
    printf("  - hybrid size     :%lld Bytes\n",hybrid_value);
-   if (mode == ROZOFS_MODE_DIR) printf("  - striping_inherit: %s\n",redundancy==1?"Yes":"No");
+   if (mode == ROZOFS_MODE_DIR) printf("  - striping_inherit: %s\n",inheritance==1?"Yes":"No");
    if (mode == ROZOFS_MODE_DIR)
    {
 
+     if (aging == 1)
+     {
+       printf("    %s -s -f aging -m %d -u %d %s %s\n",module_name,striping_factor+1,striping_unit,(inheritance == 0)?" ":"-i",dirpath);
+       return 0;
+     }
      if (hybrid == 0)
      {
-       printf("    %s -s -m %d -u %d -f 0 %s %s\n",module_name,striping_factor+1,striping_unit,(redundancy == 0)?" ":"-i",dirpath);
+       printf("    %s -s -f none -m %d -u %d  %s %s\n",module_name,striping_factor+1,striping_unit,(inheritance == 0)?" ":"-i",dirpath);
        return 0;
      }
      if (hybrid_sz == 0)
      {
-       printf("    %s -s -m %d -u %d -f 1 %s %s\n",module_name,striping_factor+1,striping_unit,(redundancy == 0)?" ":"-i",dirpath);
+       printf("    %s -s -f hybrid -m %d -u %d %s %s\n",module_name,striping_factor+1,striping_unit,(inheritance == 0)?" ":"-i",dirpath);
        return 0;              
      }
-     printf("    %s -s -m %d -u %d -f 1 -z %dK %s %s\n",module_name,striping_factor+1,striping_unit,(int)(hybrid_value/1024),(redundancy == 0)?" ":"-i",dirpath);
+     printf("    %s -s -f hybrid -m %d -u %d -z %dK %s %s\n",module_name,striping_factor+1,striping_unit,(int)(hybrid_value/1024),(inheritance == 0)?" ":"-i",dirpath);
      return 0;
 
    }
@@ -469,19 +503,19 @@ int main(int argc, char **argv) {
         {"--multi", required_argument, 0, 'm'},
         {"--unit", required_argument, 0, 'u'},
         {"--inherit", no_argument, 0, 'i'},
-        {"--hybrid", required_argument, 0, 'f'},
+        {"--fast", required_argument, 0, 'f'},
         {"--hsize", required_argument, 0, 'z'},
 	{0, 0, 0, 0}
     };
     int striping_factor = -1;
     int striping_unit = -1;
     int inherit = 0;
-    int hybrid = -1;
     int hybrid_size = 0;
     int getvalue = 0;
     int setvalue = 0;
     int dir_count = 0;
     uint64_t hybrid_size_bytes;
+    int fast_vol_mode = ROZOFS_FAST_VOL_NONE;
 
     module_name = basename(argv[0]);
     while (1) {
@@ -528,17 +562,21 @@ int main(int argc, char **argv) {
               break;   
 
           case 'f':
-            if (sscanf(optarg,"%d",&hybrid)!= 1) {
-              printf("Bad value for hybrid mode (-f): %s\n",optarg);	
+            if (strcasecmp(optarg,"none")==0) {
+              fast_vol_mode = ROZOFS_FAST_VOL_NONE;
+            }
+            else if (strcasecmp(optarg,"hybrid")==0) {
+              fast_vol_mode = ROZOFS_FAST_VOL_HYBRID;
+            } 
+            else if (strcasecmp(optarg,"aging")==0) {
+              fast_vol_mode = ROZOFS_FAST_VOL_AGING;
+            }
+            else 
+            {
+              printf("Out of range value for -f : %s (must be either none, hybrid or aging)\n",optarg);      
               usage();
-              exit(EXIT_FAILURE);			  
-            }  
-	    if (hybrid > 1)
-	    {
-              printf("Out of range value for hybrid mode (-f): %s (must be either 0(disable) or 1(enable))\n",optarg);	
-              usage();
-              exit(EXIT_FAILURE);			  
-            }  	      	                
+              exit(EXIT_FAILURE);                        
+            }                         
 	    break;
 
           case 'z':
@@ -590,7 +628,6 @@ int main(int argc, char **argv) {
        if (striping_factor == 0) 
        {
           striping_unit = 0;
-	  hybrid = 0;
 	  hybrid_size = 0;
        }
        if ( striping_unit == -1)
@@ -599,13 +636,10 @@ int main(int argc, char **argv) {
 	 usage();
 	 exit(EXIT_FAILURE);			  
        }
-       if ( hybrid == -1)
-       {
-         printf(" hybrid mode is missing\n");     
-	 usage();
-	 exit(EXIT_FAILURE);			  
-       }
-       if ( hybrid == 0) hybrid_size = 0;
+       /*
+       ** When not in hybrid mode, hybrid_size is meaningless
+       */
+       if ( fast_vol_mode != ROZOFS_FAST_VOL_HYBRID) hybrid_size = 0;
     }
     dir_count = argc -optind;
     if (dir_count == 0)
@@ -616,15 +650,16 @@ int main(int argc, char **argv) {
     }
     if (setvalue)
     {
-      for (i = 0;i < dir_count;i++)
-	set_multifile(argv[optind+i],striping_factor,striping_unit,inherit,hybrid,hybrid_size);
+      for (i = 0;i < dir_count;i++) {
+	set_multifile(argv[optind+i],striping_factor,striping_unit,inherit,fast_vol_mode,hybrid_size);
+      }  
     }
     else
     {
-      for (i = 0;i < dir_count;i++)
+      for (i = 0;i < dir_count;i++) {
 	get_multifile(argv[optind+i]);
-	printf("\n");
-    
+      }  
+      printf("\n");
     }
     return 0;
 }

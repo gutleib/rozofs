@@ -3470,6 +3470,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       int xerrno; 
       int k; 
       int inode_allocated = 0;
+      volume_t * volume;
 
       *attr_slave_p = NULL;
       
@@ -3599,6 +3600,19 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       if ((ext_attrs_p->s.attrs.ctime = ext_attrs_p->s.attrs.atime = ext_attrs_p->s.attrs.mtime = ext_attrs_p->s.cr8time= time(NULL)) == -1)
           goto error;
       ext_attrs_p->s.attrs.size = 0;
+
+      /*
+      ** Use fast volume in aging mode. Else use slow volume.
+      */
+      if ((e->volume_fast != NULL) && (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)) {
+        volume = e->volume_fast;
+        ext_attrs_p->s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+      }  
+      else {
+        volume = e->volume;
+        ext_attrs_p->s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;        
+      }  
+
       /*
       ** create the inode and write the attributes on disk:
       ** allocate one more inode because we should consider the master inode
@@ -3609,7 +3623,6 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       /*
       ** OK, now fill up all the slave inodes
       */
-
       for (k = 0; k < inode_count ; k++,buf_slave_inode_work_p++)
       {
 	 /*
@@ -3619,7 +3632,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
 	 /*
 	 ** allocate the distribution for the slave file
 	 */
-	 if (volume_distribute(e->layout,e->volume,site_number, &buf_slave_inode_work_p->s.attrs.cid, buf_slave_inode_work_p->s.attrs.sids) != 0)
+	 if (volume_distribute(e->layout,volume,site_number, &buf_slave_inode_work_p->s.attrs.cid, buf_slave_inode_work_p->s.attrs.sids) != 0)
              goto error;
 	     
 //	 fdl_debug_print_storage(e,buf_slave_inode_work_p,0,k);
@@ -3782,7 +3795,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     int hybrid = 0;
     int ret;
     ext_mattr_t *attr_slave_p = NULL;
-
+    volume_t * volume;
    
     START_PROFILING(export_mknod);
     
@@ -4020,11 +4033,22 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
 		 break;
 	       }
 	     }
-	  }	
+	  }
+          /*
+          ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
+          */
+          if ((e->volume_fast != NULL) && (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)) {
+            volume = e->volume_fast;
+            ext_attrs.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;        
+          }
+          else {
+            volume = e->volume;  
+            ext_attrs.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;        
+          }  
 	  /*
 	  ** default case
 	  */ 
-	  if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
+	  if (volume_distribute(e->layout,volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
               goto error;
 	  break;
 	}
@@ -4402,6 +4426,12 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       {
         ext_attrs.s.multi_desc.byte = plv2->attributes.s.multi_desc.byte;
 	ext_attrs.s.hybrid_desc.byte = plv2->attributes.s.hybrid_desc.byte;
+        if (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+          ext_attrs.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+        }
+        else {
+          ext_attrs.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;
+        }
       }
     }
     ext_attrs.s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;
@@ -4807,9 +4837,6 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,str
 	 quota_size += lv2->attributes.s.attrs.size;      
       }
       deleted_fid_count++;    
-
-      // Compute hash value for this fid
-      uint32_t hash = rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid);
       
       /*
       ** prepare the trash entry
@@ -5451,7 +5478,6 @@ duplicate_deleted_file:
 	      if (fid_has_been_recycled == 0)
 	      {
 	        int no_master_distribution = 0;
-		uint32_t hash;
 		/*
 		** Check the case of the multiple file
 		*/
@@ -8329,6 +8355,9 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     ctime_r((const time_t *)&ext_dir_mattr_p->s.update_time,bufall);
     DISPLAY_ATTR_TXT_NOCR("UTIME ", bufall);    
     DISPLAY_ATTR_ULONG("TSIZE",ext_dir_mattr_p->s.nb_bytes);
+    
+    DISPLAY_ATTR_TXT ("AGING",(lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)?"Yes":"No");
+      
     /*
     ** Striping configuration
     */
@@ -8501,6 +8530,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     rozofs_get_multiple_file_sizes(&lv2->attributes,&vector);
     
     slave_p = lv2->slave_inode_p;
+    DISPLAY_ATTR_TXT ("AGING",(lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)?"Yes":"No");
     DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
     DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
     DISPLAY_ATTR_TXT ("S_HYBRID",(lv2->attributes.s.hybrid_desc.s.no_hybrid==1)?"No":"Yes");
@@ -9144,30 +9174,44 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
       return -1;        
     }  
     if (striping_follow == 0xAA55) striping_follow = 0;
-    if (hybrid_enable > 1)
+    if (hybrid_enable > 2)
     {
       errno = EINVAL;
       return -1;        
     } 
-    if ( hybrid_enable == 1)
-    {
-      /*
-      ** check the size of the hybrid section
-      */
-      if (hybrid_nb_blocks == 0xAA55)
-      {
-	errno = EINVAL;
-	return -1;        
-      }
-      if (hybrid_nb_blocks > 127) {
+    switch(hybrid_enable) {
+    
+      /* No fast volume */
+      case 0:
+        hybrid_nb_blocks = 0;  
+        break;
+        
+      /* Hybrid mode */       
+      case 1:
+        /*
+        ** check the size of the hybrid section
+        */
+        if (hybrid_nb_blocks == 0xAA55)
+        {
+	  errno = EINVAL;
+	  return -1;        
+        }
+        if (hybrid_nb_blocks > 127) {
+	  errno = ERANGE;
+	  return -1;          
+        }  
+        break;
+      
+      /* Aging mode */       
+      case 2:
+        hybrid_nb_blocks = 0;  
+        break;
+
+      default:
 	errno = ERANGE;
-	return -1;          
-      }  
+	return -1;                        
     }
-    else
-    {
-      hybrid_nb_blocks = 0;  
-    }
+
     /*
     **  use he master bit to figure out if the children directory will inherit the striping configuration
     **  of the parent directory. When striping_follow is different from 0 , the master bit is asserted
@@ -9184,15 +9228,22 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     /*
     ** configure the hybrid section
     */
-    if (hybrid_enable)
+    if (hybrid_enable == 1)
     {
       lv2->attributes.s.hybrid_desc.s.no_hybrid = 0;
-      lv2->attributes.s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;	
+      lv2->attributes.s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;
+      lv2->attributes.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;	
     }
     else
     {
       lv2->attributes.s.hybrid_desc.s.no_hybrid = 1;
-      lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;		
+      lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;
+      if (hybrid_enable == 2) {
+        lv2->attributes.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+      }	
+      else {
+        lv2->attributes.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;	
+      }      	
     }
     return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);  
   }

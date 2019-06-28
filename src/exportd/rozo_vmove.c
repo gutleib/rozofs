@@ -56,12 +56,18 @@ export_config_t  * econfig = NULL;
 
 uint64_t  scanned_match_path   = 0;
 uint64_t  scanned_hybrid  = 0;
+uint64_t  scanned_aging  = 0;
 uint64_t  scanned_already = 0;
 uint64_t  scanned_to_move = 0;
 uint64_t  scanned_error   = 0;
 uint64_t  scanned_directories = 0;
 uint64_t  scanned_over_sized  = 0;
 uint64_t  scanned_under_sized = 0;
+uint64_t  scanned_under_age =0;
+
+uint64_t  creation_time_before     = 0;
+uint64_t  modification_time_before = 0;
+
 
 long long unsigned int  size_over  = 0;
 long long unsigned int  size_under  = 0xFFFFFFFFFFFFFFFF;
@@ -117,8 +123,12 @@ uint32_t                      nbFid;
 export_vol_cluster_stat2_t  cluster_stats;
 scan_index_context_t        scan_context;
 uint64_t                    rozofs_vmove_size2move;
+uint64_t                    rozofs_vmove_nb2move;
 int                         whole_eid = 0;
 
+
+#define ROZOFS_VMOVE_MAX_SIZE2MOVE_IN_A_RUN (200ULL*1024ULL*1024ULL*1024ULL)
+#define ROZOFS_VMOVE_MAX_NB2MOVE_IN_A_RUN   (2000ULL)
 /*
 **_______________________________________________________________________
 **
@@ -576,9 +586,7 @@ static int rozofs_vmove_distribute(rozofs_mover_job_t * job) {
 /*
 **_______________________________________________________________________
 **
-** RozoFS specific function for visiting a file. We have to check whether
-** this is an hybrid file under one of the directory listed in pFidTable
-** that needs its hybrid stride to be moved
+** Add a file to the move list
 **
 ** @param exportd       pointer to exporthd data structure
 ** @param inode_attr_p  pointer to the inode data
@@ -588,84 +596,9 @@ static int rozofs_vmove_distribute(rozofs_mover_job_t * job) {
 ** @retval 1 when match
 **_______________________________________________________________________
 */
-int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
-  ext_mattr_t        * inode_p = inode_attr_p;
+int rozofs_add_file_to_move(ext_mattr_t *inode_p,uint64_t length) {
   rozofs_mover_job_t * job;
-  int                  ret;
-  int                  idx;
-  rozofs_iov_multi_t   vector;
 
-  /*
-  ** Simple file case
-  */
-  if (inode_p->s.multi_desc.byte == 0) {
-    return 0;  
-  }  
-  
-  /*
-  ** Multiple file case. 
-  */
-
-  /*
-  ** The master inode is used only in hybrid mode
-  */
-  if (inode_p->s.hybrid_desc.s.no_hybrid == 1) {
-    return 0;
-  }
-    
-  scanned_hybrid++;
-
-  /*
-  ** Check the directory it is in
-  */
-  if (whole_eid == 0) {
-    for (idx=0; idx< nbFid; idx++) {  
-      ret = memcmp(pFidTable[idx], inode_p->s.pfid, sizeof(fid_t));
-      if (ret == 0) break;
-      if (ret < 0) return 0;    
-    }  
-    if (idx == nbFid) return 0;
-  }
-
-  /*
-  ** It is under the tree 
-  */
-  scanned_match_path++;
-  
-  /*
-  ** Check whether it needs to be moved
-  */
-  if (cluster[inode_p->s.attrs.cid] == destination) {
-    /*
-    ** Already on the requested volume
-    */
-    scanned_already++;
-    return 0;
-  }
-  
-  /*
-  ** Unexpected cluster identifier
-  */
-  if (cluster[inode_p->s.attrs.cid] == ROZOFS_VMOVE_UNDEFINED) {
-    char fidstr[40];
-    rozofs_fid_append(fidstr,inode_p->s.attrs.fid);
-    severe("Found cid %d for FID %s",inode_p->s.attrs.cid, fidstr);
-    scanned_error++;    
-    return 0;
-  }  
-
-  if (inode_p->s.attrs.size > size_under) {
-    scanned_over_sized++;
-    return 0;
-  }
-  if (inode_p->s.attrs.size < size_over) {
-    scanned_under_sized++;
-    return 0;
-  }
-  
-
-  scanned_to_move++;
-  
   /*
   ** Allocate a job for the mover
   */
@@ -675,19 +608,19 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   /*
   ** Get size of the hybrid stride
   */
-  vector.vectors[0].len = 0;
-  rozofs_get_multiple_file_sizes(inode_p, &vector);
-  job->size = vector.vectors[0].len;
+  job->size = length;
   
   /*
-  ** San until all credit is consumed
+  ** Scan until all credit is consumed
   */
-  if (job->size > rozofs_vmove_size2move) {
+  if ((length > rozofs_vmove_size2move)||(rozofs_vmove_nb2move <= 1)) {
     rozo_lib_stop_scanning();
     rozofs_vmove_size2move = 0;
+    rozofs_vmove_nb2move   = 0;
   }
   else {
-    rozofs_vmove_size2move -= job->size;
+    rozofs_vmove_size2move -= length;
+    rozofs_vmove_nb2move--;
   }
     
   /*
@@ -707,7 +640,182 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   job->name = malloc(sizeof(fid_t));
   memcpy(job->name,inode_p->s.attrs.fid,sizeof(fid_t));
   list_push_back(&jobs,&job->list);
+  scanned_to_move++;  
   return 1;
+}  
+/*
+**_______________________________________________________________________
+**
+** RozoFS specific function for visiting a file. We have to check whether
+** this is an hybrid file under one of the directory listed in pFidTable
+** that needs its hybrid stride to be moved
+**
+** @param exportd       pointer to exporthd data structure
+** @param inode_attr_p  pointer to the inode data
+** @param p             always NULL
+**  
+** @retval 0 no match
+** @retval 1 when match
+**_______________________________________________________________________
+*/
+int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
+  ext_mattr_t        * inode_p = inode_attr_p;
+  int                  ret;
+  int                  idx;
+  rozofs_iov_multi_t   vector;
+  ext_mattr_t        * slave_p;
+  int                  nb_slave;
+  int                  match;
+  
+  /*
+  ** Simple file case
+  */
+  if (inode_p->s.multi_desc.byte == 0) {
+    return 0;  
+  }  
+
+  /*
+  ** Multiple file case. 
+  */
+
+  /*
+  ** In hybrid mode we move the 1rst stride
+  ** In aging mode we move every stride
+  */
+  if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
+    scanned_hybrid++;
+  }
+  else if (inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+    scanned_aging++;
+  }
+  else {
+    /* Neither hybrid nor aging */
+    return 0;
+  }
+    
+
+  /*
+  ** Check the directory it is in
+  */
+  if (whole_eid == 0) {
+    for (idx=0; idx< nbFid; idx++) {  
+      ret = memcmp(pFidTable[idx], inode_p->s.pfid, sizeof(fid_t));
+      if (ret == 0) break;
+      if (ret < 0) return 0;    
+    }  
+    if (idx == nbFid) return 0;
+  }
+
+  /*
+  ** It is under the tree 
+  */
+  scanned_match_path++;
+  
+  /*
+  ** Check the file size against given size criteria
+  */
+  if (inode_p->s.attrs.size > size_under) {
+    scanned_over_sized++;
+    return 0;
+  }
+  if (inode_p->s.attrs.size < size_over) {
+    scanned_under_sized++;
+    return 0;
+  }
+  
+  /*
+  ** Check file against time criteria
+  */
+  if (modification_time_before != 0) {
+    if (inode_p->s.attrs.mtime > modification_time_before) {
+      scanned_under_age++; 
+      return 0;
+    }
+  }  
+  if (creation_time_before != 0) {
+    if (inode_p->s.cr8time > creation_time_before) {
+      scanned_under_age++; 
+      return 0;
+    }
+  }     
+  /*
+  ** Get the size of each sub file
+  */
+  vector.vectors[0].len = 0;
+  rozofs_get_multiple_file_sizes(inode_p, &vector);
+  
+  /*
+  ** Hybrid case. Check the 1rts inode 
+  */
+  if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
+
+    /*
+    ** Check whether it needs to be moved
+    */
+    if (cluster[inode_p->s.attrs.cid] == destination) {
+      /*
+      ** Already on the requested volume
+      */
+      scanned_already++;
+      return 0;
+    }
+
+    /*
+    ** Unexpected cluster identifier
+    */
+    if (cluster[inode_p->s.attrs.cid] == ROZOFS_VMOVE_UNDEFINED) {
+      char fidstr[40];
+      rozofs_fid_append(fidstr,inode_p->s.attrs.fid);
+      severe("Found cid %d for FID %s",inode_p->s.attrs.cid, fidstr);
+      scanned_error++;    
+      return 0;
+    }  
+    
+    rozofs_add_file_to_move(inode_p,vector.vectors[0].len);
+    return 1;
+  }
+  
+  /*
+  ** Aging case. Check every sub file 
+  */
+  match = 0;
+  if (inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+    slave_p = inode_p;
+    slave_p ++;
+    nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+    /*
+    ** Check every slave
+    */
+    for (idx=0; idx<nb_slave; idx++,slave_p++) {
+    
+      /*
+      ** Check whether it needs to be moved
+      */
+      if (cluster[slave_p->s.attrs.cid] == destination) {
+        /*
+        ** Already on the requested volume
+        */
+        scanned_already++;
+        continue;
+      }
+
+      /*
+      ** Unexpected cluster identifier
+      */
+      if (cluster[slave_p->s.attrs.cid] == ROZOFS_VMOVE_UNDEFINED) {
+        char fidstr[40];
+        rozofs_fid_append(fidstr,slave_p->s.attrs.fid);
+        severe("Found cid %d for FID %s",slave_p->s.attrs.cid, fidstr);
+        scanned_error++;    
+        continue;
+      }     
+      rozofs_add_file_to_move(slave_p,vector.vectors[idx+1].len);
+      match = 1;
+    }
+    return match;      
+  }  
+
+  return 0;
 }  
 /*
 **_______________________________________________________________________
@@ -973,30 +1081,65 @@ static void usage(char * fmt, ...) {
     va_start(args,fmt);
     vsprintf(error_buffer, fmt, args);
     va_end(args);   
-    printf("\n"ROZOFS_COLOR_BOLD""ROZOFS_COLOR_RED"!!!  %s !!! "ROZOFS_COLOR_NONE"\n",error_buffer);
-    exit(EXIT_FAILURE);      
+    printf("\n"ROZOFS_COLOR_BOLD""ROZOFS_COLOR_RED"!!!  %s !!! "ROZOFS_COLOR_NONE"\n",error_buffer);  
   }
   
   printf("RozoFS hybrid volume mover - %s\n", VERSION);    
-  printf("Move hybrid stride of hybrid files between slow and fast volumes.\n");
-  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory FID>|--name <directory name>|--eid <eid>} [--recursive] [--throughput <MiB>]"ROZOFS_COLOR_NONE"\n");
+  printf("Move subfiles between slow and fast volumes in hybrid or aging mode.\n");
+  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory FID>|--name <directory name>|--eid <eid>} [--recursive] [OPTIONS]"ROZOFS_COLOR_NONE"\n");
   printf("The direction of the move is defined by one of the following mandatory parameter:\n");
-  printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\t\tMove hybrid stride from slow volume to fast volume.\n");
-  printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\t\tMove hybrid stride from fast volume to slow volume.\n");
+  printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\t\tMove subfiles from slow volume to fast volume.\n");
+  printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\t\tMove subfiles from fast volume to slow volume.\n");
   printf("The files to move are defined as follow:\n");
   printf(ROZOFS_COLOR_BOLD"\t-n, --name <directory name>"ROZOFS_COLOR_NONE"\tRoot directory name on which the move applies.\n");  
   printf(ROZOFS_COLOR_BOLD"\t-F, --fid <directory FID>"ROZOFS_COLOR_NONE"\tRoot directory FID on which the move applies.\n");  
   printf(ROZOFS_COLOR_BOLD"\t-e, --eid <eid>"ROZOFS_COLOR_NONE"\t\t\tWhole eid must be moved (--recursive is implicit).\n");  
   printf(ROZOFS_COLOR_BOLD"\t-r, --recursive"ROZOFS_COLOR_NONE"\t\t\tApply vmove recursively on each sub-directory under the root directory.\n");
-  printf("Miscellaneous options:\n");
+  printf("Miscellaneous OPTIONS:\n");
   printf(ROZOFS_COLOR_BOLD"\t-t, --throughput"ROZOFS_COLOR_NONE"\t\tThroughput limitation of the mover.\n");
   printf(ROZOFS_COLOR_BOLD"\t-h, --help"ROZOFS_COLOR_NONE"\t\t\tprint this message.\n");
   printf(ROZOFS_COLOR_BOLD"\t-c, --config <filename>"ROZOFS_COLOR_NONE"\t\tExportd configuration file name (when different from %s)\n",EXPORTD_DEFAULT_CONFIG);  
   printf(ROZOFS_COLOR_BOLD"\t-o, --over <size>"ROZOFS_COLOR_NONE"\t\tMove files with total size over the given size\n");  
   printf(ROZOFS_COLOR_BOLD"\t-u, --under <size>"ROZOFS_COLOR_NONE"\t\tMove files with total size under the given size\n");   
   printf(ROZOFS_COLOR_BOLD"\t-T, --threads <nb_threads>"ROZOFS_COLOR_NONE"\tThe number of threads of the file mover (default %u)\n",20);
+  printf(ROZOFS_COLOR_BOLD"\t-C, --created <nbHours>"ROZOFS_COLOR_NONE"\t\tMove files created more than <nbHours> before\n");
+  printf(ROZOFS_COLOR_BOLD"\t-M, --modified <nbHours>"ROZOFS_COLOR_NONE"\tMove files not modified for more than <nbHours>\n");
+  printf(ROZOFS_COLOR_BOLD"\t-m, --mount <path>"ROZOFS_COLOR_NONE"\t\tMountpoint to use for moving\n");
   printf("\n");
   exit(EXIT_SUCCESS); 
+}
+/*
+**_______________________________________________________________________
+**
+** Get eid value from mount point path
+**
+** @param mountpath     Mount point path name
+**
+** @retval -1 in case of error / eid value on success
+**_______________________________________________________________________
+*/
+int rozofs_vmove_get_eid_from_path(char * mountpath) {
+  int    ret;
+  char   xattrValue[1024];
+  char * p=xattrValue;
+  int    eid;
+  
+  ret = getxattr(mountpath,"user.rozofs.export",xattrValue,sizeof(xattrValue));
+  if (ret <= 0) {
+    return -1;
+  } 
+  if (ret >= sizeof(xattrValue)) {
+    ret = sizeof(xattrValue)-1;
+  }
+  xattrValue[ret] = 0;
+  
+  while ((*p!=0) && (*p!= ' ')) p++;
+  if (*p == 0) return -1;
+  
+   ret = sscanf(p, "%d",&eid);
+   if (ret != 1) return -1;
+   
+   return eid;
 }
 /*
 **_______________________________________________________________________
@@ -1049,6 +1192,8 @@ int main(int argc, char *argv[]) {
   char               path[1024];
   int                ret;
   int                nb_threads=20;
+  uint32_t           hours=0;
+  char            *  mountpoint = 0;
   
   /*
   ** Change local directory to "/"
@@ -1104,6 +1249,9 @@ int main(int argc, char *argv[]) {
       {"over", required_argument, 0, 'o'},
       {"under", required_argument, 0, 'u'},
       {"threads", required_argument, 0, 'T'},
+      {"modified", required_argument, 0, 'M'},
+      {"created", required_argument, 0, 'C'},
+      {"mount", required_argument, 0, 'm'},
       {0, 0, 0, 0}
   };
 
@@ -1111,7 +1259,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = -1;
-    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:o:u:T:", long_options, &option_index);
+    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:o:u:T:C:M:m:", long_options, &option_index);
 
     if (c == -1)
         break;
@@ -1145,6 +1293,24 @@ int main(int argc, char *argv[]) {
         if (rozofs_uuid_parse(optarg,parent) != 0) {
           usage("Bad FID format \"%s\"",optarg);
         }  
+        break;
+        
+      case 'm':
+        mountpoint = optarg;
+        break;
+                
+      case 'M':
+        if (sscanf(optarg,"%u",&hours) != 1) {
+          usage("Bad --modification format \"%s\"",optarg);
+        }        
+        modification_time_before = time(NULL) - (hours*3600);
+        break;
+        
+      case 'C':
+        if (sscanf(optarg,"%u",&hours) != 1) {
+          usage("Bad --creation format \"%s\"",optarg);
+        }        
+        creation_time_before = time(NULL) - (hours*3600);
         break;
         
       case 'n':
@@ -1202,7 +1368,7 @@ int main(int argc, char *argv[]) {
   }
   
   if (directory == NULL) {
-    usage("Missing mandatory --dir option");
+    usage("Missing mandatory option --name or --fid or --eid");
   }
   if (destination == ROZOFS_VMOVE_UNDEFINED) {  
     usage("Missing either --fast or --slow option");
@@ -1234,6 +1400,16 @@ int main(int argc, char *argv[]) {
   else {
     eid = whole_eid;
   }  
+  /*
+  ** When mountpoint is given, check the given eid matches this mountpoint
+  */
+  if (mountpoint != NULL) {
+    int mount_eid;
+    mount_eid = rozofs_vmove_get_eid_from_path(mountpoint);
+    if (mount_eid != eid) {
+      usage("mountpoint \"%s\" accesses eid %d and not requested eid %d",mountpoint,mount_eid,eid);
+    }        
+  }
   
   /*
   ** Find out this eid in the configuration
@@ -1294,9 +1470,10 @@ int main(int argc, char *argv[]) {
     rozofs_upgrade_storage_size(econfig->vid);
 
     /*
-    ** Move up to 1G per round
+    ** What to move per round
     */
-    rozofs_vmove_size2move =  1024 * 1024 * 1024;
+    rozofs_vmove_size2move =  ROZOFS_VMOVE_MAX_SIZE2MOVE_IN_A_RUN;
+    rozofs_vmove_nb2move   =  ROZOFS_VMOVE_MAX_NB2MOVE_IN_A_RUN;
     
     /*
     ** Scan all files in the directory
@@ -1315,26 +1492,32 @@ int main(int argc, char *argv[]) {
                                                               econfig->root, 
                                                               throughput, 
                                                               &jobs,
-                                                              NULL); 
+                                                              mountpoint); 
     rozofs_mover_print_stat(printfBuffer);
     printf("%s",printfBuffer);       
 
   }  
 
   printf("{ \"vmove\" : {\n");
-  printf("     \"directory\"      : \"%s\",\n", directory);
+  if (!whole_eid) {
+    printf("     \"directory\"      : \"%s\",\n", directory);
+  }  
   printf("     \"eid\"            : %d,\n", eid);
   printf("     \"vid fast\"       : %d,\n", econfig->vid_fast);
   printf("     \"vid slow\"       : %d,\n", econfig->vid);
   printf("     \"destination\"    : \"%s\",\n", (destination==ROZOFS_VMOVE_FAST)?"fast":"slow");  
   printf("     \"throughput MB\"  : %llu,\n", throughput);  
-  printf("     \"directories\"    : %llu,\n",(long long unsigned int)scanned_directories);
+  if (!whole_eid) {
+    printf("     \"directories\"    : %llu,\n",(long long unsigned int)scanned_directories);
+  }  
   printf("     \"hybridFiles\"    : %llu,\n",(long long unsigned int)scanned_hybrid);
+  printf("     \"agingFiles\"     : %llu,\n",(long long unsigned int)scanned_aging);
   printf("     \"match path\"     : %llu,\n",(long long unsigned int)scanned_match_path);
-  printf("     \"alreadyInPlace\" : %llu,\n",(long long unsigned int)scanned_already);
   printf("     \"under sized\"    : %llu,\n",(long long unsigned int)scanned_under_sized);
+  printf("     \"under age\"      : %llu,\n",(long long unsigned int)scanned_under_age);
   printf("     \"over sized\"     : %llu,\n",(long long unsigned int)scanned_over_sized);
   printf("     \"errors\"         : %llu,\n",(long long unsigned int)scanned_error);
+  printf("     \"alreadyInPlace\" : %llu,\n",(long long unsigned int)scanned_already);
   printf("     \"toMove\"         : %llu,\n",(long long unsigned int)scanned_to_move);
   printf("}}\n");
   exit(EXIT_SUCCESS);  

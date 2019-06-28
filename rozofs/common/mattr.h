@@ -246,10 +246,27 @@ typedef struct _inode_fname_t
 /*___________________________________
 ** Bits mask of bit field 1 in ext_mattr_t
 */
-/* Wether locks on this file must be kept on export switchover */
-#define ROZOFS_BITFIELD1_PERSISTENT_FLOCK    1
-/* Whether this file has had a write error which could lead to file corruption */
-#define ROZOFS_BITFIELD1_WRITE_ERROR         2
+typedef enum _ROZOFS_BITFIELD1_RANK_E {
+  /* 
+  ** Wether locks on this file must be kept on export switchover 
+  */
+  ROZOFS_BITFIELD1_RANK_PERSISTENT_FLOCK=0,
+  /* 
+  ** Whether this file has had a write error which could lead to file corruption 
+  */
+  ROZOFS_BITFIELD1_RANK_WRITE_ERROR,
+  /* 
+  ** In aging mode files are created on fast volume 
+  ** and can later be moved on slow volume. Striping parameters apply to the files.
+  ** hybrid mode is exclusive with aging mode. 
+  */
+  ROZOFS_BITFIELD1_RANK_AGING
+} ROZOFS_BITFIELD1_RANK_E;
+
+
+#define ROZOFS_BITFIELD1_PERSISTENT_FLOCK      (1<<ROZOFS_BITFIELD1_RANK_PERSISTENT_FLOCK)
+#define ROZOFS_BITFIELD1_WRITE_ERROR           (1<<ROZOFS_BITFIELD1_RANK_WRITE_ERROR)
+#define ROZOFS_BITFIELD1_AGING                 (1<<ROZOFS_BITFIELD1_RANK_AGING)
 
 /*___________________________________
 ** Case of the multiple files
