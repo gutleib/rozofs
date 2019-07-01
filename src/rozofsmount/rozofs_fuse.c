@@ -1556,8 +1556,6 @@ void rozofs_fuse_share_mem_init()
   fuse_ino_t ino = rozofs_storcli_shared_mem[SHAREMEM_IDX_READ].buf_sz;
   ino *=rozofs_storcli_shared_mem[SHAREMEM_IDX_READ].buf_count;
   struct fuse_bufvec bufvec_fake;
-  off_t offset = (off_t) rozofs_storcli_shared_mem[SHAREMEM_IDX_READ].data_p; 
-  int ret;  
   char bufall[16];
   memset(&bufvec_fake,0,sizeof(bufvec_fake));
   bufvec_fake.count = 1;
@@ -1569,9 +1567,13 @@ void rozofs_fuse_share_mem_init()
   errno = 0;
   fuse_sharemem_init_done =1;
 #if 0
+  {
+  int ret;  
+  off_t offset = (off_t) rozofs_storcli_shared_mem[SHAREMEM_IDX_READ].data_p; 
   ret = fuse_lowlevel_notify_store(rozofs_fuse_ctx_p->ch, ino,
 			     offset, &bufvec_fake,
 			     0);
   info("Fuse share memory init %s",(ret==0)?"Success":strerror(errno));
+  }
 #endif 
 }

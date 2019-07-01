@@ -659,7 +659,6 @@ typedef enum _INODE_TYPE_E {
   INODE_TYPE_SLAVE,
 } INODE_TYPE_E;
 /*
-/*
 **_______________________________________________________________________
 **
 ** RozoFS specific function for visiting a sub-file. 

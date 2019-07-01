@@ -1879,5 +1879,17 @@ static inline void rozofs_storcli_release_prj_buf(rozofs_storcli_ctx_t * working
     read_prj_work_p->prj_buf = NULL;
     read_prj_work_p->prj_state = ROZOFS_PRJ_READ_IDLE;
   }
-}    
+}  
+/*
+**__________________________________________________________________________
+*/
+/*
+**   Attempt to unmap and close the inode on which we have applied Mojette Transform
+
+    @param working_ctx_p: storcli working context for that inode
+    
+    @retval 0 on success
+    @retval < 0 on error si errno for details
+*/
+int rozofs_storcli_inode_close(rozofs_storcli_ctx_t *working_ctx_p);  
 #endif

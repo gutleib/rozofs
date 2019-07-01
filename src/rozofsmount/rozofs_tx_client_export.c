@@ -3592,7 +3592,7 @@ int truncate_buf_multitple_nb(void *fuse_ctx_p,ientry_t *ie, uint64_t size)
     int               opcode;
     uint32_t          vers;    
     uint32_t          prog;
-    uint32_t timeout_sec;
+    //uint32_t timeout_sec;
     uint32_t         null_val = 0;    
     rozofs_fuse_save_ctx_t *fuse_save_ctx_p=NULL;
     fuse_end_tx_recv_pf_t  callback;
@@ -3659,7 +3659,7 @@ int truncate_buf_multitple_nb(void *fuse_ctx_p,ientry_t *ie, uint64_t size)
     opcode = STORCLI_TRUNCATE;
     vers = STORCLI_VERSION;
     prog = STORCLI_PROGRAM;
-    timeout_sec = ROZOFS_TMR_GET(TMR_STORCLI_PROGRAM);
+    //timeout_sec = ROZOFS_TMR_GET(TMR_STORCLI_PROGRAM);
     /*
     **___________________________________________________________________
     **   Build the individual storcli read command

@@ -1208,7 +1208,8 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
           /*
 	  ** that situation must not occur
 	  */
-	  severe("RozoFS Fuse IOCTL 5: request is missing !! (buf_sz %u)",size);
+	  severe("RozoFS Fuse IOCTL 5: request is missing !! (buf_sz %llu)",
+                  (long long unsigned int)size);
        }
        /*
        ** The size must be greater than the one of the buffer associated with the file context
