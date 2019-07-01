@@ -1029,7 +1029,7 @@ class exportd_class:
       d.new_line()
       d.set_column(1,"%s"%(e.eid))
       d.set_column(2,"%s"%(e.volume.vid))
-      if e.vid_fast != "":
+      if e.vid_fast != None:
         d.set_column(3,"%s"%(e.vid_fast.vid))
       else:
         d.set_column(3,"%s"%(e.vid_fast))
