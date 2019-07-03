@@ -409,19 +409,27 @@ int get_multifile(char *dirpath)
           printf("  - no striping for that export\n");
 	  return 0;	
 	}
-	printf("  - default striping factor :%d (%lld Files)\n",striping_factor,factor_value);  
+	printf("  - default striping count  :%lld Files\n",factor_value);  
 	printf("  - default striping unit   :%d (%lld Bytes)\n",striping_unit,unit_value);	
 	if (hybrid == 0)
 	{
+          printf("  - default hybrid mode     :No\n");	
 	  hybrid_sz = 0;
 	  hybrid_value = 0;     
 	}
 	else
 	{
+	  printf("  - default hybrid mode     :Yes\n");	
 	  if (hybrid_sz == 0)
 	    hybrid_value = unit_value;        
+  	  printf("  - default hybrid size     :%lld Bytes\n",hybrid_value);
 	}
-	printf("  - default hybrid size     :%lld Bytes\n",hybrid_value);
+        if (aging == 1) {
+          printf("  - default aging mode      :Yes\n");	
+        }
+        else {
+          printf("  - default aging mode      :No\n");	
+        }
       }
       else
       {
@@ -447,19 +455,27 @@ int get_multifile(char *dirpath)
       }
       return 0;         
    }
-   printf("  - striping count :%lld Files\n",factor_value);  
+   printf("  - striping count  :%lld Files\n",factor_value);  
    printf("  - striping unit   :%d (%lld Bytes)\n",striping_unit,unit_value);
    if (hybrid == 0)
    {
+     printf("  - hybrid mode     :No\n");	
      hybrid_sz = 0;
      hybrid_value = 0;     
    }
    else
    {
+     printf("  - hybrid mode     :Yes\n");	
      if (hybrid_sz == 0)
        hybrid_value = unit_value;        
+     printf("  - hybrid size     :%lld Bytes\n",hybrid_value);
    }
-   printf("  - hybrid size     :%lld Bytes\n",hybrid_value);
+   if (aging == 1) {
+     printf("  - aging mode      :Yes\n");	
+   }
+   else {
+     printf("  - aging mode      :No\n");	
+   }
    if (mode == ROZOFS_MODE_DIR) printf("  - striping_inherit: %s\n",inheritance==1?"Yes":"No");
    if (mode == ROZOFS_MODE_DIR)
    {

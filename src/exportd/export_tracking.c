@@ -1749,6 +1749,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     e->eid = eid;
     e->volume = volume;
     e->volume_fast = volume_fast;
+    e->fast_mode   = ec->fast_mode;
     e->bsize = bsize;
     e->thin = thin;
     e->flockp = flockp;
@@ -3450,7 +3451,7 @@ void fdl_debug_print_storage(export_t *e,ext_mattr_t *q,int master,int fileid)
     
     @param striping_factor: number of slave inode to create
     @param striping_unit : striping unit in power of 2
-    @param hybrid: assert to one if the first striping_unit must be allocated in fast volume
+    @param fast_mode: how to use the fast volume (none, hybrid, aging,...)
     @param hybrid_nb_blocks: number of block of SSD section when the file is configured to be hybrid
     
     @retval attr_p: pointer to the attributes of the master inode (NULL in case of error)
@@ -3459,7 +3460,7 @@ void fdl_debug_print_storage(export_t *e,ext_mattr_t *q,int master,int fileid)
 
 int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
                            uint32_t gid, mode_t mode, ext_mattr_t  *ext_attrs_p,lv2_entry_t *plv2,uint32_t pslice,ext_mattr_t **attr_slave_p,
-			   uint32_t striping_factor,uint32_t striping_unit,int hybrid,uint32_t hybrid_nb_blocks)
+			   uint32_t striping_factor,uint32_t striping_unit,rozofs_econfig_fast_mode_e fast_mode,uint32_t hybrid_nb_blocks)
 {
       int inode_count;
       ext_mattr_t *buf_slave_inode_p = NULL;
@@ -3502,14 +3503,8 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       ** For the case of the hybrid mode, we try to allocate the distribution of the master inode in the 
       ** fast volume: the max size that could be written is found in striping_unit_byte
       */
-      if (e->volume_fast == NULL) hybrid = 0;
-#if 0
-      if (e->volume_fast != NULL) 
-      {
-        hybrid = 1;
-      }
-#endif
-      if (hybrid)
+      if (e->volume_fast == NULL) fast_mode = rozofs_econfig_fast_none;
+      if (fast_mode == rozofs_econfig_fast_hybrid)
       {
 	/*
 	** get the distribution for the file:
@@ -3589,7 +3584,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       /*
       ** fill up the hybrid section
       */
-       if (hybrid) ext_attrs_p->s.hybrid_desc.s.no_hybrid = 0;
+       if (fast_mode == rozofs_econfig_fast_hybrid) ext_attrs_p->s.hybrid_desc.s.no_hybrid = 0;
        else ext_attrs_p->s.hybrid_desc.s.no_hybrid = 1;
       ext_attrs_p->s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;
       
@@ -3604,7 +3599,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       /*
       ** Use fast volume in aging mode. Else use slow volume.
       */
-      if ((e->volume_fast != NULL) && (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)) {
+      if (fast_mode == rozofs_econfig_fast_aging) {
         volume = e->volume_fast;
         ext_attrs_p->s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
       }  
@@ -3717,7 +3712,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
     
     @retval none
 */
-void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,uint32_t *striping_factor,uint32_t *striping_unit,int *hybrid,uint32_t *hybrid_nb_blocks)
+void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,uint32_t *striping_factor,uint32_t *striping_unit,rozofs_econfig_fast_mode_e *fast_mode,uint32_t *hybrid_nb_blocks)
 {
    /*
    ** Check if the striping is configured at directory level
@@ -3731,9 +3726,9 @@ void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,uint32_t 
      *striping_factor = e->stripping.factor;
      *striping_unit =  e->stripping.unit;
      /*
-     ** set the hybrid mode by default
+     ** set the fast mode by default
      */
-     *hybrid = 1;
+     *fast_mode = e->fast_mode;
      return;
    }
    /*
@@ -3741,10 +3736,17 @@ void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,uint32_t 
    */
    *striping_factor = plv2->attributes.s.multi_desc.master.striping_factor;
    *striping_unit= plv2->attributes.s.multi_desc.master.striping_unit;
-   if (plv2->attributes.s.hybrid_desc.s.no_hybrid != 0) *hybrid = 0;
+   if (plv2->attributes.s.hybrid_desc.s.no_hybrid != 0) {
+     if (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+       *fast_mode = rozofs_econfig_fast_aging;
+     }
+     else {
+       *fast_mode = rozofs_econfig_fast_none;
+     }    
+   }  
    else 
    {
-     *hybrid = 1;
+     *fast_mode = rozofs_econfig_fast_hybrid;
      *hybrid_nb_blocks = plv2->attributes.s.hybrid_desc.s.hybrid_sz;
    }
 }
@@ -3792,7 +3794,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     uint32_t striping_factor = 0;
     uint32_t striping_unit = 0;
     uint32_t hybrid_nb_blocks = 0;
-    int hybrid = 0;
+    rozofs_econfig_fast_mode_e fast_mode = rozofs_econfig_fast_none;
     int ret;
     ext_mattr_t *attr_slave_p = NULL;
     volume_t * volume;
@@ -3954,14 +3956,14 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     ** Check if the file must be created with slave inodes: it will depends on the directory , the way the
     ** export has been configured and the suffix of the file to create
     */
-    rozofs_get_striping_factor_and_unit(e,plv2,&striping_factor,&striping_unit,&hybrid,&hybrid_nb_blocks);
+    rozofs_get_striping_factor_and_unit(e,plv2,&striping_factor,&striping_unit,&fast_mode,&hybrid_nb_blocks);
     if (striping_factor != 0)
     {
        ret = export_mknod_multiple2(e,site_number,
                                     pfid,name,uid,gid, mode,
 				    &ext_attrs,
 				    plv2,pslice,&attr_slave_p,
-			            striping_factor,striping_unit,hybrid,hybrid_nb_blocks);
+			            striping_factor,striping_unit,fast_mode,hybrid_nb_blocks);
        if (ret < 0) goto error;
        /*
        ** Indicate that the inodes have been allocated (master and slaves)
@@ -4037,7 +4039,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
           /*
           ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
           */
-          if ((e->volume_fast != NULL) && (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)) {
+          if ((e->volume_fast != NULL) && (fast_mode==rozofs_econfig_fast_aging)) {
             volume = e->volume_fast;
             ext_attrs.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;        
           }
@@ -8356,52 +8358,34 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     DISPLAY_ATTR_TXT_NOCR("UTIME ", bufall);    
     DISPLAY_ATTR_ULONG("TSIZE",ext_dir_mattr_p->s.nb_bytes);
     
-    DISPLAY_ATTR_TXT ("AGING",(lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)?"Yes":"No");
       
     /*
     ** Striping configuration
     */
     if (lv2->attributes.s.multi_desc.byte == 0)
     {
-      uint32_t striping_factor,striping_unit;
-      int hybrid;
-      uint32_t hybrid_nb_blocks; 
       DISPLAY_ATTR_TXT ("MULTI_F","Not configured (follow either volume or export striping)");
-      rozofs_get_striping_factor_and_unit(e,lv2,&striping_factor,&striping_unit,&hybrid,&hybrid_nb_blocks);
-      if (striping_factor == 0)
-      {
-	DISPLAY_ATTR_TXT ("STRIPING","no striping forced");                
-      }
-      else
-      {
-	DISPLAY_ATTR_UINT("S_FACTOR",striping_factor+1);     
-	DISPLAY_ATTR_UINT("S_UNIT",ROZOFS_STRIPING_UNIT_BASE <<striping_unit); 
-        DISPLAY_ATTR_TXT("S_HYBRID",(e->volume_fast!=NULL)?"Yes":"No");	   
-        if (e->volume_fast!=NULL) DISPLAY_ATTR_UINT("S_HSIZE",ROZOFS_STRIPING_UNIT_BASE <<striping_unit);      
-      }      
-    }
+    }  
     else
     {
       DISPLAY_ATTR_TXT ("MULTI_F","Configured");
-      if (lv2->attributes.s.multi_desc.master.striping_factor == 0)
-      {
-	DISPLAY_ATTR_TXT ("STRIPING","no striping forced");    
-	DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.inherit==0?"No":"Yes");
-      }
-      else
-      {
-      DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
-      DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
-      DISPLAY_ATTR_TXT("S_HYBRID",lv2->attributes.s.hybrid_desc.s.no_hybrid==1?"No":"Yes");
-      if (lv2->attributes.s.hybrid_desc.s.no_hybrid == 0)
-      {
-         uint32_t hsize = (uint32_t) rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc, &lv2->attributes.s.hybrid_desc);
-         DISPLAY_ATTR_UINT("S_HSIZE",hsize);     
-      }
-      DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.inherit==0?"No":"Yes");
-      }
     }
-   return (p-value);  
+    DISPLAY_ATTR_TXT ("INHERIT",lv2->attributes.s.multi_desc.master.inherit==0?"No":"Yes");
+    {
+      uint32_t striping_factor,striping_unit;
+      rozofs_econfig_fast_mode_e fast_mode;
+      uint32_t hybrid_nb_blocks; 
+      rozofs_get_striping_factor_and_unit(e,lv2,&striping_factor,&striping_unit,&fast_mode,&hybrid_nb_blocks);
+      
+      DISPLAY_ATTR_UINT("S_FACTOR",striping_factor+1);     
+      DISPLAY_ATTR_UINT("S_UNIT",ROZOFS_STRIPING_UNIT_BASE <<striping_unit); 
+      DISPLAY_ATTR_TXT("S_HYBRID",(fast_mode==rozofs_econfig_fast_hybrid)?"Yes":"No");
+      if (fast_mode==rozofs_econfig_fast_hybrid) {
+        DISPLAY_ATTR_UINT("S_HSIZE",(hybrid_nb_blocks==0)? ROZOFS_STRIPING_UNIT_BASE <<striping_unit:ROZOFS_STRIPING_UNIT_BASE <<hybrid_nb_blocks); 
+      }     
+      DISPLAY_ATTR_TXT ("AGING",(fast_mode==rozofs_econfig_fast_aging)?"Yes":"No");
+    }
+    return (p-value);  
   }
 
   if (S_ISLNK(lv2->attributes.s.attrs.mode)) {
@@ -8530,7 +8514,6 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     rozofs_get_multiple_file_sizes(&lv2->attributes,&vector);
     
     slave_p = lv2->slave_inode_p;
-    DISPLAY_ATTR_TXT ("AGING",(lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)?"Yes":"No");
     DISPLAY_ATTR_UINT("S_FACTOR",lv2->attributes.s.multi_desc.master.striping_factor+1);     
     DISPLAY_ATTR_UINT("S_UNIT",rozofs_get_striping_size(&lv2->attributes.s.multi_desc));
     DISPLAY_ATTR_TXT ("S_HYBRID",(lv2->attributes.s.hybrid_desc.s.no_hybrid==1)?"No":"Yes");
@@ -8551,6 +8534,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
        }
           
     }
+    DISPLAY_ATTR_TXT ("AGING",(lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)?"Yes":"No");    
     if (lv2->slave_inode_p == NULL)
     {
       DISPLAY_ATTR_TXT ("STATUS","Corrupted");

@@ -30,6 +30,12 @@
 
 #define MD5_LEN  22
 
+typedef enum _rozofs_econfig_fast_mode_e {
+  rozofs_econfig_fast_none=0,
+  rozofs_econfig_fast_hybrid,
+  rozofs_econfig_fast_aging
+} rozofs_econfig_fast_mode_e;
+
 /*
 ** Multiple file stripping configuration
 ** Multi file stripping size in bytes = 256M * (1<<unit)
@@ -39,8 +45,6 @@ typedef struct estripping {
   uint8_t   unit;
   uint8_t   factor;
 } estripping_t;
-
-
 
 typedef struct storage_node_config {
     sid_t sid;
@@ -78,7 +82,8 @@ typedef struct export_config {
     ROZOFS_BSIZE_E  bsize;
     uint8_t         thin:1;    /* Thin provisionning */
     uint8_t         flockp:1;  /* persistent file locks */
-    estripping_t stripping; //< multi file stripping configuration    
+    estripping_t stripping; //< multi file stripping configuration   
+    rozofs_econfig_fast_mode_e fast_mode; 
     char root[FILENAME_MAX];
     char name[FILENAME_MAX];
     char md5[MD5_LEN];

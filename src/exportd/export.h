@@ -230,6 +230,7 @@ typedef struct export {
     eid_t eid; ///< export identifier
     volume_t *volume; ///< the volume export relies on
     volume_t *volume_fast; ///< the secondary volume that is intended to be SSD based: used for small files mainly 
+    rozofs_econfig_fast_mode_e  fast_mode; /* Hos is the fast volume used */
     uint32_t bsize; ///< the block size from enum ROZOFS_BSIZE_E
     char root[PATH_MAX]; ///< absolute path of the storage root
     char name[PATH_MAX]; ///< Export name

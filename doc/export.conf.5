@@ -30,24 +30,39 @@ grammar.
                - is optional.
                - must be an integer.
 
-.SS stripping
-    This describe the system file stripping parameters when user files are splitted on 
+.SS striping
+    This describe the system file striping parameters when user files are splitted on 
     several internal RozoFS files. 
-    The stripping parameters can be set per export, per volume or for the whole system. 
-    When no stripping is defined for an export, it takes the volume stripping parameters.
-    When no stripping is defined for a volume, it takes the system stripping parameters.
-    When no stripping is defined at system level, the stripping is set to no stripping.
+    The striping parameters can be set per export, per volume or for all the volumes. 
+    When no striping is defined for an export, it takes the volume striping parameters.
+    When no striping is defined for a volume, it takes the system striping parameters.
+    When no striping is defined at system level, the striping is set to no striping.
     
        unit:   defines the size of the strip.
                The size in bytes of a strip is : 256K * (1 << unit)
                - is optional.
-               - must be an integer.
-             
-       factor: defines the number of RozoFS files under a user file.
-               The number of RozoFS files is : (1 << factor)        
-               - is optional.
-               - must be an integer.
+               - must be an integer within
+                 - 0: 256KB
+                 - 1: 512KB
+                 - 2: 1MB
+                 - 3: 2MB
+                 - 4: 4MB
+                 - 5: 8MB
+                 - 6: 16MB
+                 - 7: 32MB
 
+             
+       factor: defines the number of RozoFS sub-files under a user file.
+               - is optional.
+               - must be an integer within 
+                 - 0: no striping
+                 - 1: for 2 sub-files
+                 - 2: for 3 sub-files
+                 - 3: for 4 sub-files
+                 - 4: for 5 sub-files
+                 - 5: for 6 sub-files
+                 - 6: for 7 sub-files
+                 - 7: for 8 sub-files
 .SS volumes:  
    It is a list of volumes. Each volume is identified by its vid and may contain
    a list of one or more clusters (cids). Each clusters is identified by its
@@ -63,9 +78,9 @@ grammar.
                - Optional field (if no layout is specified for this volume, the
                  default layout is used instead).
 
-       stripping: specify the volume stripping. 
-               - must be a valid stripping set (see system stripping above).
-               - is optional. Default is to use the system stripping.      
+       striping: specify the volume striping. 
+               - must be a valid striping set (see system striping above).
+               - is optional. Default is to use the system striping.      
        
        cid: (cluster identifier)
                - must be an integer.
@@ -154,9 +169,9 @@ rule. Incoming IP addresses for a given export are checked against the
                - must be unique for each filesystem managed by this exportd.
                - default name is the root field.
 
-       stripping: specify the export stripping. 
-               - must be a valid stripping set (see system stripping above).
-               - is optional. Default is to use the volume stripping.
+       striping: specify the export striping. 
+               - must be a valid striping set (see system striping above).
+               - is optional. Default is to use the volume striping.
 
        filter: (IPv4 filter to apply to this export)
                - is optional (every IP is allowed when omitted).
@@ -196,6 +211,12 @@ rule. Incoming IP addresses for a given export are checked against the
                - must be an integer.
                - should exist in volume list.
                - several filesystem can use the same volume.
+               
+       fast_mode: tells how the vid_fast is used: 
+               - must be a string within:
+                 - none   : vid is used as if no vid_fast is configured (default).
+                 - hybrid : vid fast is used to contain the 1rst part of the created files.
+                 - aging  : files are created on vid_fast, and can later be moved to the slow volume. 
 
        suffix_file: index of the suffix file that contains the candidate file suffixes to be stored on vid_fast
                - must be an integer (1..64).
@@ -216,7 +237,7 @@ rule. Incoming IP addresses for a given export are checked against the
 
 # Strip size of 1MB 
 # 4 RozoFS files per user file 
-stripping = { unit = 2; factor = 2;}; 
+striping = { unit = 2; factor = 2;}; 
 
 layout = 0; # Default layout 
 volumes =   # List of volumes
@@ -306,7 +327,7 @@ exports = ( # List of exported filesystem
 
     # exported file systems on volume 2
     {eid = 4; name = "bar1"; vid=2;}
-    {eid = 5; name = "noStripping"; vid=2; stripping = { unit = 0; factor = 0;}; }
+    {eid = 5; name = "nostriping"; vid=2; striping = { unit = 0; factor = 0;}; }
 
     # ...
 );

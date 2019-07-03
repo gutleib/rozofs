@@ -37,6 +37,7 @@
 #define EVOLUMES    "volumes"
 #define EVID        "vid"
 #define EVID_FAST   "vid_fast"
+#define EFAST_MODE  "fast_mode"
 #define ECIDS       "cids"
 #define ECID        "cid"
 #define ESTORAGES   "storages"
@@ -227,12 +228,13 @@ void expgw_config_release(expgw_config_t *c) {
 int export_config_initialize(export_config_t *e, eid_t eid, vid_t vid, uint8_t layout, uint32_t bsize,
         const char *root, const char * name, const char *md5, uint64_t squota, uint64_t hquota, 
 	const char *filter_name, int thin,vid_t vid_fast, uint64_t hquota_fast,int suffix_file, 
-        int flockp, estripping_t * stripping) {
+        int flockp, estripping_t * stripping, rozofs_econfig_fast_mode_e fast_mode) {
     DEBUG_FUNCTION;
 
     e->eid = eid;
     e->vid = vid;
     e->vid_fast = vid_fast;
+    e->fast_mode = fast_mode;
     e->layout = layout;
     memcpy(&e->stripping,stripping,sizeof(estripping_t));
     e->bsize = bsize;
@@ -1064,6 +1066,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
     struct config_setting_t *export_set = NULL;
     char   dafault_root_path[FILENAME_MAX];
     estripping_t       stripping;
+    rozofs_econfig_fast_mode_e fast_mode = rozofs_econfig_fast_none;
 
     /*
     ** Prior to read the export configuration, we need
@@ -1252,6 +1255,19 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         if (config_setting_lookup_int(mfs_setting, EVID_FAST, &vid_fast) == CONFIG_FALSE) {
             vid_fast = -1;
         }
+        // Lookup fast mode
+        fast_mode = rozofs_econfig_fast_none;
+        if (config_setting_lookup_string(mfs_setting, EFAST_MODE, &str) != CONFIG_FALSE) {
+          if (strcasecmp(str,"hybrid")==0) {
+            fast_mode = rozofs_econfig_fast_hybrid;
+          }
+          else if (strcasecmp(str,"aging")==0) {  
+            fast_mode = rozofs_econfig_fast_aging;
+          }
+          else if (strcasecmp(str,"none")!=0) {  
+            severe("Bad fast_mode for export %d : %s . Default to \"none\"", eid, str);
+          }           
+        }
 
         // Check for thin provisionning
         thin = 0;
@@ -1310,7 +1326,7 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         econfig = xmalloc(sizeof (export_config_t));
         if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
                 md5, squota, hquota, filter_name, thin, (vid_t) vid_fast,hquota_fast,suffix_file,
-                flockp, &stripping) != 0) {
+                flockp, &stripping, fast_mode) != 0) {
             severe("can't initialize export config.");
         }
 
