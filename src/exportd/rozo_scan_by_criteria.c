@@ -2949,7 +2949,7 @@ export_config_t * get_export_config(uint8_t eid) {
     econfig = list_entry(e, export_config_t, list);
     if (econfig->eid == eid) {
       /*
-      ** When ttriping factor is not initialize at export level
+      ** When striping factor is not initialize at export level
       ** Get it at volume level
       */
       if (econfig->stripping.factor == 255) {
@@ -2958,8 +2958,8 @@ export_config_t * get_export_config(uint8_t eid) {
           memcpy(&econfig->stripping,&vconfig->stripping, sizeof(vconfig->stripping));
         }
       }
-    }
-    return econfig;   
+      return econfig;   
+    }  
   }
   return NULL;
 }
