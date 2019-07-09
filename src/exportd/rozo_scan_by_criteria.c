@@ -108,6 +108,7 @@ typedef enum _INT_VALUE_FOR_STRING_ENUM {
   DEFINE_INT_FOR_INPUT_STRING(deleted)
   DEFINE_INT_FOR_INPUT_STRING(pfid)
   DEFINE_INT_FOR_INPUT_STRING(name)
+  DEFINE_INT_FOR_INPUT_STRING(under)
   DEFINE_INT_FOR_INPUT_STRING(xattr)
   DEFINE_INT_FOR_INPUT_STRING(noxattr)
   DEFINE_INT_FOR_INPUT_STRING(slink)
@@ -165,6 +166,7 @@ static struct option long_options[] = {
     INPUT_STRING_NO_ARG_TO_INT(deleted)
     INPUT_STRING_NO_ARG_TO_INT(pfid)  
     INPUT_STRING_NO_ARG_TO_INT(name)        
+    INPUT_STRING_NO_ARG_TO_INT(under)        
     INPUT_STRING_NO_ARG_TO_INT(xattr)
     INPUT_STRING_NO_ARG_TO_INT(noxattr)  
     INPUT_STRING_NO_ARG_TO_INT(slink)
@@ -501,9 +503,15 @@ fid_t       pfid_equal = {0};
 /*
 ** FNAME
 */
-pcre      * pRegex = NULL;
+pcre      * fname_regex = NULL;
 char      * fname_equal = NULL;
 char      * fname_bigger = NULL;
+/*
+** parent directory name (under)
+*/
+pcre      * under_regex = NULL;
+char      * under_equal = NULL;
+char      * under_bigger = NULL;
 
 int         search_dir=0;
 
@@ -736,16 +744,17 @@ char *rozo_get_path(void *exportd,void *inode_p,char *buf,int lenmax, int relati
    if (memcmp(e->rfid,inode_attr_p->s.attrs.fid,sizeof(fid_t))== 0)
    {         
       pbuf[0] = '.';
-      pbuf[1] = 0;
+      pbuf[1] = '/';
+      pbuf[2] = 0;
       return pbuf;
    }
    
    inode_val_p = (rozofs_inode_t*)inode_attr_p->s.pfid;
-   if ((inode_val_p->fid[0]==0) && (inode_val_p->fid[1]==0))
-   if (memcmp(e->rfid,inode_attr_p->s.attrs.fid,sizeof(fid_t))== 0)
+   if ((inode_val_p->fid[0]==0) && (inode_val_p->fid[1]==0))      
    {         
       pbuf[0] = '.';
-      pbuf[1] = 0;
+      pbuf[1] = '/';
+      pbuf[2] = 0;
       return pbuf;
    }
 
@@ -753,6 +762,15 @@ char *rozo_get_path(void *exportd,void *inode_p,char *buf,int lenmax, int relati
    
    buf[0] = 0;
    first = 1;
+   
+   if (S_ISDIR(inode_attr_p->s.attrs.mode)) {
+     pbuf--;
+     *pbuf = 0;
+     pbuf--;
+     *pbuf ='/';
+     first = 0;
+   }   
+   
    while(1)
    {
       /*
@@ -1226,8 +1244,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   /*
   ** Name must match regex
   */
-  if (pRegex) {
-    if (!exp_check_regex(e->root,inode_p,pRegex)) {
+  if (fname_regex) {
+    if (!exp_check_regex(e->root,inode_p,fname_regex)) {
       return 0;
     }  
   }  
@@ -1656,7 +1674,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }  
     
     /*
-    ** Must be a mulifile with less than slave_lower slave inodes
+    ** Must be a multifile with less than slave_lower slave inodes
     */ 
     if (slave_lower != LONG_VALUE_UNDEF) {
       /*
@@ -1682,7 +1700,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     } 
      
     /*
-    ** Must be a mulifile with more than slave_bigger slave inodes
+    ** Must be a multifile with more than slave_bigger slave inodes
     */ 
     if (slave_bigger != LONG_VALUE_UNDEF) {
       /*
@@ -1703,7 +1721,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     } 
      
     /*
-    ** Must be a mulifile with more than slave_bigger slave inodes
+    ** Must be a multifile with more than slave_bigger slave inodes
     */ 
     if (slave_equal != LONG_VALUE_UNDEF) {
       /*
@@ -1729,7 +1747,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }  
 
     /*
-    ** Must be a mulifile with more than slave_bigger slave inodes
+    ** Must be a multifile with more than slave_bigger slave inodes
     */ 
     if (slave_diff != LONG_VALUE_UNDEF) {
       /*
@@ -2058,6 +2076,107 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       }
     }        
   }
+         
+  /*
+  ** Under criteria
+  */
+  if (under_bigger != NULL)  {
+    int    len;    
+    /*
+    ** Get the full name 
+    */
+    pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),0);
+    len = strlen(under_bigger);
+    if (strlen(pChar) < len) return 0;
+    if (strncmp(under_bigger,pChar, len) != 0) return 0;
+  }
+    
+  while (under_equal != NULL) {
+    char * pt;
+    int    len;
+    int    trailer_slash = 0;
+    /*
+    ** Check whether under_equal has a trailer '/'
+    */    
+    len = strlen(under_equal);
+    if (under_equal[len-1] == '/') {
+      trailer_slash = 1;
+    }    
+    
+    /*
+    ** Get the full name 
+    */
+    pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),0);
+    pt = pChar;
+    len = strlen(pChar);
+    pt += len-1;
+    /*
+    ** Rewind until previous / 
+    */
+    if (S_ISREG(inode_p->s.attrs.mode)) {
+      /*
+      ** Rewind until previous / to keep only parent directory name
+      */
+      while ((pt>pChar) && (*pt!='/')) {
+        pt--;
+      }
+      if (*pt == '/') {
+        if (trailer_slash==1) {
+          pt++; /* Keep trailer slash */
+        } 
+        *pt = 0;
+      }      
+      if (strcmp(under_equal,pChar) != 0) return 0;
+      break;
+    }
+    
+    if (S_ISDIR(inode_p->s.attrs.mode)) {
+      /*
+      ** Check whether we must keep or not last '/' for comparison
+      */
+      if (trailer_slash==0) {
+        /*
+        ** Remove trailing / from name
+        */
+        if (*pt == '/') *pt = 0;
+      }
+      if (strcmp(under_equal,pChar) == 0) break;
+      /*
+      ** Rewind until previous / to keep only parent directory name
+      */
+      *pt = 0; /* eventualy remove the latests '/' */
+      pt--;
+      while ((pt>pChar) && (*pt!='/')) {
+        pt--;
+      }
+      if (trailer_slash==0) {
+        /*
+        ** Remove trailing / from name
+        */
+        if (*pt == '/') *pt = 0;
+      }
+      else {
+         pt ++;
+         *pt = 0;
+      }   
+      if (strcmp(under_equal,pChar) == 0) break;
+      return 0;
+    }  
+    break;
+  }    
+        
+  if (under_regex) {
+    /*
+    ** Get the full name 
+    */
+    pChar = rozo_get_path(exportd,inode_attr_p, fullName,sizeof(fullName),0);
+    /*
+    ** Compare the names
+    */
+    if (pcre_exec (under_regex, NULL, pChar, strlen(pChar), 0, 0, NULL, 0) != 0) {
+      return 0;
+    }  
+  }     
              
   /*
   ** This inode is valid
@@ -2691,6 +2810,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m--nohybrid\033[0m\t\tMust not be in multi volume hybrid mode file/directory..\n");
   printf("\n\033[1mFIELD:\033[0m\n");
   printf("\t\033[1m-n,--name\033[0m\t\tfile/directory name (3).\n");
+  printf("\t\033[1m--under\033[0m\t\tparent directory name (3).\n");
   printf("\t\033[1m-P,--project\033[0m\t\tproject identifier (1).\n"); 
   printf("\t\033[1m-s,--size\033[0m\t\tfile/directory size.\n"); 
   printf("\t\033[1m-g,--gid\033[0m\t\tgroup identifier (1).\n"); 
@@ -2712,6 +2832,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1m--deleted\033[0m\t\tnumber of deleted inode in the trash (directory only).\n"); 
   printf("\t\033[1m--pfid\033[0m\t\t\tParent FID (2).\n");
   printf("\t\033[1m--slave\033[0m\t\t\tnumber of slave inodes in multifile mode.\n");
+  printf("\t\033[1m--path\033[0m\t\tdire (4).\n");
   printf("(1) only --eq or --ne conditions are supported.\n");
   printf("(2) only --eq condition is supported.\n");
   printf("(3) only --eq, --ge or --regex conditions are supported.\n");
@@ -2785,6 +2906,8 @@ static void usage(char * fmt, ...) {
     printf("  \033[1mrozo_scan --Unw --Gx --Onx -o priv,gid,uid\033[0m\n");
     printf("Searching for multifiles not hybrid having more than 4 slave inodes.\n");
     printf("  \033[1mrozo_scan --nohybrid --slave --ge 4 -o json,all\033[0m\n");
+    printf("Searching for subdirectories under a given directory where a change occured after a given date.\n");
+    printf("  \033[1mrozo_scan --dir --under --ge ./home/user/joe/ --update --ge 2019-06-18 --out json,all\033[0m\n");
   }
   exit(EXIT_SUCCESS);     
 };
@@ -3692,6 +3815,9 @@ int main(int argc, char *argv[]) {
           case INT_VALUE_FOR_STRING_name:
               NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_name);
               break;                
+          case INT_VALUE_FOR_STRING_under:
+              NEW_COMPARISON_CHECKS(INT_VALUE_FOR_STRING_under);
+              break;                
           case 'x':   
           case INT_VALUE_FOR_STRING_xattr:
               NEW_OPTION_CHECKS();
@@ -3809,6 +3935,7 @@ int main(int argc, char *argv[]) {
                 case INT_VALUE_FOR_STRING_pfid:
                 case INT_VALUE_FOR_STRING_name:
                 case INT_VALUE_FOR_STRING_project:
+                case INT_VALUE_FOR_STRING_under:
                   if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
                   else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break;
@@ -3907,6 +4034,7 @@ int main(int argc, char *argv[]) {
                 case INT_VALUE_FOR_STRING_uid:
                 case INT_VALUE_FOR_STRING_pfid:
                 case INT_VALUE_FOR_STRING_name:
+                case INT_VALUE_FOR_STRING_under:
                   if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
                   else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break; 
@@ -3972,6 +4100,18 @@ int main(int argc, char *argv[]) {
                   break;                  
                 case INT_VALUE_FOR_STRING_name:
                   fname_bigger = optarg;
+                  break;
+                case INT_VALUE_FOR_STRING_under:
+                  under_bigger = malloc(strlen(optarg)+3);
+                  if (strncmp(optarg, "./",2) == 0) {
+                    strcpy(under_bigger,optarg);
+                    break;
+                  }  
+                  if (strncmp(optarg, "/",1) == 0) {
+                    sprintf(under_bigger,".%s", optarg);
+                    break;
+                  }  
+                  sprintf(under_bigger,"./%s", optarg);                  
                   break;
                      
                 case INT_VALUE_FOR_STRING_gid:          
@@ -4066,6 +4206,7 @@ int main(int argc, char *argv[]) {
                 case INT_VALUE_FOR_STRING_pfid:
                 case INT_VALUE_FOR_STRING_name:
                 case INT_VALUE_FOR_STRING_project:
+                case INT_VALUE_FOR_STRING_under:
                   if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
                   else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break;                               
@@ -4153,6 +4294,19 @@ int main(int argc, char *argv[]) {
                 case INT_VALUE_FOR_STRING_name:
                   fname_equal = optarg;
                   break;                                                                         
+
+                case INT_VALUE_FOR_STRING_under:
+                  under_equal = malloc(strlen(optarg)+3);
+                  if (strncmp(optarg, "./",2) == 0) {
+                    strcpy(under_equal,optarg);
+                    break;
+                  }  
+                  if (strncmp(optarg, "/",1) == 0) {
+                    sprintf(under_equal,".%s", optarg);
+                    break;
+                  }  
+                  sprintf(under_equal,"./%s", optarg);                  
+                  break;                                                                         
                                                                          
                                                                          
                 default:
@@ -4203,13 +4357,53 @@ int main(int argc, char *argv[]) {
                     }
                     index++;
                   }    
-                  pRegex = pcre_compile(regex, 0, &pcreErrorStr, &pcreErrorOffset, NULL);
-                  if(pRegex == NULL) {
-                    usage("Bad regex \"%s\" at offset %d : %s", regex, pcreErrorOffset, pcreErrorStr);  
+                  fname_regex = pcre_compile(regex, 0, &pcreErrorStr, &pcreErrorOffset, NULL);
+                  if(fname_regex == NULL) {
+                    usage("Bad regex for --name \"%s\" at offset %d : %s", regex, pcreErrorOffset, pcreErrorStr);  
                   }
                 }  
                 break; 
                                                                          
+                case INT_VALUE_FOR_STRING_under:
+                {  
+                  FILE*       f;
+                  const char *pcreErrorStr;     
+                  int         pcreErrorOffset;
+                  int         index;
+                  
+                  /*
+                  ** Open regex file
+                  */
+                  f = fopen(optarg, "r");
+                  if (f == NULL) {
+                    usage("Can not open file %s (%s)", optarg, strerror(errno));                 
+                  } 
+                  /*
+                  ** Read regex
+                  */
+                  if (fread(regex, sizeof(regex), 1, f) != 0) {       
+                    fclose(f);                           
+                    usage("Can not read file %s (%s)", optarg, strerror(errno));
+                  } 
+                  fclose(f);
+                  /*
+                  ** Compile the regex
+                  */
+                  index = 0;
+                  while (regex[index] != 0) {
+                    if (regex[index] == '\n') {
+                      regex[index] = 0;
+                      break;
+                    }
+                    index++;
+                  }    
+                  under_regex = pcre_compile(regex, 0, &pcreErrorStr, &pcreErrorOffset, NULL);
+                  if(under_regex == NULL) {
+                    usage("Bad regex for --under \"%s\" at offset %d : %s", regex, pcreErrorOffset, pcreErrorStr);  
+                  }
+                }  
+                break; 
+                
                 default:
                   usage("No criteria defined prior to %s",comp);     
               }
@@ -4288,6 +4482,7 @@ int main(int argc, char *argv[]) {
                                     
                 case INT_VALUE_FOR_STRING_pfid:
                 case INT_VALUE_FOR_STRING_name:
+                case INT_VALUE_FOR_STRING_under:
                   if (criteria_string) usage("No %s comparison for --%s",comp,criteria_string);  
                   else                 usage("No %s comparison for -c",comp,criteria_char);    
                   break;                                                   
