@@ -60,13 +60,13 @@ do
   #
   # Extract eid parameter if set
   #
-  if [ "$1" == "-e" ]
+  if [ "$1" == "-e" -o "$1" == "--eid" ];
   then
 
     shift 1
     if [ -z $1 ]
     then
-      echo "Missing eid value after -e option"
+      echo "Missing eid value after -e,--eid option"
       exit 1
     fi
     
