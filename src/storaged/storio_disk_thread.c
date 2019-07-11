@@ -3322,6 +3322,15 @@ int storio_rdma_write_disk_thread_create(char * hostname, int nb_threads, int in
    char                     * pChar;
 
    /*
+   ** Init of the common ring buffer used by RDMA write (to get response from the RDMA completion thread
+   */
+   if (rozofs_queue_init(&storio_rdma_write_ring,DISK_THREAD_QUEUE_RING_SZ*4) < 0)
+   {
+      fatal("cannot create ring buffer");
+      return -1;
+   }            
+          
+   /*
    ** clear the thread table
    */
    memset(rozofs_rdma_write_disk_thread_ctx_tb,0,sizeof(rozofs_disk_thread_ctx_tb));
@@ -3353,15 +3362,7 @@ int storio_rdma_write_disk_thread_create(char * hostname, int nb_threads, int in
 	fatal("storio_rdma_write_disk_thread_create af_unix_disk_sock_create_internal(%s) %s",socketName, strerror(errno));
 	return -1;   
      } 
-     /*
-     ** Init of the common ring buffer used by RDMA write (to get response from the RDMA completion thread
-     */
-     if (rozofs_queue_init(&storio_rdma_write_ring,DISK_THREAD_QUEUE_RING_SZ*4) < 0)
-     {
-	fatal("cannot create ring buffer");
-	return -1;
-     }  
-          
+
      err = pthread_attr_init(&attr);
      if (err != 0) {
        fatal("af_unix_disk_thread_create pthread_attr_init(%d) %s",i,strerror(errno));
