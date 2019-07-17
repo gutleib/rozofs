@@ -142,7 +142,9 @@ def get_eid_and_exports_from_path(path):
   for line in cmd.stdout:
     exports=line.split()[0]
     eid=line.split()[1]
-    return eid,exports
+    instance = int(line.split()[3])
+    onlyClient = "-i 127.0.0.1 -p %d "%(instance*3+50003)
+    return eid,exports,onlyClient
   syntax( "%s is not a RozoFS mountpoint"%(path))
             
 #______________________________
@@ -181,6 +183,12 @@ def check_netmwork_filters(address):
 def get_client_list(exports,eid):
   global total_watched_clients
   global total_nb_clients
+  global onlyClient
+  
+  if options.justThisOne == True: 
+    total_watched_clients = 1 
+    total_nb_clients = 1
+    return onlyClient
   
   total_watched_clients = 0 
   total_nb_clients = 0
@@ -288,6 +296,7 @@ def syntax(string=None):
   print YELLOW +"    -R,--reverse"+ NORMAL +"            oldest data are at the bottom of the display."
   print
   print CYAN + "  FILTER = {--ipRange <IP1@-IP2@> ... | --NipRange <IP1@-IP2@> ... | --what <what> ...}"+ NORMAL
+  print CYAN + "    -1,--one                 "+ NORMAL  +"  just the client handling the mountpoint." 
   print CYAN + "    -i,--ipRange  <IP1@-IP2@>"+ NORMAL  +"  excludes clients whose IP address is out of IP1-IP2 range." 
   print CYAN + "    -I,--NipRange <IP1@-IP2@>"+ NORMAL  +"  excludes clients whose IP address is within IP1-IP2 range." 
   print CYAN + "    -w,--what {r|w|l|c|d|a|x|o|nr|nw|nl|nc|nd|na|nx|no}"+ NORMAL  
@@ -337,6 +346,7 @@ parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
 parser.add_option("-w","--what", action="append",type="string", dest="what", help="what to (not to) display \"<r|nr|w|nw|l|nl|c|nc|d|nd|a|na|x|nx|o|no>\" (default everything).")
 parser.add_option("-a","--average", action="store_true",default=False, dest="average", help="Display an average line.")
+parser.add_option("-1","--one", action="store_true",default=False, dest="justThisOne", help="Just display the given client.")
 
 total_watched_clients = int(0)
 total_nb_clients = int(0)
@@ -433,7 +443,7 @@ nb_run = int(0)
 # Find the eid this path is connected to and then get the list of RozoFS
 # clients on this eid from the export
 #    
-eid,exports = get_eid_and_exports_from_path(path)
+eid,exports,onlyClient = get_eid_and_exports_from_path(path)
 clients = get_client_list(exports,eid)
 if clients == "":
   syntax( "No client found")
