@@ -106,6 +106,7 @@ typedef struct _rozofs_fuse_save_ctx_t
    char *newname;
    struct fuse_file_info *fi;
    struct flock *flock;
+   rozofsmount_file_lock_t * rozo_lock; 
    int    sleep;
    int    deferred_fuse_write_response;
    struct stat *stbuf;          /**< pointer to the setattr attributes */
