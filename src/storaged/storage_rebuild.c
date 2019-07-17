@@ -551,13 +551,16 @@ char * utility_name=NULL;
 void usage(char * fmt, ...) {
     va_list   args;
     char      error_buffer[512];
+    char     *pt=error_buffer;
 
     /*
     ** Display optionnal error message if any
     */
     if (fmt) {
       va_start(args,fmt);
-      vsprintf(error_buffer, fmt, args);
+      pt += sprintf(pt, "\033[1m\033[91m");
+      pt += vsprintf(pt, fmt, args);
+      pt += sprintf(pt, "\033[0m");
       va_end(args);   
       severe("%s",error_buffer);
       printf("%s\n",error_buffer);
@@ -565,17 +568,17 @@ void usage(char * fmt, ...) {
 
 
     printf("\nStorage node rebuild - RozoFS %s\n", VERSION);
-    printf("Usage: storage_rebuild [OPTIONS]\n\n");
-    printf("   -h, --help                \tPrint this message.\n");
-    printf("   -r, --rebuild <names>     \tlist of \'/\' separated host where exportd is running (optionnal. Check rozofs.conf)\n");
-    printf("   -d, --device <device>     \tDevice number to rebuild.\n");
-    printf("                             \tAll devices are rebuilt when omitted.\n");
-    printf("   -s, --sid <cid/sid>       \tCluster and storage identifier to rebuild.\n");
-    printf("                             \tAll <cid/sid> are rebuilt when omitted.\n");
-    printf("   -f, --fid <FID>           \tSpecify one FID to rebuild. -s must also be set.\n");
-    printf("       --bstart              \t1rst block to rebuild when FID is given\n");
-    printf("       --bstop               \tlast block to rebuild when FID is given\n");
-    printf("       --chunk               \tchunk to rebuild when FID is given\n");
+    printf("Usage: storage_rebuild <TARGET> [OPTIONS]\n\n");
+    printf("TARGET:\n");
+    printf("   -s, --sid all             \tRebuild every cid/sid of the node.\n");
+    printf("   -s, --sid <cid/sid>       \tRebuild some parts on this cid/sid. These parts are defined as follow\n");
+    printf("       -d, --device <device>     \tDevice number to rebuild within the given cid/sid.\n");
+    printf("                                 \tAll devices of the given cid/sid are rebuilt when omitted.\n");
+    printf("       -f, --fid <FID>           \tSpecify one FID to rebuild.\n");
+    printf("           --bstart <bl#>        \t1rst block to rebuild when FID is given\n");
+    printf("           --bstop  <bl#>        \tlast block to rebuild when FID is given\n");
+    printf("           --chunk  <ch#>        \tchunk to rebuild when FID is given\n");
+    printf("OPTIONS:\n");
     printf("   -p, --parallel=<val>      \tNumber of rebuild processes in parallel per cid/sid\n");
     printf("                             \t(default is %d, maximum is %d)\n",
            common_config.device_self_healing_process,MAXIMUM_PARALLEL_REBUILD_PER_SID);   
@@ -599,13 +602,15 @@ void usage(char * fmt, ...) {
     printf("   -rawlist                  \tDisplay a raw list of FID to rebuild\n");
     printf("   -fg                       \tTo force foreground execution\n");
     printf("   -bg                       \tTo force background execution\n");
+    printf("   -h, --help                \tPrint this message.\n");
     printf(" mainly for tests:\n");
 //    printf("   -H, --host=storaged-host  \tSpecify the hostname to rebuild\n");
     printf("   -c, --config=config-file  \tSpecify config file to use\n");
     printf("                             \t(default: %s).\n",STORAGED_DEFAULT_CONFIG);
+    printf("   -r, --rebuild <names>     \tlist of \'/\' separated host where exportd is running (optionnal. Check rozofs.conf)\n");
 
     printf("Rebuilding a whole storage node as fast as possible:\n");
-    printf("storage_rebuild -p %d\n\n",MAXIMUM_PARALLEL_REBUILD_PER_SID);
+    printf("storage_rebuild -s all -p %d\n\n",MAXIMUM_PARALLEL_REBUILD_PER_SID);
     printf("Rebuilding every devices of sid 2 of cluster 1:\n");
     printf("storage_rebuild -s 1/2\n\n");
     printf("Rebuilding only device 3 of sid 2 of cluster 1:\n");
@@ -787,6 +792,9 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
 	  
     if (IS_ARG(-s) || IS_ARG(--sid)) { 
       GET_PARAM(--sid)
+      if (strcasecmp(optarg,"all")==0) {
+        continue;
+      }
       ret = sscanf(optarg,"%d/%d", &par->cid, &par->sid);
       if (ret != 2) {
 	usage("-s option requires also cid/sid.\n");
@@ -3769,6 +3777,8 @@ int main(int argc, char *argv[]) {
     ** read common config file
     */
     common_config_read(NULL);         
+    
+    if (argc == 1) usage(NULL);
 
     uma_dbg_record_syslog_name("RBS");
     
