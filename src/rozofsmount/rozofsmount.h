@@ -162,13 +162,7 @@ typedef struct ientry {
      ** a file_t buffer automaticaly triggers the flush to disk of the previous pending write.
      */ 
     file_t    * write_pending;
-    list_t list_wr_block;   /**< to chain pending write block in case of no response from exportd  */
-    /*
-    ** Posix Granted locks 
-    */
-    list_t           this_ie_lock_owners;    /**< List of owner of locks on this file */
-    list_t           next_ie_in_granted_list;/**< To chain ientries in list of files owning a lock (rozofsmount_granted_lock_list) */
-    
+    list_t list_wr_block;   /**< to chain pending write block in case of no response from exportd  */    
     /**
      ** This counter is used for a reader to know whether the data in its buffer can be
      ** used safely or if they must be thrown away and a re-read from the disk is required
@@ -205,7 +199,6 @@ extern uint64_t    rozofs_aligned_write_end[2];
 extern int ROZOFS_MAX_WRITE_PENDING;
 extern int rozofs_site_number;
 
-extern void rozofsmount_invalidate_all_owners(ientry_t * ie) ;
 /**______________________________________________________________________________
 */
 /**
@@ -340,11 +333,6 @@ static inline void del_ientry(ientry_t * ie) {
     if (!list_empty(&ie->list_wr_block)) return;
     if (ie->nlookup != 0) return;
     
-    /*
-    ** Remove every file lock chained on this entry
-    */
-    rozofsmount_invalidate_all_owners(ie);
-    
     rozofs_ientries_count--;
     htable_del_entry(&htable_inode, &ie->he);
 //    htable_del(&htable_fid, ie->fid);
@@ -473,9 +461,6 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
 	  ie->ientry_long = 0;
 	}
         ie->write_error = 0;
-        
-        list_init(&ie->this_ie_lock_owners);    /**< List of owner of locks on this ientry */
-        list_init(&ie->next_ie_in_granted_list);/**< To chain ientries in list of files owning a lock (rozofsmount_granted_lock_list) */
 
 	memcpy(ie->fid, fid, sizeof(fid_t));
         memset(ie->pfid, 0, sizeof(fid_t));

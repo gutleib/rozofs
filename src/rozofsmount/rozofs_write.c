@@ -39,7 +39,6 @@ char *rozofs_buf_scratch_p=NULL;
 static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char *buf, uint32_t len);
 
 void rozofs_ll_write_cbk(void *this,void *param);
-void rozofs_clear_file_lock_owner(file_t * f);
 void export_write_block_cbk(void *this,void *param);
 
 /*
@@ -1755,6 +1754,9 @@ void rozofs_ll_flush_nb(fuse_req_t req, fuse_ino_t ino,
         errno = ENOENT;
         goto error;
     }
+
+    //info("flush lock_owner %llx", (unsigned long long)fi->lock_owner);
+
     /*
     ** check the status of the last write operation
     */
@@ -2369,27 +2371,8 @@ void rozofs_ll_release_nb(fuse_req_t req, fuse_ino_t ino,
     ** update the statistics
     */
     rzkpi_file_stat_update(ie->pfid,(int)0,RZKPI_CLOSE);
-
-    /*
-    ** Clear all the locks eventually pending on the file for this owner
-    */
-    if (f->lock_owner_ref) {
-      /*
-      ** When some locks have been set previously with this file descriptor
-      ** remove all locks from this process
-      */
-      rozofs_clear_file_lock_owner(f);
-    }
-    if ((fi->flock_release)&&(fi->lock_owner)) {
-      /*
-      ** When fuse tell us the owner of some locks to remove
-      ** load the owner in the file context and go
-      */
-      f->lock_owner_ref = fi->lock_owner;
-      rozofs_clear_file_lock_owner(f);      
-    }
     
-     if (rozofs_bugwatch) severe("BUGROZOFSWATCH release(%p) , buf_write_wait=%d, buf_write_pending=%d,",
+   if (rozofs_bugwatch) severe("BUGROZOFSWATCH release(%p) , buf_write_wait=%d, buf_write_pending=%d,",
                                    f,f->buf_write_wait,f->buf_write_pending);
 
     /*

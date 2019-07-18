@@ -629,6 +629,28 @@ void file_lock_service_init(void) {
 }
 /*
 *___________________________________________________________________
+* Search client from its reference
+*
+* @param client_ref reference of the client to remove
+*___________________________________________________________________
+*/
+rozofs_file_lock_client_t * file_lock_lookup_client(eid_t eid, uint64_t client_ref) {
+  list_t * p;
+  rozofs_file_lock_client_t * client = NULL;
+
+  /* Search the given client */
+  list_for_each_forward(p, &file_lock_client_list[eid-1]) {
+     
+    client = list_entry(p, rozofs_file_lock_client_t, next_client);
+ 
+    if (client->client_ref == client_ref) {
+      return client;
+    }       
+  }  
+  return NULL;
+}  
+/*
+*___________________________________________________________________
 * Unlink a lock. This consist in downgrading the global number of lock 
 * and unlinking the lock from every list it is in
 *
@@ -637,6 +659,20 @@ void file_lock_service_init(void) {
 *___________________________________________________________________
 */
 static inline void file_lock_unlink(rozofs_file_lock_t * lock) {
+  int                         eid;   
+  rozofs_file_lock_client_t * client;
+   
+  eid = rozofs_get_eid_from_fid(lock->lv2->attributes.s.attrs.fid);   
+   
+  /* Search the given client */
+  client = file_lock_lookup_client(eid,  lock->lock.client_ref);  
+
+  if (client) {
+    client->nb_lock--;
+  }
+  else {
+    severe("Client %llx not found on eid %d",  (long long unsigned int)lock->lock.client_ref, eid);
+  }   
 
   file_lock_stat.nb_lock_unlink++;
   file_lock_stat.nb_file_lock--;
@@ -646,6 +682,10 @@ static inline void file_lock_unlink(rozofs_file_lock_t * lock) {
   /* Unlink lock from the client */  
   list_remove(&lock->next_client_lock);
   
+  /*
+  ** Free the lock
+  */
+  xfree(lock);  
 }
 /*
 *___________________________________________________________________
@@ -760,7 +800,6 @@ static inline void file_lock_remove_one_client(eid_t eid, rozofs_file_lock_clien
       ** Just remove the current lock
       */
       file_lock_unlink(lock);
-      xfree(lock);
       nbLockRemoved++; // Some lock has been removed. That's OK 
     }
     
@@ -775,7 +814,6 @@ static inline void file_lock_remove_one_client(eid_t eid, rozofs_file_lock_clien
         lock = list_entry(p,rozofs_file_lock_t, next_fid_lock);
         if (lock->lock.client_ref == client->client_ref) {
           file_lock_unlink(lock);
-          xfree(lock);
           nbLockRemoved++; // Some lock has been removed.
         }
       }
@@ -914,28 +952,7 @@ char * display_file_lock_clients(char * pChar) {
   }
   return pChar;
 }
-/*
-*___________________________________________________________________
-* Search client from its reference
-*
-* @param client_ref reference of the client to remove
-*___________________________________________________________________
-*/
-rozofs_file_lock_client_t * file_lock_lookup_client(eid_t eid, uint64_t client_ref) {
-  list_t * p;
-  rozofs_file_lock_client_t * client = NULL;
 
-  /* Search the given client */
-  list_for_each_forward(p, &file_lock_client_list[eid-1]) {
-     
-    client = list_entry(p, rozofs_file_lock_client_t, next_client);
- 
-    if (client->client_ref == client_ref) {
-      return client;
-    }       
-  }  
-  return NULL;
-}  
 /*
 *___________________________________________________________________
 * Remove all the locks of a client and then remove the client 
@@ -1177,7 +1194,6 @@ void file_lock_remove_fid_locks(list_t * lock_list) {
   while (!list_empty(lock_list)) {
     lock = list_first_entry(lock_list,rozofs_file_lock_t, next_fid_lock);
     file_lock_unlink(lock);
-    xfree(lock);
   }
 }
 
@@ -1191,7 +1207,15 @@ void file_lock_remove_fid_locks(list_t * lock_list) {
 */
 void file_lock_add_lock_to_client(uint32_t eid, rozofs_file_lock_t * lock, ep_client_info_t * info) {
   rozofs_file_lock_client_t * client;
-  
+
+#if 0
+  info("set lock : owner %x type %s whence %s start %llu stop %llu",
+                  (long long unsigned int)lock->lock.owner_ref,
+    (lock->lock.mode==EP_LOCK_READ)?"READ":"WRITE",
+                     (long long unsigned int)lock->lock.user_range.offset_start,
+                     (long long unsigned int)lock->lock.user_range.offset_stop);
+#endif
+
   /* Search the given client */
   client = file_lock_lookup_client(eid, lock->lock.client_ref);
 
@@ -1204,7 +1228,6 @@ void file_lock_add_lock_to_client(uint32_t eid, rozofs_file_lock_t * lock, ep_cl
   }
 
   client->last_poll_time = time(0);
-
   /* Put the lock in the list of lock of this client */
   list_push_front(&client->file_lock_list,&lock->next_client_lock);
   client->nb_lock++;   
@@ -1447,20 +1470,11 @@ void rozofs_reload_flockp(lv2_entry_t * lv2, export_tracking_table_t *trk_tb_p) 
 *___________________________________________________________________
 */
 void lv2_cache_free_file_lock(uint32_t eid, rozofs_file_lock_t * lock) {
-  rozofs_file_lock_client_t * client;
-   
-  /* Search the given client */
-  client = file_lock_lookup_client(eid,  lock->lock.client_ref);  
-
-  if (client) {
-    client->nb_lock--;
-  }
   
   /*
   ** Free the lock
   */  
   file_lock_unlink(lock);     
-  xfree(lock);
 }
 
 /*
