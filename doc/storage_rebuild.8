@@ -7,27 +7,27 @@ storage_rebuild \- RozoFS disk rebuild utility
 .SH SYNOPSIS
 .IP "Rebuilding a full storage node"
  all files          :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>]
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s all
  nominal files only :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>] --nominal  
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s all --nominal  
  spare files only   :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>] --spare 
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s all --spare 
 .IP "Rebuilding only one logical storage within a storage node"
  all files          :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> 
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> 
  nominal files only :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> --nominal
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> --nominal
  spare files only   :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> --spare 
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> --spare 
 .IP "Rebuilding only a device of a logical storage"
  on the same device :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> -d <device> 
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> -d <device> 
  relocating files   :
-.B storage_rebuild [-r <exports>] [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> -d <device> -R
+.B storage_rebuild [-p <//>] [-t <MB/s>] [-l <loop>] -s <cid>/<sid> -d <device> -R
 .IP "Clearing error counters a device of a logical storage"
-.B storage_rebuild -C [-r <exports>] -s <cid>/<sid> -d <device>
+.B storage_rebuild -C -s <cid>/<sid> -d <device>
 .IP "Rebuilding only a FID of a logical storage"
-.B storage_rebuild [-r <exports>] [-t <MB/s>] [-l <loop>]  -s <cid>/<sid> -f <FID> 
+.B storage_rebuild [-t <MB/s>] [-l <loop>]  -s <cid>/<sid> -f <FID> 
 .IP "Getting the list of FID that are to be rebuilt. Then use rozo_fid2pathname utility on export node to translate FIDs to full path names."
 .B storage_rebuild -id <id> -list 
 .IP "Pause a running rebuild in order to resume it later."
@@ -52,13 +52,10 @@ A rebuild can be paused temporarily. It is then possible to resume a paused or f
 
 A monitoring rebuild file provides information on the ongoing rebuild. The name of the rebuild monitoring file is displayed on return from the rebuild command except when --quiet option is set. In any case the name of the rebuild monitoring file can be found in the syslog file.
 .SH MAIN OPTIONS
-.IP "-r, --rebuild <exports>"
+.IP "-s, --sid all"
+.RE
 .RS
-Use
-.I <exports>
-as the list of addresses (or dns names) where exportd daemon is running. When securing the exportd thanks to a virtual IP address only the virtual IP address is given (i.e "--rebuild 192.168.10.1"). When no virtual IP address is used the list of "physical" IP addresses of each host securing the exportd must be given (i.e "--rebuild 192.168.10.1/192.168.20.1"). This parameter can be omitted when the server has been installed with the
-.B export_hosts
-filled in the rozofs.conf configuration file of the server.
+Rebuilds every logical storage instance of the node.
 .RE
 .IP "-s, --sid <cid>/<sid>"
 .RE
@@ -189,7 +186,7 @@ Print help.
 
 Rebuilding a whole storage node as fast as possible:
 .RE
-.B storage_rebuild --parallel 64
+.B storage_rebuild --sid all --parallel 64
 .RE 
 
 Rebuilding every device of storage instance 2 of cluster 1:

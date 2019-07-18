@@ -84,7 +84,6 @@ typedef struct _rozo_buf_rw_status_t {
 } rozo_buf_rw_status_t;
 
 
-
 typedef struct file {
     ruc_obj_desc_t pending_rd_list;  /**< used to queue the FUSE contextr for which a read is requested  */
     ruc_obj_desc_t pending_wr_list;  /**< used to queue the FUSE context waiting for flush completed  */
@@ -106,24 +105,7 @@ typedef struct file {
     uint64_t read_from; /**< absolute position of the last available byte to read */
     uint64_t write_pos;  /**< absolute position of the first available byte to read*/
     uint64_t write_from; /**< absolute position of the last available byte to read */
-    uint64_t current_pos;/**< Estimated current position in the file */
-
-    /*
-    ** To chain the file descriptors having a lock to request in rozofsmount_requested_lock_list
-    */
-    list_t           next_file_in_requested_list;
-        
-    uint64_t         lock_owner_ref; /**< Owner of the lock when a lock has been set. Used to release any
-                                          pending lock at the time of the file close */
-    void           * fuse_req;       /**< Pointer to the saved fuse request when waiting for a blocking lock */
-    int              lock_type;      /**< Type of requested lock : EP_LOCK_READ or EP_LOCK_WRITE */   
-    int              lock_size;      
-    uint64_t         lock_start;     
-    uint64_t         lock_stop;
-    int              lock_sleep;   
-    int              lock_delay;
-    int              lock_trc_idx;
-    uint64_t         timeStamp;
+    uint64_t current_pos;/**< Estimated current position in the file */    
     uint64_t         read_consistency; /**< To check whether the buffer can be read safely */
     void           * ie;               /**< Pointer ot the ientry in the cache */
     int              write_block_counter;  /**< increment each time a write block is called */
@@ -140,7 +122,39 @@ typedef struct file {
     int              deferred_fuse_write_response; /**< asserted with the write pending threshold is reached  */
     fuse_req_t       req;    /**< fuse request on which the deferred response must be applied   */
     size_t           size;   /**< size of the write request that was deferred   */
+    /*
+    ** Number of lock pending for this file descriptor
+    */
+    uint32_t         lock_count;   
+    /*
+    ** Posix Granted locks 
+    */
+    list_t           this_file_lock_owners;    /**< List of owner of locks on this file */
+    list_t           next_file_in_granted_list;/**< To chain ientries in list of files owning a lock (rozofsmount_granted_lock_list) */
+        
 } file_t;
+
+
+/*
+** Description of a file lock that is pending on a file descriptor.
+** Several of them could be set by several threads on the same file.
+** They all are linked on list lock_owner_ref.
+*/
+typedef struct _rozofsmount_file_lock_t {
+  list_t            list;
+  int               type;
+  void            * fuse_req; 
+  uint64_t          owner_ref;
+  pid_t             pid;
+  int               size;
+  uint64_t          start;
+  uint64_t          stop;   
+  int               sleep;
+  int               delay;
+  int               trc_idx;
+  file_t          * file;
+  uint64_t          timeStamp;  
+} rozofsmount_file_lock_t;
 
 /**
 *  structure used on an opened directory
@@ -263,6 +277,8 @@ static inline file_t * rozofs_file_working_var_init(void * ientry, fid_t fid)
     ** allocate a context for the file descriptor
     */
     file = xmalloc(sizeof (file_t));
+    memset(file,0,sizeof(file_t));
+    
     memcpy(file->fid, fid, sizeof (uuid_t));
     file->buffer   = memalign(4096,exportclt.bufsize * sizeof (char));
     xmalloc_stats_insert(malloc_usable_size(file->buffer));
@@ -285,15 +301,12 @@ static inline file_t * rozofs_file_working_var_init(void * ientry, fid_t fid)
     file->current_pos = 0;
     file->rotation_counter = 0;
     file->rotation_idx = 0;
-    file->lock_owner_ref = 0;
     
     /*
-    ** List of owner of lock on this file
+    ** Number of lock pending for this file descriptor
     */
-    list_init(&file->next_file_in_requested_list);
+    file->lock_count = 0;
     
-    file->fuse_req = NULL;
-    file->lock_type = -1;
     ruc_listHdrInit(&file->pending_rd_list);
     ruc_listHdrInit(&file->pending_wr_list);
     file->read_consistency = 0;
@@ -310,6 +323,10 @@ static inline file_t * rozofs_file_working_var_init(void * ientry, fid_t fid)
     file->deferred_fuse_write_response = 0;
     file->req = NULL;
     file->size = 0;
+
+    list_init(&file->this_file_lock_owners);    
+    list_init(&file->next_file_in_granted_list);
+    
     rozofs_opened_file++;
     
     return file;
@@ -349,6 +366,7 @@ static inline void rozofs_geo_write_update(file_t *file,off_t off, size_t size)
  @retval -1 on error
  */
 extern void rozofs_clear_ientry_write_pending(file_t *f);
+extern void rozofsmount_invalidate_all_owners(file_t * file) ;
 static inline int file_close(file_t * f) {
      char *buffer;
 
@@ -388,10 +406,23 @@ static inline int file_close(file_t * f) {
      buffer = f->buffer;
      f->buffer = 0;
      xfree(buffer);
-     f->chekWord = 0;
      f->ie = 0;
-     f->fuse_req = NULL;
-     xfree(f);
+     
+     /*
+     ** Invalidate all file locks that may have been set up to now
+     */
+     rozofsmount_invalidate_all_owners(f);
+     
+     /*
+     ** In case some locks are pending on the file, do not free the file descriptor
+     ** let the flock thread take care of the final free.
+     */
+     if (f->lock_count != 0) {
+       return 0;
+     }
+        
+     f->chekWord = 0;      
+     xfree(f); 
      rozofs_opened_file--;
     return 1;
 }

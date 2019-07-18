@@ -1165,7 +1165,7 @@ def bigFName():
   return 0
 	  
 #___________________________________________________
-def lock_race():
+def flock_race():
 #___________________________________________________ 
   dir="%s/lock"%(exepath)
   os.system("mkdir -p %s"%(dir))
@@ -1175,6 +1175,28 @@ def lock_race():
   except:
     pass  
   return os.system("./IT2/test_lock_race.exe -process %d -loop %d -file %s "%(process,loop,zefile))  
+#___________________________________________________
+def flock_threads():
+#___________________________________________________ 
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_lock_threads.exe -process %d -loop %d -file %s "%(process,loop,zefile))  
+#___________________________________________________
+def flock_crash():
+#___________________________________________________ 
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_lock_crash.exe -process %d -loop %d -file %s "%(process,loop,zefile))       
 #___________________________________________________
 def flockp_race():
 #___________________________________________________ 
@@ -1187,7 +1209,29 @@ def flockp_race():
     pass  
   return os.system("./IT2/test_lock_race.exe -flockp -process %d -loop %d -file %s "%(process,loop,zefile))  
 #___________________________________________________
-def lock_posix_passing():
+def flockp_threads():
+#___________________________________________________ 
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_lock_threads.exe  -flockp  -process %d -loop %d -file %s "%(process,loop,zefile))    
+#___________________________________________________
+def flockp_crash():
+#___________________________________________________ 
+  dir="%s/lock"%(exepath)
+  os.system("mkdir -p %s"%(dir))
+  zefile='%s/%s'%(dir,tst_file)
+  try:
+    os.remove(zefile)
+  except:
+    pass  
+  return os.system("./IT2/test_lock_crash.exe  -flockp  -process %d -loop %d -file %s "%(process,loop,zefile))      
+#___________________________________________________
+def flock_posix_passing():
 #___________________________________________________ 
   dir="%s/lock"%(exepath)
   os.system("mkdir -p %s"%(dir))
@@ -1210,7 +1254,7 @@ def flockp_posix_passing():
   return os.system("./IT2/test_file_lock.exe -flockp -process %d -loop %d -file %s -nonBlocking"%(process,loop,zefile))  
 
 #___________________________________________________
-def lock_posix_blocking():
+def flock_posix_blocking():
 #___________________________________________________
   dir="%s/lock"%(exepath)
   os.system("mkdir -p %s"%(dir))
@@ -1249,7 +1293,7 @@ def flockp_bsd_passing():
   return os.system("./IT2/test_file_lock.exe -flockp -process %d -loop %d -file %s -nonBlocking -bsd"%(process,loop,zefile))
 
 #___________________________________________________
-def lock_bsd_passing():
+def flock_bsd_passing():
 #___________________________________________________  
   dir="%s/lock"%(exepath)
   os.system("mkdir -p %s"%(dir))
@@ -1270,7 +1314,7 @@ def quiet(val=10):
 
 
 #___________________________________________________
-def lock_bsd_blocking():
+def flock_bsd_blocking():
 #___________________________________________________
   dir="%s/lock"%(exepath)
   os.system("mkdir -p %s"%(dir))
@@ -2399,7 +2443,7 @@ def do_compile_programs():
 #___________________________________________________
   dirs=os.listdir("%s/IT2"%(os.getcwd()))
   for file in dirs:
-    if ".c" not in file:
+    if not file.endswith(".c"):
       continue
     words=file.split('.')
     prg=words[0]   
@@ -2848,7 +2892,7 @@ TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1
 TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','selfhealing']
 
 # File locking
-TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race']
+TST_FLOCK=['flock_posix_passing','flock_posix_blocking','flock_bsd_passing','flock_bsd_blocking','flock_race','flock_threads','flock_crash','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race','flockp_threads','flockp_crash',]
 TST_COMPIL=['compil_rozofs','compil_openmpi']
 TST_TRASH=['trashNrestore','trashNrebuild']
 

@@ -187,9 +187,9 @@ class host_class:
       if argv[i] == "-id": rebef = True
       param += " %s"%(argv[i])
     if rebef == True:
-      res=cmd_returncode("storage_rebuild %s"%(param))      
+      res=cmd_returncode("storage_rebuild -s all %s"%(param))      
     else:  
-      res=cmd_returncode("storage_rebuild -c %s %s"%(self.get_config_name(),param))  
+      res=cmd_returncode("storage_rebuild -s all -c %s %s"%(self.get_config_name(),param))  
     sys.exit(res)
 #____________________________________
 # Class sid

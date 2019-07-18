@@ -174,7 +174,7 @@ void ruc_sockCtrl_socket_poll()
    
    @retval number of sockets for which an event is asserted 
 */
-__inline__ int ruc_sockCtrl_build_sock_table(uint64_t *fdset_p,int *socket_tab_p,int nb_sockets)
+static inline int ruc_sockCtrl_build_sock_table(uint64_t *fdset_p,int *socket_tab_p,int nb_sockets)
 {
    int i;
    uint32_t val32;

@@ -28,8 +28,7 @@
 #include <sys/shm.h>
 #include <sys/wait.h>
 #include <time.h>
-
-
+#include <pthread.h>
 
 #define DEFAULT_NB_PROCESS    20
 #define DEFAULT_LOOP         200
@@ -53,11 +52,18 @@ int blocking=1;
 int display=0;
 int bsd=0;
 int flockp=0;
-
+int fd;
+  
 typedef struct _record_t {
   uint32_t  owner;
   uint32_t  count;
 } RECORD_T;  
+
+typedef struct _test_ctx_t {
+  pthread_t thread;
+  int       procNb;
+  int       retval;
+} test_ctx_t;
 
 static void usage() {
     printf("Parameters:\n");
@@ -167,7 +173,6 @@ void set_flockp(char * name)  {
 }
 int create_file(char * name)  {
   char c;
-  int fd;
   RECORD_T record;
   
   unlink(name);
@@ -222,7 +227,7 @@ int display_flock(int ope, struct flock * flock,int retry) {
   printf("%s\n",msg);
 }
 #define RETRY 8000
-int set_lock (int fd, int code , int ope, int start, int stop, int posRef) {
+int set_lock (test_ctx_t * ctx, int code , int ope, int start, int stop, int posRef) {
   int ret;
   int retry=RETRY;
   struct flock flock;
@@ -247,175 +252,100 @@ int set_lock (int fd, int code , int ope, int start, int stop, int posRef) {
   
   while (retry) {
     retry--;
-    ret = fcntl(fd, code, &flock);
+    ret = fcntl(fd,code, &flock);
     if (ret == 0) break;
     if ((code == F_SETLKW)||(ope == F_UNLCK)||(errno != EAGAIN)) {
-      printf("proc %3d - fnctl() errno %d %s\n", myProcId, errno, strerror(errno));
-      return -1;
+      if (errno == EBADF) {
+        ctx->retval = 2;
+        pthread_exit(&ctx);
+      }  
+      ctx->retval = 1;
+      printf("proc %3d - pthread_exit %d\n", ctx->procNb, ctx->retval);
+      pthread_exit(&ctx);
+      return -1;        
     }      
   }
   if (retry == 0) {
-    printf("proc %3d - fnctl() max retry %d %s\n", myProcId, errno, strerror(errno));
+    printf("proc %3d - fnctl() max retry %d %s\n",  ctx->procNb, errno, strerror(errno));
+    ctx->retval = 1;
+    printf("proc %3d - pthread_exit %d\n", ctx->procNb, ctx->retval);
+    pthread_exit(&ctx);
     return -1;    
   }
   
-  if (display) printf("PROC %3d %d retry\n", myProcId, RETRY-retry);
+  if (display) printf("PROC %3d %d retry\n", ctx->procNb, RETRY-retry);
 
   return 0;
 }
 
 
-int loop_test_process() {
-  int fd;
+int loop_test_process(void * param) {
   int ret;
-  int idx;
-  RECORD_T record;
-  time_t starting = time(NULL);
-
-  fd = open(FILENAME, O_RDWR);
-  if (fd < 0) {
-    printf("proc %3d - open(%s) errno %d %s\n", myProcId, FILENAME,errno, strerror(errno));
-    return -1;  
-  }    
-  if (myProcId != 0) sleep(2);
-
+  test_ctx_t * ctx = (test_ctx_t *) param; 
+  
   while ( 1 ) {
   
     /*
     ** Get the lock
     */
 
-    ret = set_lock(fd, F_SETLKW, F_WRLCK, 0, 8, SEEK_SET);    
+    ret = set_lock(ctx,F_SETLKW, F_WRLCK, 4096*ctx->procNb, 4096*(ctx->procNb+1), SEEK_SET);    
     if (ret != 0) {
-      printf("proc %3d - set_lock(F_SETLKW,%s) errno %d %s\n", myProcId, FILENAME,errno, strerror(errno));    
-      close(fd);  
+      printf("proc %3d - set_lock(F_SETLKW,%s) errno %d %s\n", ctx->procNb, FILENAME,errno, strerror(errno));    
       return ret; 
     }
-    
-    //printf("proc %d : I have the lock\n",myProcId);
-    /*
-    ** Read the file content
-    */
-    pread(fd, &record, sizeof(record), 0);
-    
-    if (record.owner == myProcId) {
-
-      record.count++;
-      record.owner++;
-      if (record.owner == nbProcess) record.owner = 0;
-
-      pwrite(fd, &record, sizeof(record), 0);
-
-      //printf("proc %d : new lock owner is %d/%d\n",myProcId, record.owner, record.count);    
-    }
-
-    ret = set_lock(fd, F_SETLKW, F_UNLCK, 0, 0, SEEK_SET);    
+    sched_yield();
+    ret = set_lock(ctx,F_SETLKW, F_UNLCK, 4096*ctx->procNb, 4096*(ctx->procNb+1), SEEK_SET);    
     if (ret != 0) {
-      printf("proc %3d - set_lock(F_UNLCK,%s) errno %d %s\n", myProcId, FILENAME,errno, strerror(errno));    
-      close(fd);  
+      printf("proc %3d - set_lock(F_UNLCK,%s) errno %d %s\n", ctx->procNb, FILENAME,errno, strerror(errno));    
       return ret;	 
     }      
-
-    if (record.count >= loop) break;
-     
-    usleep(10000);
-    
-    if ((time(NULL) - starting) > 30) {
-      printf("proc %3d - test too long %d/%d\n",myProcId, record.owner, record.count);    
-      close(fd);        
-      return -1;	   
-    }
-  }
-  ret = set_lock(fd, F_SETLKW, F_WRLCK, 0, 8, SEEK_SET);    
-  if (ret != 0) {
-    printf("proc %3d - set_lock(F_SETLKW,%s) errno %d %s\n", myProcId, FILENAME,errno, strerror(errno));    
-    close(fd);  
-    return ret; 
-  }        
-  close(fd);     
+    sched_yield();
+  }    
   return 0;
 }  
-void free_result(void) {
-  struct shmid_ds   ds;
-  shmctl(shmid,IPC_RMID,&ds); 
-}
-int * allocate_result(int size) {
-  struct shmid_ds   ds;
-  void            * p;
-      
-  /*
-  ** Remove the block when it already exists 
-  */
-  shmid = shmget(SHARE_MEM_NB,1,0666);
-  if (shmid >= 0) {
-    shmctl(shmid,IPC_RMID,&ds);
-  }
-  
-  /* 
-  * Allocate a block 
-  */
-  shmid = shmget(SHARE_MEM_NB, size, IPC_CREAT | 0666);
-  if (shmid < 0) {
-    perror("shmget(IPC_CREAT)");
-    return 0;
-  }  
-
-  /*
-  * Map it on memory
-  */  
-  p = shmat(shmid,0,0);
-  if (p == 0) {
-    shmctl(shmid,IPC_RMID,&ds);  
-       
-  }
-  memset(p,0,size);  
-  return (int *) p;
-}
 int main(int argc, char **argv) {
-  pid_t pid[2000];
+  test_ctx_t ctx[2000];
+  test_ctx_t *pCtx;
   int proc;
   int ret;
-  int fd;
-  int c;
+  int c; 
+  void * ptr;  
+  int loop;
     
   read_parameters(argc, argv);
   if (FILENAME[0] == 0) {
     printf("-file is mandatory\n");
     exit(-100);
   }
+  nbProcess = nbProcess*4;
   if (create_file(FILENAME)<0) exit(-1000);
   
   if (nbProcess <= 0) {
     printf("Bad -process option %d\n",nbProcess);
     exit(-100);
   }
-
-  result = allocate_result(4*nbProcess);
-  if (result == NULL) {
-    printf(" allocate_result error\n");
-    exit(-100);
-  }  
-  for (proc=0; proc < nbProcess; proc++) {
   
-     pid[proc] = fork();     
-     if (pid[proc] == 0) {
-       myProcId = proc;
-       result[proc] = loop_test_process();
-       exit(0);
-     }  
-  }
+  for (loop=0; loop<20; loop++) {
 
-  for (proc=0; proc < nbProcess; proc++) {
-    waitpid(pid[proc],NULL,0);        
-  }
-  
-  ret = 0;
-  for (proc=0; proc < nbProcess; proc++) {
-    if (result[proc] != 0) {
-      ret--;
+    fd = open(FILENAME, O_RDWR, 0640);
+    if (fd < 0) {
+      printf("open(%s) %s\n",FILENAME,strerror(errno));
+      return -1;
     }
-  }
-  free_result();
-  if (ret) printf("OK %d / FAILURE %d\n",nbProcess+ret, -ret);
-  exit(ret);
+  
+    pCtx = ctx;
+    for (proc=0; proc < nbProcess; proc++, pCtx++) {
+      pCtx->procNb = proc;
+      pCtx->retval = 0;
+      if (pthread_create(&pCtx->thread, NULL, (void*) loop_test_process,  pCtx) != 0) {
+          printf("can't create  thread: %s", strerror(errno));
+          exit(1);
+      }
+    }
+
+    sleep(2);
+
+    exit(0);
+  }  
 }
