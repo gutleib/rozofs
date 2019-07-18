@@ -139,6 +139,7 @@ typedef struct _rozofsmount_file_lock_t {
   int               type;
   void            * fuse_req; 
   uint64_t          owner_ref;
+  pid_t             pid;
   int               size;
   uint64_t          start;
   uint64_t          stop;   

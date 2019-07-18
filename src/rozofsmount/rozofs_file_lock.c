@@ -111,6 +111,7 @@ typedef struct _rozofsmount_lock_owner_table_t {
   list_t                      list;
   uint32_t                    bitmap;
   rozofsmount_lock_owner_t    owners[ROZOFSMOUNT_NB_LOCK_OWNER];
+  pid_t                       pid[ROZOFSMOUNT_NB_LOCK_OWNER];
 } rozofsmount_lock_owner_table_t;
     
     		    
@@ -243,6 +244,7 @@ rozofsmount_file_lock_t * rozofs_allocate_lock(fuse_req_t              req,
   rozo_lock->sleep      = sleep;
   rozo_lock->start      = start;
   rozo_lock->stop       = stop;
+  rozo_lock->pid        = flock->l_pid;
     
   switch(flock->l_type) {
     case F_WRLCK: 
@@ -342,7 +344,7 @@ static inline char *print_whence(int whence) {
 ** @param owner_ref  lock owner reference
 ** @param ie         ientry of the file
 */
-void rozofsmount_validate_owner(uint64_t valid,uint64_t owner_ref, file_t * file) {
+void rozofsmount_validate_owner(uint64_t valid,uint64_t owner_ref, file_t * file, pid_t pid) {
   list_t                          * p;
   rozofsmount_lock_owner_table_t  * tbl = NULL;
   int                               idx;  
@@ -430,6 +432,7 @@ void rozofsmount_validate_owner(uint64_t valid,uint64_t owner_ref, file_t * file
       if (tbl->owners[idx].owner_ref == 0) {
         tbl->owners[idx].next_poll = time(NULL) + ROZOFSMOUNT_LOCK_POLL_PERIOD;
         tbl->owners[idx].owner_ref = owner_ref;
+        tbl->pid[idx]             = pid;
         tbl->bitmap |= (1<<idx); 
         return;
       }
@@ -444,6 +447,7 @@ void rozofsmount_validate_owner(uint64_t valid,uint64_t owner_ref, file_t * file
   list_init(&tbl->list);
   tbl->owners[0].owner_ref = owner_ref;
   tbl->owners[0].next_poll = time(NULL) + ROZOFSMOUNT_LOCK_POLL_PERIOD;
+  tbl->pid[0]              = pid;
   tbl->bitmap = 1;
 
       
@@ -637,6 +641,8 @@ char * display_lock_stat(char * p) {
         }  
         p += rozofs_string_append(p,"\n            { \"ref\" : \""); 
         p += rozofs_x64_append(p,tbl->owners[idx].owner_ref);
+        p += rozofs_string_append(p,"\", \"pid\" : "); 
+        p += rozofs_u32_append(p,tbl->pid[idx]);
         p += rozofs_string_append(p,"\", \"next poll\" : "); 
         p += rozofs_i32_append(p,tbl->owners[idx].next_poll-now);
         p += rozofs_string_append(p,"}"); 
@@ -663,6 +669,8 @@ char * display_lock_stat(char * p) {
     p += rozofs_string_append(p,"\n        { \"fid\" : \"");  
     rozofs_fid_append(fidString,rozo_lock->file->fid);
     p += rozofs_string_append(p,fidString);
+    p += rozofs_string_append(p,"\", \"pid\" : \""); 
+    p += rozofs_u32_append(p,rozo_lock->pid);    
     p += rozofs_string_append(p,"\", \"owner\" : \""); 
     p += rozofs_x64_append(p,rozo_lock->owner_ref);
     p += rozofs_string_append(p,"\", \"type\" : "); 
@@ -851,7 +859,7 @@ void rozofs_poll_owner_cbk(void *this,void *param)  {
   ** revalidate or invalidate the lock owners
   */
   if ((ret.gw_status.status == EP_SUCCESS) && (file!=NULL)) {    
-    rozofsmount_validate_owner(ret.gw_status.ep_lock_ret_t_u.lock.client_ref,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file);      
+    rozofsmount_validate_owner(ret.gw_status.ep_lock_ret_t_u.lock.client_ref,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file, 0);      
   }        
 
 error:
@@ -1451,6 +1459,8 @@ void rozofs_ll_flock_nb(fuse_req_t req,
     int          sleep ;
     struct flock flock;
     int          op = input_op;
+    const struct fuse_ctx *ctx;
+    ctx = fuse_req_ctx(req);
 
     /*
     ** Just keep significant bits
@@ -1497,7 +1507,7 @@ void rozofs_ll_flock_nb(fuse_req_t req,
     flock.l_whence = SEEK_SET;
     flock.l_start  = 0;
     flock.l_len    = 0;
-    flock.l_pid    = fi->lock_owner; 
+    flock.l_pid    = ctx->pid; 
     
     if (sleep) lock_stat.posix_set_blocking_lock--;   
     else       lock_stat.posix_set_passing_lock--;    
@@ -2160,14 +2170,14 @@ void rozofs_ll_setlk_internal_cbk(void *this,void * param)
       */
       if (is_old_export) {
         if (ret.gw_status.ep_lock_ret_t_u.lock.mode == EP_LOCK_FREE) {
-          rozofsmount_validate_owner(0,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file);
+          rozofsmount_validate_owner(0,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file,rozo_lock->pid);
         }
         else {
-          rozofsmount_validate_owner(1,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file);        
+          rozofsmount_validate_owner(1,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file,rozo_lock->pid);        
         }
       }
       else {
-        rozofsmount_validate_owner(ret.gw_status.ep_lock_ret_t_u.lock.client_ref,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file);
+        rozofsmount_validate_owner(ret.gw_status.ep_lock_ret_t_u.lock.client_ref,ret.gw_status.ep_lock_ret_t_u.lock.owner_ref, file, rozo_lock->pid);
       }
            
       xdr_free((xdrproc_t) decode_proc, (char *) &ret);   
