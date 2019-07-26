@@ -20,7 +20,7 @@
 # This script is used to moved old files of a hybrig/tiering export 
 # from the fast volume toward the slow volume
 MOVECMD="rozo_vmove"
-MOVECMD="/home/jean-pierre/rozoClients/mfile/tests/build/src/exportd/rozo_vmove"
+#MOVECMD="/home/jean-pierre/rozoClients/mfile/tests/build/src/exportd/rozo_vmove"
 
 #
 # USAGE
