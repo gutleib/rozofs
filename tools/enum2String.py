@@ -36,13 +36,13 @@ def parse_file(enum_name, fname):
   with open (fname, "r") as myfile:
     
     for line in myfile:
-      if "typedef" in line and "enum" in line:
+      if "typedef" in line and "enum" in line and enum_name in line:
         enum   = ""
         inside = True
         continue
         
       if inside:
-        if enum_name in line: return enum
+        if enum_name in line and "}" in line : return enum
         line = line.replace("\n","") 
         line = line.replace("{","") 
         line = line.replace("}","")
