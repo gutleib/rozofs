@@ -4,7 +4,6 @@
 /usr/bin/rozo_scan
 /usr/bin/rozo_throughput
 /usr/bin/rozo_io
-/usr/bin/rozo_aging
 /usr/bin/rozo_locate_projections
 /usr/bin/rozo_multifile
 /usr/bin/rozo_mount_clusterstats
