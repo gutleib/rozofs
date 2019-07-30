@@ -26,41 +26,57 @@
 # and get the eid from the -e opttion in the user command line
 
 active=""
+#set -x
 
+#____________________________________________
+#
+# Get export hosts addresses from rozofs.conf
+#
+get_export_hosts() {
+  exports=""
+  
+  if [ -f  /etc/rozofs/rozofs.conf ];
+  then
+    exports=`cat /etc/rozofs/rozofs.conf | grep export_hosts | awk -F'"' '{print $2}'`
+    return
+  fi
+  
+  if [ -f  /usr/local/etc/rozofs/rozofs.conf ]; 
+  then
+    exports=`cat /usr/local/etc/rozofs/rozofs.conf | grep export_hosts | awk -F'"' '{print $2}'`
+    return  
+  fi   
+}
 #
 # Register parameters
 #
 eid=""
-local="NO"
 parameters=''
 help_requested="NO"
-while [ ! -z $1 ]
+verbose=""
+
+#_________________________
+# Loop on input parameters
+#
+while [ ! -z $1 ];
 do
+
+  ThisParameter=$1
   
-  #
+  #___________
   # Debug mode
   #
-  if [ "$1" == "--debug" ]
+  if [ ${ThisParameter} == "--debug" ]
   then
     set -x
     shift 1
     continue
   fi
-  
-  #
-  # local mode : use local host name as active export
-  
-  if [ "$1" == "--local" ]
-  then
-    local="YES"
-    shift 1
-    continue
-  fi
 
+  #_______________________________
+  # Extract eid parameter when set
   #
-  # Extract eid parameter if set
-  #
-  if [ "$1" == "-e" -o "$1" == "--eid" ];
+  if [ ${ThisParameter} == "-e" -o ${ThisParameter} == "--eid" -o ${ThisParameter} == "e" -o ${ThisParameter} == "eid" ];
   then
 
     shift 1
@@ -70,110 +86,155 @@ do
       exit 1
     fi
     
-    eid="-e $1"
+    eid="eid $1"
     shift 1      
     continue 
   fi
   
-  #
+  #__________________________________
   # Check whether help is requested 
   #
-  if [ "$1" == "-h" -o "$1" == "--help" ];
+  if [ ${ThisParameter} == "-h" -o ${ThisParameter} == "--help" -o ${ThisParameter} == "help" -o ${ThisParameter} == "h" ];
   then
     help_requested="YES"
   fi
-
-  parameters="${parameters} $1"
+  
+  #_______________________________________
+  # Regex must be re-quoted to avoid Linux 
+  # interpretation of some characters 
+  #
+  if [ ${ThisParameter} == "regex" ];
+  then
+    shift 1
+    ThisParameter=$1
+    if [ -z ${ThisParameter} ];
+    then
+      echo "Missing regex value"
+      exit 1
+    fi
+    
+    #
+    # Check the regex does not end by a closing bracket
+    #
+    if [ "${verbose}" != "" ];
+    then
+      last=$1
+      last=${last: -1}
+      if [ "${last}" == ')' -o "${last}" == '(' -o "${last}" == ']' -o "${last}" == '[' -o "${last}" == '}' -o "${last}" == '{' ];
+      then
+        echo
+        echo "A space may be missing after the regex and before the bracket !!!"
+        echo
+      fi 
+    fi     
+    
+    parameters="${parameters} regex '${ThisParameter}' "
+    shift 1 
+    continue   
+  fi
+  #_____________________________________________
+  # verbose ; upward verbose in the command line
+  #
+  if [ ${ThisParameter} == "v" -o ${ThisParameter} == "vv" ];
+  then
+    verbose=${ThisParameter}
+    shift 1
+    continue   
+  fi
+  
+  #___________________________________________________________
+  # Re introduce \ before some characters
+  # Note : in sed expression \\ to get \ + \( to set ( => \\\(
+  #
+  if [ -z "${ThisParameter##*(*}" -o -z "${ThisParameter##*)*}" -o -z "${ThisParameter##*<*}" -o -z "${ThisParameter##*>*}" ] 
+  then
+    ThisParameter=`echo ${ThisParameter} | sed -e 's#(#\\\(#g' -e 's#)#\\\)#g' -e 's#>#\\\>#g' -e 's#<#\\\<#g'`
+  fi
+  
+  parameters="${parameters} ${ThisParameter}"
   shift 1        
   
 done
 
-#
+
+#________________________________________
 # When no parameter is set, request help
 #
-if [ "${parameters}" == "" ]
+if [ "${parameters}" == "" ];
 then
-  parameters="-h"
+  parameters="help"
   help_requested="YES"
 fi
 
-#
+
+#_________________________________________________________
 # Find out the current RozoFS exportd from the current path
 #
 res=`attr -qg rozofs.export . 2>/dev/null`
 if [ $? -eq 0 ]
 then
+
   #
   # This is a RozoFS mountpoint
   #
-  exports=`echo ${res} | awk '{print $1}'`
+  exports=`echo ${res} | awk '{print ${ThisParameter}}'`
+  
   #
   # When eid is not given in the commande line 
   # get it from the client
   #
   if [ -z "${eid}" ]
   then
-    eid="-e "`echo ${res} | awk '{print $2}'`
-  fi  
+    eid="eid "`echo ${res} | awk '{print $2}'`
+  fi 
+   
 else
-  if [ "${eid}" == "" -a "${help_requested}" == "NO" ];
-  then
-    echo ""
-    echo "\"${PWD}\" is not a RozoFS mountpoint,"
-    echo "and --eid is not set to tell the targeted RozoFS file system."
-    exit 1
-  fi  
+
   #
   # This is not a RozoFS mountpoint
   # Read rozofs.conf file
   #
-  exports=`cat /etc/rozofs/rozofs.conf | grep export_hosts | awk -F'"' '{print $2}'`
-  if [ $? -ne 0 ];
+  get_export_hosts
+  if [ ${exports} == "" ];
   then
     echo
     echo "\"${PWD}\" is not a RozoFS mountpoint,"
     echo "and rozofs.conf configuration file can not be read."
     exit 1
   fi
+  
+  #
+  # This is not a RozoFS mountpoint and eid is missing
+  #
+  if [ "${eid}" == "" -a "${help_requested}" == "NO" ];
+  then
+    echo ""
+    echo "\"${PWD}\" is not a RozoFS mountpoint,"
+    echo "and eid is not set to tell the targeted RozoFS file system."
+    parameters="help"
+  fi  
 fi
  
-# 
+#_________________________________________________________________
 # Find out which of these exports is the active one using rozodiag
 #
-if [ "${local}" == "YES" ]
-then
-  active="$HOSTNAME"
-else
-  for active in `echo $exports | tr \/ ' '`
-  do
-    rozodiag -i ${active} -T export:0 -c up | grep uptime >> /dev/null
-    case "$?" in
-      "0") break;;
-      *)   active="";;
-    esac      
-  done
-  case "${active}" in
-    "") {
-      echo "Active exportd not found within ${exports}"
-      exit 1
-    };;
-   esac   
-fi
+for active in `echo $exports | tr \/ ' '`
+do
+ rozodiag -t 4 -i ${active} -T export:0 -c up | grep uptime >> /dev/null
+ case "$?" in
+   "0") break;;
+   *)   active="";;
+ esac      
+done
+case "${active}" in
+ "") {
+   echo "Active exportd not found within ${exports}"
+   exit 1
+ };;
+esac   
 
-
-# 
-# Is the current node the active export
+#__________________________________________
+# Forward the command to the active axportd
 #
-if [ "$HOSTNAME" == "${active}" ]
-then
-  #
-  # Curent node is the active export 
-  #
-  rozo_scan_by_criteria ${eid} ${parameters}
-else
-  #
-  # Forward the command to the active axport
-  #
-  ssh ${active} "rozo_scan_by_criteria ${eid} ${parameters}"
-fi
+ssh ${active} "rozo_scan_by_criteria ${verbose} ${eid} ${parameters} "
 exit $?
