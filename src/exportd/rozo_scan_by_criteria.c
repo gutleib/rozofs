@@ -159,7 +159,7 @@ typedef enum _rozofs_scan_keyw_e {
   rozofs_scan_keyw_operator_and,   // and
 
   
-  rozofs_scan_keyw_option_all,  
+  rozofs_scan_keyw_option_skipdate,  
   rozofs_scan_keyw_option_help,
   rozofs_scan_keyw_option_verbose,
   rozofs_scan_keyw_option_vverbose,
@@ -388,7 +388,7 @@ uint64_t hybrid = LONG_VALUE_UNDEF;
 ** creation and modification time match the research date
 ** criteria
 */
-int scan_all_tracking_files = 0; // Only those matching research criteria
+int skip_tracking_file = 0; // Every tracking file must be scanned
 
 int highlight;
 #define HIGHLIGHT(x) if (x) {highlight = 1; pDisplay += rozofs_string_append(pDisplay,ROZOFS_COLOR_CYAN);}else{highlight = 0;}
@@ -579,9 +579,10 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1mh, help\033[0m\t\tPrint this message along with examples and exit.\n");
   printf("\t\033[1mv, verbose\033[0m\tPrint input parsing information.\n");
   printf("\t\033[1mvv, vverbose\033[0m\tPrint input parsing information and scanning execution.\n");
-  printf("\t\033[1ma, all\033[0m\t\tForce scanning all tracking files and not only those matching scan time criteria.\n");
-  printf("\t\t\tThis is usefull for files imported with tools such as rsync, since their creation\n");
-  printf("\t\t\tor modification dates are not related to their importation date under RozoFS.\n");
+  printf("\t\033[1mskipdate\033[0m\tSkip tracking files which creation/modification date tells they can not contain files/directory matching\n");
+  printf("\t\t\tthe input scan date criteria. This speeds the scan, but unfortunatly does not work for files imported with tools\n");
+  printf("\t\t\tsuch as rsync, since their creation/modification dates are not related to their importation date under RozoFS.\n");
+  printf("\t\t\tThey may be sometimes no correlation between the tracking file dates and the file creation/modification dates.\n");
   printf("\033[1m\033[4mCONDITION:\033[0m\n");
   printf("\tThe \033[1mCONDITION\033[0m is a set of elementary statements combined together thanks to and/or operators,\n");
   printf("\tthat files/directories have to match . Brackets should be used to unambiguously express the \033[1mCONDITION\033[0m.\n");
@@ -4372,6 +4373,12 @@ int rozofs_check_trk_file_date (void *export,void *inode,void *param) {
   uint64_t             date2Check;
   
   nb_checked_tracking_files++;
+  
+  /*
+  ** When it is not requested to optimize tracking file walking thanks to date criteria
+  ** just return the file has to be processed 
+  */
+  if (skip_tracking_file == 0) return 1;
 
   /*
   ** If some date comparisons are determinant, some tracking files may be skipped
@@ -5020,16 +5027,13 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       break;
      
     /*
-    ** option:   a, all,        old[-a, --all]
     ** field:    atime          old[--hatime] old[--satime] old[--atime]
     ** operator: and
     */  
     case 'a' : 
-      if (argLen == 1) return rozofs_scan_keyw_option_all;
       rozofs_scan_check_against("and",rozofs_scan_keyw_operator_and);
-      rozofs_scan_check_against("all",rozofs_scan_keyw_option_all);  
       rozofs_scan_check_against("atime",rozofs_scan_keyw_field_atime);  
-      rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_option_all);
+      return rozofs_scan_keyw_input_error;
       break;
 
     case 'b' : 
@@ -5212,6 +5216,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
     ** field:     supdate    old[--supdate]
     ** scope:     slink      old[-S,--slink]
     ** scope:     slink      old[-S,--slink]
+    ** option:    skipdate   
     */
     case 's' : 
       if (argLen == 1) return rozofs_scan_keyw_field_size;
@@ -5225,6 +5230,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       rozofs_scan_check_against("smod",rozofs_scan_keyw_field_mtime);
       rozofs_scan_check_against("satime",rozofs_scan_keyw_field_atime);
       rozofs_scan_check_against("supdate",rozofs_scan_keyw_field_update_time);
+      rozofs_scan_check_against("skipdate",rozofs_scan_keyw_option_skipdate);
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_field_size);
       break;
       
@@ -5485,46 +5491,34 @@ pcre * rozofs_scan_compile_regex_string(char * pt) {
 */
 int rozofs_scan_is_date_comparison_determinant(rozofs_scan_node_t * node,
                                                rozofs_scan_node_t * dateComparison) {
-  int                  result;
-  int                  idx;
-  rozofs_scan_node_t * leaf;
+  int result;
+  int idx;
     
   if (node==NULL) return 1;
   
+  switch(node->type) {
+    case rozofs_scan_type_criteria:
+      return 1;
+      break;  
+
+    case rozofs_scan_type_field:
+      if (node == dateComparison) return 0;
+      return 1;
+      break; 
+         
+    default:
+      break;   
+  }  
+
   /*
-  ** Evaluate current field or criteria
+  ** Evaluate every subnode 
   */       
   for (idx=0; idx<node->n.nbNext; idx++) {   
            
-    if (node->n.next[idx]==0) {
-      result = 1;
-    }    
-    else switch (node->n.next[idx]->type) {
-    
-      case  rozofs_scan_type_node:    
-        result = rozofs_scan_is_date_comparison_determinant(node->n.next[idx],dateComparison);
-        break;  
-        
-      case rozofs_scan_type_criteria:
-      case rozofs_scan_type_field:
-        leaf = node->n.next[idx];
-        if (leaf == dateComparison) {
-          /*
-          ** This is the tested date comparison
-          */
-          result = 0;
-        }  
-        else {
-          result = 1;
-        }  
-        break;  
-        
-      default:
-        result = 1;
-    }  
-    
+    result = rozofs_scan_is_date_comparison_determinant(node->n.next[idx],dateComparison);
+
     /*
-    ** And operator. All sub nodes must be TRUE
+    ** And operator. All sub nodes have to be TRUE for the node to be TRUE
     */
     if (node->n.ope == rozofs_scan_node_ope_and) {
       if (!result) {
@@ -5532,16 +5526,16 @@ int rozofs_scan_is_date_comparison_determinant(rozofs_scan_node_t * node,
       }  
       continue;    
     }
-
+    
     /*
-    ** Or operator. One TRUE next node is sufficient to make the node TRUE
-    */
+    ** Or operator. One TRUE sub node is enough to make the node TRUE
+    */ 
     if (result) {
       return 1;
     }  
   }    
   return result;
-}     
+}    
 /* 
 **__________________________________________________________________
 ** Check whether the input date comparison enables to skip some
@@ -5944,8 +5938,8 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
         }          
         break;
         
-      case rozofs_scan_keyw_option_all:
-        scan_all_tracking_files = 1;
+      case rozofs_scan_keyw_option_skipdate:
+        skip_tracking_file = 1;
         break;    
         
       case rozofs_scan_keyw_scope_junk:
@@ -6027,43 +6021,54 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
   }  
   
   /*
-  ** If some date comparisons have been set, check whether we can skip some
-  ** tracking files thanks to them
+  ** If it is requested to skip tracking files not matching input date condition,
+  ** check if actually some date condition exist
   */
-  VERBOSE("\n Check for tracking file skipping thanks to some date criteria\n");
-  rozofs_scan_lookup_date_field(upNode);
-  determinant = 0;
-  if (rozofs_scan_date_field_count) {
-    int                  idx;
-    rozofs_scan_node_t * leaf;
-    
+  if (skip_tracking_file) {
+    VERBOSE("\n Check for tracking file skipping thanks to some date criteria\n");
     /*
-    ** Loop on the date comparisons set
+    ** Build array of date conditions
     */
-    for (idx=0; idx<rozofs_scan_date_field_count; idx++) {
-      leaf = dateField[idx];
-      VERBOSE("   <%s> \t<%s> \t<%llu> \t", 
-               rozofs_scan_keyw_e2String(leaf->l.name), 
-               rozofs_scan_keyw_e2String(leaf->l.comp),
-               (long long unsigned int)leaf->l.value.u64);
-       
-      if (rozofs_scan_is_date_comparison_determinant(upNode, leaf)==0) {
-        /*
-        ** This date comparison is determinant
-        */
-        VERBOSE(" is DETERMINANT\n");
-        determinant++;
-      }
-      else {
-        /*
-        ** This date field is not determinant. Clear it from the table
-        */
-        VERBOSE(" is NOT determinant\n");
-        dateField[rozofs_scan_date_field_count] = NULL;
-      }
+    rozofs_scan_lookup_date_field(upNode);
+    /*
+    ** Check whether the date condition is determinant by setting every condition
+    ** to true and this one to false. If result is false, the condition can be 
+    ** used to skip tracking files.
+    */
+    determinant = 0;
+    if (rozofs_scan_date_field_count) {
+      int                  idx;
+      rozofs_scan_node_t * leaf;
+
+      /*
+      ** Loop on the date comparisons set
+      */
+      for (idx=0; idx<rozofs_scan_date_field_count; idx++) {
+        leaf = dateField[idx];
+        VERBOSE("   <%s> \t<%s> \t<%llu> \t", 
+                 rozofs_scan_keyw_e2String(leaf->l.name), 
+                 rozofs_scan_keyw_e2String(leaf->l.comp),
+                 (long long unsigned int)leaf->l.value.u64);
+
+        if (rozofs_scan_is_date_comparison_determinant(upNode, leaf)==0) {
+          /*
+          ** This date comparison is determinant
+          */
+          VERBOSE(" is DETERMINANT\n");
+          determinant++;
+        }
+        else {
+          /*
+          ** This date field is not determinant. Clear it from the table
+          */
+          VERBOSE(" is NOT determinant\n");
+          dateField[rozofs_scan_date_field_count] = NULL;
+        }
+      }  
     }  
+    VERBOSE("\n %d determinant date comparison(s)\n\n", determinant);
+    skip_tracking_file = determinant;
   }
-  VERBOSE("\n %d determinant date comparison(s)\n\n", determinant);
 }
 /*
 **_______________________________________________________________________
