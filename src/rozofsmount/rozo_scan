@@ -55,6 +55,13 @@ parameters=''
 help_requested="NO"
 verbose=""
 
+#
+# Need to be root
+if [ $EUID -ne 0 ]
+then
+  echo "You need to have root privileges."
+  exit 1
+fi  
 #_________________________
 # Loop on input parameters
 #
