@@ -140,9 +140,11 @@ function backup
         return 1
     fi
 
-    tar_file=${BACKUP_DIR}/backup-`date "+%Y%m%d_%Hh%Mm%Ss"`.tar.gz
+    tar_file=${BACKUP_DIR}/backup-`date "+%Y%m%d_%Hh%Mm%Ss"`.tar
+    #tar_file=${BACKUP_DIR}/backup-`date "+%Y%m%d_%Hh%Mm%Ss"`.tar.gz
     echo "Save tar as $tar_file"
-    time tar -zchf - ${EXPORT_DIR_TO_SAVE} | pv -L ${TAR_THROUGHPUT} > ${tar_file}
+    time tar -chf - ${EXPORT_DIR_TO_SAVE} | pv -L ${TAR_THROUGHPUT} > ${tar_file}
+    # time tar -zchf - ${EXPORT_DIR_TO_SAVE} | pv -L ${TAR_THROUGHPUT} > ${tar_file}
     return ${PIPESTATUS[0]}
 }
 
@@ -431,7 +433,7 @@ echo "The export file system has ${used_export_inodes} inodes"
 echo "Perform backup..."
 backup
 ret=$?
-if [ $ret -gt 0 ]; then
+if [ $ret -gt 1 ]; then
     exit $ret
 fi
 
