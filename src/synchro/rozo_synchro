@@ -33,9 +33,9 @@ syntax() {
   printf "             To list configured RozoFS synchronizations.\n"
   printf "\033[1m${PRG} history <name>\033[0m\n"
   printf "             To get the history of this RozoFS synchronization.\n"
-  printf "\033[1m${PRG} create <name> [--period <p>] --source <S> [--project <P>] --target <T> --destination <D>  \033[0m\n"
+  printf "\033[1m${PRG} create <name> [--period <p>] [--bw <#MB/s>] --source <S> [--project <P>] --target <T> --destination <D>  \033[0m\n"
   printf "             To create a new RozoFS synchronization.\n"
-  printf "\033[1m${PRG} modify <name> [--target <newT>][--destination <newD>][--period <p>][--full]\033[0m\n"
+  printf "\033[1m${PRG} modify <name> [--target <newT>][--destination <newD>][--period <p>][--bw <#MB/s>][--full]\033[0m\n"
   printf "             To modify an existing RozoFS synchronization.\n"
   printf "\033[1m${PRG} delete <name> \033[0m\n"
   printf "             To delete an existing RozoFS synchronization.\n"
@@ -216,6 +216,14 @@ display_one_synchronization() {
     printf "      \"%s\" \t: %s,\n" "PROJECT" ${PROJECT}
   fi  
 
+  BW=`read_cfg BW`
+  if [ "$BW" == "" -o "$BW" == "0" ];
+  then
+    printf "      \"%s\" \t: 0,\n" "BW(MB/s)" 
+  else  
+    printf "      \"%s\" \t: %s,\n" "BW(MB/s)" ${BW}
+  fi  
+
   MNT=`read_cfg MNT`
   printf "      \"%s\" \t: \"%s\",\n" "SRC MNT" ${MNT}
 
@@ -366,6 +374,7 @@ write_cfg() {
   then
     printf "PERIOD = %s\n" ${PERIOD} >> ${DIR}/cfg 
   fi    
+  printf "BW = %s\n" ${BW} >> ${DIR}/cfg     
   printf "EID = %s\n" ${EID} >> ${DIR}/cfg
   if [[ "${PROJECT}"  != "" ]]
   then
@@ -409,9 +418,10 @@ create_syntax() {
     printf "\n$* !!!\n\n"
   fi
   printf "\033[4musage :\033[0m\n"
-  printf "  \033[1m${PRG} create <name> [--period <p>] --source <S> [--project <P>] --target <T> --destination <D>  \033[0m\n"
+  printf "  \033[1m${PRG} create <name> [--period <p>] [--bw <#MB/s>] --source <S> [--project <P>] --target <T> --destination <D>  \033[0m\n"
   printf "      \033[1m<name>\033[0m           The name of the RozoFS synchronization.\n"
   printf "      \033[1m[--period <p>]\033[0m       Period in minutes between each synchronization.\n"
+  printf "      \033[1m[--bw <#MB/s>]\033[0m       Rsync bandwith limitation in MB/s for each source node.\n"
   printf "      \033[1m--source <S>\033[0m         The source directory within a RozoFS file system.\n"
   printf "      \033[1m[--project <P>]\033[0m      Limits the synchronization to this project number.\n"
   printf "      \033[1m--target <T>\033[0m         The destination hostname or IP address.\n"
@@ -565,13 +575,14 @@ modify_syntax() {
     printf "\n$* !!!\n\n"
   fi
   printf "\033[4musage :\033[0m\n"
-  printf "  \033[1m${PRG} modify <name> [--target <newT>][--destination <newD>][--period <p>][--full]\033[0m\n"
+  printf "  \033[1m${PRG} modify <name> [--target <newT>][--destination <newD>][--period <p>][--bw <#MB/s>][--full]\033[0m\n"
   printf "      \033[1m<name>\033[0m                  The name of the RozoFS synchronization.\n"
   printf "      \033[1m[--target <newT>]\033[0m       The destination hostname or IP address.\n"
   printf "      \033[1m|--destination <newD>]\033[0m  The destination directory.\n"
   printf "      \033[1m[--full]\033[0m                To request next synchronization to be a full synchronization.\n"
   printf "      \033[1m[--period <p>]\033[0m          Period in minutes between each synchronization.\n"
   printf "                              A period of 0 means no period.\n"
+  printf "      \033[1m[--bw <#MB/s>]\033[0m          Rsync bandwith limitation in MB/s for each source node.\n"
   exit 1
 }    
 #_________________________________________________
@@ -601,6 +612,16 @@ modify() {
   PROJECT=`read_cfg PROJECT`
   MNT=`read_cfg MNT`
   DIRECTORY=`read_cfg DIRECTORY`  
+
+  #
+  # BW change
+  #
+  if [[ "${BW}" == "" ]]
+  then
+    TARGET=`read_cfg BW`
+  else  
+    mod="YES"
+  fi
   #
   # Control whether the target is changed
   #
@@ -906,6 +927,7 @@ MNT=""
 BASE_DST=""
 PROJECT=""
 PERIOD=""
+BW=""
 verbose=""
 full=""
 dry=""
@@ -985,6 +1007,10 @@ do
        case "$2" in 
          "") syntax "Missing target name after --target option";;
        esac  
+       if [ "${TARGET}" != "" ];
+       then
+         syntax "At least 2 target defined \"${TARGET}\" and \"$2\""
+       fi  
        TARGET=$2
        shift 2
     };;
@@ -994,6 +1020,10 @@ do
        case "$2" in 
          "") syntax "Missing source directory name after --source option";;
        esac  
+       if [ "${DIRECTORY}" != "" ];
+       then
+         syntax "At least 2 source directories defined \"${DIRECTORY}\" and \"$2\""
+       fi  
        DIRECTORY=$2
        shift 2
     };;
@@ -1003,6 +1033,10 @@ do
        case "$2" in 
          "") syntax "Missing destination directory name after --destination option";;
        esac  
+       if [ "${BASE_DST}" != "" ];
+       then
+         syntax "At least 2 destination directories defined \"${BASE_DST}\" and \"$2\""
+       fi  
        BASE_DST=$2
        shift 2
     };;
@@ -1012,7 +1046,24 @@ do
        case "$2" in 
          "") syntax "Missing project number after --project option";;
        esac  
+       if [ "${PROJECT}" != "" ];
+       then
+         syntax "At least 2 projects defined \"${PROJECT}\" and \"$2\""
+       fi  
        PROJECT=$2
+       shift 2
+    };;
+    
+    # BW limitation per source node        
+    --bw) {
+       case "$2" in 
+         "") syntax "Missing bandwith value in MB/s";;
+       esac  
+       if [ "${BW}" != "" ];
+       then
+         syntax "At least 2 bandwith values defined \"${BW}\" and \"$2\""
+       fi  
+       BW=$2
        shift 2
     };;
 
@@ -1021,12 +1072,20 @@ do
        case "$2" in 
          "") syntax "Missing period value after --period option";;
        esac  
+       if [ "${PERIOD}" != "" ];
+       then
+         syntax "At least 2 periods defined \"${PERIOD}\" and \"$2\""
+       fi  
        PERIOD=$2
        shift 2
     };;
     
     # Actions    
     create|modify|delete|run|list|history|abort|periodic) {
+       if [ "${action}" != "" ];
+       then
+         syntax "At least 2 actions defined \"${action}\" and \"$1\""
+       fi  
        action=$1
        shift 1
     };;     

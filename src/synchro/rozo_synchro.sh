@@ -139,7 +139,11 @@ display_rsync_file_recursive() {
   # X preserve extended attributes
   # E preserve executability
   # --sparse keep holes in file during synchro 
-  myrsync="rsync $1 -e 'ssh -o StrictHostKeyChecking=no' --sockopts=SO_SNDBUF=1048576,SO_RCVBUF=1048576 "
+  myrsync="rsync $1 -e 'ssh -o StrictHostKeyChecking=no' --sockopts=SO_SNDBUF=1048576,SO_RCVBUF=1048576"
+  if [ ${BW} != "0" ];
+  then
+    myrsync="${myrsync} --bwlimit $((BW*1024))"
+  fi  
       
   echo "  if ! ${myrsync} --stats --sparse -d -rlptgoDAXE --delete-before --update ${MNT}/\$1/ --rsync-path=\"mkdir -p ${BASE_DST}/\$1 && ${myrsync} \" root@${TARGET}:${BASE_DST}/\$1"
   echo "  then"
@@ -178,6 +182,10 @@ display_rsync_file() {
   # E preserve executability
   # --sparse keep holes in file during synchro 
   myrsync="rsync $1 -e 'ssh -o StrictHostKeyChecking=no' --sockopts=SO_SNDBUF=1048576,SO_RCVBUF=1048576 "
+  if [ ${BW} != "0" ];
+  then
+    myrsync="${myrsync} --bwlimit $((BW*1024))"
+  fi  
 
   echo "  if ! ${myrsync} --stats --sparse -d -lptgoDAXE --delete-before --update ${MNT}/\$1/ --rsync-path=\"mkdir -p ${BASE_DST}/\$1 && ${myrsync} \" root@${TARGET}:${BASE_DST}/\$1"
   echo "  then"
@@ -757,6 +765,7 @@ fi
 #
 EID=`read_cfg EID`
 PROJECT=`read_cfg PROJECT`
+BW=`read_cfg BW`
 MNT=`read_cfg MNT`
 DIRECTORY=`read_cfg DIRECTORY`
 TARGET=`read_cfg TARGET`
