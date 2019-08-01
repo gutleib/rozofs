@@ -7568,6 +7568,15 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 		       pfid, name, fid_to_rename, &type_to_rename,root_dirent_mask_name) != 0)
         goto out;
 
+    /*
+    ** If the moved object is a directory, let's change the atime of this directory.
+    ** This will indicate to the rozo_synchro tools that the directory has moved 
+    ** and that a full recursive synchronization is needed on this directory
+    */
+    if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
+      lv2_to_rename->attributes.s.attrs.atime = time(NULL);
+    }
+
     if (memcmp(pfid, npfid, sizeof (fid_t)) != 0) {       
         if (deleted_object)
 	{
