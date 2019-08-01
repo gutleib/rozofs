@@ -1,0 +1,55 @@
+#!/bin/bash
+#set -x
+
+#-----------------------------------------------------------------
+# Print the list of nodes
+#
+make_node_file() {
+  echo "localhost1"
+  echo "localhost2" 
+#  echo "localhost3"
+#  echo "localhost4"  
+}
+#-----------------------------------------------------------------
+# Install the rozo needed software
+#
+install() {
+  make_node_file  > ${PRIV}/.rozo_synchro/.nodefile
+
+  cp -f $ROOT_ROZO/tests/build/src/rozodiag/rozodiag /usr/bin
+  cp -f $ROOT_ROZO/tests/build/src/exportd/rozo_scan_by_criteria /usr/bin
+
+  cp -f $ROOT_ROZO/tests/build/src/synchro/rozo_synchro_analyze_result /usr/bin  
+  cp -f rozo_synchro /usr/bin  
+  cp -f rozo_synchro.sh /usr/bin
+}
+#-----------------------------------------------------------------
+# Clean up the rozo software
+#
+clean() {
+  rm -f /usr/bin/rozodiag
+  rm -f /usr/bin/rozo_scan_by_criteria 
+  rm -f /usr/bin/rozo_synchro
+  rm -f /usr/bin/rozo_synchro_analyze_result
+  rm -f /usr/bin/rozo_synchro.sh      
+}
+#
+#-----------------------------------------------------------------
+#
+set -x
+
+PRIV="/mnt/private"
+if [ ! -d ${PRIV} ]
+then
+  echo "${PRIV} does not exists"
+  exit 1
+fi
+if [ ! -d ${PRIV}/.rozo_synchro ];
+then
+  mkdir ${PRIV}/.rozo_synchro
+fi
+
+case "$1" in
+  "clean") clean;;
+  *)       install;;
+esac  

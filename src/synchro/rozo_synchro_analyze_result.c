@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdarg.h>
+#include <unistd.h>
 
 #define MAX_LINE_LEN 4096
 
@@ -157,7 +158,7 @@ static inline dir_entry_t * lookup_entry(uint32_t hash, char * name, int name_le
 **
 **----------------------------------------------------------------------------
 */
-static inline dir_entry_t * delete_entry(dir_entry_t * entry) {
+static void delete_entry(dir_entry_t * entry) {
   free(entry->name);
   list_remove(&entry->list);
   free(entry);
@@ -234,14 +235,17 @@ void syntax(char * fmt, ...) {
   ** Display usage
   */
 //  printf("RozoFS  - %s\n", VERSION);
-  printf("Usage: rozo_analyze_results <synchroPath> <//in> <//out> \n\n");
+  printf("Usage: rozo_analyze_results <synchroPath> <//in> <//out> <failed> <remaining>\n\n");
   printf("  <synchroPath>   RozoFS synchronization directory full path.\n");
   printf("  <//in>          GNU parallel input file.\n");
   printf("  <//out>         GNU parallel output file.\n");
+  printf("  <failed>        output file to write the failed directory list.\n");
+  printf("  <remaining>     output file to write the remaining directory list.\n");
   
   if (fmt) exit(EXIT_FAILURE);
   exit(EXIT_SUCCESS); 
 }
+
 /*-----------------------------------------------------------------------------
 **
 **  M A I N
@@ -285,7 +289,7 @@ int main(int argc, char **argv) {
   ** Check the number of parameters
   */
   
-  if (argc<4) {
+  if (argc<6) {
     syntax("Missing parameters");
   }  
   
@@ -363,21 +367,12 @@ int main(int argc, char **argv) {
     } 
   }  
   
-  /*
-  ** Open files to register file and remaining directories
-  */
-  sprintf(dir1,"%s/failed_directories",argv[1]);
-  ffailed = fopen(dir1,"w");
-  if (ffailed == NULL) {
-    syntax("fopen(%s) %s", dir1, strerror(errno)); 
-  }
-
-  sprintf(dir1,"%s/remaining_directories",argv[1]);
-  fremaining = fopen(dir1,"w");
-  if (fremaining == NULL) {
-    syntax("fopen(%s) %s", dir1, strerror(errno)); 
-  }  
+  unlink(argv[4]);
+  ffailed = NULL;
   
+  unlink(argv[5]);
+  fremaining = NULL;
+
   /*
   ** Read //in file 
   */
@@ -399,6 +394,12 @@ int main(int argc, char **argv) {
       
       if (entry == NULL) {
         remaining++;
+        if (fremaining == NULL) {
+          fremaining = fopen(argv[5],"w");
+          if (fremaining == NULL) {
+            syntax("fopen(%s) %s", argv[5], strerror(errno));
+          }
+        }
         fwrite(dir1,read,1,fremaining);
         continue;
       }
@@ -407,13 +408,19 @@ int main(int argc, char **argv) {
       }
       else {
         failed++;      
+        if (ffailed == NULL) {
+          ffailed = fopen(argv[4],"w");
+          if (ffailed == NULL) {
+            syntax("fopen(%s) %s", argv[4], strerror(errno));
+          }
+        }
         fwrite(dir1,read,1,ffailed);
       }  
       delete_entry(entry);
     }  
   }   
-  fclose(fremaining);
-  fclose(ffailed);
+  if (fremaining) fclose(fremaining);
+  if (ffailed)    fclose(ffailed);
   fclose(fin);
   fclose(fout);      
   printf("success %d failed %d remaining %d\n",success,failed,remaining);
