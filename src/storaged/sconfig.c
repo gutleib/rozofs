@@ -263,25 +263,28 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
 	** Device configuration
 	*/
 	if (!config_setting_lookup_int(ms, SDEV_TOTAL, &devices)) {
-            errno = ENOKEY;
-            severe("can't fetch total device number.");
-            goto out;
+          /*
+          ** Default is to have one device only
+          */
+          devices    = 1;
+          mapper     = 1; 
+          redundancy = 1;        
 	}
-	if (devices > STORAGE_MAX_DEVICE_NB) {
-            errno = EINVAL;
-            severe("Device number exceed %d for storage %d.", STORAGE_MAX_DEVICE_NB, i);
-            goto out;
+        else {
+	  if (devices > STORAGE_MAX_DEVICE_NB) {
+              errno = EINVAL;
+              severe("Device number exceed %d for storage %d.", STORAGE_MAX_DEVICE_NB, i);
+              goto out;
+          }
+
+	  if (!config_setting_lookup_int(ms, SDEV_MAPPER, &mapper)) {
+	    mapper = devices;
+	  }
+
+	  if (!config_setting_lookup_int(ms, SDEV_RED, &redundancy)) {
+	    redundancy = 2;
+	  }
         }
-
-
-	if (!config_setting_lookup_int(ms, SDEV_MAPPER, &mapper)) {
-	  mapper = devices;
-	}
-
-	if (!config_setting_lookup_int(ms, SDEV_RED, &redundancy)) {
-	  redundancy = 2;
-	}
-
 	
 	/*
 	** When automount is configured, do not get the root path from 
