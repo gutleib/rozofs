@@ -636,6 +636,7 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
   dst = -1;
   if (ret < 0) {
     xerrno = errno;
+    severe("close(%s) %s",dst_fname,strerror(errno));     
     goto abort;       
   }
     
@@ -662,8 +663,10 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
   return 0;
 
 abort:
-  if (setxattr(dst_fname, "user.rozofs", "mover_invalidate = 0", strlen("mover_invalidate"),0)<0) {
-    severe("fsetxattr(%s,mover_invalidate) %s",dst_fname,strerror(errno));   
+  pChar = buf;
+  pChar += sprintf(pChar,"mover_invalidate = 0");
+  if (setxattr(dst_fname, "user.rozofs", buf, strlen(buf),0)<0) {
+    severe("fsetxattr(%s,%s) %s",dst_fname,buf,strerror(errno));   
   }
   
 generic_error:
