@@ -156,15 +156,16 @@ class host_class:
       nextl=","
     print ");"
     nexts=" "
+    print "nodeid = 0;"
     print "storages = ("
     for s in self.sid:
       if rozofs.device_automount == True:
         if s.cid.volume.vid == 1 :
-          print "\t%s{cid = %s; sid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)      
+          print "\t%s{cid = %s; sid = %s; nodeid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.cid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)      
         else:
-          print "\t%s{cid = %s; sid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; spare-mark = \"%s\";}"%(nexts,s.cid.cid,s.sid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red,s.cid.volume.vid)                
+          print "\t%s{cid = %s; sid = %s; nodeid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; spare-mark = \"%s\";}"%(nexts,s.cid.cid,s.sid,s.cid.cids.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red,s.cid.volume.vid)                
       else:
-        print "\t%s{cid = %s; sid = %s; root =\"%s\"; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.get_root_path(self.number),s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)
+        print "\t%s{cid = %s; sid = %s; nodeid = %s; root =\"%s\"; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.cid,s.get_root_path(self.number),s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)
       nexts=","
     print "); "
        
