@@ -85,6 +85,10 @@ void rozofs_numa_allocate_node(int instance, char * criteria)
      return;
    }  
 
+   /*
+   ** Instance must be positive for modulo
+   */
+   if (instance<0) instance = -instance;
    configured_nodes = numa_num_configured_nodes();   
    bit = instance%configured_nodes;
    numa_run_on_node(bit); 
