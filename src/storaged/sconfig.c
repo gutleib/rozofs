@@ -235,7 +235,7 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         const char *spare_mark = NULL;
         
 	char       rootPath[PATH_MAX];
-
+        
         if (!(ms = config_setting_get_elem(stor_settings, i))) {
             errno = ENOKEY;
             severe("can't fetch storage.");
@@ -253,11 +253,21 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
             severe("can't lookup cid for storage %d.", i);
             goto out;
         }
-	
         /*
 	** Only keep the clusters we take care of
 	*/
 	if ((cluster_id!=0)&&(cluster_id!=cid)) continue;
+
+        /*
+        ** When only one cluster or one sid
+        ** Check whether a numa node id over wrides the default one
+        */
+        if (cluster_id!=0) {
+          if (config_setting_lookup_int(ms, SNODEID, &nodeid) != CONFIG_FALSE) {
+            config->numa_node_id = nodeid;
+          }  
+        }
+	
 
 	/*
 	** Device configuration
