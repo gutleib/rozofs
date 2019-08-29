@@ -60,6 +60,7 @@ int    dump_data=0;
 uint64_t  first=0,last=-1;
 unsigned int prjid = -1;
 int    display_blocks=0;
+uint64_t   patched_date = 0;
 
 #define HEXDUMP_COLS 16
 void hexdump(void *mem, unsigned int offset, unsigned int len) {
@@ -279,7 +280,8 @@ unsigned char buffer[2*1024*33];
 void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t * hdr, int spare, uint64_t firstBlock) {
   uint16_t rozofs_disk_psize;
   int      fd;
-  rozofs_stor_bins_hdr_t * pH;
+  rozofs_stor_bins_hdr_t    * pH;
+  rozofs_stor_bins_footer_t * pF;
   int      nb_read;
   uint32_t bbytes = ROZOFS_BSIZE_BYTES(hdr->v0.bsize);
   char     crc32_string[32];
@@ -328,7 +330,7 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
       rozofs_disk_psize = rozofs_get_psizes_on_disk(hdr->v0.layout,hdr->v0.bsize,prjid);
     }
     
-    /* Version 0 without projection given as parameter*/
+    /*  Version 0 without projection given as parameter*/
     else {
       // Read 1rst block
       nb_read = pread(fd, buffer, sizeof(rozofs_stor_bins_hdr_t), 0);
@@ -381,10 +383,13 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
     nb_read = (nb_read / rozofs_disk_psize);
     
     pH = (rozofs_stor_bins_hdr_t*) buffer;
+
     for (idx=0; idx<nb_read; idx++) {
     
-      pH = (rozofs_stor_bins_hdr_t*) &buffer[idx*rozofs_disk_psize];
-      
+      pH = (rozofs_stor_bins_hdr_t*)    &buffer[idx*rozofs_disk_psize];
+      pF = (rozofs_stor_bins_footer_t*) &buffer[(idx+1)*rozofs_disk_psize];
+      pF--;
+            
       bid = (offset/rozofs_disk_psize)+idx+firstBlock;
       
       if (bid < first) continue;
@@ -394,6 +399,30 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
       pH->s.filler = 0;
       uint32_t crc32=0;
 
+      /*
+      ** We are requested to patch the date in header as well as footer
+      */
+      if (patched_date!= 0) {
+        /* CRC32 is set to 0 which means no CRC32 */
+        save_crc32 = 0;
+        pH->s.timestamp = patched_date;
+        pF->timestamp   = patched_date;
+        /* Re-write header */
+        nb_read = pwrite(fd, pH, sizeof(rozofs_stor_bins_hdr_t), offset+((unsigned char*)pH-buffer));
+        if (nb_read<sizeof(rozofs_stor_bins_hdr_t)) {
+          printf("pwrite header %d %s\n",bid,strerror(errno));
+          close(fd);
+          return;         
+        }        
+        /* Re-write footer */
+        nb_read = pwrite(fd, pF, sizeof(rozofs_stor_bins_footer_t), offset+((unsigned char*)pF-buffer));
+        if (nb_read<sizeof(rozofs_stor_bins_footer_t)) {
+          printf("pwrite footer %d %s\n",bid,strerror(errno));
+          close(fd);
+          return;         
+        }                
+      }
+      
       if (save_crc32 == 0) {
         sprintf(crc32_string,"NONE");
       }
@@ -402,27 +431,30 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
         crc32 = crc32c(crc32,(char *) pH, rozofs_disk_psize);
 	if (crc32 != save_crc32) sprintf(crc32_string,"ERROR");
 	else                     sprintf(crc32_string,"OK");
-	
       }
       pH->s.filler = save_crc32;
       	
       if (dump_data == 0) {
       
-	printf ("| %10llu | %16llu | %10llu | %2d | %4d | %5s | %s\n",
+	printf ("| %10llu | %16llu | %10llu | %2d | %4d | %5s | %s Head %llu Foot %llu \n",
         	(long long unsigned int)bid,
         	(long long unsigned int)bbytes * bid,
         	(long long unsigned int)offset+(idx*rozofs_disk_psize),
 		pH->s.projection_id,
 		pH->s.effective_length, 
 		crc32_string,  
-		ts2string(pH->s.timestamp));
+		ts2string(pH->s.timestamp),
+                (long long unsigned int)pH->s.timestamp,
+                (long long unsigned int)pF->timestamp);
        }		
        else {
 	printf("_________________________________________________________________________________________\n");
 	printf("Block# %llu / file offset %llu / projection offset %llu\n", 
         	(unsigned long long)bid, (unsigned long long)(bbytes * bid), (unsigned long long)(offset+(idx*rozofs_disk_psize)));
-	printf("prj id %d / length %d / CRC %s / time stamp %s\n", 
-        	pH->s.projection_id,pH->s.effective_length,crc32_string, ts2string(pH->s.timestamp)); 	
+	printf("prj id %d / length %d / CRC %s / time stamp %s Head %llu Foot %llu)\n", 
+        	pH->s.projection_id,pH->s.effective_length,crc32_string, ts2string(pH->s.timestamp),
+                (long long unsigned int)pH->s.timestamp,
+                (long long unsigned int)pF->timestamp); 	
 	printf("_________________________________________________________________________________________\n");
 	if ((pH->s.projection_id == 0)&&(pH->s.timestamp==0)) continue;
 	hexdump(pH, (offset+(idx*rozofs_disk_psize)), rozofs_disk_psize);      	            
@@ -453,6 +485,7 @@ void usage() {
     printf("   -b <first>:          \tTo display from block number <first> to the end.\n");
     printf("   -b :<last>           \tTo display from start to block number <last>.\n");  
     printf("   -b <block>           \tTo display only <block> block number.\n");   
+    printf("   -D <date>            \tTo patch the date of the blocks given by -b option.\n");   
     exit(-1);  
 }
 
@@ -525,6 +558,22 @@ int main(int argc, char *argv[]) {
       if (statfs(pRoot, &st) != 0) {
         printf("%s is not a directory !!!\n", pRoot);
         usage();
+      }
+      idx++;
+      continue;    
+    }
+    
+    /* -D <date>*/
+    if (strcmp(argv[idx], "-D") == 0) {
+      idx++;
+      if (idx == argc) {
+        printf("%s option set but missing value !!!\n", argv[idx-1]);
+        usage();
+      } 
+      ret = sscanf(argv[idx], "%llu", &patched_date);
+      if (ret != 1) {
+        printf("Bad date value %s !!!\n",argv[idx]);
+	usage();
       }
       idx++;
       continue;    
