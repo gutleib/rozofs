@@ -1115,17 +1115,18 @@ void rozofs_ll_read_cbk(void *this,void *param)
         /*
         ** possible optimization: extend the write pos to a User Data Blcok Boundary
         */
-        rozofs_asynchronous_flush(fi);
         /*
         ** save in buf flush thesection between read_from and write_pos
+        ** Do it before the rozofs_asynchronous_flush() because it reset write_from & write_pos
         */
         len = file->write_pos - next_read_from;  
         offset_buf_wr_start =  file->write_from - file->read_from ; 
         offset_buf_wr_start +=  (next_read_from- file->write_from);
         src_p =(uint8_t *)( file->buffer + offset_buf_wr_start);
         memcpy(local_buf_flush,src_p,len);   
-        file->write_pos  = 0;
-        file->write_from = 0;
+
+        rozofs_asynchronous_flush(fi);
+
         /*
         ** copy the received buffer in the file descriptor context
         */
@@ -1256,15 +1257,22 @@ void rozofs_ll_read_cbk(void *this,void *param)
         *  
         */
         ROZOFS_WRITE_MERGE_STATS(RZ_FUSE_WRITE_5);
-        rozofs_asynchronous_flush(fi);        
         /*
         ** save in buf flush the section between write_from and write_pos
+        ** Do it before the rozofs_asynchronous_flush() because it reset write_from & write_pos
         */
         offset_end = next_read_from + file->export->bufsize;
         
         len = offset_end - file->write_from;      
         src_p =(uint8_t *)( file->buffer + (file->write_from- file->read_from));
         memcpy(local_buf_flush,src_p,len);   
+        /*
+        ** Compute offset in the final buffer where to rewrite these data
+        */
+        offset_buf_wr_start = file->write_from - next_read_from;
+         
+        rozofs_asynchronous_flush(fi);        
+
         /*
         ** copy the received buffer in the file descriptor context
         */
@@ -1275,7 +1283,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
         /**
         * merge the with the buf flush
         */
-        dst_p = (uint8_t*)(file->buffer + (file->write_from - next_read_from));
+        dst_p = (uint8_t*)(file->buffer + offset_buf_wr_start);
         rozofs_write_in_buffer(file,dst_p,local_buf_flush,len); 
 
         file->write_pos  = 0;
