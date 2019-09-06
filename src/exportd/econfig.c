@@ -504,7 +504,7 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
                adminStatus = string2rozofs_cluster_admin_status_e(adminStatusString);
                if (adminStatus == -1) {
                  errno = EINVAL;
-            	 severe("Bad admin value for cid %d \"%s\" assuming \"in service\"", cid, adminStatusString);
+            	 severe("Bad admin value for cid %d \"%s\" assuming \"in service\"", (int) cid, adminStatusString);
                  adminStatus = rozofs_cluster_admin_status_in_service;
                } 
             }
