@@ -1011,6 +1011,29 @@ static int64_t write_buf_nb(void *buffer_p,file_t * f, uint64_t off, const char 
       f->file2create = 0;
     }
     /*
+    ** When writing offset 0 of a destination mover file, one must sometimes set STORCLI_FLAGS_EMPTY_FILE
+    ** to avoid a race condition between the 2 first writes, especially on files
+    ** bigger than 128 blocks and smaller than 256 with a size not alligned on 4096.
+    ** while the 1rst write from block #0 is going to create the projections files on storages,
+    ** the second write from block #128 will require an internal read of the last block
+    ** => the internal read can fail because some projections exist and some not (ENOENT)
+    ** and so the 2nd write can fail.
+    */
+    else if (off==0) {
+      rozofs_inode_t *inode_p;
+      inode_p = (rozofs_inode_t*)f->fid; 
+      uint64_t  nbBlocks  = ie->attrs.attrs.size/4096;
+      uint64_t  alignment = ie->attrs.attrs.size%4096;
+
+      if ((alignment!=0) && (nbBlocks<256)) {
+        inode_p = (rozofs_inode_t*)f->fid; 
+        if (inode_p->s.key == ROZOFS_REG_D_MOVER) {
+          args.flags |= STORCLI_FLAGS_EMPTY_FILE;      
+        }
+      }  
+    }
+    
+    /*
     ** No need to re-read the last block when not aligned when we extend 
     ** the file since this client is the only writter of the file
     */

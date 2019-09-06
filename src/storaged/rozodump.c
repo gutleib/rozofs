@@ -273,7 +273,8 @@ char * ts2string(uint64_t u64) {
   ts = *localtime(&input);
   strftime(dateSting, sizeof(dateSting), "%a %Y-%m-%d %H:%M:%S:", &ts);
   len= strlen(dateSting);
-  sprintf(&dateSting[len],"%6.6u",(unsigned int)micro);
+  len += sprintf(&dateSting[len],"%6.6u",(unsigned int)micro);
+  sprintf(&dateSting[len]," %llu",(unsigned long long int)u64);
   return dateSting;
 }    
 unsigned char buffer[2*1024*33];
@@ -284,8 +285,9 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
   rozofs_stor_bins_footer_t * pF;
   int      nb_read;
   uint32_t bbytes = ROZOFS_BSIZE_BYTES(hdr->v0.bsize);
-  char     crc32_string[32];
+  char     crc32_string[64];
   uint64_t offset;
+  char    *color;
   
   if (dump_data == 0) {
     printf ("+------------+------------------+------------+----+------+-------+--------------------------------------------\n");
@@ -410,52 +412,81 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
         /* Re-write header */
         nb_read = pwrite(fd, pH, sizeof(rozofs_stor_bins_hdr_t), offset+((unsigned char*)pH-buffer));
         if (nb_read<sizeof(rozofs_stor_bins_hdr_t)) {
-          printf("pwrite header %d %s\n",bid,strerror(errno));
+          printf("pwrite header %llu %s\n",(long long unsigned int)bid,strerror(errno));
           close(fd);
           return;         
         }        
         /* Re-write footer */
         nb_read = pwrite(fd, pF, sizeof(rozofs_stor_bins_footer_t), offset+((unsigned char*)pF-buffer));
         if (nb_read<sizeof(rozofs_stor_bins_footer_t)) {
-          printf("pwrite footer %d %s\n",bid,strerror(errno));
+          printf("pwrite footer %llu %s\n",(long long unsigned int)bid,strerror(errno));
           close(fd);
           return;         
         }                
       }
       
       if (save_crc32 == 0) {
+        color = ROZOFS_COLOR_YELLOW;
         sprintf(crc32_string,"NONE");
       }
       else {
         crc32 = fid2crc32((uint32_t *)fid)+bid-firstBlock;
         crc32 = crc32c(crc32,(char *) pH, rozofs_disk_psize);
-	if (crc32 != save_crc32) sprintf(crc32_string,"ERROR");
-	else                     sprintf(crc32_string,"OK");
+	if (crc32 != save_crc32) {
+          color = ROZOFS_COLOR_RED;
+          sprintf(crc32_string,"ERROR");
+        }
+	else {
+          color = ROZOFS_COLOR_GREEN;
+          sprintf(crc32_string,"OK");
+        }  
       }
       pH->s.filler = save_crc32;
       	
       if (dump_data == 0) {
-      
-	printf ("| %10llu | %16llu | %10llu | %2d | %4d | %5s | %s Head %llu Foot %llu \n",
+	printf ("| %10llu | %16llu | %10llu | %2d | ",
         	(long long unsigned int)bid,
         	(long long unsigned int)bbytes * bid,
         	(long long unsigned int)offset+(idx*rozofs_disk_psize),
-		pH->s.projection_id,
-		pH->s.effective_length, 
-		crc32_string,  
-		ts2string(pH->s.timestamp),
-                (long long unsigned int)pH->s.timestamp,
-                (long long unsigned int)pF->timestamp);
-       }		
-       else {
+                pH->s.projection_id); 
+                
+        if (pH->s.effective_length==0) {
+          printf(ROZOFS_COLOR_YELLOW);
+          printf ("%4d",pH->s.effective_length);
+          printf(ROZOFS_COLOR_NONE);
+        }       
+        else {
+          printf ("%4d",pH->s.effective_length);
+        }       
+        
+        printf("%s",color);
+	printf (" | %5s | ", crc32_string);
+        printf(ROZOFS_COLOR_NONE);
+                
+	printf ("%s ", ts2string(pH->s.timestamp));
+        if ((pH->s.timestamp!=0) && (pH->s.timestamp != pF->timestamp)){
+          printf(ROZOFS_COLOR_RED);
+ 	  printf("%llu\n",(long long unsigned int)pF->timestamp);
+          printf(ROZOFS_COLOR_NONE);
+        }
+        else {
+ 	  printf("\n");
+        }         
+      }		
+      else {
 	printf("_________________________________________________________________________________________\n");
 	printf("Block# %llu / file offset %llu / projection offset %llu\n", 
         	(unsigned long long)bid, (unsigned long long)(bbytes * bid), (unsigned long long)(offset+(idx*rozofs_disk_psize)));
-	printf("prj id %d / length %d / CRC %s / time stamp %s Head %llu Foot %llu)\n", 
-        	pH->s.projection_id,pH->s.effective_length,crc32_string, ts2string(pH->s.timestamp),
-                (long long unsigned int)pH->s.timestamp,
-                (long long unsigned int)pF->timestamp); 	
-	printf("_________________________________________________________________________________________\n");
+	printf("prj id %d / length %d / CRC %s %s %s / time stamp %s", 
+        	pH->s.projection_id,pH->s.effective_length,
+                color, crc32_string, ROZOFS_COLOR_NONE,
+                ts2string(pH->s.timestamp));
+        if (pH->s.timestamp != pF->timestamp){        
+          printf(ROZOFS_COLOR_RED);
+          printf(" %llu",(long long unsigned int)pF->timestamp); 
+          printf(ROZOFS_COLOR_NONE);
+        }   	
+	printf("\n_________________________________________________________________________________________\n");
 	if ((pH->s.projection_id == 0)&&(pH->s.timestamp==0)) continue;
 	hexdump(pH, (offset+(idx*rozofs_disk_psize)), rozofs_disk_psize);      	            
       }
@@ -506,7 +537,7 @@ int main(int argc, char *argv[]) {
   int           chunk_stop;
 
   /*
-  ** read common config file
+  ** read common config file (to get number of slices)
   */
   common_config_read(NULL); 
   
@@ -570,7 +601,7 @@ int main(int argc, char *argv[]) {
         printf("%s option set but missing value !!!\n", argv[idx-1]);
         usage();
       } 
-      ret = sscanf(argv[idx], "%llu", &patched_date);
+      ret = sscanf(argv[idx], "%llu", (long long unsigned int *)&patched_date);
       if (ret != 1) {
         printf("Bad date value %s !!!\n",argv[idx]);
 	usage();

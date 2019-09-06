@@ -743,6 +743,13 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   rozofs_iov_multi_t vector; 
 
   /*
+  ** Only move regular files
+  */
+  if (!S_ISREG(inode_p->s.attrs.mode)) {
+    return 0;
+  }  
+
+  /*
   ** get the size of each section
   */
   rozofs_get_multiple_file_sizes(inode_p,&vector);

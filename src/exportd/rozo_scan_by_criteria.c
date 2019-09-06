@@ -711,7 +711,9 @@ static void usage(char * fmt, ...) {
     printf("Searching for multifiles not hybrid files having more than 4 sub files.\n");
     printf("  \033[1mrozo_scan nohybrid slave gt 4 out json,all\033[0m\n");
     printf("Searching for sub-directories under a some directories where any change occured after a given date.\n");
-    printf("  \033[1mrozo_scan dir \\(parent\\>=./joe/ or parent\\>=./jeff/ \\) and update\\>=2019-06-18 out json,all\033[0m\n");
+    printf("  \033[1mrozo_scan dir \\(parent\\>=./joe/ or parent\\>=./jeff/ \\) and update\\>=2019-06-18\033[0m\n");
+    printf("Searching for sub-directories under a some directories that have been moved/renamed after a given date.\n");
+    printf("  \033[1mrozo_scan dir parent ge ./project/BenHur atime ge 0030-04-07-12:00 cr8 lt 0030-04-07-12:00\033[0m\n");
     printf("Searching for .o object files under one directory.\n");
     printf("  \033[1mrozo_scan dir parent ge ./proj2/compil name ge .o out json,all\033[0m\n");
   }
@@ -3682,6 +3684,15 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   char         fidString[40];      
 
   nb_scanned_entries++;
+ 
+  /*
+  ** Only process REG, DIR and SLINK
+  */
+  if ((!S_ISREG(inode_p->s.attrs.mode))
+  &&  (!S_ISDIR(inode_p->s.attrs.mode))
+  &&  (!S_ISLNK(inode_p->s.attrs.mode))) {
+    return 0;
+  }  
    
   /*
   ** Check for symbolic link scope
