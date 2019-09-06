@@ -460,7 +460,7 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
           printf ("%4d",pH->s.effective_length);
         }       
         
-        printf(color);
+        printf("%s",color);
 	printf (" | %5s | ", crc32_string);
         printf(ROZOFS_COLOR_NONE);
                 
