@@ -2056,6 +2056,11 @@ int export_reload_nb()
     list_for_each_forward_safe(p, q, &exports) {
         export_entry_t *entry = list_entry(p, export_entry_t, list);
 
+        /*
+        ** Stop,trashd thread
+        */
+        export_stop_one_trashd(entry->export.eid);   
+
         // Canceled the load trash pthread if neccesary before
         // reload list of exports
         if (entry->export.load_trash_thread) {

@@ -961,7 +961,16 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   export_t   * e = exportd;
   
   nb_scanned_entries++;
-  
+ 
+  /*
+  ** Only process REG, DIR and SLINK
+  */
+  if ((!S_ISREG(inode_p->s.attrs.mode))
+  &&  (!S_ISDIR(inode_p->s.attrs.mode))
+  &&  (!S_ISLNK(inode_p->s.attrs.mode))) {
+    return 0;
+  }  
+    
   if (search_dir==0) {
     /*
     ** Exclude symlink
