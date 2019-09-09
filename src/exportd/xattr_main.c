@@ -129,6 +129,11 @@ ssize_t
 rozofs_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 {
    int size;
+   /*
+   ** save the current tracking context needed for allocation
+   */
+   xattr_set_tracking_context(dentry);
+
    size =  ext4_listxattr(dentry, buffer, buffer_size);
    if (size < 0)
    {
