@@ -19,6 +19,7 @@
 #include "rozo_inode_lib.h"
 #include "exp_cache.h"
 #include "mdirent.h"
+#include "xattr_main.h"
 
 #define LONG_VALUE_UNDEF  -1LLU
 
@@ -28,6 +29,11 @@ mdirents_name_entry_t    bufferName;
 export_config_t        * export_config = NULL;
 int                      layout=LAYOUT_4_6_8;
 uint8_t                  rozofs_inverse,rozofs_forward,rozofs_safe;
+
+#define ROZOFS_SCAN_XATTR_BUFFER_SIZE 8192
+char rozofs_scan_xattr_list_buffer[ROZOFS_SCAN_XATTR_BUFFER_SIZE];
+char rozofs_scan_xattr_value_buffer[ROZOFS_SCAN_XATTR_BUFFER_SIZE];
+
 
 /*____________________________________________________________
 ** Global variables for argument populated while parsing command
@@ -463,6 +469,10 @@ int                  rozofs_scan_node_counter = 0;
 */
 rozofs_scan_node_t * upNode  = NULL;
 
+static inline int rozo_scan_has_extended_attr(ext_mattr_t * inode_p) {
+  if ((inode_p->s.i_state == 0)&&(inode_p->s.i_file_acl == 0)) return 0;
+  return 1;
+}
 /*
 **_____________________________________________________
 ** Prototype of criteria and field evaluation functions
@@ -653,7 +663,8 @@ static void usage(char * fmt, ...) {
   printf("\t\t\t\tDefault is to have one file/directory path per line.\n");
   printf("\t\033[1mline<val>\033[0m\t\tDisplay <val> file/directory per line.\n");
   printf("\t\033[1mjson\033[0m\t\t\toutput is in json format.\n");
-  printf("\t\033[1malls|allh\033[0m\t\tdisplay every field (time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date).\n");
+  printf("\t\033[1malls|allh\033[0m\t\tdisplay every field except extended attributes (\033[1mxattr\033[0m option).\n");
+  printf("\t\t\t\t\tdates are expressed in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
   printf("\t\033[1m<full|rel|fid>\033[0m\t\tDisplay <full names|relative names|fid>.\n");
   printf("\t\033[1msize\033[0m\t\t\tdisplay file/directory size.\n");
   printf("\t\033[1mproject\033[0m\t\t\tdisplay project identifier.\n");
@@ -668,7 +679,8 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1msupdate|hupdate\033[0m\t\tdisplay update directory time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
   printf("\t\033[1msatime|hatime\033[0m\t\tdisplay access time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
   printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
-  printf("\t\033[1mxattr\033[0m\t\t \tdisplay extended attributes presence.\n");
+  printf("\t\033[1mxattr\033[0m\t\t \tdisplay extended attributes names and values.\n");
+  printf("\t\t\t\t\t\033[1mall\033[0m or \033[1mallh\033[0m do not display extended attributes.\n");
   printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution.\n");
   printf("\t\033[1mtrash\033[0m\t\t\tdisplay directory trash configuration.\n");
   printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
@@ -685,7 +697,7 @@ static void usage(char * fmt, ...) {
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching for files having extended attributes with a size comprised between 76000 and 76100 or equal to 78M .\n");
-    printf("  \033[1mrozo_scan [xattr and [[size\\>=76k and size\\<=76100] or size=78M]] out size\033[0m\n");
+    printf("  \033[1mrozo_scan [xattr and [[size\\>=76k and size\\<=76100] or size=78M]] out size,xattr\033[0m\n");
     printf("Searching for files with a modification date in february 2017 but created before 2017.\n");
     printf("  \033[1mrozo_scan mtime ge 2017-02-01 and mtime lt 2017-03-01 and cr8 lt 2017-01-01 out hcr8,hmtime,uid,sep=#\033[0m\n");
     printf("Searching for files created by user 4501 or goup 1023 on 2015 January the 10th in the afternoon.\n");
@@ -1773,7 +1785,7 @@ int rozofs_scan_eval_one_criteria_inode(
     ** Must have extended attributes
     */  
     case rozofs_scan_keyw_criteria_has_xattr: 
-      if (rozofs_has_xattr(inode_p->s.attrs.mode)) break;
+      if (rozo_scan_has_extended_attr(inode_p)) break;
       result = 0;
       break;        
       
@@ -1781,7 +1793,10 @@ int rozofs_scan_eval_one_criteria_inode(
     ** Must have no extended attributes
     */  
     case rozofs_scan_keyw_criteria_has_no_xattr: 
-      if (!rozofs_has_xattr(inode_p->s.attrs.mode)) break;
+      /*
+      ** When no more xattribute is set, clear the xattr flag in the mode field
+      */
+      if (!rozo_scan_has_extended_attr(inode_p)) break;
       result = 0;
       break;        
             
@@ -3821,8 +3836,53 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   */
   IF_DISPLAY(display_xattr) {
     NEW_FIELD(xattr);  
-    if (rozofs_has_xattr(inode_p->s.attrs.mode)) {
+    if (rozo_scan_has_extended_attr(inode_p)) {
       pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
+      if (display_xattr) {
+        struct dentry    entry;
+        lv2_entry_t      lv2;
+        int              length;
+        char *           pt;
+        
+        memcpy(&lv2,inode_attr_p,sizeof(ext_mattr_t));
+        lv2.extended_attr_p = NULL;
+        
+        entry.d_inode  = &lv2;
+        entry.trk_tb_p = e->trk_tb_p;
+        START_SUBARRAY(xattr_list);
+        pt = rozofs_scan_xattr_list_buffer;
+
+        length = rozofs_listxattr(&entry, rozofs_scan_xattr_list_buffer, ROZOFS_SCAN_XATTR_BUFFER_SIZE);
+
+        while (length > 0) {
+          int xattr_length;
+
+          SUBARRAY_START_ELEMENT();
+          
+          FIRST_QUOTED_NAME(xattr_name);
+          pDisplay += rozofs_string_append(pDisplay,pt);
+          pDisplay += rozofs_string_append(pDisplay,"\"");   
+    
+          xattr_length = rozofs_getxattr(&entry, pt, rozofs_scan_xattr_value_buffer, ROZOFS_SCAN_XATTR_BUFFER_SIZE);
+          if (xattr_length > 0) {
+            NEW_QUOTED_NAME(xattr_value);
+            if (rozofs_is_printable(rozofs_scan_xattr_value_buffer,xattr_length)){
+              rozofs_scan_xattr_value_buffer[xattr_length] = 0;
+              pDisplay += rozofs_string_append(pDisplay,rozofs_scan_xattr_value_buffer);
+            }
+            else {
+              pDisplay += rozofs_hexa_append(pDisplay,rozofs_scan_xattr_value_buffer,xattr_length); 
+            }   
+            pDisplay += rozofs_string_append(pDisplay,"\"");                 
+          }
+          
+          SUBARRAY_STOP_ELEMENT();
+          length -= (strlen(pt)+1);
+          pt += (strlen(pt)+1);
+        }
+        STOP_SUBARRAY();
+
+      }
     }
     else {
       pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
