@@ -24,6 +24,7 @@
 #include <string.h>
 #include <uuid/uuid.h>
 #include <sys/stat.h>
+#include <ctype.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -308,7 +309,23 @@ static inline int rozofs_fid_append(char * pChar, uuid_t fid) {
 
 
 
-
+/*
+**___________________________________________________________
+** Check a sequence of bytes is printable
+**
+** @param pChar       The starting of the sequence
+** @param size        The sise of the sequence
+**
+** @retval True if printable, False else
+*/
+static inline int rozofs_is_printable(char * pChar, int size) {
+  int i;
+  if (size<=0) return 0;
+  for (i=0; i<size; i++,pChar++) {
+    if (!isprint((int)*pChar)) return 0;
+  }
+  return 1;
+}
 /*
 **___________________________________________________________
 ** Append a string and add a 0 at the end
@@ -610,8 +627,36 @@ static inline char * rozofs_line(char * pChar, uint8_t * column_len) {
 
 
 
+/*
+**___________________________________________________________
+** Dump on a line in hexadecimal 
+**
+** @param pChar       The string that is being built
+** @param pt          The begining of the zone to dump
+** @param size        Size of the zone to dump
+**
+** @retval the size added to the string
+*/
+static inline int rozofs_hexa_append(char * pChar, char * pt, int size) {
+  int           i;
+  char          v;
+  
+  if (size<=0) return 0;
+  
+  *pChar++ = '0';
+  *pChar++ = 'x';
 
-
+  for (i=0; i<size; i++,pt++) {
+    v = *pt;
+    v = (v >>4)&0xF;
+    if (v<10) *pChar++ = v + '0';
+    else      *pChar++ = v + 'a' - 10;
+    v = *pt & 0xF;
+    if (v<10) *pChar++ = v + '0';
+    else      *pChar++ = v + 'a' - 10;
+  }
+  return 2*size+2; 
+}
 
 
 
