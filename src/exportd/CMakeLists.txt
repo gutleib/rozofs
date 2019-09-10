@@ -39,8 +39,6 @@ add_executable(exportd
     dirent_search.c
     dirent_insert.c
     dirent_enum2String_file_repair_cause_e.h
-    cache.h
-    cache.c
     exp_cache.c
     exp_cache.h
     export.h
@@ -51,6 +49,8 @@ add_executable(exportd
     econfig.h
     econfig.c
     exportd.c
+    export_flock.c
+    export_flock.h
     exp_cache_dirty_mgt.c
     export_expgw_conf.c
     export_expgw_conf.h
@@ -210,7 +210,6 @@ add_executable(rozo_warnquota
 )
 target_link_libraries(rozo_warnquota rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 set (librozo_inode_sources
-       cache.c
        exp_cache.c
        exp_cache.h
        mdirent.h
@@ -273,6 +272,14 @@ add_executable(rozo_scan_by_criteria
     econfig.c
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h 
+    xattr_acl.c
+    xattr_main.c
+    xattr_nocache.c
+    xattr_security.c
+    xattr_stub.c
+    xattr_system.c
+    xattr_trusted.c
+    xattr_user.c
 )
 target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${PCRE_LIBRARY})
 #________________________________________________________

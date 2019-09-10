@@ -10323,6 +10323,10 @@ int export_removexattr(export_t *e, fid_t fid, char *name) {
       if ((status = rozofs_removexattr(&entry, name)) != 0) {
           goto out;
       }
+      /*
+      ** When no more xattribute is set, clear the xattr flag in the mode field
+      */
+//      if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&lv2->attributes.s.attrs.mode);
     }
 #ifdef ROZOFS_DIR_STATS
       /*

@@ -28,7 +28,7 @@
 #include <rozofs/rpc/epproto.h>
 #include <rozofs/rpc/export_profiler.h>
 #include <rozofs/core/rozofs_flock.h>
-#include "cache.h"
+#include "export_flock.h"
 #include <rozofs/core/af_unix_socket_generic.h>
 #include "exportd.h"
 
@@ -613,20 +613,7 @@ int must_file_lock_be_removed(lv2_entry_t * lv2, uint32_t eid, uint8_t bsize, st
       return 0;   
   }   
 }
-/*
-*___________________________________________________________________
-* initialize the lock service
-*
-*___________________________________________________________________
-*/
-void file_lock_service_init(void) {
-  int idx;
-  
-  memset(&file_lock_stat,0, sizeof(file_lock_stat));
-  for (idx=0; idx<EXPGW_EID_MAX_IDX; idx++) {
-    list_init(&file_lock_client_list[idx]);
-  }  
-}
+
 /*
 *___________________________________________________________________
 * Search client from its reference
@@ -1476,36 +1463,19 @@ void lv2_cache_free_file_lock(uint32_t eid, rozofs_file_lock_t * lock) {
   */  
   file_lock_unlink(lock);     
 }
-
 /*
-**___________________________END OF FILE LOCK SERVICE_____________________________
+*___________________________________________________________________
+* initialize the lock service
+*
+*___________________________________________________________________
 */
-
-
-
-
-
-char * lv2_cache_display(lv2_cache_t *cache, char * pChar) {
-
-  int i;
-
-  pChar += sprintf(pChar, "lv2 attributes cache : current/max %u/%u\n",cache->size, cache->max);
-  pChar += sprintf(pChar, "hit %llu / miss %llu / lru_del %llu\n",
-                   (long long unsigned int) cache->hit, 
-		   (long long unsigned int)cache->miss,
-		   (long long unsigned int)cache->lru_del);
-  pChar += sprintf(pChar, "entry size %u - current size %u - maximum size %u\n", 
-                   (unsigned int) sizeof(lv2_entry_t), 
-		   (unsigned int)sizeof(lv2_entry_t)*cache->size, 
-		   (unsigned int)sizeof(lv2_entry_t)*cache->max);
-  for (i = 0; i < EXPORT_LV2_MAX_LOCK; i++)
-  {
-    pChar += sprintf(pChar, "hash%2.2d: %llu \n",i,
-                     (long long unsigned int) cache->hash_stats[i]);  
+void file_lock_service_init(void) {
+  int idx;
   
-  } 
-  memset(cache->hash_stats,0,sizeof(uint64_t)*EXPORT_LV2_MAX_LOCK);
-  return pChar;		   
+  memset(&file_lock_stat,0, sizeof(file_lock_stat));
+  for (idx=0; idx<EXPGW_EID_MAX_IDX; idx++) {
+    list_init(&file_lock_client_list[idx]);
+  }  
+  
+  lv2_cache_attach_flock_cbk(file_lock_remove_fid_locks, rozofs_reload_flockp);  
 }
-
-

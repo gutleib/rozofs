@@ -1619,6 +1619,10 @@ static int exportd_initialize() {
 
     // Initialize lv2 cache
     lv2_cache_initialize(&cache);
+    /*
+    ** file_lock_service_init uust be called after lv2_cache_initialize
+    */
+    file_lock_service_init();
 
     // Initialize list of volume(s)
     if (volumes_initialize() != 0)

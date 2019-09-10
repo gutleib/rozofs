@@ -30,8 +30,6 @@
 #include "mdir.h"
 #include "mslnk.h"
 
-
-
 /** API lv2 cache management functions.
  *
  * lv2 cache is common to several exports to take care of max fd opened.
@@ -110,6 +108,10 @@ typedef struct _export_tracking_table_t
 
 extern lv2_cache_t cache;
 
+typedef void (*file_lock_remove_cbk_t) (list_t * lock_list);
+typedef void (*file_lock_reload_cbk_t)(lv2_entry_t * lv2, export_tracking_table_t *trk_tb_p);
+
+
 /*
 **__________________________________________________________________
 */
@@ -169,6 +171,8 @@ static inline int lv2_cache_is_locked_entry_in_cache(lv2_entry_t *lv2_p)
     @retval none
 */
 void lv2_cache_initialize(lv2_cache_t *cache);
+void lv2_cache_attach_flock_cbk(file_lock_remove_cbk_t file_lock_remove,
+                                file_lock_reload_cbk_t file_lock_reload);
 /*
 **__________________________________________________________________
 */

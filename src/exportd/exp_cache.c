@@ -26,10 +26,10 @@
 //#include <rozofs/common/xmalloc.h>
 //#include <rozofs/common/profile.h>
 //#include <rozofs/rpc/epproto.h>
-#include "cache.h"
 #include "export.h"
 #include "rozofs_exp_mover.h"
 #include "export_thin_prov_api.h"
+
 
 #include <rozofs/common/export_track.h>
 
@@ -49,6 +49,10 @@ int rozofs_export_host_id = 0;   /**< reference between 0..7: default 0  */
 export_tracking_table_t * export_tracking_table[EXPGW_EID_MAX_IDX+1] = { 0 };
 
 time_t exp_lv2_last_locked_entry_in_lru = 0;
+
+
+file_lock_remove_cbk_t file_lock_remove_cbk = NULL;
+file_lock_reload_cbk_t file_lock_reload_cbk = NULL;
 
 /**
  * hashing function used to find lv2 entry in the cache
@@ -79,6 +83,7 @@ uint32_t lv2_hash(void *key) {
     return hash;
 }
 
+
 int lv2_cmp(void *k1, void *k2) {
     rozofs_inode_t fake_inode1;
     rozofs_inode_t fake_inode2;  
@@ -107,7 +112,9 @@ int lv2_cmp(void *k1, void *k2) {
 */
 static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
 
-  file_lock_remove_fid_locks(&entry->file_lock);
+  if (file_lock_remove_cbk) {
+    file_lock_remove_cbk(&entry->file_lock);
+  }  
 #ifndef LIBROZO_FLAG
   /*
   ** check if the entry to remove is a directory, in such a case we need to check
@@ -179,10 +186,30 @@ void lv2_cache_initialize(lv2_cache_t *cache) {
     memset(cache->hash_stats,0,sizeof(uint64_t)*EXPORT_LV2_MAX_LOCK);
     
     /* 
-    ** Lock service initalize 
+    ** No Lock service 
     */
-    file_lock_service_init();
+    file_lock_remove_cbk = NULL;
+    file_lock_reload_cbk = NULL;
 }
+/*
+**__________________________________________________________________
+*/
+/**
+*   init of an exportd attribute cache
+
+    @param: pointer to the cache context
+    
+    @retval none
+*/
+void lv2_cache_attach_flock_cbk(file_lock_remove_cbk_t file_lock_remove,
+                                file_lock_reload_cbk_t file_lock_reload) {
+  /* 
+  ** Lock service initalize 
+  */
+  file_lock_remove_cbk = file_lock_remove;
+  file_lock_reload_cbk = file_lock_reload;
+
+}      
 /*
 **__________________________________________________________________
 */
@@ -453,7 +480,9 @@ lv2_entry_t *lv2_cache_put(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache,
     /*
     ** Need eventually to re install the persistent file locks saved in extended attributes
     */
-    rozofs_reload_flockp(entry,trk_tb_p);    
+    if (file_lock_reload_cbk) {
+      file_lock_reload_cbk(entry,trk_tb_p);    
+    }
     
     list_init(&entry->list);
     /*
@@ -1753,7 +1782,9 @@ static inline void lv2_cache_update_lru_th(lv2_cache_t *cache, lv2_entry_t *entr
 */
 static inline void lv2_cache_unlink_th(lv2_cache_t *cache,lv2_entry_t *entry,uint32_t hash) {
 
-  file_lock_remove_fid_locks(&entry->file_lock);
+  if (file_lock_remove_cbk) {
+    file_lock_remove_cbk(&entry->file_lock);
+  }  
   mattr_release(&entry->attributes.s.attrs);
   /*
   ** check the presence of the extended attribute block and free it
@@ -2069,5 +2100,28 @@ void lv2_cache_del_th(lv2_cache_t *cache, fid_t fid)
 **________________________________________________________________________
 */     
 
+
+char * lv2_cache_display(lv2_cache_t *cache, char * pChar) {
+
+  int i;
+
+  pChar += sprintf(pChar, "lv2 attributes cache : current/max %u/%u\n",cache->size, cache->max);
+  pChar += sprintf(pChar, "hit %llu / miss %llu / lru_del %llu\n",
+                   (long long unsigned int) cache->hit, 
+		   (long long unsigned int)cache->miss,
+		   (long long unsigned int)cache->lru_del);
+  pChar += sprintf(pChar, "entry size %u - current size %u - maximum size %u\n", 
+                   (unsigned int) sizeof(lv2_entry_t), 
+		   (unsigned int)sizeof(lv2_entry_t)*cache->size, 
+		   (unsigned int)sizeof(lv2_entry_t)*cache->max);
+  for (i = 0; i < EXPORT_LV2_MAX_LOCK; i++)
+  {
+    pChar += sprintf(pChar, "hash%2.2d: %llu \n",i,
+                     (long long unsigned int) cache->hash_stats[i]);  
+  
+  } 
+  memset(cache->hash_stats,0,sizeof(uint64_t)*EXPORT_LV2_MAX_LOCK);
+  return pChar;		   
+}
 
 #endif

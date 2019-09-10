@@ -44,8 +44,8 @@
 #include <rozofs/common/dist.h>
 #include <rozofs/common/export_track.h>
 #include "volume.h"
-#include "cache.h"
 #include "export_expgw_conf.h"
+#include "export_flock.h"
 //#include "geo_replication.h"
 
 #define TRASH_DNAME "trash"
