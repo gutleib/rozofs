@@ -20,6 +20,8 @@
 #include "exp_cache.h"
 #include "mdirent.h"
 #include "xattr_main.h"
+#include <rozofs/common/acl.h>
+#include <rozofs/common/posix_acl_attr.h>
 
 #define LONG_VALUE_UNDEF  -1LLU
 
@@ -283,6 +285,12 @@ char separator[128] = {0};
 
 int first_array_element = 1;
 
+#define SUBARRAY_NEW_LINE()  {\
+  if (display_json) {\
+    pDisplay += rozofs_string_append(pDisplay,",\n             ");\
+  }\
+}
+
 #define NEW_NAME(field) {\
   if (display_json) {\
     pDisplay += rozofs_string_append(pDisplay,", \""#field"\" : ");\
@@ -300,9 +308,15 @@ int first_array_element = 1;
     pDisplay += rozofs_string_append(pDisplay," "#field"=\"");\
   }\
 }  
+#define NEW_QUOTED_NAME_NEW_LINE(field) {\
+  if (display_json) {\
+    SUBARRAY_NEW_LINE();\
+    pDisplay += rozofs_string_append(pDisplay," \""#field"\" : \"");\
+  }\
+}  
 #define FIRST_QUOTED_NAME(field) {\
   if (display_json) {\
-    pDisplay += rozofs_string_append(pDisplay,"\""#field"\" : \"");\
+    pDisplay += rozofs_string_append(pDisplay," \""#field"\" : \"");\
   }\
   else {\
     pDisplay += rozofs_string_append(pDisplay," "#field"=\"");\
@@ -3865,15 +3879,77 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     
           xattr_length = rozofs_getxattr(&entry, pt, rozofs_scan_xattr_value_buffer, ROZOFS_SCAN_XATTR_BUFFER_SIZE);
           if (xattr_length > 0) {
-            NEW_QUOTED_NAME(xattr_value);
+            NEW_QUOTED_NAME_NEW_LINE(xattr_value);
             if (rozofs_is_printable(rozofs_scan_xattr_value_buffer,xattr_length)){
               rozofs_scan_xattr_value_buffer[xattr_length] = 0;
               pDisplay += rozofs_string_append(pDisplay,rozofs_scan_xattr_value_buffer);
+              pDisplay += rozofs_string_append(pDisplay,"\"");                 
             }
             else {
               pDisplay += rozofs_hexa_append(pDisplay,rozofs_scan_xattr_value_buffer,xattr_length); 
+              pDisplay += rozofs_string_append(pDisplay,"\"");                 
+
+              /*
+              ** Decode ACL
+              */ 
+              if ((strcmp(pt,POSIX_ACL_XATTR_ACCESS)==0) || (strcmp(pt,POSIX_ACL_XATTR_DEFAULT)==0)) {
+                struct posix_acl       * acl_p;
+                struct posix_acl_entry * acl_e;
+                int                      idx;
+                acl_p = posix_acl_from_xattr(rozofs_scan_xattr_value_buffer, xattr_length);
+                if (acl_p != NULL) {
+                  NEW_QUOTED_NAME_NEW_LINE(acl);
+                  acl_e = acl_p->a_entries;
+                  for (idx=0; idx<acl_p->a_count; idx++,acl_e++) {
+                     switch(acl_e->e_tag) {
+			case ACL_USER_OBJ:
+                          pDisplay += rozofs_string_append(pDisplay,"user:");
+                          break;
+			case ACL_GROUP_OBJ:
+                          pDisplay += rozofs_string_append(pDisplay,"group:");
+                          break;                         
+			case ACL_MASK:
+                          pDisplay += rozofs_string_append(pDisplay,"mask:");
+                          break;                         
+			case ACL_OTHER:
+                          pDisplay += rozofs_string_append(pDisplay,"other:");
+                          break;                         
+			case ACL_USER:
+                          pDisplay += rozofs_string_append(pDisplay,"user:");
+                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
+                          break;                         
+			case ACL_GROUP:
+                          pDisplay += rozofs_string_append(pDisplay,"group:");
+                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
+                          break;                         
+			default:
+                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_tag);
+			  pDisplay += rozofs_string_append(pDisplay,"?:");
+                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
+		     }
+                     if (acl_e->e_perm & ACL_READ) {
+		       pDisplay += rozofs_string_append(pDisplay,":r");
+                     }
+                     else {
+		       pDisplay += rozofs_string_append(pDisplay,":-");
+                     }  
+                     if (acl_e->e_perm & ACL_WRITE) {
+		       pDisplay += rozofs_string_append(pDisplay,"w");
+                     }
+                     else {
+		       pDisplay += rozofs_string_append(pDisplay,"-");
+                     }                          
+                     if (acl_e->e_perm & ACL_EXECUTE) {
+		       pDisplay += rozofs_string_append(pDisplay,"x ");
+                     }
+                     else {
+		       pDisplay += rozofs_string_append(pDisplay,"- ");
+                     }  
+                  }
+                  pDisplay += rozofs_string_append(pDisplay,"\"");                               
+                }
+              }
             }   
-            pDisplay += rozofs_string_append(pDisplay,"\"");                 
           }
           
           SUBARRAY_STOP_ELEMENT();
