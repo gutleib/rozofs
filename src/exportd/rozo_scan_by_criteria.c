@@ -37,6 +37,16 @@ char rozofs_scan_xattr_list_buffer[ROZOFS_SCAN_XATTR_BUFFER_SIZE];
 char rozofs_scan_xattr_value_buffer[ROZOFS_SCAN_XATTR_BUFFER_SIZE];
 
 
+#define ROZO_SCAN_MAX_XATTR      128
+int     rozo_scan_xattr_nb  = 0;
+char *  rozo_scan_xattr_table[ROZO_SCAN_MAX_XATTR];
+/*
+** lv2 structure to read extended attribute of an inode
+*/
+lv2_entry_t      xattr_lv2;
+struct dentry    xattr_entry;
+
+
 /*____________________________________________________________
 ** Global variables for argument populated while parsing command
 */
@@ -140,6 +150,7 @@ typedef enum _rozofs_scan_keyw_e {
   rozofs_scan_keyw_field_cid,  
   rozofs_scan_keyw_field_sid,  
   rozofs_scan_keyw_field_sidrange,  
+  rozofs_scan_keyw_field_xname,  
   
   rozofs_scan_keyw_field_max,
 
@@ -657,6 +668,7 @@ static void usage(char * fmt, ...) {
   printf("\033[1m    \033[4mFIELDNAME:\033[0m\033[1m supporting \"=\", \"\\>=\" or regex comparators with character string VALUE\033[0m\n");
   printf("\t\033[1mn, name\033[0m\t\tFile/directory name.\n");
   printf("\t\033[1mparent\033[0m\t\tFile/directory parent name.\n");
+  printf("\t\033[1xname\033[0m\t\textended attribute name.\n");
   printf("\033[1m    \033[4mFIELDNAME:\033[0m\033[1m supporting  \"\\<\", \"\\<=\", \"=\", \"\\>\", \"\\>=\" or \"!=\" comparators.\033[0m\n");
   printf("\033[1m      \033[4mwith unsigned VALUE\033[0m\n");
   printf("\t\033[1mlink\033[0m\t\tFile number of links.\n"); 
@@ -712,6 +724,8 @@ static void usage(char * fmt, ...) {
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching for files having extended attributes with a size comprised between 76000 and 76100 or equal to 78M .\n");
     printf("  \033[1mrozo_scan [xattr and [[size\\>=76k and size\\<=76100] or size=78M]] out size,xattr\033[0m\n");
+    printf("Searching for files having system extended attributes.\n");
+    printf("  \033[1mrozo_scan xname ge system. out json,xattr\033[0m\n");
     printf("Searching for files with a modification date in february 2017 but created before 2017.\n");
     printf("  \033[1mrozo_scan mtime ge 2017-02-01 and mtime lt 2017-03-01 and cr8 lt 2017-01-01 out hcr8,hmtime,uid,sep=#\033[0m\n");
     printf("Searching for files created by user 4501 or goup 1023 on 2015 January the 10th in the afternoon.\n");
@@ -1350,6 +1364,79 @@ char *rozo_get_path(void *exportd,void *inode_p,char *buf,int lenmax, int relati
     }
 
     return pbuf;
+}
+/*
+**__________________________________________________________________
+** Get the value of extended attributes of an inode from its name
+** rozo_scan_read_xattribute_list() must have been already called
+** so global variable xattr_lv2 and xattr_dentry are already populated 
+** The value of the extended attribute is stored in buffer
+** rozofs_scan_xattr_value_buffer
+** 
+** @param pXname : Name of the extended attribute
+** 
+** @retval the size of the extended attribute value in rozofs_scan_xattr_value_buffer
+**__________________________________________________________________
+*/
+int rozo_scan_read_xattribute_value(char * pXname) {
+  /*
+  ** rozo_scan_read_xattribute_list() must have been already called
+  ** so global variable xattr_lv2 and xattr_dentry are already populated 
+  */
+  return rozofs_getxattr(&xattr_entry, pXname, rozofs_scan_xattr_value_buffer, ROZOFS_SCAN_XATTR_BUFFER_SIZE);
+}
+/*
+**__________________________________________________________________
+** Get the list of extended attributes from the inode
+** The function gets the list of extended attributes in buffer
+** rozofs_scan_xattr_list_buffer, sets rozo_scan_xattr_nb to 
+** the number of extended attributes, and populates table
+** rozo_scan_xattr_table[] with the pointers to the extended 
+** attributes names within buffer rozofs_scan_xattr_list_buffer
+**  
+** @param inode_attr_p: pointer to the inode data
+** @param exportd : pointer to exportd data structure
+*
+** @retval the number of extended attributes of the inode
+**__________________________________________________________________
+*/
+int rozo_scan_read_xattribute_list(export_t * e, void * inode_attr_p) {
+  int              length;
+  char *           pt;
+
+  /*
+  ** if attibutes have already been read, do not read again
+  */
+  if (rozo_scan_xattr_nb >= 0) return rozo_scan_xattr_nb;
+  rozo_scan_xattr_nb = 0;
+  
+  /*
+  ** Recopy the the attributes in the xattr_lv2 global variable 
+  */
+  memcpy(&xattr_lv2,inode_attr_p,sizeof(ext_mattr_t));
+  xattr_lv2.extended_attr_p = NULL;
+
+  /*
+  ** Prepare interface to call list xattr
+  */
+  xattr_entry.d_inode  = &xattr_lv2;
+  xattr_entry.trk_tb_p = e->trk_tb_p;
+
+  length = rozofs_listxattr(&xattr_entry, rozofs_scan_xattr_list_buffer, ROZOFS_SCAN_XATTR_BUFFER_SIZE);
+  
+  /*
+  ** Loop on xattribute names in the buffer
+  */
+  pt = rozofs_scan_xattr_list_buffer;
+  while (length > 0) {
+  
+    rozo_scan_xattr_table[rozo_scan_xattr_nb] = pt;
+    rozo_scan_xattr_nb++;
+    
+    length -= (strlen(pt)+1);
+    pt += (strlen(pt)+1);
+  }
+  return rozo_scan_xattr_nb;   
 }
 /*
 **__________________________________________________________________
@@ -2200,6 +2287,7 @@ int rozofs_scan_eval_one_field_inode(
   char               fullName[ROZOFS_PATH_MAX];
   int                trailer_slash = 0; 
   char             * pt; 
+  int                xattr_idx;
   
   switch(field_name) {
 
@@ -2273,7 +2361,73 @@ int rozofs_scan_eval_one_field_inode(
      }
      return 1;
      break;      
-      
+     
+    /*______________________________________
+    ** xattribute name
+    ** eq, ge, regex
+    */
+   case rozofs_scan_keyw_field_xname:
+     /*
+     ** Get xattribute list
+     */ 
+     rozo_scan_read_xattribute_list(e,inode_p);
+
+     /*
+     ** Loop on extended attributes
+     */
+     for (xattr_idx=0; xattr_idx< rozo_scan_xattr_nb; xattr_idx++) {          
+
+       pName = rozo_scan_xattr_table[xattr_idx];
+       if (pName==NULL) continue;
+
+       switch(comp) {
+         /*
+         ** Equality
+         */
+         case rozofs_scan_keyw_comparator_eq:  
+           VVERBOSE_CHAR(pName);
+           /*
+           ** Compare the names
+           */
+           if (strcmp(pName, field_value->string)==0) {
+             return 1;
+           }  
+           continue;
+           break;
+
+         /*
+         ** ge : Name must contain the given string
+         */
+         case rozofs_scan_keyw_comparator_ge:   
+           VVERBOSE_CHAR(pName);
+           if (strlen(pName) < strlen(field_value->string)) {
+             continue;
+           }
+           if (strstr(pName, field_value->string)==NULL) {
+             continue;
+           }  
+           return 1;
+           break;  
+
+         case rozofs_scan_keyw_comparator_regex:
+           VVERBOSE_REGEX(pName);         
+           /*
+           ** Check the regex 
+           */
+           if (pcre_exec (field_value->regex, NULL, pName, strlen(pName), 0, 0, NULL, 0) == 0) {
+             return 1;
+           }
+           continue;             
+
+         default:  
+          severe("Unexpected comparator for field xname %d",comp);
+          continue;
+          break;                 
+       }
+     }  
+     return 0;
+     break;      
+           
     /*______________________________________
     ** Creation time
     */
@@ -3161,6 +3315,7 @@ int rozofs_scan_validate_one_field_regular(
     */
     case rozofs_scan_keyw_field_fname:
     case rozofs_scan_keyw_field_parent:
+    case rozofs_scan_keyw_field_xname:
       switch(comp) {
         case rozofs_scan_keyw_comparator_eq:  
         case rozofs_scan_keyw_comparator_ge:   
@@ -3417,6 +3572,7 @@ int rozofs_scan_validate_one_field_directory(
     */
     case rozofs_scan_keyw_field_fname:
     case rozofs_scan_keyw_field_parent:
+    case rozofs_scan_keyw_field_xname:
       switch(comp) {
         case rozofs_scan_keyw_comparator_eq:  
         case rozofs_scan_keyw_comparator_ge:   
@@ -3688,6 +3844,75 @@ void get_directory_stripping_info(ext_mattr_t  * inode_p,
 }  
 /*
 **_______________________________________________________________________
+**
+**  Decode acl xattribute
+**
+** @param acl_p          pointer to the acl extended attribute value
+** @param pChar          pointer to the buffer where to write the decoded string
+**    
+** @retval Number of bytes added to the buffer
+**_______________________________________________________________________
+*/                
+int rozo_scan_decode_acl(char * pChar, struct posix_acl * acl_p) {
+  struct posix_acl_entry * acl_e;
+  int                      idx;
+  char                   * pDisplay = pChar;
+  
+  acl_e = acl_p->a_entries;
+  for (idx=0; idx<acl_p->a_count; idx++,acl_e++) {
+
+    switch(acl_e->e_tag) {
+      case ACL_USER_OBJ:
+        pDisplay += rozofs_string_append(pDisplay,"user:");
+        break;
+      case ACL_GROUP_OBJ:
+        pDisplay += rozofs_string_append(pDisplay,"group:");
+        break;                         
+      case ACL_MASK:
+        pDisplay += rozofs_string_append(pDisplay,"mask:");
+        break;                         
+      case ACL_OTHER:
+        pDisplay += rozofs_string_append(pDisplay,"other:");
+        break;                         
+      case ACL_USER:
+        pDisplay += rozofs_string_append(pDisplay,"user:");
+        pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
+        break;                         
+      case ACL_GROUP:
+        pDisplay += rozofs_string_append(pDisplay,"group:");
+        pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
+        break;                         
+      default:
+        pDisplay += rozofs_u32_append(pDisplay,acl_e->e_tag);
+	pDisplay += rozofs_string_append(pDisplay,"?:");
+        pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
+    }
+
+    if (acl_e->e_perm & ACL_READ) {
+      pDisplay += rozofs_string_append(pDisplay,":r");
+    }
+    else {
+      pDisplay += rozofs_string_append(pDisplay,":-");
+    }  
+
+    if (acl_e->e_perm & ACL_WRITE) {
+      pDisplay += rozofs_string_append(pDisplay,"w");
+    }
+    else {
+      pDisplay += rozofs_string_append(pDisplay,"-");
+    }    
+
+    if (acl_e->e_perm & ACL_EXECUTE) {
+      pDisplay += rozofs_string_append(pDisplay,"x ");
+    }
+    else {
+      pDisplay += rozofs_string_append(pDisplay,"- ");
+    }  
+  }
+  return (pDisplay-pChar);
+}
+/*
+**_______________________________________________________________________
 */
 /**
 *   RozoFS specific function for visiting
@@ -3736,6 +3961,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       return 0;   
     }   
   }
+  
+  /*
+  ** Reset inode xattribute number on each inode
+  */
+  rozo_scan_xattr_nb = -1;
   
   nb_scanned_entries_in_scope++;
      
@@ -3853,31 +4083,30 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     if (rozo_scan_has_extended_attr(inode_p)) {
       pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
       if (display_xattr) {
-        struct dentry    entry;
-        lv2_entry_t      lv2;
-        int              length;
-        char *           pt;
+        int    xattr_idx;
+        int    xattr_length;
+        char * pXname;
+         
+        /*
+        ** Get xattribute list
+        */ 
+        rozo_scan_read_xattribute_list(e,inode_attr_p);
         
-        memcpy(&lv2,inode_attr_p,sizeof(ext_mattr_t));
-        lv2.extended_attr_p = NULL;
-        
-        entry.d_inode  = &lv2;
-        entry.trk_tb_p = e->trk_tb_p;
-        START_SUBARRAY(xattr_list);
-        pt = rozofs_scan_xattr_list_buffer;
-
-        length = rozofs_listxattr(&entry, rozofs_scan_xattr_list_buffer, ROZOFS_SCAN_XATTR_BUFFER_SIZE);
-
-        while (length > 0) {
-          int xattr_length;
+        /*
+        ** Loop on extended attributes
+        */
+        for (xattr_idx=0; xattr_idx< rozo_scan_xattr_nb; xattr_idx++) {
 
           SUBARRAY_START_ELEMENT();
-          
           FIRST_QUOTED_NAME(xattr_name);
-          pDisplay += rozofs_string_append(pDisplay,pt);
+          
+          pXname = rozo_scan_xattr_table[xattr_idx];
+
+          pDisplay += rozofs_string_append(pDisplay,pXname);
           pDisplay += rozofs_string_append(pDisplay,"\"");   
     
-          xattr_length = rozofs_getxattr(&entry, pt, rozofs_scan_xattr_value_buffer, ROZOFS_SCAN_XATTR_BUFFER_SIZE);
+          xattr_length = rozo_scan_read_xattribute_value(pXname);
+          
           if (xattr_length > 0) {
             NEW_QUOTED_NAME_NEW_LINE(xattr_value);
             if (rozofs_is_printable(rozofs_scan_xattr_value_buffer,xattr_length)){
@@ -3892,60 +4121,12 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
               /*
               ** Decode ACL
               */ 
-              if ((strcmp(pt,POSIX_ACL_XATTR_ACCESS)==0) || (strcmp(pt,POSIX_ACL_XATTR_DEFAULT)==0)) {
+              if ((strcmp(pXname,POSIX_ACL_XATTR_ACCESS)==0) || (strcmp(pXname,POSIX_ACL_XATTR_DEFAULT)==0)) {
                 struct posix_acl       * acl_p;
-                struct posix_acl_entry * acl_e;
-                int                      idx;
                 acl_p = posix_acl_from_xattr(rozofs_scan_xattr_value_buffer, xattr_length);
                 if (acl_p != NULL) {
                   NEW_QUOTED_NAME_NEW_LINE(acl);
-                  acl_e = acl_p->a_entries;
-                  for (idx=0; idx<acl_p->a_count; idx++,acl_e++) {
-                     switch(acl_e->e_tag) {
-			case ACL_USER_OBJ:
-                          pDisplay += rozofs_string_append(pDisplay,"user:");
-                          break;
-			case ACL_GROUP_OBJ:
-                          pDisplay += rozofs_string_append(pDisplay,"group:");
-                          break;                         
-			case ACL_MASK:
-                          pDisplay += rozofs_string_append(pDisplay,"mask:");
-                          break;                         
-			case ACL_OTHER:
-                          pDisplay += rozofs_string_append(pDisplay,"other:");
-                          break;                         
-			case ACL_USER:
-                          pDisplay += rozofs_string_append(pDisplay,"user:");
-                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
-                          break;                         
-			case ACL_GROUP:
-                          pDisplay += rozofs_string_append(pDisplay,"group:");
-                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
-                          break;                         
-			default:
-                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_tag);
-			  pDisplay += rozofs_string_append(pDisplay,"?:");
-                          pDisplay += rozofs_u32_append(pDisplay,acl_e->e_id);
-		     }
-                     if (acl_e->e_perm & ACL_READ) {
-		       pDisplay += rozofs_string_append(pDisplay,":r");
-                     }
-                     else {
-		       pDisplay += rozofs_string_append(pDisplay,":-");
-                     }  
-                     if (acl_e->e_perm & ACL_WRITE) {
-		       pDisplay += rozofs_string_append(pDisplay,"w");
-                     }
-                     else {
-		       pDisplay += rozofs_string_append(pDisplay,"-");
-                     }                          
-                     if (acl_e->e_perm & ACL_EXECUTE) {
-		       pDisplay += rozofs_string_append(pDisplay,"x ");
-                     }
-                     else {
-		       pDisplay += rozofs_string_append(pDisplay,"- ");
-                     }  
-                  }
+                  pDisplay += rozo_scan_decode_acl(pDisplay,acl_p);
                   pDisplay += rozofs_string_append(pDisplay,"\"");                               
                 }
               }
@@ -3953,8 +4134,6 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
           }
           
           SUBARRAY_STOP_ELEMENT();
-          length -= (strlen(pt)+1);
-          pt += (strlen(pt)+1);
         }
         STOP_SUBARRAY();
 
@@ -5428,6 +5607,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
     */      
     case 'x' :
       rozofs_scan_check_against("xattr",rozofs_scan_keyw_criteria_has_xattr);
+      rozofs_scan_check_against("xname",rozofs_scan_keyw_field_xname);
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_criteria_has_xattr);
       break;
 
@@ -5859,6 +6039,7 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
           
         case rozofs_scan_keyw_field_fname:
         case rozofs_scan_keyw_field_parent:
+        case rozofs_scan_keyw_field_xname:
           switch(comp) {
             case rozofs_scan_keyw_comparator_eq:
             case rozofs_scan_keyw_comparator_ge:
