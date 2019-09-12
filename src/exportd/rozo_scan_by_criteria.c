@@ -858,14 +858,14 @@ void rozofs_scan_display_tree(rozofs_scan_node_t * node, int level) {
                   node->l.value.u32[1]); 
           break;        
         case rozofs_scan_value_type_string: 
-          printf("[%s]--[%s]--[%s>]\n",
+          printf("[%s]--[%s]--[%s]\n",
                   rozofs_scan_keyw_e2String(node->l.name),
                   rozofs_scan_keyw_e2String(node->l.comp),
                   node->l.value.string); 
           break;
         case rozofs_scan_value_type_fid:    
           rozofs_fid_append(fidString,node->l.value.fid);
-          printf("[%s]--[%s]--[%s>]\n",
+          printf("[%s]--[%s]--[%s]\n",
                   rozofs_scan_keyw_e2String(node->l.name),
                   rozofs_scan_keyw_e2String(node->l.comp),
                   fidString); 
@@ -4086,6 +4086,8 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
         int    xattr_idx;
         int    xattr_length;
         char * pXname;
+
+        START_SUBARRAY(xattr_list);
          
         /*
         ** Get xattribute list
