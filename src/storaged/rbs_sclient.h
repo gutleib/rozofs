@@ -122,16 +122,19 @@ int rbs_read_all_available_proj(sclient_t **storages, int spare_idx, uint8_t lay
         uint32_t nb_blocks_2_read, uint32_t * nb_blocks_read, 
         rbs_storcli_ctx_t * working_ctx_p,
 	uint64_t          * size_read);
-/** Send a request to export server for get the list of member storages
- *  of cluster with a given cid and add this storage list to the list
- *  of clusters
- *
- * @param clt: RPC connection to export server
- * @param export_host: IP or hostname of export server
- * @param cid: the unique ID of cluster
- * @param cluster_entries: list of cluster(s)
- *
- * @return: 0 on success -1 otherwise (errno is set)
- */
-int rbs_get_fid_attr(rpcclt_t * clt, const char *export_host, fid_t fid, ep_mattr_t * attr, uint32_t * bsize, uint8_t * layout);	
+/* 
+**__________________________________________________________________________
+** Send a request to export server to get the attributes of a FID
+** The request must be sent tothe slave export that manages this FID.
+** 
+** @param export_host_list: List of hostnames of the export servers
+** @param fid             : FID whose attributes are requested 
+** @param attr            : returned attributes
+** @param bsize           : returned block size 
+** @param layout          : returned layout  
+**
+** @retval: 0 on success -1 otherwise (errno is set)
+**__________________________________________________________________________
+*/
+int rbs_get_fid_attr(const char *export_host_list, fid_t fid, ep_mattr_t * attr, uint32_t * bsize, uint8_t * layout);	
 #endif
