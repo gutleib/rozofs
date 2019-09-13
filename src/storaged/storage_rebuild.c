@@ -2721,7 +2721,7 @@ int rbs_build_job_lists_one_fid(rbs_stor_config_t *stor_confs) {
       ep_mattr_t attr;
       
       // Resolve this FID thanks to the exportd
-      if (rbs_get_fid_attr(&rpcclt_export, pExport_host, parameter.fid2rebuild, &attr, &bsize, &layout) != 0)
+      if (rbs_get_fid_attr(parameter.rbs_export_hostname, parameter.fid2rebuild, &attr, &bsize, &layout) != 0)
       {
         if (errno == ENOENT) {
 	  status = -2;
