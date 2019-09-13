@@ -1031,7 +1031,7 @@ int check_fid_deleted_from_export(fid_t fid) {
 
   // Resolve this FID thanks to the exportd
   errno = 0;
-  ret = rbs_get_fid_attr(&rpcclt_export, pExport_hostname, fid, &attr, &bsize, &layout);
+  ret = rbs_get_fid_attr(storage_config.export_hostname, fid, &attr, &bsize, &layout);
  
   if ((ret != 0)&&(errno == ENOENT)) {
     return 1;

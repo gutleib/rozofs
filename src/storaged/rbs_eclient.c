@@ -367,78 +367,147 @@ out:
     rpcclt_release(clt);
     return status;
 }
-/** Send a request to export server for get the list of member storages
- *  of cluster with a given cid and add this storage list to the list
- *  of clusters
- *
- * @param clt: RPC connection to export server
- * @param export_host: IP or hostname of export server
- * @param cid: the unique ID of cluster
- * @param cluster_entries: list of cluster(s)
- *
- * @return: 0 on success -1 otherwise (errno is set)
- */
-int rbs_get_fid_attr(rpcclt_t * clt, const char *export_host, fid_t fid, ep_mattr_t * attr, uint32_t * bsize, uint8_t * layout) {
-    int status = -1;
-    epgw_mattr_ret_t *ret = 0;
-    epgw_mfile_arg_t arg;
-    rozofs_inode_t  * inode = (rozofs_inode_t *) fid;
-    rozofs_inode_t *inode_p;
-    DEBUG_FUNCTION;
+/* 
+**__________________________________________________________________________
+** Send a request to export server to get the attributes of a FID
+** The request must be sent tothe slave export that manages this FID.
+** 
+** @param export_host_list: List of hostnames of the export servers
+** @param fid             : FID whose attributes are requested 
+** @param attr            : returned attributes
+** @param bsize           : returned block size 
+** @param layout          : returned layout  
+**
+** @retval: 0 on success -1 otherwise (errno is set)
+**__________________________________________________________________________
+*/
+int rbs_get_fid_attr(const char *export_host_list, fid_t fid, ep_mattr_t * attr, uint32_t * bsize, uint8_t * layout) {
+  int                 status = -1;
+  epgw_mattr_ret_t  * ret = NULL;
+  epgw_mfile_arg_t    arg;
+  rozofs_inode_t    * inode = (rozofs_inode_t *) fid;
+  struct timeval      timeo;
+  int                 slave_idx;
+  int                 export_idx;
+  int                 retry;
+  char              * pHost;  
+  rpcclt_t            clt;
+  
+  memset(&clt,0,sizeof(rpcclt_t));
+  clt.sock = -1;
+  
+  //info("rbs_get_fid_attr %s",export_host_list);
+  
+  /*
+  ** Compute index of the slave export responsible for this FID
+  */
+  slave_idx = ((inode->s.eid - 1) % EXPORT_SLICE_PROCESS_NB) + 1;
+  
 
-    struct timeval timeo;
-    timeo.tv_sec = RBS_TIMEOUT_EPROTO_REQUESTS;
-    timeo.tv_usec = 0;
+  /*
+  ** Parse host list
+  */
+  if (rozofs_host_list_parse(export_host_list,'/') == 0) {
+    severe("rozofs_host_list_parse(%s)",export_host_list);
+    return -1;
+  }   
 
-    clt->sock = -1;
+  /*
+  ** Try 10 times
+  */
+  for (retry=10; retry > 0; retry--) {
 
-    // Initialize connection with exportd server
-    if (rpcclt_initialize
-            (clt, export_host, EXPORT_PROGRAM, EXPORT_VERSION,
-            ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 
-	    rozofs_get_service_port_export_master_eproto(), timeo) != 0)
-        goto out;
-
-    // Send request
-    arg.arg_gw.eid = inode->s.eid;
-    memcpy(&arg.arg_gw.fid,fid, sizeof(fid_t));
     /*
-    ** Make it a mover source FID
+    ** Loop on export names
     */
-    inode_p = (rozofs_inode_t*)arg.arg_gw.fid;
-    inode_p->s.key = ROZOFS_REG_S_MOVER;
+    for (export_idx=0; export_idx<ROZOFS_HOST_LIST_MAX_HOST; export_idx++) {
 
-    ret = ep_getattr_1(&arg, clt->client);
-    if (ret == 0) {
+      /*
+      ** Free resources from previous loop
+      */
+      if (ret) xdr_free((xdrproc_t) xdr_epgw_mattr_ret_t, (char *) ret);
+      rpcclt_release(&clt);
+
+      /*
+      ** Connect time out is 100ms + 100ms per retry
+      */ 
+      timeo.tv_sec  = 0;
+      timeo.tv_usec = 100000 + ((10-retry)*100000);
+
+      /*
+      ** Next export name if any
+      */
+      pHost = rozofs_host_list_get_host(export_idx);
+      if (pHost == NULL) break;
+
+      /*
+      ** Initialize connection with exportd server
+      */
+      if (rpcclt_initialize(&clt, pHost, EXPORT_PROGRAM, EXPORT_VERSION,
+                            ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE, 
+	                    rozofs_get_service_port_export_slave_eproto(slave_idx), 
+                            timeo) != 0) {
+        continue;
+      }    
+      //info("rbs_get_fid_attr winner is %s slave %d",pHost,slave_idx);
+
+      /*
+      ** Prepare the request
+      */
+      arg.arg_gw.eid = inode->s.eid;
+      memcpy(&arg.arg_gw.fid,fid, sizeof(fid_t));
+      /*
+      ** Make it a mover source FID
+      */
+      inode = (rozofs_inode_t*)arg.arg_gw.fid;
+      inode->s.key = ROZOFS_REG_S_MOVER;
+
+      /*
+      ** Set request timeout
+      */ 
+      timeo.tv_sec  = 0;
+      timeo.tv_usec = 100000 + ((10-retry)*20000);
+
+      /*
+      ** Send the request to the exportd
+      */
+      ret = ep_getattr_1(&arg, clt.client);
+      if (ret == 0) {
         errno = EPROTO;
-        // Release connection
-        rpcclt_release(clt);
         goto out;
-    }
+      }
 
-    if (ret->status_gw.status == EP_FAILURE) {
+      if (ret->status_gw.status == EP_FAILURE) {
         errno = ret->status_gw.ep_mattr_ret_t_u.error;
-        // Release connection
-        rpcclt_release(clt);
         goto out;
-    }    
+      }    
     
-    *bsize  = ret->bsize;
-    *layout = ret->layout;
-    memcpy(attr, &ret->status_gw.ep_mattr_ret_t_u.attrs, sizeof(ep_mattr_t));
+      *bsize  = ret->bsize;
+      *layout = ret->layout;
+      memcpy(attr, &ret->status_gw.ep_mattr_ret_t_u.attrs, sizeof(ep_mattr_t));
 
-    // Release connection
-    rpcclt_release(clt);
-    /*
-    ** Check the case of the mover (rozo_rebalancing)
-    */
-    if (rozofs_is_storage_fid_valid((mattr_t*)attr,fid) == 0) {
-       errno = ENOENT;
-       goto out;
+      /*
+      ** Check the case of the mover (rozo_rebalancing)
+      */
+      if (rozofs_is_storage_fid_valid((mattr_t*)attr,fid) == 0) {
+        errno = ENOENT;
+        goto out;
+      }
+      
+      status = 0;
+      goto out;
     }
-    status = 0;
+  }
+      
 out:
-    if (ret)
-        xdr_free((xdrproc_t) xdr_epgw_mattr_ret_t, (char *) ret);
-    return status;
+  /*
+  ** Release connection
+  */
+  rpcclt_release(&clt);
+  /*
+  ** Free the response
+  */
+  if (ret) xdr_free((xdrproc_t) xdr_epgw_mattr_ret_t, (char *) ret);
+  //info("rbs_get_fid_attr status %d",status);
+  return status;
 }
