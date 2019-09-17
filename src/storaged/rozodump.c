@@ -391,6 +391,15 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
       pH = (rozofs_stor_bins_hdr_t*)    &buffer[idx*rozofs_disk_psize];
       pF = (rozofs_stor_bins_footer_t*) &buffer[(idx+1)*rozofs_disk_psize];
       pF--;
+ 
+      if ((spare) && (pH->s.timestamp != 0)) {
+        uint64_t footer_offset = idx*rozofs_disk_psize;
+        if ((pH->s.timestamp != 0) && (pH->s.effective_length!=0)){
+          footer_offset += rozofs_get_psizes_on_disk(hdr->v2.layout,hdr->v2.bsize,pH->s.projection_id);
+          pF = (rozofs_stor_bins_footer_t*) &buffer[footer_offset];
+          pF--;
+        } 
+      }
             
       bid = (offset/rozofs_disk_psize)+idx+firstBlock;
       
