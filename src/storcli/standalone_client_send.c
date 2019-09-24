@@ -796,6 +796,12 @@ int rozofs_sorcli_sp_read_standalone(uint32_t lbg_id,uint32_t socket_context_ref
     /*
     ** now send the message
     */
+
+    {
+      sp_read_arg_t *request = (sp_read_arg_t *)msg2encode_p;
+      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid,rozofs_storcli_trc_req_mode_standalone);
+    }
+
     ret = north_lbg_send_with_shaping(lbg_id,xmit_buf,0,0);
     if (ret < 0)
     {
@@ -806,11 +812,6 @@ int rozofs_sorcli_sp_read_standalone(uint32_t lbg_id,uint32_t socket_context_ref
     }
     lbg_stats_p->read_stats.lbg_send_ok++;   
     TX_STATS(ROZOFS_TX_SEND);
-
-    {
-      sp_read_arg_t *request = (sp_read_arg_t *)msg2encode_p;
-      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid);
-    }
     /*
     ** OK, so now finish by starting the guard timer
     */
@@ -1089,7 +1090,10 @@ int rozofs_sorcli_sp_write_standalone(uint32_t lbg_id,uint32_t socket_context_re
     /*
     ** now send the message
     */
-    ret = north_lbg_send(lbg_id,xmit_buf);
+    {
+      sp_write_arg_t *request = (sp_write_arg_t *)msg2encode_p;
+      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid,rozofs_storcli_trc_req_mode_standalone);
+    }    ret = north_lbg_send(lbg_id,xmit_buf);
     if (ret < 0)
     {
        lbg_stats_p->write_stats.lbg_send_nok++;
@@ -1100,10 +1104,6 @@ int rozofs_sorcli_sp_write_standalone(uint32_t lbg_id,uint32_t socket_context_re
     lbg_stats_p->write_stats.lbg_send_ok++;
     TX_STATS(ROZOFS_TX_SEND);
 
-    {
-      sp_write_arg_t *request = (sp_write_arg_t *)msg2encode_p;
-      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid);
-    }
     /*
     ** OK, so now finish by starting the guard timer
     */

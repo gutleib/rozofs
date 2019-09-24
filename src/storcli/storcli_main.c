@@ -508,13 +508,15 @@ char * storcli_ope2string(int ope) {
 */
 char * display_rwerror(char * pChar) {
   uint        idx;
+  uint        idxsid;
   uint8_t *   fid;
   int        first=1;
   storcli_rw_error_record_t * pCtx;
   struct tm  ts;
   int        i;
-  rozofs_storcli_trc_t     * trc;
-   
+  rozofs_storcli_trc_t       * trc;
+  rozofs_storcli_trc_req_t   * trcreq;
+  
   pChar += rozofs_string_append(pChar, "{\"rw errors\" : [\n");
   
   /*
@@ -543,31 +545,91 @@ char * display_rwerror(char * pChar) {
     i=0;
     while (pCtx->dist_set[i]!=0) {
       if (i!=0) pChar += rozofs_string_append(pChar, "-");
-      pChar += rozofs_u32_append(pChar, pCtx->dist_set[i]);
+      if (pCtx->lbgSelectable &(1<<i)) {
+        pChar += rozofs_u32_append(pChar, pCtx->dist_set[i]);
+      }
+      else {
+        pChar += rozofs_string_append(pChar,ROZOFS_COLOR_RED);
+        pChar += rozofs_u32_append(pChar, pCtx->dist_set[i]);
+        pChar += rozofs_string_append(pChar,ROZOFS_COLOR_NONE);
+      }  
       i++;
     }
     pChar += rozofs_string_append(pChar, "\", \"lbg\" : \"");  
-    pChar += rozofs_string_append(pChar, pCtx->lbg);  
+    pChar += rozofs_binary_append(pChar, pCtx->lbgSelectable, i);  
     
     pChar += rozofs_string_append(pChar, "\",\n      \"ope\" : \"");
     pChar += rozofs_string_append(pChar, storcli_ope2string(pCtx->opcode)); 
     pChar += rozofs_string_append(pChar, "\", \"line\" : ");
     pChar += rozofs_i32_append(pChar, pCtx->line);
-    pChar += rozofs_string_append(pChar, ", \"bid\" : ");  
-    pChar += rozofs_u64_append(pChar, pCtx->offset);
-    pChar += rozofs_string_append(pChar, ", \"size\" : ");  
-    pChar += rozofs_i32_append(pChar, pCtx->size);
-    pChar += rozofs_string_append(pChar, ",\n      \"prj\" : [\n"); 
+    switch(pCtx->opcode) {
+      case STORCLI_READ:        
+        pChar += rozofs_string_append(pChar, ", \"offset\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->offset*4096);
+        pChar += rozofs_string_append(pChar, ", \"bid\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->offset);
+        pChar += rozofs_string_append(pChar, ", \"size\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->size*4096);
+        break;
+      case STORCLI_WRITE:  
+        pChar += rozofs_string_append(pChar, ", \"offset\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->offset);
+        pChar += rozofs_string_append(pChar, ", \"bid\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->offset/4096);
+        pChar += rozofs_string_append(pChar, ", \"size\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->size);
+        break;
+      case  STORCLI_TRUNCATE: 
+        pChar += rozofs_string_append(pChar, ", \"offset\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->offset*4096+pCtx->size);
+        pChar += rozofs_string_append(pChar, ", \"bid\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->offset);
+        pChar += rozofs_string_append(pChar, ", \"size\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->size);
+        break;
+      default:
+        pChar += rozofs_string_append(pChar, ", \"offset\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->offset);
+        pChar += rozofs_string_append(pChar, ", \"size\" : ");  
+        pChar += rozofs_u64_append(pChar, pCtx->size);
+        break;
+    }  
+    pChar += rozofs_string_append(pChar, ",\n      \"retry enabled\" : \"");  
+    if (pCtx->retry_enabled) {    
+      pChar += rozofs_string_append(pChar, "True"); 
+    }
+    else {   
+      pChar += rozofs_string_append(pChar, "False"); 
+    }
+    pChar += rozofs_string_append(pChar, "\", \"retry in prg\" : \"");  
+    if (pCtx->retry_in_prg) {    
+      pChar += rozofs_string_append(pChar, "True"); 
+    }
+    else {   
+      pChar += rozofs_string_append(pChar, "False"); 
+    }
+    pChar += rozofs_string_append(pChar, "\",\n      \"prj\" : [\n"); 
 
     for (i=0; i< pCtx->traceSize; i++) {
       trc = &pCtx->traceBuffer[i];
+      pChar += rozofs_string_append(pChar,rozofs_get_color(trc->prj));
       pChar += rozofs_string_append(pChar, "          { \"prj\" : "); 
       pChar += rozofs_i32_append(pChar, trc->prj);
       pChar += rozofs_string_append(pChar, ", \"type\" : \"");       
       if (trc->req) {
+        trcreq = (rozofs_storcli_trc_req_t*)trc;
         rozofs_storcli_trc_req_t * req = (rozofs_storcli_trc_req_t *) trc;
         pChar += rozofs_string_append(pChar, "REQ\", \"sid\" : ");
         pChar += rozofs_i32_append(pChar, req->sid);
+        pChar += rozofs_string_append(pChar, ", \"rank\" : ");
+        for (idxsid=0; idxsid<16; idxsid++) {
+          if (pCtx->dist_set[idxsid] == req->sid) {
+            pChar += rozofs_i32_append(pChar, idxsid);         
+          }
+        }
+        pChar += rozofs_string_append(pChar, ", \"mode\" : \"");
+        pChar += rozofs_string_append(pChar, rozofs_storcli_trc_req_mode_e2String(trcreq->mode));
+        pChar += rozofs_string_append(pChar, "\"");
       }     
       else {
         rozofs_storcli_trc_rsp_t * rsp = (rozofs_storcli_trc_rsp_t *) trc;
@@ -577,6 +639,7 @@ char * display_rwerror(char * pChar) {
       }
       if (i==(pCtx->traceSize-1)) pChar += rozofs_string_append(pChar, "}\n");                   
       else                        pChar += rozofs_string_append(pChar, "},\n");
+      pChar += rozofs_string_set_default(pChar);
     } 
     pChar += rozofs_string_append(pChar, "      ]\n   }");    
   }

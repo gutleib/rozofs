@@ -1283,6 +1283,10 @@ int rozofs_sorcli_sp_read_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uint
     /*
     ** Check the case of the full RDMA
     */
+    {
+      sp_read_arg_t *request = (sp_read_arg_t *)msg2encode_p;
+      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid,rozofs_storcli_trc_req_mode_rdma);
+    }
     if (common_config.rdma_full)
     {
         ret =rozofs_storcli_rdma_post_send_rpc_request(lbg_id,1,xmit_buf,&tcp_cnx_p->assoc,rozofs_tx_ctx_p);
@@ -1304,10 +1308,6 @@ int rozofs_sorcli_sp_read_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uint
     lbg_stats_p->read_stats.lbg_send_ok++;   
     TX_STATS(ROZOFS_TX_SEND);
 
-    {
-      sp_read_arg_t *request = (sp_read_arg_t *)msg2encode_p;
-      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid);
-    }
     /*
     ** OK, so now finish by starting the guard timer
     */
@@ -1681,6 +1681,11 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
     /*
     ** Check the case of the full RDMA
     */
+    {
+      sp_read_arg_t *request = (sp_read_arg_t *)msg2encode_p;
+      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid,rozofs_storcli_trc_req_mode_rdma);
+    }
+    
     if (common_config.rdma_full)
     {
         ret =rozofs_storcli_rdma_post_send_rpc_request(lbg_id,0,xmit_buf,&tcp_cnx_p->assoc,rozofs_tx_ctx_p);
@@ -1702,10 +1707,6 @@ int rozofs_sorcli_sp_write_rdma(uint32_t lbg_id,uint32_t socket_context_ref, uin
     lbg_stats_p->write_stats.lbg_send_ok++;
     TX_STATS(ROZOFS_TX_SEND);
 
-    {
-      sp_read_arg_t *request = (sp_read_arg_t *)msg2encode_p;
-      rozofs_storcli_trace_request(user_ctx_p, opaque_value_idx1, request->sid);
-    }
     /*
     ** OK, so now finish by starting the guard timer
     */
@@ -2074,7 +2075,7 @@ void rozofs_client_rdma_cnx_lbg_state_change(uint32_t lbg_id,uint32_t state,uint
 /*__________________________________________________________________________
 */
 /**
-*   RDMÂ/TCP  connect callback upon successful connect
+*   RDMA/TCP  connect callback upon successful connect
      
 
  @param userRef : pointer to a load balancer entry

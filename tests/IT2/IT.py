@@ -933,18 +933,20 @@ def get_1rst_header_and_bins(fname):
     for line in f.readlines():
                  
       if "/hdr_0/" in line:
-        mapper = line.split()[3]
+        if mapper == None:
+          mapper = line.split()[3]
         if bins != None: break    
         continue
         
       if "/bins_0/" in line:
-        bins = line.split()[3]
+        if bins == None:
+          bins = line.split()[3]
         if mapper != None: break    
         continue  
 
-  if mapper != None:       
-    cid = mapper.split('/')[4].split('_')[1]
-    sid = mapper.split('/')[4].split('_')[2]
+  if bins != None:       
+    cid = bins.split('/')[4].split('_')[1]
+    sid = bins.split('/')[4].split('_')[2]
                   
   os.system("rm -f /tmp/get_header_and_bins")
   return cid,sid,mapper,bins
@@ -1134,7 +1136,7 @@ def crc32():
   # Get its localization  
   cid,sid,mapper,bins = get_1rst_header_and_bins(crcfile)
              
-  if mapper == None or bins == None or int(cid) == int(0) or sid == "" :
+  if bins == None or int(cid) == int(0) or sid == "" :
     report("Fail to find mapper/bins file name in /tmp/crc32loc")
     return -1
     
@@ -2070,7 +2072,10 @@ def rebuild_1dev() :
         
     device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)
     
-    dev=int(hid)%int(mapper_modulo)
+    if int(mapper_modulo) == 0:
+      dev = 0
+    else:   
+      dev=int(hid)%int(mapper_modulo)
     clean_rebuild_dir()    
 
     backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
@@ -2552,7 +2557,7 @@ def do_compile_programs():
     do_compile_program("IT2/%s"%(prg))
 
 #___________________________________________________
-def do_run_list(list):
+def do_run_list(list,loop):
 # run a list of test
 #___________________________________________________
   global tst_file
@@ -2562,7 +2567,7 @@ def do_run_list(list):
   failed=int(0)
   success=int(0)
   
-  dis = adaptative_tbl(4,"TEST RESULTS",blue)
+  dis = adaptative_tbl(4,"TEST RESULTS (%s/%s)"%(loop,options.repeat),blue)
   dis.new_center_line()
   dis.set_column(1,'#',blue)
   dis.set_column(2,'Name',blue)
@@ -2650,6 +2655,8 @@ def do_run_list(list):
   
   console("")
   dis.display()        
+  if failed != 0 and stopOnFailure == True:
+    sys.exit(1)
   
      
 #___________________________________________________
@@ -2982,7 +2989,7 @@ parser.add_option("-t","--fusetrace", action="store_true",dest="fusetrace", defa
 parser.add_option("-F","--fast", action="store_true",dest="fast", default=False, help="To run 2 times faster tests.")
 parser.add_option("-S","--speed", action="store_true",dest="speed", default=False, help="To run 4 times faster tests.")
 parser.add_option("-L","--long", action="store_true",dest="long", default=False, help="To run 2 times longer tests.")
-parser.add_option("-r","--repeat", action="store", type="string", dest="repeat", help="A repetition count.")
+parser.add_option("-r","--repeat", action="store", type="string", dest="repeat", default="1", help="A repetition count.")
 parser.add_option("-m","--mount", action="store", type="string", dest="mount", help="A comma separated list of mount points to test on.")
 parser.add_option("-R","--rebuildCheck", action="store_true", dest="rebuildCheck", default=False, help="To request for strong rebuild checks on each rebuild.")
 parser.add_option("-e","--exepath", action="store", type="string", dest="exepath", help="re-exported path to run the test on.")
@@ -3080,20 +3087,19 @@ list =[]
 list = make_test_list(args)
             
 # No list of test. Print usage
-if len(list) == 0:
-  usage()
+if len(list) == 0: usage()
   
 new_list=[]    
-if options.repeat != None:
-  repeat = int(options.repeat)
-  while repeat != int(0):
-    new_list.extend(list)
-    repeat=repeat-1
-else:
-  new_list.extend(list)  
+new_list.extend(list)
 
 do_compile_programs() 
 
+if int(options.repeat) == int(0): stopOnFailure = True
+runloop = int(1)
+while True:
 
+  do_run_list(new_list,runloop)
 
-do_run_list(new_list)
+  if int(runloop) == int(options.repeat): sys.exit(0)
+  runloop = runloop + int(1)
+    
