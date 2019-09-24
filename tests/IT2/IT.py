@@ -2182,19 +2182,37 @@ def selfhealing() :
 
   hid0 = get_hid(cid,sid0)
   ret = selfhealing_resecure(hid0,cid,sid0,dev0)
-  if ret != 0: return 1
+  if ret != 0:
+    os.system("./setup.py spare") 
+    selfhealing_spare(hid0,cid,sid0,dev0)
+    return 1
      
   hid1 = get_hid(cid,sid1)
   ret = selfhealing_resecure(hid1,cid,sid1,dev1)
-  if ret != 0: return 1
+  if ret != 0: 
+    os.system("./setup.py spare; ./setup.py spare") 
+    selfhealing_spare(hid0,cid,sid0,dev0)
+    selfhealing_spare(hid1,cid,sid1,dev1)
+    return 1
      
   hid2 = get_hid(cid,sid2)
   ret = selfhealing_resecure(hid2,cid,sid2,dev2)
-  if ret != 0: return 1
+  if ret != 0: 
+    os.system("./setup.py spare; ./setup.py spare; ./setup.py spare") 
+    selfhealing_spare(hid0,cid,sid0,dev0)
+    selfhealing_spare(hid1,cid,sid1,dev1)
+    selfhealing_spare(hid2,cid,sid2,dev2)
+    return 1
      
   hid3 = get_hid(cid,sid3)
   ret = selfhealing_resecure(hid3,cid,sid3,dev3)
-  if ret != 0: return 1
+  if ret != 0: 
+    os.system("./setup.py spare; ./setup.py spare; ./setup.py spare; ./setup.py spare") 
+    selfhealing_spare(hid0,cid,sid0,dev0)
+    selfhealing_spare(hid1,cid,sid1,dev1)
+    selfhealing_spare(hid2,cid,sid2,dev2)
+    selfhealing_spare(hid3,cid,sid3,dev3)
+    return 1
      
   if filecmp.cmp(reffile,"./ref") == False: 
     report("%s and %s differ"%(reffile,"./ref"))
@@ -2202,17 +2220,10 @@ def selfhealing() :
 
   # Create 2 spare device
   os.system("./setup.py spare; ./setup.py spare; ./setup.py spare; ./setup.py spare")
-
-  ret = selfhealing_spare(hid0,cid,sid0,dev0)
-  if ret != 0: return 1
-  
-  ret = selfhealing_spare(hid1,cid,sid1,dev1)
-  if ret != 0: return 1
-
-  ret = selfhealing_spare(hid2,cid,sid2,dev2)
-  if ret != 0: return 1
-
-  ret = selfhealing_spare(hid3,cid,sid3,dev3)
+  ret =       selfhealing_spare(hid0,cid,sid0,dev0)  
+  ret = ret + selfhealing_spare(hid1,cid,sid1,dev1)
+  ret = ret + selfhealing_spare(hid2,cid,sid2,dev2)
+  ret = ret + selfhealing_spare(hid3,cid,sid3,dev3)
   if ret != 0: return 1
 
   for i in range(60):
