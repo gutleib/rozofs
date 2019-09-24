@@ -629,6 +629,19 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
         errno = ENOENT;
         goto error;
     }
+
+    /*
+    ** check the status of the last write operation
+    */
+    if (file->wr_error!= 0)
+    {
+      /*
+      ** that error is permanent, 
+      */
+      errno = file->wr_error;
+      goto error;    
+    }
+    
     /*
     ** file KPI 
     */

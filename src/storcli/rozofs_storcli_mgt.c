@@ -779,7 +779,7 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p)
  
     if (ctx_p->read_ctx_lock != 0)
    {
-    severe("bad read_ctx_lock value %d",ctx_p->read_ctx_lock);   
+    severe("bad read_ctx_lock value 0x%x",ctx_p->read_ctx_lock);   
    }  
    /*
    ** Check the case of the read retry

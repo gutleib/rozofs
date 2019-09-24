@@ -941,7 +941,7 @@ retry:
      ** that usage of the inuse is mandatory since in case of failure the function re-use the same
      ** xmit buffer to attempt a transmission on another lbg
      */
-     working_ctx_p->read_ctx_lock++;
+     working_ctx_p->read_ctx_lock |= (1<<projection_id);
      prj_cxt_p[projection_id].prj_state = ROZOFS_PRJ_READ_IN_PRG;
      ruc_buf_inuse_increment(xmit_buf);
      
@@ -953,7 +953,7 @@ retry:
                                          0,
                                          rozofs_storcli_read_req_processing_cbk,
                                          (void*)working_ctx_p);
-     working_ctx_p->read_ctx_lock--;
+     working_ctx_p->read_ctx_lock &= ~(1<<projection_id);
      ruc_buf_inuse_decrement(xmit_buf);
 
      if (ret < 0)
@@ -1210,7 +1210,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
      ** any other TCP connection up in the lbg.
      ** In that case the state of the projection is changed to ROZOFS_PRJ_READ_ERROR
      */
-     working_ctx_p->read_ctx_lock++;
+     working_ctx_p->read_ctx_lock |= (1<<projection_id);
      ruc_buf_inuse_increment(xmit_buf);
      prj_cxt_p[projection_id].prj_state = ROZOFS_PRJ_READ_IN_PRG;
      
@@ -1223,7 +1223,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
                                          rozofs_storcli_read_req_processing_cbk,
                                          (void*)working_ctx_p);
 
-    working_ctx_p->read_ctx_lock--;
+    working_ctx_p->read_ctx_lock &= ~(1<<projection_id);
      ruc_buf_inuse_decrement(xmit_buf);
     if (ret < 0)
     {
@@ -1920,7 +1920,7 @@ fatal:
     STORCLI_STOP_NORTH_PROF(&working_ctx_p->prj_ctx[projection_id],read_prj,0);
     if(recv_buf!= NULL) ruc_buf_freeBuffer(recv_buf);       
     rozofs_tx_free_from_ptr(this);
-    if (working_ctx_p->read_ctx_lock != 0) return;
+    if (working_ctx_p->read_ctx_lock & (1<<projection_id)) return;
     fatal("Cannot get the pointer to the receive buffer");
     return;
     
@@ -1938,7 +1938,7 @@ retry_attempt:
     ** error is not direct. If the system is in the sending process we do not call
     ** the retry attempt.    
     */
-    if (working_ctx_p->read_ctx_lock != 0) return;
+    if (working_ctx_p->read_ctx_lock & (1<<projection_id)) return;
 
     rozofs_storcli_read_projection_retry(working_ctx_p,projection_id,same_storage_retry_acceptable);
     return;
