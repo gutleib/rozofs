@@ -38,19 +38,47 @@ typedef enum _rozofs_alignment_e {
 
 
 
-#define ROZOFS_COLOR_CYAN       "\033[96m"
-#define ROZOFS_COLOR_YELLOW     "\033[93m"
-#define ROZOFS_COLOR_BLUE       "\033[94m"
-#define ROZOFS_COLOR_GREEN      "\033[92m"
-#define ROZOFS_COLOR_PURPLE     "\033[95m"
-#define ROZOFS_COLOR_RED        "\033[91m"
-#define ROZOFS_COLOR_WHITE      "\033[97m"
+#define ROZOFS_COLOR_CYAN       "\033[96m\033[40m"
+#define ROZOFS_COLOR_YELLOW     "\033[93m\033[40m"
+#define ROZOFS_COLOR_ORANGE     "\033[33m\033[40m"
+#define ROZOFS_COLOR_BLUE       "\033[34m\033[40m\033[1m"
+#define ROZOFS_COLOR_GREEN      "\033[92m\033[40m"
+#define ROZOFS_COLOR_DARKGREEN  "\033[32m\033[40m"
+#define ROZOFS_COLOR_PURPLE     "\033[95m\033[40m"
+#define ROZOFS_COLOR_DEEPPURPLE "\033[95m\033[40m\033[1m"
+#define ROZOFS_COLOR_RED        "\033[91m\033[40m\033[1m"
+#define ROZOFS_COLOR_WHITE      "\033[97m\033[40m"
+#define ROZOFS_COLOR_LIGHTCYAN  "\033[36m\033[40m"
 
 #define ROZOFS_COLOR_BOLD       "\033[1m"
 #define ROZOFS_COLOR_REVERSE    "\033[7m"
 #define ROZOFS_COLOR_UNDERSCORE "\033[4m"
 #define ROZOFS_COLOR_NONE       "\033[0m"
 
+static char * ROZOFS_COLOR_LIST[] = {
+  ROZOFS_COLOR_CYAN,
+  ROZOFS_COLOR_YELLOW,
+  ROZOFS_COLOR_PURPLE,
+  ROZOFS_COLOR_GREEN,
+  ROZOFS_COLOR_BLUE,
+  ROZOFS_COLOR_WHITE,
+  ROZOFS_COLOR_RED,
+  ROZOFS_COLOR_DEEPPURPLE,
+};
+#define ROZOFS_COLOR_NB  (sizeof(ROZOFS_COLOR_LIST)/sizeof(char *))
+
+/*
+ *_______________________________________________________________________
+ *  Choose a color from an input integer value
+ *
+ *  @param val : input value
+ *  
+ *  @retval the formated size
+ *_______________________________________________________________________
+ */
+static inline char * rozofs_get_color(uint32_t val) {
+  return ROZOFS_COLOR_LIST[val % ROZOFS_COLOR_NB];
+}
 /*
  *_______________________________________________________________________
  *  Build a string from a date given by time() API
@@ -660,7 +688,34 @@ static inline int rozofs_hexa_append(char * pChar, char * pt, int size) {
 
 
 
-
+/*
+**___________________________________________________________
+** Write a value in binary notation
+** Append a 64 bit number in decimal representation 
+** with eventually a minus sign. Add a 0 at the end.
+**
+** @param pChar       The string that is being built
+** @param val         The 64bits unsigned (so positive)value
+** @param nbBits      The numbe of bits to display
+**
+** @retval the size added to the string
+*/
+static inline int rozofs_binary_append(char * pChar, uint64_t val, unsigned int nbBits) {
+  int    i;
+  
+  if (nbBits>64) nbBits = 64;
+  
+  *pChar++ = '0';
+  *pChar++ = 'b';
+  
+  pChar += (nbBits-1);
+  for (i=0;i<nbBits;i++) {
+    if (val&1) *pChar-- = '1'; 
+    else       *pChar-- = '0';
+    val = val>>1;
+  }  
+  return nbBits+2;
+}
 
 
 
