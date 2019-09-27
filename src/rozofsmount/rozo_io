@@ -14,8 +14,8 @@ from optparse import OptionParser
 devices = []
 
 active_export = None
-UPLINE = ""
-BOTTOM = ""
+UP_LINE = ""
+BOTTOM_LINE = ""
 #___________________________
 # converts string <inBytes> to integer 
 # in the unit given by <to>.
@@ -250,29 +250,29 @@ def get_color_code(col):
   
 #______________________________________    
 def build_upline(titles,total_column):
-  global UPLINE
-  global BOTTOM
+  global UP_LINE
+  global BOTTOM_LINE
 
-  UPLINE = "     "  
+  UP_LINE = "     "  
   for col in range(total_column):
-    UPLINE = UPLINE + ' ' + titles[col][0:8].replace(' ','_')
-  UPLINE = UPLINE + " "
+    UP_LINE = UP_LINE + ' ' + titles[col][0:8].replace(' ','_')
+  UP_LINE = UP_LINE + " "
   
   if SIZE == int(60): 
-    UPLINE = UPLINE + "     "
+    UP_LINE = UP_LINE + "     "
     for col in range(total_column):
-      UPLINE = UPLINE + ' ' + titles[col][0:8].replace(' ','_')
+      UP_LINE = UP_LINE + ' ' + titles[col][0:8].replace(' ','_')
 
-  BOTTOM = "     "
+  BOTTOM_LINE = "     "
   for column in range(total_column):
-    BOTTOM = BOTTOM + '|' + "________"
-  BOTTOM = BOTTOM + '|'  
+    BOTTOM_LINE = BOTTOM_LINE + '|' + "________"
+  BOTTOM_LINE = BOTTOM_LINE + '|'  
   
   if SIZE == int(60):  
-    BOTTOM += "     "
+    BOTTOM_LINE += "     "
     for colum in range(nbColumn):
-      BOTTOM = BOTTOM + '|' + "________"
-    BOTTOM = BOTTOM + '|'  
+      BOTTOM_LINE = BOTTOM_LINE + '|' + "________"
+    BOTTOM_LINE = BOTTOM_LINE + '|'  
 #______________________________________    
 def delta_time(minute,sec,minus):
   if int(sec) >= int(minus):
@@ -288,12 +288,10 @@ def syntax(string=None):
     
   print "Usage: " + BOLD + "rozo_io "+ YELLOW +"[OPTIONS]" + CYAN + " [FILTER] " + GREEN + "[MOUNTPOINT]"+ NORMAL
   print
-  print YELLOW +"  OPTIONS = {--period <seconds>|--short|--average|--history|--reverse}"+ NORMAL
-  print YELLOW +"    -p,--period <seconds>"+ NORMAL +"   enables to set the refresh period to <seconds> seconds."
-  print YELLOW +"    -s,--short"+ NORMAL +"              displays only a short 30 seconds counter set."
-  print YELLOW +"    -a,--average"+ NORMAL +"            displays an average at the bottom of each column."
-  print YELLOW +"    -H,--history"+ NORMAL +"            displays a 60 minutes and a 60 hours history."
-  print YELLOW +"    -R,--reverse"+ NORMAL +"            oldest data are at the bottom of the display."
+  print YELLOW +"  OPTIONS = {--period <seconds>|--history}"+ NORMAL
+  print YELLOW +"    -p,--period <seconds>"+ NORMAL +"   Enables to set the refresh period to <seconds> seconds."
+  print YELLOW +"    -H,--history"+ NORMAL +"            Displays a 60 minutes and a 60 hours history."
+  print YELLOW +"    -d,--delay <hours#>"+ NORMAL +"     Run for <hours#> hours."
   print
   print CYAN + "  FILTER = {--ipRange <IP1@-IP2@> ... | --NipRange <IP1@-IP2@> ... | --what <what> ...}"+ NORMAL
   print CYAN + "    -1,--one                 "+ NORMAL  +"  just the client handling the mountpoint." 
@@ -307,10 +305,15 @@ def syntax(string=None):
   print "  When no mount point is provided, current path is taken as input mount point."
   print 
   print "examples:"
-  print "  rozo_io --what r -what w /mnt/rfs1" 
-  print "  rozo_io -p 10 /mnt/rfs -s" 
+  print "  rozo_io --what r -w w /mnt/rfs1" 
+  print "  rozo_io -p 10 /mnt/rfs " 
   print 
   sys.exit(-1)    
+  
+def test(string):
+  val = val = common_convert_Bytes(string)
+  print "%20s : %s "%(string,val)
+  
 #______________________________________    
 
 RED='\033[91m\033[40m\033[1m'
@@ -335,43 +338,65 @@ time_unit_list=["s","m","h"]
 
 parser = OptionParser()
 parser.add_option("-d","--delay", action="store",type="string", dest="delay", help="Delay in hours for periodic mode (default is infinite)")
-parser.add_option("-n","--natural", action="store_true",default=False, dest="natural", help="Natural time flow (old->new left->right).")
-parser.add_option("-R","--reverse", action="store_true",default=False, dest="reverse", help="Reverse time flow (new->old left->right).")
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
-parser.add_option("-s","--short", action="store_true",default=True,dest="short", help="Display only 30 sec")
-parser.add_option("-l","--long", action="store_false",dest="short", help="Display only 60 sec")
 parser.add_option("-v","--verbose", action="store_true",default=False, dest="verbose", help="Verbose mode for debug.")
 parser.add_option("-H","--history", action="store_true",default=False, dest="history", help="Display a 60 minutes and 60 hours history.")
 parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange", help="Allowed IP range (one IP address or a range like 192.168.1.21-192.168.1.28)")
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
 parser.add_option("-w","--what", action="append",type="string", dest="what", help="what to (not to) display \"<r|nr|w|nw|l|nl|c|nc|d|nd|a|na|x|nx|o|no>\" (default everything).")
-parser.add_option("-a","--average", action="store_true",default=False, dest="average", help="Display an average line.")
 parser.add_option("-1","--one", action="store_true",default=False, dest="justThisOne", help="Just display the given client.")
+parser.add_option("-b","--bold", action="store_false",default=True, dest="bold", help="Do not highlight biggest values.")
 
 total_watched_clients = int(0)
 total_nb_clients = int(0)
 
 (options, args) = parser.parse_args()
-period = int(60)
-if options.short == True:
-  period = int(30)
-  
-if options.period != None:
-  try:
-    period = int(options.period)
-  except:
-    syntax( "Bad period value %s"%(options.period))
 
 
-natural_time_order = True
-if options.natural == True:
-  natural_time_order = True
-  if options.reverse == True:
-    syntax("--natural and --reverse are incompatible")
-if options.reverse:
-  natural_time_order = False
-  
-  
+history = ""
+if options.history == True:
+  #
+  # History display 60 minutes and then 60 hours history in 
+  # two loops  
+  # 
+  # 1rst loop will display per minute history
+  history = " m"
+  period = int(60)
+  SIZE   = int(60) 
+else:  
+  #
+  # Periodic mode has a default of 30 seconds period
+  #
+  period = int(30)  
+  SIZE   = int(30)
+  if options.period != None:
+    try:
+      period = int(options.period)
+    except:
+      syntax( "Bad period value %s"%(options.period))
+    if period > int(30): period = int(30)
+#
+# Period can be either 60s for history
+# or a divider of 30s for periodic mode
+# 
+if period > int(30): period = int(60)
+else:
+  if period > int(15): period = int(30)
+  else:
+    if period > int(10): period = int(15)
+    else:
+      if period > int(6): period = int(10)
+      else:
+          if period > int(5): period = int(6)
+          else:
+            if period > int(3): period = int(5)
+            else:
+              if period > int(2): period = int(3)
+              else: period = int(2)  
+
+#
+# Filtering the colums to display
+#  
 what = ""    
 if options.what != None:
   for w in options.what:
@@ -382,7 +407,10 @@ if options.what != None:
 if len(args) != 0: path = args[0]
 else:              path = os.getcwd()
 
-    
+ 
+#
+# Filetring rozofsmount upon IP addresses
+#    
 ipLowArray  = []
 ipHighArray = []
 ipRule      = []
@@ -429,7 +457,7 @@ if options.Niprange != None:
     NipRule.append(iprange)
   
 #
-# Check limit number of run
+# A limit in time to run can be set
 # 
 max_run = int(2147483647)   
 if options.delay != None:
@@ -437,7 +465,7 @@ if options.delay != None:
     max_run = int(options.delay) * int(3600) / int(period)   
   except:
     syntax( "--delay must be an integer \"%s\""%(options.delay))  
-nb_run = int(0)
+nb_run = int(1)
         
 # 
 # Find the eid this path is connected to and then get the list of RozoFS
@@ -447,11 +475,7 @@ eid,exports,onlyClient = get_eid_and_exports_from_path(path)
 clients = get_client_list(exports,eid)
 if clients == "":
   syntax( "No client found")
-
-if options.short == True:
-  SIZE = int(30)
-else:
-  SIZE = int(60)  
+  
 
 print
 print "  Clients of eid %s : "%(eid)
@@ -466,23 +490,47 @@ print
 # Not to block the file system
 #
 os.chdir("/")  
-history = ""
-if options.history == True:
-  #
-  # 1rst loop will display per minute history
-  #
-  history = " m"
 
-loop = int(0)
+refresh_client_delay = int(0)
+
+#
+# Number of rozodiag round to display a full 
+# array of result
+#
+round     = int(1)
+if history != "":
+  last_round = 1
+else:  
+  last_round = int(30)/int(period)
+
+#
+# Average arrays
+#
+avg_left = []
+avg_left = [ int(0) for j in range(50) ]
+avg_rigth = []
+avg_rigth = [ int(0) for j in range(50) ]  
+
+#
+# Record per column
+#
+record =  [ int(0) for j in range(50) ]    
+
+#
+# Max value per column
+#
+if options.bold == True: max_col_val = [ int(0) for j in range(50) ]  
+
+start = True          
 while True : 
 
   #
-  # Every 10 loops, rebuild the list of clients
+  # Every 3 minutes refresh client list
   #
-  loop = loop + int(1)
-  if loop == 11: 
+  refresh_client_delay = refresh_client_delay + period
+  if refresh_client_delay > int(180) : 
     clients =  get_client_list(exports,eid)
-    loop = 0
+    refresh_client_delay = int(0)
 
   #
   # Get current time
@@ -499,10 +547,15 @@ while True :
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+  time_col_val = []
+  time_col_val = [[ int(0) for j in range(50) ] for i in range(60) ]             
+
+  if round == int(1):
+    if options.bold == True: max_col_val = [ int(0) for j in range(50) ]  
+    
   #
   # Parse output and cumulate the throughputs
   #
-  start = True
   for line in cmd.stdout:
   
     if not "|" in line : continue
@@ -515,29 +568,10 @@ while True :
       try:
         if total_column != nbColumn: 
           total_column = nbColumn
-          build_upline(titles,total_column)
       except:         
         total_column = nbColumn
-        build_upline(titles,total_column)
-        record =  [ int(0) for j in range(total_column) ]    
-        
+      build_upline(titles,total_column)        
       start = False
-      time_col_val = []
-      time_col_val = [[ int(0) for j in range(total_column) ] for i in range(SIZE) ]  
-      max_val = [ int(0) for j in range(total_column) ]     
-      
-      
-      #
-      # Average arrays
-      #
-      if options.average == True:
-      
-        avg1 = []
-        avg1 = [ int(0) for j in range(total_column) ]
-
-        if SIZE == int(60):
-          avg2 = []
-          avg2 = [ int(0) for j in range(total_column) ]          
       continue
     
     if nbColumn > total_column: nbColumn = total_column
@@ -546,8 +580,8 @@ while True :
     # Get time value
     #
     try:
-      t =  -int(words[1]) -1
-      if t >= SIZE: continue 
+      deltaTime =  -int(words[1]) -1
+      if deltaTime >= period: continue
     except:
       continue
 
@@ -557,114 +591,110 @@ while True :
       
       try:
       
-        time_col_val[t][column] = time_col_val[t][column] + int(val)
-        if int(val) > max_val[column]: 
-          max_val[column] = int(val) 
-          if record[column] < int(val): 
-            record[column] = int(val)   
+        new_val = time_col_val[deltaTime][column] + int(val)
+        time_col_val[deltaTime][column] = new_val
+        if options.bold == True:
+          if max_col_val[column] < new_val: max_col_val[column] = new_val
+        if record[column] < new_val:  record[column] = new_val   
                  
         #
         # For average option add the value on the right array
         #              
-        if options.average == True:
-          if SIZE == int(30):
-            avg1[column] += int(val) 
-          else:  
-            if t < int(30):    
-              if natural_time_order == True:     
-                avg2[column] += int(val) 
-              else:             
-                avg1[column] += int(val)  
-            else:
-              if natural_time_order == True:     
-                avg1[column] += int(val) 
-              else:             
-                avg2[column] += int(val)  
+        if history == "":
+          avg_left[column] += int(val) 
+        else:  
+          if deltaTime < int(30):    
+            avg_rigth[column] += int(val) 
+          else:
+            avg_left[column] += int(val) 
              
       except:
-        syntax( "Error on t %s column %s val %s"%(t,column,val) ) 
-#      print "t %s col %s val %s"%(t,column,time_col_val[t][column])
+        syntax( "Error on t %s column %s val %s"%(deltaTime,column,val) ) 
 
-  LINE = zedate + " - %d/%d  RozoFS clients on "%(total_watched_clients,total_nb_clients)  + GREEN + "eid " + eid  + NORMAL
-  if history == " m":
-    LINE = LINE + " - Last " + REVERSE + "60 minutes" + NORMAL + " history."  
-  elif history == " h": 
-    LINE = LINE + " - Last " + REVERSE + "60 hours" + NORMAL + " history."
-  if natural_time_order == True:
-    LINE += "    NATURAL TIME FLOW: left->right & UP->down"
-  else:
-    LINE += "    REVERSE TIME FLOW: left<-right & UP<-down"
-  print LINE
-      
-  LINE = "     "
-  for column in range(nbColumn):
-    color = get_color_code(column)
-    LINE = LINE + ' ' + color + "%7s "%(common_bytes_with_unit(record[column])) + NORMAL
-  print LINE
-            
-  print UPLINE 
-    
+  #
+  # Round 1 : display header and records
+  #
+  if int(round) == int(1) : 
+    LINE = zedate + " - %d/%d  RozoFS clients on "%(total_watched_clients,total_nb_clients)  + GREEN + "eid " + eid  + NORMAL
+    if history == " m":
+      LINE = LINE + " - Last " + REVERSE + "60 minutes" + NORMAL + " history."  
+    elif history == " h": 
+      LINE = LINE + " - Last " + REVERSE + "60 hours" + NORMAL + " history."
+    print LINE
+       
+    LINE = "     "
+    for column in range(nbColumn):
+      color = get_color_code(column)
+      LINE = LINE + ' ' + color + "%7s "%(common_bytes_with_unit(record[column])) + NORMAL
+    print LINE        
+    print UP_LINE 
+
+  #
+  # Display some raws
+  #    
   for raw in range(30):
-    if natural_time_order == True:
-      IDX = SIZE - 1 - raw
-    else:
-      IDX   = raw  
-    m,s = delta_time(minute,sec, 1 + IDX)
+    if raw < int(30)-period: continue
+    deltaTime = SIZE - 1 - raw
       
     if history == "": 
+      m,s = delta_time(minute,sec, 1 + deltaTime)
       LINE = "%2.2d:%2.2d"%(m,s)
     else:
-      LINE = "     "  
+      LINE = " -%2.2d "%(1+deltaTime)  
     
     for column in range(nbColumn):
       color = get_color_code(column)
-      if max_val[column] != int(0):
-        if time_col_val[IDX][column] == max_val[column]: color = color + REVERSE
-      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[IDX][column])) + NORMAL
+      if options.bold:
+        if max_col_val[column] != int(0):
+          if time_col_val[deltaTime][column] == max_col_val[column]: color = color + REVERSE
+      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[deltaTime][column])) + NORMAL
     LINE = LINE + "|" 
     
-    if SIZE == int(60):    
-      if natural_time_order == True:
-        IDX -= 30
-      else:
-        IDX += 30  
-      m,s = delta_time(minute,sec,1 + IDX)
-        
-      if history == "": 
-        LINE += "%2.2d:%2.2d"%(m,s) 
-      else:
-        LINE += "     "
-                  
+    if history != "":   
+     
+      deltaTime -= 30
+      LINE += " -%2.2d "%(1+deltaTime)  
+                
       for column in range(nbColumn):      
         color = get_color_code(column)
-        if max_val[column] != int(0):
-          if time_col_val[IDX][column] == max_val[column]: color = color + REVERSE
-        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[IDX][column])) + NORMAL
+        if options.bold == True :
+          if max_col_val[column] != int(0):
+            if time_col_val[deltaTime][column] == max_col_val[column]: color = color + REVERSE
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[deltaTime][column])) + NORMAL
       LINE = LINE + '|' 
        
     print LINE  
 
-  print BOTTOM      
-
-  LINE ="     "
-  if options.average == True:
+  if int(round) != int(last_round):
+    round = int(round) + int(1)
+  else:
+    #
+    # Last round : Display BOTTOM_LINE and averages
+    #    
+    round = int(1)
+    print BOTTOM_LINE      
+    LINE ="     "
     for column in range(nbColumn):
       color = get_color_code(column)
-      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg1[column]/30)) + NORMAL
+      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg_left[column]/30)) + NORMAL
     LINE = LINE + "|     " 
-    if SIZE == int(60):
+    avg_left = [ int(0) for j in range(50) ]
+    if history != "":
       for column in range(nbColumn):
         color = get_color_code(column)
-        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg2[column]/30)) + NORMAL
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg_rigth[column]/30)) + NORMAL
       LINE = LINE + "|     " 
+      avg_rigth = [ int(0) for j in range(50) ]  
     print LINE
-    # print BOTTOM
+    
+
   sys.stdout.flush()
+
     
   #
   # Go out after history per hour displey
   #  
-  if history == " h": break;
+  if history == " h": break
   
   #
   # Reloop after history per minute, in order to
@@ -686,6 +716,10 @@ while True :
   if options.delay != None:
     if int(nb_run) >= int(max_run): 
       history = " m"
+      last_round = int(1)
+      period = int(60)
+      SIZE   = int(60)       
+      start = True
       continue
     nb_run = nb_run + int(1)
   #
