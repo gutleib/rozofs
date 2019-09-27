@@ -380,6 +380,13 @@ static void man_storage_json_device_status(char * pChar) {
   pChar += rozofs_string_append(pChar, "  free    the free size in bytes available on the device.\n");
   pChar += rozofs_string_append(pChar, "  total   the total size in bytes of the device.\n");
 }
+char storaged_hostname[256] = {0};
+int storaged_get_host_name() {
+  if (storaged_hostname[0] == 0) {
+    gethostname(storaged_hostname,sizeof(storaged_hostname));
+  }
+  return (int) storaged_hostname[0];
+}
 static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void *bufRef) {
     char                * pChar = uma_dbg_get_buffer();
     storage_t           * st=NULL;
@@ -389,8 +396,13 @@ static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void
     char                  link[PATH_MAX];
     char                  majmin[64];
     
-    
-    pChar += sprintf(pChar, "{ \"devices\" : [  \n");
+    if (storaged_get_host_name()) {
+      pChar += sprintf(pChar, "{ \"hostname\" : \"%s\",\n",storaged_hostname);
+    }
+    else {
+      pChar += sprintf(pChar, "{ \"hostname\" : \"NULL\",\n");
+    }
+    pChar += sprintf(pChar, "  \"devices\" : [  \n");
     
     while((st = storaged_next(st)) != NULL) {
       /* 
