@@ -2270,7 +2270,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
     {
        if (strcmp(name,".")==0)
        {       
-          export_recopy_extended_attributes_multifiles(e,pfid,lv2, attrs, NULL /* No slave inode */, NULL);
+          export_recopy_extended_attributes_multifiles(e,pfid,plv2, attrs, NULL /* No slave inode */, NULL);
 	  memset(pattrs->attrs.fid,0, sizeof(fid_t));     
        }
        else
