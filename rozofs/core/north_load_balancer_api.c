@@ -1681,7 +1681,9 @@ int north_lbg_is_local(int  lbg_idx)
   lbg_p = north_lbg_getObjCtx_p(lbg_idx);
   if (lbg_p == NULL) 
   {
-    warning("north_lbg_is_local: no such instance %d ",lbg_idx);
+    if (lbg_idx != -1) {
+      warning("north_lbg_is_local: no such instance %d ",lbg_idx);
+    }  
     return 0;
   }
   return lbg_p->local;
