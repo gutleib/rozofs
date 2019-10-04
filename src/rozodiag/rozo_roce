@@ -13,6 +13,8 @@ BLUE='\033[94m\033[40m'
 UBBLUE='\033[1;4;94m\033[40m'
 NORMAL='\033[0m'
 BOLD='\033[1m'
+CYAN='\033[96m\033[40m'
+YELLOW='\033[93m\033[40m'
 
 ib_devices = []
 
@@ -144,29 +146,27 @@ class rozo_roce_device:
     self.ports.append(roce_port)
 
 #______________________  
-def rozo_roce_dstat(bit):
+def rozo_roce_dstat(what):
   global ib_devices
-
-  if bit:
-    multiplier = int(8)
-    unit = "b"
-  else:
-    multiplier = int(1)
-    unit = "B"
-
 
   while True: 
 
     LINE = BLUE
     for ib_device in ib_devices:
       for port in ib_device.ports:
-         LINE = LINE + "| %12s /%2s  "%(ib_device.name,port.port_num)
+        if what == "all":
+          LINE = LINE + "|   %20s /%2s          "%(ib_device.name,port.port_num)
+        else:
+          LINE = LINE + "| %12s /%2s  "%(ib_device.name,port.port_num)          
     LINE = LINE + '|'
     print LINE
     LINE = BLUE     
     for ib_device in ib_devices:
       for port in ib_device.ports:
-         LINE = LINE + "| " + UBBLUE + "   recv " + NORMAL + " " +  UBBLUE + "   xmit " + NORMAL + BLUE + " "
+        if what == "all":
+          LINE = LINE + "| " + UBBLUE + "       recv      " + NORMAL + " " +  UBBLUE + "       xmit      " + NORMAL + BLUE + " "
+        else:
+          LINE = LINE + "| " + UBBLUE + "   recv " + NORMAL + " " +  UBBLUE + "   xmit " + NORMAL + BLUE + " "        
     LINE = LINE + '|'
     print LINE
 
@@ -176,7 +176,18 @@ def rozo_roce_dstat(bit):
       for ib_device in ib_devices:
         for port in ib_device.ports:
           port.update_counters()
-          LINE = LINE + "| %7s%s %7s%s "%(common_bytes_with_unit(port.recv_delta*multiplier),unit,common_bytes_with_unit(port.xmit_delta*multiplier),unit)
+          if what == "all": 
+            LINE = LINE + "| %s%7sb/%7sB%s %s%7sb/%7sB%s "%(CYAN,
+                                                    common_bytes_with_unit(port.recv_delta*int(8)),
+                                                    common_bytes_with_unit(port.recv_delta),
+                                                    NORMAL, YELLOW,
+                                                    common_bytes_with_unit(port.xmit_delta*int(8)),
+                                                    common_bytes_with_unit(port.xmit_delta),
+                                                    NORMAL)
+          elif what == "B":
+            LINE = LINE + "| %s%7sB%s %s%7sB%s "%(CYAN,common_bytes_with_unit(port.recv_delta),NORMAL, YELLOW,common_bytes_with_unit(port.xmit_delta),NORMAL)
+          elif what == "b":
+            LINE = LINE + "| %s%7sb%s %s%7sb%s "%(CYAN,common_bytes_with_unit(port.recv_delta*int(8)),NORMAL, YELLOW,common_bytes_with_unit(port.xmit_delta*int(8)),NORMAL)                                                    
       LINE = LINE + '|'
       print LINE
   
@@ -219,6 +230,10 @@ def rozo_roce_counters():
         val  = read_int_file("%s/counters/%s"%(port.port_path,f))
         name = "\"%s\""%(f)
         print "            ,%35s : %s"%(name,val)
+      for f in sorted(os.listdir("%s/hw_counters/"%(port.port_path))):
+        val  = read_int_file("%s/hw_counters/%s"%(port.port_path,f))
+        name = "\"%s\""%(f)
+        print "            ,%35s : %s"%(name,val)
       print "         }"
     print "      ]"
     print "    }"
@@ -228,14 +243,16 @@ def rozo_roce_counters():
 def rozo_man():
   print "Usage:"
   print BOLD + " rozo_roce -c " + NORMAL + " Display IB devices counters." 
-  print BOLD + " rozo_roce -B " + NORMAL + " Display IB devices ports throughput per second in Bytes." 
-  print BOLD + " rozo_roce -b " + NORMAL + " Display IB devices ports throughput per second in bits." 
+  print BOLD + " rozo_roce -t " + NORMAL + " Display IB devices ports throughput int bits and Bytes per second ." 
+  print BOLD + " rozo_roce -b " + NORMAL + " Display IB devices ports throughput int bits per second." 
+  print BOLD + " rozo_roce -B " + NORMAL + " Display IB devices ports throughput int Bytes per second." 
   sys.exit(0)
     
 parser = OptionParser()
-parser.add_option("-b","--bits", action="store_true",default=False, dest="bits", help="DDisplay IB devices ports throughput in bit/s.")
-parser.add_option("-B","--Bytes", action="store_true",default=False, dest="bytes", help="Display IB devices ports throughput in Byte/s.")
 parser.add_option("-c","--counters", action="store_true",default=False, dest="counters", help="Display IB devices counters.")
+parser.add_option("-t","--throughput", action="store_true",default=False, dest="throughput", help="Display IB devices ports throughput per second in bits and Bytes.")
+parser.add_option("-b","--bits", action="store_true",default=False, dest="bits", help="Display IB devices ports throughput int bits per second.")
+parser.add_option("-B","--Bytes", action="store_true",default=False, dest="Bytes", help="Display IB devices ports throughput in Bytes per second.")
 (options, args) = parser.parse_args()
 
 #
@@ -250,11 +267,12 @@ for devName in os.listdir("/sys/class/infiniband/"):
   for port in os.listdir("/sys/class/infiniband/%s/ports/"%(devName)):
     ib_device.add_port(port)
 
-
-if options.bytes == True:
-  rozo_roce_dstat(False)
-elif options.bits:
-  rozo_roce_dstat(True)
+if options.Bytes == True:
+  rozo_roce_dstat("B")
+elif options.bits == True:
+  rozo_roce_dstat("b")
+elif options.throughput == True:
+  rozo_roce_dstat("all")
 elif options.counters:
   rozo_roce_counters()
 else:
