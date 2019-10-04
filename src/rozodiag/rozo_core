@@ -1,0 +1,105 @@
+#!/bin/bash
+
+#_________________________________________
+# Display Syntax
+#_________________________________________
+#
+syntax() {
+  echo "rozo_core all             List core files on all hosts n1, n2, ..."
+  echo "rozo_core ls              List local core files"
+  echo "rozo_core rm [corefile]   Remove local core file(s)"
+  echo "rozo_core gdb [corefile]  Launch gdb on core file(s)"
+  exit 0
+}
+#_________________________________________
+# List core files
+#_________________________________________
+#
+rozo_core_ls () {
+  echo "Cores on ${HOSTNAME} :"
+  for corefile in `ls /var/run/rozofs/core/*/* 2>/dev/null`
+  do
+    ls -lisa ${corefile}
+  done
+  exit 0
+}
+#_________________________________________
+# List core files on all hosts
+#_________________________________________
+#
+rozo_core_all () {
+
+  HOSTLIST=`grep -oP "n\d+" /etc/hosts`
+  
+  for h in ${HOSTLIST}
+  do
+    ssh ${h} "rozo_core ls"
+  done
+  exit 0
+}
+#_________________________________________
+# Translate directory name to executable name
+#_________________________________________
+#
+rozo_core_exe () {
+  module=`echo $1 | awk -F'/' '{print $6;}'`
+  case "${module}" in
+    "export_slave") module="exportd";;
+  esac  
+}
+#_________________________________________
+# Launch gdb on core files
+#_________________________________________
+#
+rozo_core_gdb () {
+
+  which gdb
+  if [ $? -ne "0" ];
+  then
+    echo "No gdb on this server.";
+    exit 1
+  fi  
+  
+  case "$1" in
+    ""){
+      for corefile in `ls /var/run/rozofs/core/*/* 2>/dev/null`
+      do
+        rozo_core_exe ${corefile}
+        gdb ${module} -c ${corefile}
+      done
+    };;
+    *) {
+      rozo_core_exe $1
+      gdb ${module} -c $1
+    };;
+  esac
+  exit 0
+}
+#_________________________________________
+# Remove core files
+#_________________________________________
+#
+rozo_core_rm () {
+
+  case "$1" in
+    ""){
+      for corefile in `ls /var/run/rozofs/core/*/* 2>/dev/null`
+      do
+        rm -f ${corefile}
+      done
+    };;
+    *) {
+        rm -f $1
+    };;
+  esac
+    
+  exit 0
+}
+#_________________________________________
+# MAIN
+#_________________________________________
+#
+case "$1" in
+  ls|rm|gdb|all) rozo_core_$1 $2;;
+esac
+syntax  
