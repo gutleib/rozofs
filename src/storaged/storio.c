@@ -332,9 +332,20 @@ int main(int argc, char *argv[]) {
       ** No node identifier set in storage.conf; Use IP address + CID
       */      
       rozofs_numa_allocate_node(sconfig_get_this_IP(&storaged_config,0)+storio_instance,"host IP + cluster id");
-    }
-    
-    
+      
+      if (common_config.processor_model == common_config_processor_model_EPYC)
+      {
+	/*
+	** case of EPYC
+	*/ 
+	if ((common_config.adaptor_numa_node >= 0) && (numa_available()>=0))
+	{
+	  uint32_t taskid = storio_instance;
+	  rozofs_numa_run_on_node(taskid,common_config.adaptor_numa_node);      
+	}   
+      }
+
+    }    
     /*
     ** Kill the eventual storio with same instance that may be locked
     */

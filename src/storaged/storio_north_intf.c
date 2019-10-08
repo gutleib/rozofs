@@ -38,6 +38,11 @@
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/core/ruc_buffer_debug.h>
 #include <rozofs/core/rozofs_host2ip.h>
+#include <rozofs/core/rozofs_numa.h>
+
+
+#include <numa.h>
+#include <numaif.h>
 
 #include "sconfig.h"
 #include "sprotosvc_nb.h"
@@ -59,6 +64,140 @@ extern sconfig_t storaged_config;
 uint64_t tcp_receive_depletion_count = 0;
 
 extern void af_unix_disk_pool_socket_on_receive_buffer_depletion();
+
+/*
+**____________________________________________________
+*/
+
+
+void * ruc_buf_poolCreate_numa(uint32_t nbBuf,uint32_t bufsize,rozofs_numa_mem_t *membind_p)
+{
+  ruc_buf_t  *poolRef;
+  ruc_obj_desc_t  *pnext=(ruc_obj_desc_t*)NULL;
+  char *pusrData;
+  char *pBufCur;
+  ruc_buf_t  *p;
+  int huge_page = 0;
+  int available;
+  int ret;
+   /*
+   **   create the control part of the buffer pool
+   */
+   poolRef = (ruc_buf_t*)ruc_listCreate(nbBuf,sizeof(ruc_buf_t));
+   if (poolRef==(ruc_buf_t*)NULL) 
+   {
+     /*
+     ** cannot create the buffer pool
+     */
+     severe("Cannot create pool"); 
+     return NULL;
+   }
+   poolRef->type = BUF_POOL_HEAD;
+   /*
+   **  create the usrData part
+   */
+   /*
+   **  bufsize MUST long word aligned
+   */
+   if ((bufsize & 0x3) != 0) 
+   {
+     bufsize = ((bufsize & (~0x3)) + 4 );
+   }
+  /*
+  ** test that the size does not exceed 32 bits
+  */
+  {
+    uint32_t nbElementOrig;
+    uint32_t NbElements;
+    uint32_t memRequested;
+
+    nbElementOrig = nbBuf;
+    if (nbElementOrig == 0) 
+    {
+
+      return NULL;
+    }
+
+    memRequested = bufsize*(nbElementOrig);
+    NbElements = memRequested/(bufsize);
+    if (NbElements != nbElementOrig)
+    {
+      /*
+      ** overlap
+      */
+     severe("Cannot create pool: overlapping"); 
+      return NULL;
+    }
+  }
+  /*
+  ** check for hugepage
+  */
+  size_t alloc_size = bufsize*nbBuf;
+#if 1
+  if (alloc_size > ROZOFS_HUGE_PAGE_SIZE)
+  {
+     int count = alloc_size/ROZOFS_HUGE_PAGE_SIZE;
+     if (alloc_size%ROZOFS_HUGE_PAGE_SIZE)
+     {
+       count+=1;
+     }
+     alloc_size = ROZOFS_HUGE_PAGE_SIZE*count;
+     huge_page = 1;  
+  }
+#endif
+   if (posix_memalign((void**)&pusrData,4096,alloc_size))
+   {
+     /*
+     **  out of memory, free the pool
+     */
+     severe("Cannot create pool: out of memory"); 
+     ruc_listDelete((ruc_obj_desc_t*)poolRef);
+     return NULL;
+   }
+
+
+  available = numa_available();
+  if ((available >= 0) && (membind_p!=NULL))
+  {
+    ret = mbind(pusrData,alloc_size,membind_p->mode,&membind_p->nodemask,membind_p->maxnode,membind_p->flags);
+    if (ret < 0)
+    {
+      severe("numa_mbind failure: %s\n",strerror(errno));    
+    }
+  } 
+  memset(pusrData,0,alloc_size);
+   /*
+   ** store the pointer address on the head
+   */
+   poolRef->ptr = (uint8_t*)pusrData;
+   poolRef->bufCount = nbBuf; 
+   poolRef->len = (uint32_t)nbBuf*bufsize; 
+   poolRef->usrLen = nbBuf;
+
+
+
+   pBufCur = pusrData;
+   /*
+   ** init of the payload pointers
+   */
+   while ((p = (ruc_buf_t*)ruc_objGetNext((ruc_obj_desc_t*)poolRef,&pnext))
+               !=(ruc_buf_t*)NULL) 
+   {
+      p->ptr = (uint8_t*)pBufCur;
+      p->state = BUF_FREE;
+      p->bufCount  = bufsize;
+      p->retry_counter     = 0;
+      p->opaque_ref = NULL;
+      p->type = BUF_ELEM;
+      p->callBackFct = (ruc_pf_buf_t)NULL;
+      pBufCur += bufsize;
+   }
+   /*
+   **  return the reference of the buffer pool
+   */
+  RUC_BUF_TRC("buf_poolCreate_out",poolRef,poolRef->ptr,poolRef->len,-1);
+  return poolRef;
+}
 
 /*
 **____________________________________________________
@@ -261,13 +400,30 @@ int storio_north_interface_buffer_init(int read_write_buf_count,int read_write_b
    
     storage_read_write_buf_count  = read_write_buf_count;
     storage_read_write_buf_sz     = read_write_buf_sz    ;
+    rozofs_numa_mem_t membind_data;
+    int numa_requested = 0;
     
     af_inet_rozofs_north_conf.rpc_recv_max_sz = storage_read_write_buf_sz;
+    
+   /*
+   ** Check the case of the numa
+   */
+   if (common_config.processor_model == common_config_processor_model_EPYC)
+   {
+     if ((common_config.adaptor_numa_node >= 0) && (numa_available()>=0))
+     {
+       membind_data.mode = MPOL_BIND;
+       membind_data.nodemask = (1 <<  common_config.adaptor_numa_node); 
+       membind_data.maxnode = 32;
+       membind_data.flags = 0; //  MPOL_F_STATIC_NODES; 
+       numa_requested = 1;
+     } 
+   }
     
     /*
     ** create the pool for receiving requests from rozofsmount
     */
-    storage_receive_buffer_pool_p = ruc_buf_poolCreate(storage_read_write_buf_count, STORIO_BUF_RECV_SZ);
+    storage_receive_buffer_pool_p = ruc_buf_poolCreate_numa(storage_read_write_buf_count, STORIO_BUF_RECV_SZ,((numa_requested!=0)?&membind_data:NULL));
     if (storage_receive_buffer_pool_p == NULL)
     {
        severe( "ruc_buf_poolCreate(%d,%d)", storage_read_write_buf_count, STORIO_BUF_RECV_SZ ); 

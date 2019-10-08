@@ -2009,7 +2009,17 @@ int main(int argc, char *argv[]) {
     storcli_lbg_cnx_sup_init();
 
     gprofiler->uptime = time(0);
-    
+    if (common_config.processor_model == common_config_processor_model_EPYC)
+    {
+      /*
+      ** case of EPYC
+      */ 
+      if ((common_config.adaptor_numa_node >= 0) && (numa_available()>=0))
+      {
+	uint32_t taskid = conf.module_index;
+	rozofs_numa_run_on_node(taskid,common_config.adaptor_numa_node);      
+      }   
+    }
     /*
     ** Kill the eventual storcli with same instance that main be locked
     */

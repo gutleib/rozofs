@@ -51,6 +51,41 @@ void show_numa(char * argv[], uint32_t tcpRef, void *bufRef) {
   
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
+
+/**
+*  case of NUMA: allocate the running node according to the
+*  instance
+
+   @param instance: instance number of the process
+   @param excluded_node: numa node to exclude (can be -1 when not significant)
+*/
+
+#define ROZOFS_MAX_NUMA_NODE 32
+void rozofs_numa_run_on_node(uint32_t instance, int excluded_node)
+{
+   int configured_nodes;
+   int available;
+   int idx;
+   int i;
+   uint32_t node_table[ROZOFS_MAX_NUMA_NODE];
+
+   available = numa_available();
+   if (available < 0) return;
+   /*
+   ** the number of nodes within the configuration
+   */
+   configured_nodes = numa_num_configured_nodes(); 
+   i = 0;
+   for (idx = 0; idx <configured_nodes;idx++)   
+   {
+     if (idx != excluded_node) node_table[i++] = idx;
+   }
+   configured_nodes = i;
+   
+  idx =  instance %configured_nodes;
+  numa_run_on_node(node_table[idx]);
+}
+
 /**
 *  case of NUMA: allocate the running node according to the
 *  instance

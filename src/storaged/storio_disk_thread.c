@@ -40,6 +40,7 @@
 #include "storio_north_intf.h"
 #include <rozofs/core/ruc_buffer_debug.h>
 #include "storio_serialization.h"
+#include <rozofs/core/rozofs_numa.h>
 
 bool_t xdr_sp_read_ret_no_bins_t (XDR *xdrs, sp_read_ret_t *objp);
 
@@ -334,6 +335,7 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
   sp_read_ret_t            ret;
   int                      is_fid_faulty;
   storio_device_mapping_t * fidCtx;
+  int chunk;
     
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeBefore = MICROLONG(timeDay);
@@ -427,6 +429,11 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
   msg->size = ret.sp_read_ret_t_u.rsp.bins.bins_len;        
   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
   thread_ctx_p->stat.read_Byte_count += ret.sp_read_ret_t_u.rsp.bins.bins_len;
+  /*
+  ** to avoid a crash in KPI update since the context can be released
+  */
+  chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+  
   storio_send_response(thread_ctx_p,msg,0);
 
   /*
@@ -440,7 +447,6 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
   ** Update KPI per device
   */
   {
-    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
     int dev   = storio_get_dev(fidCtx, chunk); 
     if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
       storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
@@ -1009,7 +1015,8 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   storio_device_mapping_t * fidCtx;
   rozofs_rdma_disk_read_t   *rdma_p;
   int status;
-  char *pbuf;   
+  char *pbuf; 
+  int chunk;  
 
   ret.status = SP_FAILURE;          
   
@@ -1192,6 +1199,11 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
            
   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
   thread_ctx_p->stat.write_Byte_count += size;
+  /*
+  ** to avoid a crash in KPI update since the context can be released
+  */
+  chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+
   storio_send_response(thread_ctx_p,msg,0);
 
   /*
@@ -1205,7 +1217,6 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
   ** Update KPI per device
   */
   {
-    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
     int dev   = storio_get_dev(fidCtx, chunk); 
     if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
       storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
@@ -1284,6 +1295,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
   int sleep_done = 0;
   int rdma_write_thread_enabled = 0;
   char *pbuf;
+  int chunk_size;
     
 
   ret.status = SP_FAILURE;   
@@ -1602,6 +1614,10 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
 
      storio_encode_rpc_response(rpcCtx,(char*)&ret);  
      thread_ctx_p->stat.write_Byte_count += size;
+     /*
+     ** to avoid a crash in the KPI update
+     */
+     chunk_size = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
      storio_send_response(thread_ctx_p,msg,0);
 
      /*
@@ -1614,8 +1630,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
      ** Update KPI per device
      */
      {
-       int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
-       int dev   = storio_get_dev(fidCtx, chunk); 
+       int dev   = storio_get_dev(fidCtx, chunk_size); 
        if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
 	 storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
                                    thread_ctx_p->thread_idx, 
@@ -1668,7 +1683,8 @@ void *storio_rdma_write_thread(void *arg)
   storage_t *st      = 0;
   uint8_t    version = 0;  
   int        is_fid_faulty;          
-
+  int        chunk_size;
+  
   uma_dbg_thread_add_self("Disk WR-RDMA");
   {
     struct sched_param my_priority;
@@ -1843,6 +1859,10 @@ void *storio_rdma_write_thread(void *arg)
 
      storio_encode_rpc_response(rpcCtx,(char*)&ret);  
      thread_ctx_p->stat.write_Byte_count += size;
+     /*
+     ** to avoid a crash in the KPI update
+     */
+     chunk_size = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
      storio_send_response(thread_ctx_p,msg,0);
 
      /*
@@ -1855,8 +1875,7 @@ void *storio_rdma_write_thread(void *arg)
      ** Update KPI per device
      */
      {
-       int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
-       int dev   = storio_get_dev(fidCtx, chunk); 
+       int dev   = storio_get_dev(fidCtx, chunk_size); 
        if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
 	 storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
                                    thread_ctx_p->thread_idx, 
@@ -2013,6 +2032,7 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
   int                      size;
   int                      is_fid_faulty;
   storio_device_mapping_t * fidCtx;
+  int chunk;
     
   
   gettimeofday(&timeDay,(struct timezone *)0);  
@@ -2115,6 +2135,10 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
            
   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
   thread_ctx_p->stat.write_Byte_count += size;
+  /*
+  ** to avoid a crash in KPI update since the context can be released
+  */
+  chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
   storio_send_response(thread_ctx_p,msg,0);
 
   /*
@@ -2128,7 +2152,7 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
   ** Update KPI per device
   */
   {
-    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+
     int dev   = storio_get_dev(fidCtx, chunk); 
     if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
       storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
@@ -2160,6 +2184,7 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
   int                      size;
   int                      is_fid_faulty;
   storio_device_mapping_t * fidCtx;
+  int chunk;
     
   
   gettimeofday(&timeDay,(struct timezone *)0);  
@@ -2255,6 +2280,10 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
            
   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
   thread_ctx_p->stat.write_Byte_count += size;
+  /*
+  ** to avoid a crash in KPI update since the context can be released
+  */
+  chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
   storio_send_response(thread_ctx_p,msg,0);
 
   /*
@@ -2268,7 +2297,7 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
   ** Update KPI per device
   */
   {
-    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+
     int dev   = storio_get_dev(fidCtx, chunk); 
     if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
       storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
@@ -2792,6 +2821,7 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
   sp_read_ret_t            ret;
   int                      is_fid_faulty;
   storio_device_mapping_t * fidCtx;
+  int chunk;
     
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeBefore = MICROLONG(timeDay);
@@ -2904,6 +2934,11 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
   msg->size = ret.sp_read_ret_t_u.rsp.bins.bins_len;        
   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
   thread_ctx_p->stat.read_Byte_count += ret.sp_read_ret_t_u.rsp.bins.bins_len;
+  /*
+  ** to avoid a crash in KPI update since the context can be released
+  */
+  chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+  
   storio_send_response(thread_ctx_p,msg,0);
 
   /*
@@ -2917,7 +2952,6 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
   ** Update KPI per device
   */
   {
-    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
     int dev   = storio_get_dev(fidCtx, chunk); 
     if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
       storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
@@ -2950,6 +2984,7 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
   int                      size;
   int                      is_fid_faulty;
   storio_device_mapping_t * fidCtx;
+  int chunk;
     
   
   gettimeofday(&timeDay,(struct timezone *)0);  
@@ -3033,6 +3068,11 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
            
   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
   thread_ctx_p->stat.write_Byte_count += size;
+  /*
+  ** to avoid a crash in KPI update since the context can be released
+  */
+  chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
+
   storio_send_response(thread_ctx_p,msg,0);
 
   /*
@@ -3046,7 +3086,6 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
   ** Update KPI per device
   */
   {
-    int chunk = args->bid/ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(args->bsize);
     int dev   = storio_get_dev(fidCtx, chunk); 
     if ((dev>=0) && (dev<STORAGE_MAX_DEVICE_NB)) {    
       storage_device_kpi_update(st->device_ctx[dev].kpiRef, 
@@ -3105,7 +3144,21 @@ void *storio_disk_thread(void *arg) {
     
 
     }  
-   
+
+    /*
+    ** EPYC case
+    */
+    if (common_config.processor_model == common_config_processor_model_EPYC)
+    {
+      /*
+      ** case of EPYC: the disk threads are distributed among all the available nodes
+      */ 
+      if ((common_config.adaptor_numa_node >= 0) && (numa_available()>=0))
+      {
+	uint32_t taskid = ctx_p->thread_idx;
+	rozofs_numa_run_on_node(taskid,-1);      
+      }   
+    }
 
   //info("Disk Thread %d Started !!\n",ctx_p->thread_idx);
   

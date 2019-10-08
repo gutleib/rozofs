@@ -40,6 +40,14 @@ STRING 	global 	core_file_directory		""
 // order to collocate some RozoFS modules on the same node for memory
 // access efficiency.
 BOOL 	global 	numa_aware			False
+// Ethernet Adaptor numa node (-1 not significant)
+INT     global adaptor_numa_node                -1 
+// processor model:
+// EPYC: all AMD CPUs 
+// INTEL:   covers E5 & skylake families
+
+ENUM  global processor_model        "INTEL"   "EPYC,INTEL"
+
 // Number of slices in the STORIO.
 INT	global 	storio_slice_number		1024 8:(32*1024)
 // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
@@ -211,7 +219,9 @@ INT     storio rdma_delay_threshold            12  0:64
 // number of Mojette threads
 INT     storcli mojette_thread_count                4  1:4
 // number of Fuse threads
-INT     client reply_thread_count                2  1:4
+INT     client reply_thread_count                2  1:8
+// Buffer read by-pass
+BOOL     client bufread_bypass                False
 // Guard delay associated with directory re-write used for tracking children changes within a directory 
 INT   	export expdir_guard_delay_sec		10  1:7200
 // Maximum number of entries that the export level 2 cache can contain (unit is KB) 

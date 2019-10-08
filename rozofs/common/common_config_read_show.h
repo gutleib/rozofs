@@ -49,6 +49,12 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"numa_aware")==0) {
     COMMON_CONFIG_SET_BOOL(numa_aware,value);
   }
+  if (strcmp(parameter,"adaptor_numa_node")==0) {
+    COMMON_CONFIG_SET_INT(adaptor_numa_node,value);
+  }
+  if (strcmp(parameter,"processor_model")==0) {
+    COMMON_CONFIG_PROCESSOR_MODEL_SET_ENUM(value);
+  }
   if (strcmp(parameter,"storio_slice_number")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(storio_slice_number,value,8,(32*1024));
   }
@@ -260,7 +266,10 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
     COMMON_CONFIG_SET_INT_MINMAX(mojette_thread_count,value,1,4);
   }
   if (strcmp(parameter,"reply_thread_count")==0) {
-    COMMON_CONFIG_SET_INT_MINMAX(reply_thread_count,value,1,4);
+    COMMON_CONFIG_SET_INT_MINMAX(reply_thread_count,value,1,8);
+  }
+  if (strcmp(parameter,"bufread_bypass")==0) {
+    COMMON_CONFIG_SET_BOOL(bufread_bypass,value);
   }
   if (strcmp(parameter,"expdir_guard_delay_sec")==0) {
     COMMON_CONFIG_SET_INT_MINMAX(expdir_guard_delay_sec,value,1,7200);
@@ -326,6 +335,26 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
     pChar += rozofs_string_append(pChar,"// order to collocate some RozoFS modules on the same node for memory\n");
     pChar += rozofs_string_append(pChar,"// access efficiency.\n");
     COMMON_CONFIG_SHOW_BOOL(numa_aware,False);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("adaptor_numa_node",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(adaptor_numa_node,-1);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// Ethernet Adaptor numa node (-1 not significant)\n");
+    COMMON_CONFIG_SHOW_INT(adaptor_numa_node,-1);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("processor_model",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_ENUM(processor_model,"INTEL");
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// processor model:\n");
+    pChar += rozofs_string_append(pChar,"// EPYC: all AMD CPUs \n");
+    pChar += rozofs_string_append(pChar,"// INTEL:   covers E5 & skylake families\n");
+    COMMON_CONFIG_SHOW_ENUM(processor_model,""INTEL"","EPYC,INTEL");
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
@@ -994,7 +1023,16 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
     COMMON_CONFIG_IS_DEFAULT_INT(reply_thread_count,2);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
-    COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:4");
+    COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:8");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("bufread_bypass",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_BOOL(bufread_bypass,False);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// Buffer read by-pass\n");
+    COMMON_CONFIG_SHOW_BOOL(bufread_bypass,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
@@ -1124,6 +1162,20 @@ char * show_common_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// order to collocate some RozoFS modules on the same node for memory\n");
   pChar += rozofs_string_append(pChar,"// access efficiency.\n");
   COMMON_CONFIG_SHOW_BOOL(numa_aware,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(adaptor_numa_node,-1);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Ethernet Adaptor numa node (-1 not significant)\n");
+  COMMON_CONFIG_SHOW_INT(adaptor_numa_node,-1);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_ENUM(processor_model,"INTEL");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// processor model:\n");
+  pChar += rozofs_string_append(pChar,"// EPYC: all AMD CPUs \n");
+  pChar += rozofs_string_append(pChar,"// INTEL:   covers E5 & skylake families\n");
+  COMMON_CONFIG_SHOW_ENUM(processor_model,""INTEL"","EPYC,INTEL");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_INT(storio_slice_number,1024);
@@ -1411,7 +1463,13 @@ char * show_common_config_module_client(char * pChar) {
   COMMON_CONFIG_IS_DEFAULT_INT(reply_thread_count,2);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
-  COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:4");
+  COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:8");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(bufread_bypass,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Buffer read by-pass\n");
+  COMMON_CONFIG_SHOW_BOOL(bufread_bypass,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(storcli_read_parallel,False);
@@ -1724,6 +1782,20 @@ char * save_common_config_module_global(char * pChar) {
     COMMON_CONFIG_SHOW_BOOL(numa_aware,False);
   }
 
+  COMMON_CONFIG_IS_DEFAULT_INT(adaptor_numa_node,-1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Ethernet Adaptor numa node (-1 not significant)\n");
+    COMMON_CONFIG_SHOW_INT(adaptor_numa_node,-1);
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_ENUM(processor_model,"INTEL");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// processor model:\n");
+    pChar += rozofs_string_append(pChar,"// EPYC: all AMD CPUs \n");
+    pChar += rozofs_string_append(pChar,"// INTEL:   covers E5 & skylake families\n");
+    COMMON_CONFIG_SHOW_ENUM(processor_model,"INTEL","EPYC,INTEL");
+  }
+
   COMMON_CONFIG_IS_DEFAULT_INT(storio_slice_number,1024);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Number of slices in the STORIO.\n");
@@ -2013,7 +2085,13 @@ char * save_common_config_module_client(char * pChar) {
   COMMON_CONFIG_IS_DEFAULT_INT(reply_thread_count,2);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
-    COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:4");
+    COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:8");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(bufread_bypass,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Buffer read by-pass\n");
+    COMMON_CONFIG_SHOW_BOOL(bufread_bypass,False);
   }
 
   COMMON_CONFIG_IS_DEFAULT_BOOL(storcli_read_parallel,False);
@@ -2685,6 +2763,12 @@ static inline void common_config_generated_read(char * fname) {
   // order to collocate some RozoFS modules on the same node for memory 
   // access efficiency. 
   COMMON_CONFIG_READ_BOOL(numa_aware,False);
+  // Ethernet Adaptor numa node (-1 not significant) 
+  COMMON_CONFIG_READ_INT(adaptor_numa_node,-1);
+  // processor model: 
+  // EPYC: all AMD CPUs  
+  // INTEL:   covers E5 & skylake families 
+  COMMON_CONFIG_PROCESSOR_MODEL_READ_ENUM(&cfg);
   // Number of slices in the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(storio_slice_number,1024,8,(32*1024));
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual. 
@@ -2790,7 +2874,9 @@ static inline void common_config_generated_read(char * fname) {
   // statfs period in seconds. minimum is 0. 
   COMMON_CONFIG_READ_INT(statfs_period,10);
   // number of Fuse threads 
-  COMMON_CONFIG_READ_INT_MINMAX(reply_thread_count,2,1,4);
+  COMMON_CONFIG_READ_INT_MINMAX(reply_thread_count,2,1,8);
+  // Buffer read by-pass 
+  COMMON_CONFIG_READ_BOOL(bufread_bypass,False);
   // When that flag is asserted any storcli can be selected for reading. 
   COMMON_CONFIG_READ_BOOL(storcli_read_parallel,False);
   /*

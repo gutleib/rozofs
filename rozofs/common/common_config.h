@@ -37,6 +37,27 @@ void common_config_read(char * fname);
 ** ENUM definion
 */
 
+// processor_model 
+typedef enum _common_config_processor_model_e {
+  common_config_processor_model_EPYC,
+  common_config_processor_model_INTEL,
+} common_config_processor_model_e;
+// enum to string
+static inline char * common_config_processor_model2String(common_config_processor_model_e x) {
+  switch(x) {
+    case common_config_processor_model_EPYC: return "EPYC";
+    case common_config_processor_model_INTEL: return "INTEL";
+    default: return "?";
+  }
+  return "?";
+}
+// string to enum
+static inline common_config_processor_model_e string2common_config_processor_model(const char * x) {
+  if (strcmp(x,"EPYC")==0) return common_config_processor_model_EPYC;
+  if (strcmp(x,"INTEL")==0) return common_config_processor_model_INTEL;
+  return -1;
+}
+
 // device_selfhealing_mode 
 typedef enum _common_config_device_selfhealing_mode_e {
   common_config_device_selfhealing_mode_spareOnly,
@@ -79,6 +100,12 @@ typedef struct _common_config_t {
   // order to collocate some RozoFS modules on the same node for memory
   // access efficiency.
   int32_t     numa_aware;
+  // Ethernet Adaptor numa node (-1 not significant)
+  int32_t     adaptor_numa_node;
+  // processor model:
+  // EPYC: all AMD CPUs 
+  // INTEL:   covers E5 & skylake families
+  common_config_processor_model_e  processor_model;
   // Number of slices in the STORIO.
   int32_t     storio_slice_number;
   // File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.
@@ -189,6 +216,8 @@ typedef struct _common_config_t {
   int32_t     statfs_period;
   // number of Fuse threads
   int32_t     reply_thread_count;
+  // Buffer read by-pass
+  int32_t     bufread_bypass;
   // When that flag is asserted any storcli can be selected for reading.
   int32_t     storcli_read_parallel;
 
@@ -302,6 +331,34 @@ extern common_config_t common_config;
 /*_______________________________
 ** ENUM macro
 */
+// Read enum from configuration file
+static inline void COMMON_CONFIG_PROCESSOR_MODEL_READ_ENUM(config_t * cfg) {
+  const char * charval;
+  common_config.processor_model = -1;
+  if (config_lookup_string(cfg, "processor_model", &charval) == CONFIG_TRUE) {
+    common_config.processor_model = string2common_config_processor_model(charval);
+  }
+  if (common_config.processor_model == -1) {
+    common_config.processor_model =  string2common_config_processor_model("INTEL");
+  }
+}
+// Set enum value thanks to rozodiag
+#define COMMON_CONFIG_PROCESSOR_MODEL_SET_ENUM(VAL)  {\
+  int myval = string2common_config_processor_model(VAL);\
+  if (myval == -1) {\
+    pChar += rozofs_string_append_error(pChar," Unexpected enum value for processor_model : ");\
+    pChar += rozofs_string_append_error(pChar,VAL);\
+  }\
+  else {\
+    common_config.processor_model = myval;\
+    pChar += rozofs_string_append(pChar,"processor_model");\
+    pChar += rozofs_string_append(pChar," set to value ");\
+    pChar += rozofs_string_append(pChar,VAL);\
+  }\
+  pChar += rozofs_eol(pChar);\
+  return 0;\
+}
+
 // Read enum from configuration file
 static inline void COMMON_CONFIG_DEVICE_SELFHEALING_MODE_READ_ENUM(config_t * cfg) {
   const char * charval;

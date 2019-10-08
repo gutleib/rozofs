@@ -32,6 +32,7 @@ typedef struct _rozofs_shared_pool_t
    uint32_t buf_count;  /**< number of buffer              */
    void *data_p;        /**< pointer to the beginning of the shared memory     */
    uint64_t read_stats; /**< allocate statistics: incremented each time it is allocated     */
+   int   numa_node;     /**< bitmap of the numa nodes */
 } rozofs_shared_pool_t;
 
 /**

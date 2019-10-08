@@ -247,11 +247,12 @@ int file_read_nb(void *buffer_p,file_t * f, uint64_t off, char **buf, uint32_t l
     */
     ie = (ientry_t*)f->ie;
     flush_write_ientry(ie);    
+
     
     /*
-    ** Check whether the buffer content is valid or if it must be forgotten
+    ** Check whether the buffer content is valid or if it must be forgotten of if the rozofs buffer need to be by-passed
     */
-    if (f->read_consistency != ie->read_consistency) {
+    if ((f->read_consistency != ie->read_consistency) || (common_config.bufread_bypass !=0)) {
       /* The file has been modified since this buffer has been read. The data
       ** it contains are questionable. Better forget them.
       */
@@ -355,8 +356,10 @@ int file_read_nb(void *buffer_p,file_t * f, uint64_t off, char **buf, uint32_t l
        */
        //ret = read_buf_nb(buffer_p,f,off, f->buffer, f->export->bufsize);
 
-       /* Let's read ahead : when half of the buffer size is requested, let's read read a whole buffer size */
-       if (len_aligned <= (f->export->bufsize)) 
+       /* Let's read ahead : when half of the buffer size is requested, let's read read a whole buffer size 
+       ** That action should not take place when the read buffer is by_passed
+       */
+       if ((len_aligned <= (f->export->bufsize)) &&(common_config.bufread_bypass ==0)) 
        {
          if (len_aligned >= (f->export->bufsize/2)) len_aligned = f->export->bufsize;
          /* when requested size is too small, let's read the minimum read configured size */
@@ -1011,11 +1014,11 @@ void rozofs_ll_read_cbk(void *this,void *param)
     **  the buffer has to be install in the allocated buffer of the file_t structure.
     **  That makes the data available for a next read.
     */
-    if ((readahead == 0) && (received_len > ROZOFS_MAX_FILE_BUF_SZ))
+    if ((readahead == 0) && ((received_len > ROZOFS_MAX_FILE_BUF_SZ)||(common_config.bufread_bypass !=0)))
     {   
         /*
 	**______________________________________________
-	**  Big read case (>=256KB)
+	**  Big read case (>=256KB) or rozofs buffer by-pass
 	**______________________________________________
 	*/
         uint8_t *src_p = payload+position;

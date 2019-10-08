@@ -31,7 +31,10 @@
 #include <rozofs/core/af_unix_socket_generic.h>
 #include <rozofs/core/rozofs_socket_family.h>
 #include <rozofs/core/uma_dbg_api.h>
+#include <rozofs/core/rozofs_numa.h>
 #include "rozofs_fuse_thread_intf.h" 
+#include <numa.h>
+#include <numaif.h>
 
 int af_unix_fuse_socket_ref = -1;
  
@@ -202,7 +205,18 @@ void *rozofs_fuse_thread(void *arg) {
  #endif        
 
     }  
-#endif     
+#endif  
+   if (common_config.processor_model == common_config_processor_model_EPYC)
+   {
+     /*
+     ** EPYC socket
+     */
+     if ((common_config.adaptor_numa_node >= 0) && (numa_available()>=0))
+     {    
+       uint32_t taskid = ctx_p->thread_idx;
+       rozofs_numa_run_on_node(taskid,common_config.adaptor_numa_node);      
+     }       
+   }   
 
   //info("Fuse Thread %d Started !!\n",ctx_p->thread_idx);
   

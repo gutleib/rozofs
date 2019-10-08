@@ -59,7 +59,7 @@ void * af_unix_mojette_pool_send = NULL;
 void * af_unix_mojette_pool_recv = NULL;
 #define DEFAULT_STCMO_THREAD_WRITE       1
 #define DEFAULT_STCMO_THREAD_READ        0
-#define DEFAULT_STCMO_THREAD_THRESHOLD  (16*8*1024)
+#define DEFAULT_STCMO_THREAD_THRESHOLD  (64*1024)
 int rozofs_stcmoj_thread_write_enable=DEFAULT_STCMO_THREAD_WRITE;
 int rozofs_stcmoj_thread_read_enable=DEFAULT_STCMO_THREAD_READ;
 uint32_t rozofs_stcmoj_thread_len_threshold=DEFAULT_STCMO_THREAD_THRESHOLD;

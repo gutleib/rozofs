@@ -18,13 +18,181 @@
 
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/core/ruc_buffer_debug.h>
+#include <rozofs/core/rozofs_share_memory.h>
+#include <rozofs/core/rozofs_numa.h>
 
 #include "rozofs_storcli_sharedmem.h"
+#include <numa.h>
+#include <numaif.h>
+
 /**
 * array used for storing information related to the storcli shared memory
 */
 rozofs_stc_south_shared_pool_t rozofs_storcli_shared_mem[_ROZOFS_STORCLI_MAX_POOL];
 int rozofs_stc_south_shared_mem_init_done = 0;
+
+
+
+
+
+
+/*
+**__________________________________________________________________________________
+*/
+/**
+*  create a shared pool that is numa aware
+
+     @param nbuf : number of buffers
+     @param bufsize: size of the buffer
+     @param key : shared memory key
+     @param membind_p: contains the information for numa, might be NULL
+     
+     (see mbind(2))
+     mode: 
+
+*/
+#define MB_1 (1024*1024)
+#define MB_2 (2*MB_1)     
+void * ruc_buf_poolCreate_shared_numa(uint32_t nbBuf, uint32_t bufsize, key_t key, rozofs_numa_mem_t *membind_p/*,ruc_pf_buf_t init_fct*/)
+{
+  ruc_buf_t  *poolRef;
+  ruc_obj_desc_t  *pnext=(ruc_obj_desc_t*)NULL;
+  char *pusrData;
+  char *pBufCur;
+  ruc_buf_t  *p;
+  int shmid;
+  int available;
+  int ret;
+
+   /*
+   **   create the control part of the buffer pool
+   */
+   poolRef = (ruc_buf_t*)ruc_listCreate(nbBuf,sizeof(ruc_buf_t));
+   if (poolRef==(ruc_buf_t*)NULL)
+   {
+     /*
+     ** cannot create the buffer pool
+     */
+     RUC_WARNING(-1);
+     return NULL;
+   }
+   poolRef->type = BUF_POOL_HEAD;
+   /*
+   **  create the usrData part
+   */
+   /*
+   **  bufsize MUST long word aligned
+   */
+   if ((bufsize & 0x3) != 0)
+   {
+     bufsize = ((bufsize & (~0x3)) + 4 );
+   }
+  /*
+  ** test that the size does not exceed 32 bits
+  */
+  {
+    uint32_t nbElementOrig;
+    uint32_t NbElements;
+    uint32_t memRequested;
+
+    nbElementOrig = nbBuf;
+    if (nbElementOrig == 0)
+    {
+      RUC_WARNING(-1);
+      return NULL;
+    }
+
+    memRequested = bufsize*(nbElementOrig);
+    NbElements = memRequested/(bufsize);
+    if (NbElements != nbElementOrig)
+    {
+      /*
+      ** overlap
+      */
+      RUC_WARNING(-1);
+      return NULL;
+    }
+  }
+  /*
+  ** delete existing shared memory
+  */
+  rozofs_share_memory_free_from_key(key,NULL);
+  /*
+  ** create the shared memory
+  */
+  int size = bufsize*nbBuf;
+  int page_count = size/MB_2;
+  if (size%MB_2 != 0) page_count+=1;
+  int allocated_size = page_count*MB_2;
+  if ((shmid = shmget(key, allocated_size, IPC_CREAT/*|SHM_HUGETLB */| 0666 )) < 0) {
+      fatal("ruc_buf_poolCreate_shared :shmget %s %d",strerror(errno),allocated_size);
+      return (ruc_obj_desc_t*)NULL;
+  }
+  /*
+  * Now we attach the segment to our data space.
+  */
+  if ((pusrData = shmat(shmid, NULL, 0)) == (char *) -1)
+  {
+     /*
+     **  out of memory, free the pool
+     */    
+    severe("shmat failure for key %x (%s)",key,strerror(errno));
+    RUC_WARNING(errno);
+    ruc_listDelete_shared((ruc_obj_desc_t*)poolRef);
+    return (ruc_obj_desc_t*)NULL;
+  }
+  /*
+  ** map the memory on the specified node
+  */
+  available = numa_available();
+  if ((available >= 0) && (membind_p!=NULL))
+  {
+    ret = mbind(pusrData,allocated_size,membind_p->mode,&membind_p->nodemask,membind_p->maxnode,membind_p->flags);
+    if (ret < 0)
+    {
+      severe("numa_mbind failure: %s\n",strerror(errno));    
+    } 
+    /*
+    ** clear the memory
+    */
+    memset( pusrData,0,allocated_size);
+  }
+   /*
+   ** store the pointer address on the head
+   */
+   poolRef->ptr = (uint8_t*)pusrData;
+   poolRef->bufCount = nbBuf;
+   poolRef->len = (uint32_t)nbBuf*bufsize;
+   poolRef->usrLen = nbBuf;
+
+   pBufCur = pusrData;
+   /*
+   ** init of the payload pointers
+   */
+   while ((p = (ruc_buf_t*)ruc_objGetNext((ruc_obj_desc_t*)poolRef,&pnext))
+               !=(ruc_buf_t*)NULL)
+   {
+      p->ptr = (uint8_t*)pBufCur;
+      p->state = BUF_FREE;
+      p->bufCount  = (uint16_t)bufsize;
+      p->type = BUF_ELEM;
+      p->callBackFct = (ruc_pf_buf_t)NULL;
+#if 0
+      /*
+      ** call the init function associated with the buffer
+      */
+      if (init_fct != NULL) (*init_fct)(pBufCur);
+#endif
+      pBufCur += bufsize;
+   }
+   /*
+   **  return the reference of the buffer pool
+   */
+  RUC_BUF_TRC("buf_poolCreate_out",poolRef,poolRef->ptr,poolRef->len,-1);
+  // 64BITS return (uint32_t)poolRef;
+  return poolRef;
+}
+
 
 /*__________________________________________________________________________
 */
@@ -37,17 +205,18 @@ void rozofs_stc_south_shared_mem_display(char * argv[], uint32_t tcpRef, void *b
     int i;
 
 
-    pChar += sprintf(pChar, "   pool     |     key     |  size    | count |    address     |      stats     |\n");
-    pChar += sprintf(pChar, "------------+-------------+----------+-------+----------------+----------------+\n");
+    pChar += sprintf(pChar, "   pool     |     key     |  size    | count |    address     |      stats     |  node |\n");
+    pChar += sprintf(pChar, "------------+-------------+----------+-------+----------------+----------------+-------+\n");
     for (i = 0; i < _ROZOFS_STORCLI_MAX_POOL; i ++)
     {
       if (rozofs_storcli_shared_mem[i].key == 0) continue;
-      pChar +=sprintf(pChar," %10s | %8.8d  | %8.8d |%4d   | %p |%15llu |\n",rozofs_storcli_shared_mem[i].name,
+      pChar +=sprintf(pChar," %10s | %8.8d  | %8.8d |%4d   | %p |%15llu |%4d   |\n",rozofs_storcli_shared_mem[i].name,
                       rozofs_storcli_shared_mem[i].key,
                       rozofs_storcli_shared_mem[i].buf_sz,
                       rozofs_storcli_shared_mem[i].buf_count,
                       rozofs_storcli_shared_mem[i].data_p,
-                      (long long unsigned int)rozofs_storcli_shared_mem[i].read_stats);    
+                      (long long unsigned int)rozofs_storcli_shared_mem[i].read_stats,
+		      rozofs_storcli_shared_mem[i].numa_node);    
     
     }
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -75,12 +244,30 @@ void rozofs_stc_south_shared_mem_display(char * argv[], uint32_t tcpRef, void *b
 void  *rozofs_create_shared_memory(int key_instance,int pool_idx,uint32_t buf_nb, uint32_t buf_sz,char *name)
 {
    key_t key = 0x724F0000 | key_instance;
+   rozofs_numa_mem_t membind_data;
+   int numa_requested = 0;
+   int i;
+
+   rozofs_storcli_shared_mem[pool_idx].numa_node = -1;
+   if (common_config.processor_model == common_config_processor_model_EPYC)
+   {
+     if ((common_config.adaptor_numa_node >= 0) && (numa_available()>=0))
+     {
+       membind_data.mode = MPOL_BIND;
+       membind_data.nodemask = (1 <<  common_config.adaptor_numa_node); 
+
+       membind_data.maxnode = 32;
+       membind_data.flags = 0; //  MPOL_F_STATIC_NODES; 
+       numa_requested = 1;
+       rozofs_storcli_shared_mem[pool_idx].numa_node = common_config.adaptor_numa_node;
+     } 
+   }
 
    rozofs_storcli_shared_mem[pool_idx].key          = key;
    rozofs_storcli_shared_mem[pool_idx].name         = strdup(name);
    rozofs_storcli_shared_mem[pool_idx].buf_sz       = buf_sz;
    rozofs_storcli_shared_mem[pool_idx].buf_count    = buf_nb;
-   rozofs_storcli_shared_mem[pool_idx].pool_p = ruc_buf_poolCreate_shared(buf_nb,buf_sz,key);
+   rozofs_storcli_shared_mem[pool_idx].pool_p = ruc_buf_poolCreate_shared_numa(buf_nb,buf_sz,key,((numa_requested!=0)?&membind_data:NULL));
    if (rozofs_storcli_shared_mem[pool_idx].pool_p == NULL) return NULL;
    /*
    ** register the pool with the debug

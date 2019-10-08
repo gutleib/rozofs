@@ -17,7 +17,17 @@
  */
  #ifndef ROZOFS_NUMA_H
  #define ROZOFS_NUMA_H
+#include <inttypes.h>
+#include <unistd.h>
 #include <numa.h>
+#include <numaif.h>
+
+typedef struct _rozofs_numa_mem_t {
+   int mode; /** 0 or MPOL_F_STATIC_NODES,MPOL_F_RELATIVE_NODES */
+   unsigned long nodemask;
+   unsigned long maxnode;
+   unsigned flags; /** MPOL_DEFAULT,MPOL_BIND,MPOL_INTERLEAVE,MPOL_PREFERRED,MPOL_LOCAL */
+} rozofs_numa_mem_t;
 /**
 *  case of NUMA: allocate the running node according to the
 *  instance
@@ -26,5 +36,13 @@
    @param criteria: the criteria that leaded to the instance choice
 */
 void rozofs_numa_allocate_node(int instance, char * criteria);
+/**
+*  case of NUMA: allocate the running node according to the
+*  instance
+
+   @param instance: instance number of the process
+   @param excluded_node: numa node to exclude (can be -1 when not significant)
+*/
+void rozofs_numa_run_on_node(uint32_t instance, int excluded_node);
 
 #endif

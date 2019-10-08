@@ -34,6 +34,8 @@
 #include "rozofs_storcli_mojette_thread_intf.h" 
 #include "rozofs_storcli.h"
 #include "storcli_main.h"
+#include <numa.h>
+#include <numaif.h>
 
 int af_unix_disk_socket_ref = -1;
  
@@ -402,8 +404,21 @@ void *rozofs_stcmoj_thread(void *arg) {
                     (policy == SCHED_RR)    ? "SCHED_RR" :
                     "???");
  #endif        
-     
-    }
+
+    } 
+   if (common_config.processor_model == common_config_processor_model_EPYC)
+   {
+    /*
+    ** EPYC
+    */ 
+    if ((common_config.adaptor_numa_node >= 0) && (numa_available()>=0))
+    {
+      uint32_t nodeid;
+
+      nodeid = common_config.adaptor_numa_node;
+      numa_run_on_node(nodeid);      
+    }         
+  }
   while(1) {
     if ((ctx_p->thread_idx != 0) && (ctx_p->thread_idx >= common_config.mojette_thread_count))
     {
