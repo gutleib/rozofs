@@ -1,5 +1,7 @@
 #!/bin/bash
-
+RED='\033[91m\033[40m\033[1m'
+GREEN='\033[92m\033[40m'
+NORMAL='\033[0m'
 #_________________________________________
 # Display Syntax
 #_________________________________________
@@ -16,11 +18,25 @@ syntax() {
 #_________________________________________
 #
 rozo_core_ls () {
-  echo "Cores on ${HOSTNAME} :"
+
+  nb=0
   for corefile in `ls /var/run/rozofs/core/*/* 2>/dev/null`
   do
+  
+    if [ "${nb}" == "0" ];
+    then
+      printf ${RED}"Some core files on ${HOSTNAME} :\n"${NORMAL}
+    fi
+    nb=$((nb+1))
+       
     ls -lisa ${corefile}
   done
+
+  if [ "${nb}" == "0" ];
+  then
+    printf ${GREEN}"No core files on ${HOSTNAME}\n"${NORMAL}
+  fi
+  
   exit 0
 }
 #_________________________________________
@@ -28,9 +44,19 @@ rozo_core_ls () {
 #_________________________________________
 #
 rozo_core_all () {
-
-  HOSTLIST=`grep -oP "n\d+" /etc/hosts`
-  
+  case "$1" in
+    "") FILTER="n";;
+    *)  FILTER=$1;;
+  esac
+  HOSTLIST=`grep -oP "${FILTER}\d+\b" /etc/hosts | sort -u`
+  case "${HOSTLIST}" in
+    "") {
+      cat /etc/hosts
+      printf "\033[91m\033[40mNo host matching prefix \"%s\" in /etc/hosts.\n" ${FILTER}
+      printf "Try other prefix \"rozo_core all <prefix>\".\033[0m\n"
+      exit 1
+    };;
+  esac  
   for h in ${HOSTLIST}
   do
     ssh ${h} "rozo_core ls"
