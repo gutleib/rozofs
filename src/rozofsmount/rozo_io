@@ -400,7 +400,8 @@ else:
 what = ""    
 if options.what != None:
   for w in options.what:
-    what = what + ' ' + w
+    for letter in w:
+      what = what + ' ' + letter
 #
 # input RozoFS mount point is either in args or current path
 #
