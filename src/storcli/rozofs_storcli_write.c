@@ -896,12 +896,7 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    for (i = 0; i < forward_projection; i++)
    {
      working_ctx_p->prj_ctx[i].prj_state = ROZOFS_PRJ_READ_IDLE;
-     if (working_ctx_p->wr_nb_blocks<=1) {
-       working_ctx_p->prj_ctx[i].prj_buf   =  rozofs_storcli_any_south_buffer_allocate();     
-     }
-     else {
-       working_ctx_p->prj_ctx[i].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
-     }  
+     working_ctx_p->prj_ctx[i].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
      if (working_ctx_p->prj_ctx[i].prj_buf == NULL)
      {
        /*
@@ -1322,12 +1317,7 @@ void rozofs_storcli_write_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,u
 	   */
 	   ruc_buf_inuse_decrement(prj_cxt_p[projection_id].prj_buf);
                  int position  = rozofs_storcli_get_position_of_first_byte2write();
-           if (working_ctx_p->wr_nb_blocks<=1) {
-             prj_cxt_p[projection_id].prj_buf   =  rozofs_storcli_any_south_buffer_allocate();     
-           }
-           else {
-             prj_cxt_p[projection_id].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
-           }             
+           prj_cxt_p[projection_id].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);         
            if (prj_cxt_p[projection_id].prj_buf == NULL)
            {
 	     /*
@@ -2361,12 +2351,8 @@ void rozofs_storcli_write_timeout(rozofs_storcli_ctx_t *working_ctx_p)
       /*
       ** allocate a buffer for the missing projection
       */
-      if (working_ctx_p->wr_nb_blocks<=1) {
-        working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing   =  rozofs_storcli_any_south_buffer_allocate();     
-      }
-      else {
-        working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
-      }       
+      working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+
       if (working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing == NULL)
       {
 	/*
