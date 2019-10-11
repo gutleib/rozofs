@@ -19,83 +19,6 @@ YELLOW='\033[93m\033[40m'
 ib_devices = []
 
 from optparse import OptionParser
-#___________________________
-# converts string <inBytes> to integer 
-# in the unit given by <to>.
-# <inBytes>  is 
-# [<spaces>]<numeric>[{.|,}<numeric>][<spaces>]<unit>
-# <unit> is {B|K|KB|M|MB|G|GB|T|TB|P|PB}
-# <to> is <unit>
-def common_convert_Bytes(inBytes,to="B"):
-  inBytes = inBytes.replace(" ", "")
-
-  if "." in inBytes:
-    before = int(inBytes.split('.')[0])
-    after  = inBytes.split('.')[1]
-    unit   = re.split('(\d+)',after)[2]
-    after  = re.split('(\d+)',after)[1]
-  elif "," in inBytes:
-    before = int(inBytes.split(',')[0])
-    after  = inBytes.split(',')[1]
-    unit   = re.split('(\d+)',after)[2]
-    after  = re.split('(\d+)',after)[1]
-  else:
-    unit   = re.split('(\d+)',inBytes)[2]
-    before = re.split('(\d+)',inBytes)[1]
-    after = "0"
-
-  if   len(after) == 1: after=int(after)*100
-  elif len(after) == 2: after=int(after)*10
-  elif len(after) == 3: after=int(after)
-
-  if   unit == "KB" or unit == "K": val = (int(before)*1000 + after)
-  elif unit == "MB" or unit == "M": val = (int(before)*1000 + after) * 1000
-  elif unit == "GB" or unit == "G": val = (int(before)*1000 + after) * 1000000
-  elif unit == "TB" or unit == "T": val = (int(before)*1000 + after) * 1000000000
-  elif unit == "PB" or unit == "P": val = (int(before)*1000 + after) * 1000000000000
-  else: val = int(before)
-  
-  if to == "K" or to =="KB": return val/1000
-  if to == "M" or to =="MB": return val/1000000  
-  if to == "G" or to =="GB": return val/1000000000
-  if to == "T" or to =="TB": return val/1000000000000
-  if to == "P" or to =="PB": return val/1000000000000000
-  return val
-#______________________  
-def common_bytes_with_unit(inBytes):
-  if inBytes < 0: sign = "-"
-  else:           sign = ""
-  
-  string="%s"%(inBytes)
-  value = common_convert_Bytes(string,"B")
-
-  if value < 1000: return "%s%4d  "%(sign,value)
-  
-  if value < 1000000:
-    if value >= (100*1000): return "%s%4d K"%(sign,value/1000)
-    if value >=  (10*1000): return "%s%2d.%1d K"%(sign,value/1000,(value % 1000) / 100)
-    return "%s%1d.%2.2d K"%(sign,value/1000,(value % 1000) / 10)   
-  
-  if value < 1000000000:  
-    if value >= (100*1000000): return "%s%4d M"%(sign,value/1000000)
-    if value >=  (10*1000000): return "%s%2d.%1d M"%(sign,value/1000000,(value % 1000000) / 100000)
-    return "%s%1d.%2.2d M"%(sign,value/1000000,(value % 1000000) / 10000)   
-  
-  if value < 1000000000000:  
-    if value >= (100*1000000000): return "%s%4d G"%(sign,value/1000000000)
-    if value >=  (10*1000000000): return "%s%2d.%1d G"%(sign,value/1000000000,(value % 1000000000) / 100000000)
-    return "%s%1d.%2.2d G"%(sign,value/1000000000,(value % 1000000000) / 10000000)   
-  
-  if value < 1000000000000000:  
-    if value >= (100*1000000000000): return "%s%4d T"%(sign,value/1000000000000)
-    if value >=  (10*1000000000000): return "%s%2d.%1d T"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000)
-    return "%s%1d.%2.2d T"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)   
-  
-  if value < 1000000000000000000:  
-    if value >= (100*1000000000000000): return "%s%4d P"%(sign,value/1000000000000000)
-    if value >=  (10*1000000000000000): return "%s%2d.%1d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
-  
-  return "%s%1s.%2.2d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
 
 #______________________  
 def read_string_file(path):
@@ -107,28 +30,33 @@ def read_string_file(path):
 def read_int_file(path):
     return int(read_string_file(path))
 
-
-
 #______________________  
 class rozo_roce_port:
   def __init__(self,port_num,path):
+    global options
     self.port_path  = path
     self.port_num   = port_num
-    self.recv       = int(0)
-    self.xmit       = int(0)
-    self.recv_delta = int(0)
-    self.xmit_delta = int(0)
+    if options.track == None: return
+    self.counter = []
+    for counter in options.track: self.counter.append(int(0))
+    self.delta_counter = []
+    for counter in options.track: self.delta_counter.append(int(0))
     self.update_counters()
 
   def update_counters(self):
-    recv = read_int_file("%s/counters/port_rcv_data"%(self.port_path))
-    self.recv_delta = 4 *(recv - self.recv)
-    self.recv       = recv
-    
-    xmit = read_int_file("%s/counters/port_xmit_data"%(self.port_path))
-    self.xmit_delta = 4 * (xmit - self.xmit)
-    self.xmit       = xmit
-        
+    global options
+    idx = int(0)
+    for counter in options.track:
+      fname="%s/counters/%s"%(self.port_path,counter)
+      if not os.path.exists(fname):
+        fname="%s/hw_counters/%s"%(self.port_path,counter)
+        if not os.path.exists(fname):
+          print "counter %s not found !!!"%(counter)
+          sys.exit(1)
+      val = read_int_file(fname)
+      self.delta_counter[idx] = val - self.counter[idx]
+      self.counter[idx]       = val    
+      idx = idx + int(1)    
     
 #______________________  
 class rozo_roce_device:
@@ -146,51 +74,41 @@ class rozo_roce_device:
     self.ports.append(roce_port)
 
 #______________________  
-def rozo_roce_dstat(what):
+def rozo_roce_track():
   global ib_devices
 
   while True: 
-
-    LINE = BLUE
-    for ib_device in ib_devices:
-      for port in ib_device.ports:
-        if what == "all":
-          LINE = LINE + "|   %20s /%2s          "%(ib_device.name,port.port_num)
-        else:
-          LINE = LINE + "| %12s /%2s  "%(ib_device.name,port.port_num)          
+    LINE = CYAN
+    for counter in options.track:
+      LINE = LINE + "| %-12s "%(counter[0:12])          
     LINE = LINE + '|'
     print LINE
-    LINE = BLUE     
-    for ib_device in ib_devices:
-      for port in ib_device.ports:
-        if what == "all":
-          LINE = LINE + "| " + UBBLUE + "       recv      " + NORMAL + " " +  UBBLUE + "       xmit      " + NORMAL + BLUE + " "
-        else:
-          LINE = LINE + "| " + UBBLUE + "   recv " + NORMAL + " " +  UBBLUE + "   xmit " + NORMAL + BLUE + " "        
+    LINE = CYAN
+    for counter in options.track:
+      LINE = LINE + "| %-12s "%(counter[12:24])          
     LINE = LINE + '|'
     print LINE
 
     for i in range (0,30):    
       time.sleep(1) 
+
       LINE =  NORMAL
       for ib_device in ib_devices:
         for port in ib_device.ports:
           port.update_counters()
-          if what == "all": 
-            LINE = LINE + "| %s%7sb/%7sB%s %s%7sb/%7sB%s "%(CYAN,
-                                                    common_bytes_with_unit(port.recv_delta*int(8)),
-                                                    common_bytes_with_unit(port.recv_delta),
-                                                    NORMAL, YELLOW,
-                                                    common_bytes_with_unit(port.xmit_delta*int(8)),
-                                                    common_bytes_with_unit(port.xmit_delta),
-                                                    NORMAL)
-          elif what == "B":
-            LINE = LINE + "| %s%7sB%s %s%7sB%s "%(CYAN,common_bytes_with_unit(port.recv_delta),NORMAL, YELLOW,common_bytes_with_unit(port.xmit_delta),NORMAL)
-          elif what == "b":
-            LINE = LINE + "| %s%7sb%s %s%7sb%s "%(CYAN,common_bytes_with_unit(port.recv_delta*int(8)),NORMAL, YELLOW,common_bytes_with_unit(port.xmit_delta*int(8)),NORMAL)                                                    
+          
+      idx = 0    
+      for counter in options.track:
+        val = int(0)
+        delta = int(0)
+        for ib_device in ib_devices:
+          for port in ib_device.ports:
+            val   = val   + port.counter[idx]
+            delta = delta + port.delta_counter[idx]
+        LINE = LINE + "| %12s "%(delta)            
+        idx = idx + 1                                        
       LINE = LINE + '|'
       print LINE
-  
  
 #______________________  
 def rozo_roce_counters():
@@ -241,18 +159,16 @@ def rozo_roce_counters():
   
 #______________________  
 def rozo_man():
+  print "RozoFS utility to dump/track IB counters"
   print "Usage:"
-  print BOLD + " rozo_roce -c " + NORMAL + " Display IB devices counters." 
-  print BOLD + " rozo_roce -t " + NORMAL + " Display IB devices ports throughput int bits and Bytes per second ." 
-  print BOLD + " rozo_roce -b " + NORMAL + " Display IB devices ports throughput int bits per second." 
-  print BOLD + " rozo_roce -B " + NORMAL + " Display IB devices ports throughput int Bytes per second." 
+  print BOLD + " rozo_roce -c,--counters " + NORMAL + " Display all IB devices counters." 
+  print BOLD + " rozo_roce -t <counter1> ... -t <counterN>" + NORMAL + "Track IB devices ports counters." 
   sys.exit(0)
     
 parser = OptionParser()
 parser.add_option("-c","--counters", action="store_true",default=False, dest="counters", help="Display IB devices counters.")
-parser.add_option("-t","--throughput", action="store_true",default=False, dest="throughput", help="Display IB devices ports throughput per second in bits and Bytes.")
-parser.add_option("-b","--bits", action="store_true",default=False, dest="bits", help="Display IB devices ports throughput int bits per second.")
-parser.add_option("-B","--Bytes", action="store_true",default=False, dest="Bytes", help="Display IB devices ports throughput in Bytes per second.")
+parser.add_option("-t","--track", action="append",type="string", dest="track", help="IB counter to track.")
+
 (options, args) = parser.parse_args()
 
 #
@@ -267,13 +183,10 @@ for devName in os.listdir("/sys/class/infiniband/"):
   for port in os.listdir("/sys/class/infiniband/%s/ports/"%(devName)):
     ib_device.add_port(port)
 
-if options.Bytes == True:
-  rozo_roce_dstat("B")
-elif options.bits == True:
-  rozo_roce_dstat("b")
-elif options.throughput == True:
-  rozo_roce_dstat("all")
-elif options.counters:
+if options.counters:
   rozo_roce_counters()
-else:
+elif options.track == None:
   rozo_man()
+else:
+  rozo_roce_track()
+
