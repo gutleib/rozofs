@@ -1,0 +1,336 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+import datetime
+import shutil
+
+BLUE='\033[94m\033[40m'
+UBBLUE='\033[1;4;94m\033[40m'
+NORMAL='\033[0m'
+BOLD='\033[1m'
+CYAN='\033[96m\033[40m'
+YELLOW='\033[93m\033[40m'
+
+ib_devices = []
+
+from optparse import OptionParser
+#___________________________
+# converts string <inBytes> to integer 
+# in the unit given by <to>.
+# <inBytes>  is 
+# [<spaces>]<numeric>[{.|,}<numeric>][<spaces>]<unit>
+# <unit> is {B|K|KB|M|MB|G|GB|T|TB|P|PB}
+# <to> is <unit>
+def common_convert_Bytes(inBytes,to="B"):
+  inBytes = inBytes.replace(" ", "")
+
+  if "." in inBytes:
+    before = int(inBytes.split('.')[0])
+    after  = inBytes.split('.')[1]
+    unit   = re.split('(\d+)',after)[2]
+    after  = re.split('(\d+)',after)[1]
+  elif "," in inBytes:
+    before = int(inBytes.split(',')[0])
+    after  = inBytes.split(',')[1]
+    unit   = re.split('(\d+)',after)[2]
+    after  = re.split('(\d+)',after)[1]
+  else:
+    unit   = re.split('(\d+)',inBytes)[2]
+    before = re.split('(\d+)',inBytes)[1]
+    after = "0"
+
+  if   len(after) == 1: after=int(after)*100
+  elif len(after) == 2: after=int(after)*10
+  elif len(after) == 3: after=int(after)
+
+  if   unit == "KB" or unit == "K": val = (int(before)*1000 + after)
+  elif unit == "MB" or unit == "M": val = (int(before)*1000 + after) * 1000
+  elif unit == "GB" or unit == "G": val = (int(before)*1000 + after) * 1000000
+  elif unit == "TB" or unit == "T": val = (int(before)*1000 + after) * 1000000000
+  elif unit == "PB" or unit == "P": val = (int(before)*1000 + after) * 1000000000000
+  else: val = int(before)
+  
+  if to == "K" or to =="KB": return val/1000
+  if to == "M" or to =="MB": return val/1000000  
+  if to == "G" or to =="GB": return val/1000000000
+  if to == "T" or to =="TB": return val/1000000000000
+  if to == "P" or to =="PB": return val/1000000000000000
+  return val
+#______________________  
+def common_bytes_with_unit(inBytes):
+  if inBytes < 0: sign = "-"
+  else:           sign = ""
+  
+  string="%s"%(inBytes)
+  value = common_convert_Bytes(string,"B")
+
+  if value < 1000: return "%s%4d  "%(sign,value)
+  
+  if value < 1000000:
+    if value >= (100*1000): return "%s%4d K"%(sign,value/1000)
+    if value >=  (10*1000): return "%s%2d.%1d K"%(sign,value/1000,(value % 1000) / 100)
+    return "%s%1d.%2.2d K"%(sign,value/1000,(value % 1000) / 10)   
+  
+  if value < 1000000000:  
+    if value >= (100*1000000): return "%s%4d M"%(sign,value/1000000)
+    if value >=  (10*1000000): return "%s%2d.%1d M"%(sign,value/1000000,(value % 1000000) / 100000)
+    return "%s%1d.%2.2d M"%(sign,value/1000000,(value % 1000000) / 10000)   
+  
+  if value < 1000000000000:  
+    if value >= (100*1000000000): return "%s%4d G"%(sign,value/1000000000)
+    if value >=  (10*1000000000): return "%s%2d.%1d G"%(sign,value/1000000000,(value % 1000000000) / 100000000)
+    return "%s%1d.%2.2d G"%(sign,value/1000000000,(value % 1000000000) / 10000000)   
+  
+  if value < 1000000000000000:  
+    if value >= (100*1000000000000): return "%s%4d T"%(sign,value/1000000000000)
+    if value >=  (10*1000000000000): return "%s%2d.%1d T"%(sign,value/1000000000000,(value % 1000000000000) / 100000000000)
+    return "%s%1d.%2.2d T"%(sign,value/1000000000000,(value % 1000000000000) / 10000000000)   
+  
+  if value < 1000000000000000000:  
+    if value >= (100*1000000000000000): return "%s%4d P"%(sign,value/1000000000000000)
+    if value >=  (10*1000000000000000): return "%s%2d.%1d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 100000000000000)
+  
+  return "%s%1s.%2.2d P"%(sign,value/1000000000000000,(value % 1000000000000000) / 10000000000000)   
+
+#______________________  
+def read_string_file(path):
+    f = open(path,"r")
+    val = f.read()
+    f.close()
+    return val.strip()
+#______________________  
+def read_int_file(path):
+    return int(read_string_file(path))
+
+
+
+#______________________  
+class rozo_roce_port:
+  def __init__(self,port_num,path):
+    self.port_path  = path
+    self.port_num   = port_num
+    self.recv       = int(0)
+    self.xmit       = int(0)
+    self.recv_delta = int(0)
+    self.xmit_delta = int(0)
+    self.update_counters()
+
+  def update_counters(self):
+    recv = read_int_file("%s/counters/port_rcv_data"%(self.port_path))
+    self.recv_delta = 4 *(recv - self.recv)
+    self.recv       = recv
+    
+    xmit = read_int_file("%s/counters/port_xmit_data"%(self.port_path))
+    self.xmit_delta = 4 * (xmit - self.xmit)
+    self.xmit       = xmit
+        
+#______________________  
+class rozo_ethernet:
+
+  def __init__(self):
+    self.port_path  = "/proc/net/dev"
+    self.recv       = int(0)
+    self.xmit       = int(0)
+    self.recv_delta = int(0)
+    self.xmit_delta = int(0)
+    self.update_counters()
+
+  def update_counters(self):
+    recv = int(0)
+    xmit = int(0)
+    string="cat %s"%(self.port_path)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:
+      if '|' in line: continue
+      if "bond" in line: continue
+      if "lo" in line: continue
+      words=line.split()
+      recv = recv + int(words[1])
+      xmit = xmit + int(words[9])  
+    self.recv_delta = recv - self.recv
+    self.xmit_delta = xmit - self.xmit
+    self.recv = recv
+    self.xmit = xmit
+  
+#______________________  
+class rozo_roce_device:
+
+  def __init__(self,name):
+    self.name = name
+    self.nb_ports = int(0)
+    self.ports = []
+    ib_devices.append(self)
+
+  def add_port(self,port):
+    self.nb_ports = self.nb_ports + int(1)
+    path = "/sys/class/infiniband/%s/ports/%s/"%(self.name,port)
+    roce_port = rozo_roce_port(port,path)
+    self.ports.append(roce_port)
+
+
+#______________________  
+def rozo_nstat_display_header(what):
+  global ib_devices
+  global eth
+  
+  nbCounters = int(1)
+
+  LINE = BLUE
+  if what == "all":
+    LINE = LINE + "|      %20s           "%("Ethernet")
+  else:
+    LINE = LINE + "|   %12s    "%("Ethernet")          
+
+  for ib_device in ib_devices:
+    for port in ib_device.ports:
+      nbCounters = nbCounters + int(1)
+      if what == "all":
+        LINE = LINE + "|   %20s /%2s          "%(ib_device.name,port.port_num)
+      else:
+        LINE = LINE + "| %12s /%2s  "%(ib_device.name,port.port_num)          
+  LINE = LINE + '|'
+  print LINE
+
+
+  LINE = BLUE     
+  for i in range(nbCounters):
+    if what == "all":
+      LINE = LINE + "| " + UBBLUE + "       recv      " + NORMAL + " " +  UBBLUE + "       xmit      " + NORMAL + BLUE + " "
+    else:
+      LINE = LINE + "| " + UBBLUE + "   recv " + NORMAL + " " +  UBBLUE + "   xmit " + NORMAL + BLUE + " "        
+  LINE = LINE + '|'
+  print LINE
+#______________________  
+def rozo_nstat_get_color(val):
+  if int(val) < int(1000000): return NORMAL
+  if int(val) < int(1000000000) : return CYAN
+  return YELLOW
+#______________________  
+def rozo_nstat_display_counters(what):
+  global ib_devices
+  global eth
+
+  #
+  # Display ethernet statistics
+  #
+  LINE =  NORMAL
+  if what == "all": 
+    colrecv = rozo_nstat_get_color(eth.recv_delta)
+    colxmit = rozo_nstat_get_color(eth.xmit_delta)
+    LINE = LINE + "| %s%7sb/%7sB%s %s%7sb/%7sB%s "%(colrecv,
+                                            common_bytes_with_unit(eth.recv_delta*int(8)),
+                                            common_bytes_with_unit(eth.recv_delta),
+                                            NORMAL, colxmit,
+                                            common_bytes_with_unit(eth.xmit_delta*int(8)),
+                                            common_bytes_with_unit(eth.xmit_delta),
+                                            NORMAL)
+  elif what == "B":
+    colrecv = rozo_nstat_get_color(eth.recv_delta)
+    colxmit = rozo_nstat_get_color(eth.xmit_delta)
+    LINE = LINE + "| %s%7sB%s %s%7sB%s "%(colrecv,common_bytes_with_unit(eth.recv_delta),NORMAL, colxmit,common_bytes_with_unit(eth.xmit_delta),NORMAL)
+  elif what == "b":
+    colrecv = rozo_nstat_get_color(eth.recv_delta*int(8))
+    colxmit = rozo_nstat_get_color(eth.xmit_delta*int(8))
+    LINE = LINE + "| %s%7sb%s %s%7sb%s "%(colrecv,common_bytes_with_unit(eth.recv_delta*int(8)),NORMAL, colxmit,common_bytes_with_unit(eth.xmit_delta*int(8)),NORMAL)                                                    
+
+
+  #
+  # Display Roce statistics
+  #
+  for ib_device in ib_devices:
+    for port in ib_device.ports:
+      if what == "all": 
+        colrecv = rozo_nstat_get_color(port.recv_delta)
+        colxmit = rozo_nstat_get_color(port.xmit_delta)
+        LINE = LINE + "| %s%7sb/%7sB%s %s%7sb/%7sB%s "%(colrecv,
+                                                common_bytes_with_unit(port.recv_delta*int(8)),
+                                                common_bytes_with_unit(port.recv_delta),
+                                                NORMAL, colxmit,
+                                                common_bytes_with_unit(port.xmit_delta*int(8)),
+                                                common_bytes_with_unit(port.xmit_delta),
+                                                NORMAL)
+      elif what == "B":
+        colrecv = rozo_nstat_get_color(port.recv_delta)
+        colxmit = rozo_nstat_get_color(port.xmit_delta)
+        LINE = LINE + "| %s%7sB%s %s%7sB%s "%(colrecv,common_bytes_with_unit(port.recv_delta),NORMAL, colxmit,common_bytes_with_unit(port.xmit_delta),NORMAL)
+      elif what == "b":
+        colrecv = rozo_nstat_get_color(port.recv_delta*int(8))
+        colxmit = rozo_nstat_get_color(port.xmit_delta*int(8))
+        LINE = LINE + "| %s%7sb%s %s%7sb%s "%(colrecv,common_bytes_with_unit(port.recv_delta*int(8)),NORMAL, colxmit,common_bytes_with_unit(port.xmit_delta*int(8)),NORMAL)                                                    
+  LINE = LINE + '|'
+  print LINE
+
+#______________________  
+def rozo_nstat(what):
+  global ib_devices
+  global eth
+
+  while True: 
+
+    rozo_nstat_display_header(what)
+
+    for i in range (0,30): 
+       
+      time.sleep(1) 
+      
+      #
+      # Update statistics
+      #
+      eth.update_counters()
+      for ib_device in ib_devices:
+        for port in ib_device.ports:
+          port.update_counters()
+
+      rozo_nstat_display_counters(what)
+ 
+  
+#______________________  
+def rozo_man():
+  print "Usage:"
+  print BOLD + " rozo_nstat -t " + NORMAL + " Display throughput int bits and Bytes per second ." 
+  print BOLD + " rozo_nstat -b " + NORMAL + " Display throughput int bits per second." 
+  print BOLD + " rozo_nstat -B " + NORMAL + " Display throughput int Bytes per second." 
+  sys.exit(0)
+    
+parser = OptionParser()
+parser.add_option("-t","--throughput", action="store_true",default=False, dest="throughput", help="Display throughput per second in bits and Bytes.")
+parser.add_option("-b","--bits", action="store_true",default=False, dest="bits", help="Display throughput int bits per second.")
+parser.add_option("-B","--Bytes", action="store_true",default=False, dest="Bytes", help="Display throughput in Bytes per second.")
+(options, args) = parser.parse_args()
+
+
+
+
+#
+# Init Ethernet counters
+#
+eth = rozo_ethernet()
+
+#
+# Make the list of devices
+#
+if not os.path.exists("/sys/class/infiniband/"):
+  print "Roce is not installed"
+else:
+  #
+  # Check IB devices
+  #
+  for devName in os.listdir("/sys/class/infiniband/"):
+    ib_device = rozo_roce_device(devName)
+    for port in os.listdir("/sys/class/infiniband/%s/ports/"%(devName)):
+      ib_device.add_port(port)
+
+if options.Bytes == True:
+  rozo_nstat("B")
+elif options.bits == True:
+  rozo_nstat("b")
+elif options.throughput == True:
+  rozo_nstat("all")
+else:
+  rozo_man()

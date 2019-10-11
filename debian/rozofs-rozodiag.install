@@ -6,4 +6,5 @@
 /usr/bin/rozo_dumpcnf
 /usr/bin/rozo_memdump
 /usr/bin/rozo_roce
+/usr/bin/rozo_nstat
 /usr/bin/rozo_core
