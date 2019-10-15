@@ -111,14 +111,19 @@ def read_int_file(path):
 
 #______________________  
 class rozo_roce_port:
-  def __init__(self,port_num,path):
+  def __init__(self,name,port_num,path):
+    self.name       = name
     self.port_path  = path
     self.port_num   = port_num
     self.recv       = int(0)
     self.xmit       = int(0)
     self.recv_delta = int(0)
     self.xmit_delta = int(0)
+    self.trace      = False
+    if options.itf != None:
+      if name in options.itf: self.trace = True    
     self.update_counters()
+
 
   def update_counters(self):
     recv = read_int_file("%s/counters/port_rcv_data"%(self.port_path))
@@ -128,6 +133,28 @@ class rozo_roce_port:
     xmit = read_int_file("%s/counters/port_xmit_data"%(self.port_path))
     self.xmit_delta = 4 * (xmit - self.xmit)
     self.xmit       = xmit
+    
+    ib.update_counters(self.recv_delta,self.xmit_delta)
+
+
+#______________________  
+class rozo_eth_port:
+  def __init__(self,name,recv,xmit):
+    self.name       = name
+    self.recv       = recv
+    self.xmit       = xmit
+    self.recv_delta = int(0)
+    self.xmit_delta = int(0)
+    self.trace      = False
+    if options.itf != None:
+      if name in options.itf: 
+        self.trace = True
+
+  def update_counters(self,recv,xmit):
+    self.recv_delta = recv - self.recv
+    self.xmit_delta = xmit - self.xmit
+    self.recv = recv
+    self.xmit = xmit  
         
 #______________________  
 class rozo_ethernet:
@@ -138,25 +165,64 @@ class rozo_ethernet:
     self.xmit       = int(0)
     self.recv_delta = int(0)
     self.xmit_delta = int(0)
-    self.update_counters()
-
-  def update_counters(self):
+    self.itf = []
+    
     recv = int(0)
     xmit = int(0)
-    string="cat %s"%(self.port_path)
+    string="cat /proc/net/dev"
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
       if '|' in line: continue
       if "bond" in line: continue
       if "lo" in line: continue
+      if "docker" in line: continue
+      if "veth" in line: continue
       words=line.split()
+      itf = words[0].split(':')[0]
+      recv = recv + int(words[1])
+      xmit = xmit + int(words[9]) 
+      eth_port = rozo_eth_port(itf,int(words[1]),int(words[9]))
+      self.itf.append(eth_port)
+    self.recv       = recv
+    self.xmit       = xmit
+
+  def update_counters(self):
+    recv = int(0)
+    xmit = int(0)
+    string="cat /proc/net/dev"
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:
+      if '|' in line: continue
+      if "bond" in line: continue
+      if "lo" in line: continue
+      if "docker" in line: continue
+      if "veth" in line: continue
+      words=line.split()
+      itf = words[0].split(':')[0]
+      for port in self.itf:
+        if port.name == itf:
+          port.update_counters(int(words[1]),int(words[9]))
       recv = recv + int(words[1])
       xmit = xmit + int(words[9])  
     self.recv_delta = recv - self.recv
     self.xmit_delta = xmit - self.xmit
     self.recv = recv
     self.xmit = xmit
+#______________________  
+class rozo_ib:
+
+  def __init__(self):
+    self.reset_counters()
+
+  def update_counters(self,recv,xmit):
+    self.recv_delta = self.recv_delta + recv
+    self.xmit_delta = self.xmit_delta + xmit
+
+  def reset_counters(self):
+    self.recv_delta = int(0)
+    self.xmit_delta = int(0)
   
 #______________________  
 class rozo_roce_device:
@@ -170,30 +236,32 @@ class rozo_roce_device:
   def add_port(self,port):
     self.nb_ports = self.nb_ports + int(1)
     path = "/sys/class/infiniband/%s/ports/%s/"%(self.name,port)
-    roce_port = rozo_roce_port(port,path)
+    roce_port = rozo_roce_port("%s/%s"%(ib_device.name,port),port,path)
     self.ports.append(roce_port)
 
 
 #______________________  
-def rozo_nstat_display_header(what):
+def rozo_nstat_display_header():
   global ib_devices
   global eth
-  
-  nbCounters = int(1)
+  global what
+    
+  nbCounters = int(2)
 
   LINE = BLUE
   if what == "all":
-    LINE = LINE + "|      %20s           "%("Ethernet")
+    LINE = LINE + "|      %20s           |      %20s           "%("Ethernet","IB")
   else:
-    LINE = LINE + "|   %12s    "%("Ethernet")          
+    LINE = LINE + "|   %12s    |   %12s    "%("Ethernet","IB")          
 
-  for ib_device in ib_devices:
-    for port in ib_device.ports:
+  if options.itf != None:
+    for itf in options.itf:
       nbCounters = nbCounters + int(1)
       if what == "all":
-        LINE = LINE + "|   %20s /%2s          "%(ib_device.name,port.port_num)
+        LINE = LINE + "|      %20s           "%(itf)
       else:
-        LINE = LINE + "| %12s /%2s  "%(ib_device.name,port.port_num)          
+        LINE = LINE + "|   %12s    "%(itf)          
+
   LINE = LINE + '|'
   print LINE
 
@@ -212,68 +280,78 @@ def rozo_nstat_get_color(val):
   if int(val) < int(1000000000) : return CYAN
   return YELLOW
 #______________________  
-def rozo_nstat_display_counters(what):
-  global ib_devices
+def rozo_nstat_display_one_counters(recv,xmit):
+  global LINE
+  global what
+
+  if what == "all": 
+    colrecv = rozo_nstat_get_color(recv)
+    colxmit = rozo_nstat_get_color(xmit)
+    LINE = LINE + "| %s%7sb/%7sB%s %s%7sb/%7sB%s "%(colrecv,
+                                            common_bytes_with_unit(recv*int(8)),
+                                            common_bytes_with_unit(recv),
+                                            NORMAL, colxmit,
+                                            common_bytes_with_unit(xmit*int(8)),
+                                            common_bytes_with_unit(xmit),
+                                            NORMAL)
+  elif what == "B":
+    colrecv = rozo_nstat_get_color(recv)
+    colxmit = rozo_nstat_get_color(xmit)
+    LINE = LINE + "| %s%7sB%s %s%7sB%s "%(colrecv,common_bytes_with_unit(recv),NORMAL, colxmit,common_bytes_with_unit(xmit),NORMAL)
+  elif what == "b":
+    colrecv = rozo_nstat_get_color(recv*int(8))
+    colxmit = rozo_nstat_get_color(xmit*int(8))
+    LINE = LINE + "| %s%7sb%s %s%7sb%s "%(colrecv,common_bytes_with_unit(recv*int(8)),NORMAL, colxmit,common_bytes_with_unit(xmit*int(8)),NORMAL)                                                    
+
+#______________________  
+def rozo_nstat_display_counters():
+  global ib
   global eth
+  global LINE
 
   #
   # Display ethernet statistics
   #
-  LINE =  NORMAL
-  if what == "all": 
-    colrecv = rozo_nstat_get_color(eth.recv_delta)
-    colxmit = rozo_nstat_get_color(eth.xmit_delta)
-    LINE = LINE + "| %s%7sb/%7sB%s %s%7sb/%7sB%s "%(colrecv,
-                                            common_bytes_with_unit(eth.recv_delta*int(8)),
-                                            common_bytes_with_unit(eth.recv_delta),
-                                            NORMAL, colxmit,
-                                            common_bytes_with_unit(eth.xmit_delta*int(8)),
-                                            common_bytes_with_unit(eth.xmit_delta),
-                                            NORMAL)
-  elif what == "B":
-    colrecv = rozo_nstat_get_color(eth.recv_delta)
-    colxmit = rozo_nstat_get_color(eth.xmit_delta)
-    LINE = LINE + "| %s%7sB%s %s%7sB%s "%(colrecv,common_bytes_with_unit(eth.recv_delta),NORMAL, colxmit,common_bytes_with_unit(eth.xmit_delta),NORMAL)
-  elif what == "b":
-    colrecv = rozo_nstat_get_color(eth.recv_delta*int(8))
-    colxmit = rozo_nstat_get_color(eth.xmit_delta*int(8))
-    LINE = LINE + "| %s%7sb%s %s%7sb%s "%(colrecv,common_bytes_with_unit(eth.recv_delta*int(8)),NORMAL, colxmit,common_bytes_with_unit(eth.xmit_delta*int(8)),NORMAL)                                                    
-
+  LINE = NORMAL
+  rozo_nstat_display_one_counters(eth.recv_delta,eth.xmit_delta)
 
   #
-  # Display Roce statistics
+  # Display IB statistics
   #
-  for ib_device in ib_devices:
-    for port in ib_device.ports:
-      if what == "all": 
-        colrecv = rozo_nstat_get_color(port.recv_delta)
-        colxmit = rozo_nstat_get_color(port.xmit_delta)
-        LINE = LINE + "| %s%7sb/%7sB%s %s%7sb/%7sB%s "%(colrecv,
-                                                common_bytes_with_unit(port.recv_delta*int(8)),
-                                                common_bytes_with_unit(port.recv_delta),
-                                                NORMAL, colxmit,
-                                                common_bytes_with_unit(port.xmit_delta*int(8)),
-                                                common_bytes_with_unit(port.xmit_delta),
-                                                NORMAL)
-      elif what == "B":
-        colrecv = rozo_nstat_get_color(port.recv_delta)
-        colxmit = rozo_nstat_get_color(port.xmit_delta)
-        LINE = LINE + "| %s%7sB%s %s%7sB%s "%(colrecv,common_bytes_with_unit(port.recv_delta),NORMAL, colxmit,common_bytes_with_unit(port.xmit_delta),NORMAL)
-      elif what == "b":
-        colrecv = rozo_nstat_get_color(port.recv_delta*int(8))
-        colxmit = rozo_nstat_get_color(port.xmit_delta*int(8))
-        LINE = LINE + "| %s%7sb%s %s%7sb%s "%(colrecv,common_bytes_with_unit(port.recv_delta*int(8)),NORMAL, colxmit,common_bytes_with_unit(port.xmit_delta*int(8)),NORMAL)                                                    
+  rozo_nstat_display_one_counters(ib.recv_delta,ib.xmit_delta)
+
+  #
+  # Display requested interfaces
+  #
+  if options.itf != None:
+    for itf in options.itf:
+      found = False
+      for port in eth.itf:
+        if port.name == itf: 
+          rozo_nstat_display_one_counters(port.recv_delta,port.xmit_delta)
+          found = True
+          break
+      if found == True: continue     
+      for ib_device in ib_devices:
+        for port in ib_device.ports:
+          if port.name == itf: 
+            rozo_nstat_display_one_counters(port.recv_delta,port.xmit_delta)
+            break
+
   LINE = LINE + '|'
   print LINE
 
 #______________________  
-def rozo_nstat(what):
+def rozo_nstat(par):
   global ib_devices
   global eth
-
+  global what
+  
+  what = par
+  
   while True: 
 
-    rozo_nstat_display_header(what)
+    rozo_nstat_display_header()
 
     for i in range (0,30): 
        
@@ -283,25 +361,53 @@ def rozo_nstat(what):
       # Update statistics
       #
       eth.update_counters()
+      ib.reset_counters()
       for ib_device in ib_devices:
         for port in ib_device.ports:
           port.update_counters()
-
-      rozo_nstat_display_counters(what)
+          
+      rozo_nstat_display_counters()
  
+#______________________  
+def rozo_nstat_list():  
+  global ib_devices
+  global eth
   
+  print "Ethernet interfaces:"
+  string="cat /proc/net/dev"
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    if '|' in line: continue
+    if "bond" in line: continue
+    if "lo" in line: continue
+    if "docker" in line: continue
+    if "veth" in line: continue
+    itf = line.split()[0].split(':')[0]
+    print " - %s"%(itf)
+
+  print "IB interfaces:"
+  for ib_device in ib_devices:
+    for port in ib_device.ports:
+      print " - %s/%s"%(ib_device.name,port.port_num)   
+            
 #______________________  
 def rozo_man():
   print "Usage:"
+  print BOLD + " rozo_nstat -l " + NORMAL + " List every interface." 
   print BOLD + " rozo_nstat -t " + NORMAL + " Display throughput int bits and Bytes per second ." 
   print BOLD + " rozo_nstat -b " + NORMAL + " Display throughput int bits per second." 
   print BOLD + " rozo_nstat -B " + NORMAL + " Display throughput int Bytes per second." 
+  print BOLD + " rozo_nstat -i <if>" + NORMAL + " Display throughput of this interface." 
   sys.exit(0)
     
 parser = OptionParser()
+parser.add_option("-l","--list", action="store_true",default=False, dest="listing", help="List every interface.")
 parser.add_option("-t","--throughput", action="store_true",default=False, dest="throughput", help="Display throughput per second in bits and Bytes.")
 parser.add_option("-b","--bits", action="store_true",default=False, dest="bits", help="Display throughput int bits per second.")
 parser.add_option("-B","--Bytes", action="store_true",default=False, dest="Bytes", help="Display throughput in Bytes per second.")
+parser.add_option("-i","--if", action="append",type="string", dest="itf", help="Interface to detail.")
+
 (options, args) = parser.parse_args()
 
 
@@ -311,6 +417,7 @@ parser.add_option("-B","--Bytes", action="store_true",default=False, dest="Bytes
 # Init Ethernet counters
 #
 eth = rozo_ethernet()
+ib  = rozo_ib()
 
 #
 # Make the list of devices
@@ -325,6 +432,10 @@ else:
     ib_device = rozo_roce_device(devName)
     for port in os.listdir("/sys/class/infiniband/%s/ports/"%(devName)):
       ib_device.add_port(port)
+
+if options.listing == True:
+  rozo_nstat_list()
+  sys.exit(1)
 
 if options.Bytes == True:
   rozo_nstat("B")
