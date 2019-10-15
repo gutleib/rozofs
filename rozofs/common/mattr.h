@@ -542,7 +542,7 @@ typedef struct _rozofs_multi_vect_t
 typedef struct _rozofs_iov_multi_t
 {
    int nb_vectors;   /** number of vectors */
-   rozofs_multi_vect_t vectors[ ROZOFS_MAX_STRIPING_FACTOR+1];
+   rozofs_multi_vect_t vectors[ ROZOFS_MAX_STRIPING_FACTOR+2]; /**< take care of the hybrid section and up to 8 slave inodes */
 } rozofs_iov_multi_t;
 
 
