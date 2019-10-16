@@ -250,10 +250,10 @@ def rozo_nstat_display_header():
 
   LINE = BLUE
   if what == "all":
-    LINE = LINE + "|      %20s           |      %20s           "%("Ethernet","IB")
+    LINE = LINE + "|                Ethernet             |                 IB                  "
   else:
-    LINE = LINE + "|   %12s    |   %12s    "%("Ethernet","IB")          
-
+    LINE = LINE + "|       Ethernet    |         IB        "
+    
   if options.itf != None:
     for itf in options.itf:
       nbCounters = nbCounters + int(1)
