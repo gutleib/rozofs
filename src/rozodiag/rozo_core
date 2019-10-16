@@ -7,10 +7,11 @@ NORMAL='\033[0m'
 #_________________________________________
 #
 syntax() {
-  echo "rozo_core all             List core files on all hosts n1, n2, ..."
+  echo "rozo_core all             List core files on all nodes n1, n2, ..."
   echo "rozo_core ls              List local core files"
   echo "rozo_core rm [corefile]   Remove local core file(s)"
   echo "rozo_core gdb [corefile]  Launch gdb on core file(s)"
+  echo "rozo_core uptime          Get uptime of all nodes n1, n2, ..."
   exit 0
 }
 #_________________________________________
@@ -40,6 +41,30 @@ rozo_core_ls () {
   exit 0
 }
 #_________________________________________
+# Get nodes uptime
+#_________________________________________
+#
+rozo_core_uptime () {
+  case "$1" in
+    "") FILTER="n";;
+    *)  FILTER=$1;;
+  esac
+  HOSTLIST=`grep -oP "${FILTER}\d+$" /etc/hosts | sort -u`
+  case "${HOSTLIST}" in
+    "") {
+      cat /etc/hosts
+      printf "\033[91m\033[40mNo host matching prefix \"%s\" in /etc/hosts.\n" ${FILTER}
+      printf "Try other prefix \"rozo_core all <prefix>\".\033[0m\n"
+      exit 1
+    };;
+  esac  
+  for h in ${HOSTLIST}
+  do
+    ssh ${h} "echo $HOSTNAME; uptime"
+  done
+  exit 0
+}
+#_________________________________________
 # List core files on all hosts
 #_________________________________________
 #
@@ -48,7 +73,7 @@ rozo_core_all () {
     "") FILTER="n";;
     *)  FILTER=$1;;
   esac
-  HOSTLIST=`grep -oP "${FILTER}\d+\b" /etc/hosts | sort -u`
+  HOSTLIST=`grep -oP "${FILTER}\d+$" /etc/hosts | sort -u`
   case "${HOSTLIST}" in
     "") {
       cat /etc/hosts
@@ -63,6 +88,7 @@ rozo_core_all () {
   done
   exit 0
 }
+
 #_________________________________________
 # Translate directory name to executable name
 #_________________________________________
@@ -126,6 +152,6 @@ rozo_core_rm () {
 #_________________________________________
 #
 case "$1" in
-  ls|rm|gdb|all) rozo_core_$1 $2;;
+  ls|rm|gdb|all|uptime) rozo_core_$1 $2;;
 esac
 syntax  
