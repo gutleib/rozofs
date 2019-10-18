@@ -58,9 +58,15 @@ rozo_core_uptime () {
       exit 1
     };;
   esac  
+
   for h in ${HOSTLIST}
   do
-    ssh ${h} "echo $HOSTNAME; uptime"
+    res=`ssh -o ConnectTimeout=5 ${h} "uptime"`
+    warning=`echo ${res} | awk '{print $3}'`
+    case "${warning}" in 
+     0|1|2|3|4|5) printf "\033[91m\033[40m";;
+    esac
+    printf "%s : %s\033[0m\n" ${h} "${res}"
   done
   exit 0
 }
@@ -84,7 +90,7 @@ rozo_core_all () {
   esac  
   for h in ${HOSTLIST}
   do
-    ssh ${h} "rozo_core ls"
+    ssh -o ConnectTimeout=5 ${h} "rozo_core ls"
   done
   exit 0
 }
