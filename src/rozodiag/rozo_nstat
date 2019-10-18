@@ -215,6 +215,10 @@ class rozo_ib:
 
   def __init__(self):
     self.reset_counters()
+    if not os.path.exists("/sys/class/infiniband/"):
+      self.present = False
+    else:
+      self.present = True  
 
   def update_counters(self,recv,xmit):
     self.recv_delta = self.recv_delta + recv
@@ -246,13 +250,20 @@ def rozo_nstat_display_header():
   global eth
   global what
     
-  nbCounters = int(2)
-
+  if ib.present == True:
+    nbCounters = int(2)
+  else:
+    nbCounters = int(1)
+    
   LINE = BLUE
   if what == "all":
-    LINE = LINE + "|                Ethernet             |                 IB                  "
+    LINE = LINE + "|                Ethernet             "
+    if ib.present == True:
+      LINE = LINE + "|                 IB                  " 
   else:
-    LINE = LINE + "|       Ethernet    |         IB        "
+    LINE = LINE + "|       Ethernet    "
+    if ib.present == True:
+      LINE = LINE + "|         IB        "
     
   if options.itf != None:
     for itf in options.itf:
@@ -318,7 +329,8 @@ def rozo_nstat_display_counters():
   #
   # Display IB statistics
   #
-  rozo_nstat_display_one_counters(ib.recv_delta,ib.xmit_delta)
+  if ib.present == True:
+    rozo_nstat_display_one_counters(ib.recv_delta,ib.xmit_delta)
 
   #
   # Display requested interfaces
@@ -422,9 +434,7 @@ ib  = rozo_ib()
 #
 # Make the list of devices
 #
-if not os.path.exists("/sys/class/infiniband/"):
-  print "Roce is not installed"
-else:
+if os.path.exists("/sys/class/infiniband/"):
   #
   # Check IB devices
   #
