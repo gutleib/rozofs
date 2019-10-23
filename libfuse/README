@@ -1,0 +1,46 @@
+RozoFS fuse library
+
+RozoFS can be started either with the fuse.ko or rozo.ko modules.
+
+rozo.ko module is checked first
+when it is not present, RozoFS  starts with the installed fuse module.
+
+the patched fuse.ko module and the rozo.ko module provide the same
+functionality. 
+
+the rozo.ko module is preferred when RozoFS runs on a server on which some
+application might use fuse for their own purpose. Because of the modification that have been done in the legacy fuse module for RozoFS, it might be possible that this module does not work friendly with some application that expect the fuse legacy module.
+
+Directory layout:
+-----------------
+
+- fuse-2.9.7:
+it is the directory that contains the fuse source code.
+
+- bin,include,lib and share:
+Theses are the directory under which the libfuse will install all its stuff when
+calling make install.
+
+Compiling the RozoFS fuse library
+---------------------------------
+It is not necessary to run configure, just do the following
+
+cd ./fuse-2.9.7
+make
+make install
+
+rozofsmount link
+----------------
+because the decision to use either rozo.ko or fuse.ko is located in the fuse
+library, it is not more possible to use a dynamic linking with libfuse at the
+generation time of rozofsmount.
+
+Instead, the fuse library MUST be statically linked with rozofsmount.
+
+the libfuse used by rozofsmount is ./lib/libfuse.a.
+
+The CMakeLists.txt of rozofsmount has been modified for doing it:
+
+target_link_libraries(rozofsmount rozofs fuse dl ${PTHREAD_LIBRARY}  ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+
+

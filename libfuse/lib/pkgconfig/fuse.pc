@@ -1,0 +1,11 @@
+prefix=/home/rozofs/rozofs-3.0-dev/libfuse/fuse-2.9.7/..
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: fuse
+Description: Filesystem in Userspace
+Version: 2.9.7
+Libs: -L${libdir} -lfuse -pthread
+Libs.private: -ldl  
+Cflags: -I${includedir}/fuse -D_FILE_OFFSET_BITS=64
