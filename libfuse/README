@@ -23,9 +23,9 @@ calling make install.
 
 Compiling the RozoFS fuse library
 ---------------------------------
-It is not necessary to run configure, just do the following
 
-cd ./fuse-2.9.7
+cd absolute_path_github_client>/libfuse/fuse-2.9.7
+./configure --prefix=<absolute_path_github_client>/libfuse/fuse-2.9.7/../ --disable-shared
 make
 make install
 
