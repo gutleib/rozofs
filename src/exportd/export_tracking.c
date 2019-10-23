@@ -9002,6 +9002,13 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     
     }   
     /*
+    ** Write quota entry for this project so it will be seen
+    ** in response to CLI :rozo_repquota -v -s 
+    */
+    if (valu64 != 0) {
+      rozofs_qt_inode_update(e->eid,-1,-1,0,ROZOFS_QT_INC,valu64);
+    }
+    /*
     ** Save new distribution on disk
     */
     lv2->attributes.s.attrs.cid=(cid_t)valu64;
