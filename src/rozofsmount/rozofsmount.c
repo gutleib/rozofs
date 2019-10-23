@@ -493,6 +493,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(pagecache);  
   DISPLAY_UINT32_CONFIG(kernel_max_read);  
   DISPLAY_UINT32_CONFIG(kernel_max_write);  
+  DISPLAY_UINT32_CONFIG(rozo_module);  
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
 /*__________________________________________________________________________
@@ -1801,7 +1802,7 @@ void rozofs_start_one_storcli(int instance) {
 
     if (rozofs_fuse_ctx_p->dev > 0)
     {
-      cmd_p += sprintf(cmd_p, "-C /sys/fs/fuse/connections/%d/rozofs ",rozofs_fuse_ctx_p->dev);    
+      cmd_p += sprintf(cmd_p, "-C /sys/fs/%s/connections/%d/rozofs ",(conf.rozo_module==0)?"fuse":"rozo",rozofs_fuse_ctx_p->dev);    
     
     }
    
@@ -2362,6 +2363,29 @@ int rozofs_mountpoint_check(const char * mntpoint) {
 
     return 0;
 }
+/*
+**______________________________________________________________________________________________________
+*/
+/*
+**  Check if we are using fuse kernel module with /dev/fuse or rozo fuse kernel module with /dev/rozo
+*/
+void rozofs_check_fuse_kernel_module_in_use()
+{
+	int res;
+
+	struct stat stbuf;
+
+       res = stat("/dev/rozo", &stbuf);
+       if (res == 0)
+       {
+         conf.rozo_module = 1;
+       }
+}
+
+
+/*
+**______________________________________________________________________________________________________
+*/
 
 int main(int argc, char *argv[]) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -2439,10 +2463,15 @@ int main(int argc, char *argv[]) {
     conf.kernel_max_read = 0;
     conf.kernel_max_write = 0;
     conf.pagecache = 0;
+    conf.rozo_module = 0;
     conf.idx_fuse_profile = ROZOFS_DEFAULT_FUSE_PROFILE;
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
     }
+    /*
+    ** check the kernel module that will be in use
+    */
+    rozofs_check_fuse_kernel_module_in_use();
     /*
     ** read common config file
     */

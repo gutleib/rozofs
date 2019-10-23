@@ -805,7 +805,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 	   ret = ioctl(rozofs_fuse_ctx_p->fd,7,&cnx_param);  
 	   if (ret == 0)
 	   {
-	     pChar +=sprintf(pChar,"Device path          : /sys/fs/fuse/connections/%u (%s)\n",cnx_param.dev,
+	     pChar +=sprintf(pChar,"Device path          : /sys/fs/%s/connections/%u (%s)\n",(conf.rozo_module==0)?"fuse":"rozo",cnx_param.dev,
 	                                                   (rozofs_fuse_ctx_p->fuse_path_solved==0)?"NOT SOLVED":"SOLVED");
 	     pChar +=sprintf(pChar,"ra_pages             : %llu\n",(long long unsigned int)cnx_param.ra_pages);
 	     pChar +=sprintf(pChar,"max_background       : %u\n",cnx_param.max_background);
@@ -1116,7 +1116,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
   }
   else
   {
-    pChar +=  sprintf(pChar,"fusectl    : /sys/fs/fuse/connections/%d (%s)\n",rozofs_fuse_ctx_p->dev,(rozofs_fuse_ctx_p->fuse_path_solved==0)?"NOT SOLVED":"SOLVED");  
+    pChar +=  sprintf(pChar,"fusectl    : /sys/fs/%s/connections/%d (%s)\n",(conf.rozo_module==0)?"fuse":"rozo",rozofs_fuse_ctx_p->dev,(rozofs_fuse_ctx_p->fuse_path_solved==0)?"NOT SOLVED":"SOLVED");  
   
   }
     pChar +=  sprintf(pChar,"pagecache  : %s/%s\n",(conf.pagecache)?"Enabled":"Disabled",(rozofs_fuse_ctx_p->dev > 0)?"Supported":"Not supported");    	       
@@ -1468,7 +1468,7 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
        /*
        **  RozoFS fuse connection parameters
        */
-
+              
        memset(&rozofs_fuse_cnx_param,0,sizeof(rozofs_cnx_param_t));
 
        if (rozofs_fuse_ctx_p->ioctl_supported == 0) break;
@@ -1480,7 +1480,7 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
 	** Now attempt to fill up the mount path on the fuse connection. It is needed by
 	** the storcli in order to be able to open the inode on which mojette transform should apply
 	*/
-	sprintf(pathname,"/sys/fs/fuse/connections/%d/rozofs",rozofs_fuse_ctx_p->dev);  
+	sprintf(pathname,"/sys/fs/%s/connections/%d/rozofs",(conf.rozo_module==0)?"fuse":"rozo",rozofs_fuse_ctx_p->dev);  
 	if ((fd_fusectl = open(pathname,O_RDONLY)) < 0)
 	{
 	    info("RozoFS Cannot open %s (%s)",pathname,strerror(errno));

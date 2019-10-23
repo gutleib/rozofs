@@ -135,6 +135,7 @@ typedef struct rozofsmnt_conf {
     unsigned pagecache; /**< when assert storcli performs a direct write in Linux page cache for I/O greater than 256 KB */
     unsigned kernel_max_read; /**< image of the block size at kernel level */
     unsigned kernel_max_write; /**< image of the block size at kernel level */
+    unsigned rozo_module;  /**< assert to one if rozo fuse module is in use */
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 
