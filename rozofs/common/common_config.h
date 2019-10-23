@@ -299,6 +299,10 @@ typedef struct _common_config_t {
   int32_t     storio_fidctx_ctx;
   // Spare file restoring : Number of spare file context in 1K unit
   int32_t     spare_restore_spare_ctx;
+  // RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)
+  int32_t     rdma_delay_ms;
+  // RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called
+  int32_t     rdma_delay_threshold;
   // Whether RozoFS devices must mandatorily be identified by a valid label.
   // Storages will not mount any device not having a valid RozoFS label.
   int32_t     mandatory_device_label;
@@ -315,15 +319,6 @@ typedef struct _common_config_t {
   int32_t     min_rmda_size_KB;
   // number of Mojette threads
   int32_t     mojette_thread_count;
-
-  /*
-  ** storio scope configuration parameters
-  */
-
-  // RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)
-  int32_t     rdma_delay_ms;
-  // RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called
-  int32_t     rdma_delay_threshold;
 } common_config_t;
 
 extern common_config_t common_config;

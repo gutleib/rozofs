@@ -1117,9 +1117,9 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
 */
 void man_common_config(char * pChar) {
   pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
-  pChar += rozofs_string_append_bold(pChar,"\tcconf");
+  pChar += rozofs_string_append_bold(pChar,"\tcconf [long]");
   pChar += rozofs_string_append     (pChar,"\t\tdisplays the whole common_config configuration.\n");
-  pChar += rozofs_string_append_bold(pChar,"\tcconf <scope>");
+  pChar += rozofs_string_append_bold(pChar,"\tcconf [long] <scope>");
   pChar += rozofs_string_append     (pChar,"\tdisplays only the <scope> configuration part.\n");
   pChar += rozofs_string_append_bold(pChar,"\tcconf search <parameter>");
   pChar += rozofs_string_append     (pChar,"\tdisplays parameters approximatively like <parameter>.\n");
@@ -1214,6 +1214,100 @@ char * show_common_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// When that flag is asserted, RozoFS operates in standalone mode only.\n");
   COMMON_CONFIG_SHOW_BOOL(standalone,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** global scope configuration parameters
+**
+*/
+char * show_common_config_module_global_short(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    GLOBAL SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_core_file,1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of core files that the system is allowed to keep for all the modules of this server.\n");
+    pChar += rozofs_string_append(pChar,"// Older core files are kept while newest are removed.	\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_core_file,1,"0:8");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(core_file_directory,"");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Directory where the core files are stored.\n");
+    COMMON_CONFIG_SHOW_STRING(core_file_directory,"");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(numa_aware,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Enables to take into account the NUMA architecture of the board in \n");
+    pChar += rozofs_string_append(pChar,"// order to collocate some RozoFS modules on the same node for memory\n");
+    pChar += rozofs_string_append(pChar,"// access efficiency.\n");
+    COMMON_CONFIG_SHOW_BOOL(numa_aware,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(adaptor_numa_node,-1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Ethernet Adaptor numa node (-1 not significant)\n");
+    COMMON_CONFIG_SHOW_INT(adaptor_numa_node,-1);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_ENUM(processor_model,"INTEL");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// processor model:\n");
+    pChar += rozofs_string_append(pChar,"// EPYC: all AMD CPUs \n");
+    pChar += rozofs_string_append(pChar,"// INTEL:   covers E5 & skylake families\n");
+    COMMON_CONFIG_SHOW_ENUM(processor_model,"INTEL","EPYC,INTEL");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_slice_number,1024);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of slices in the STORIO.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(storio_slice_number,1024,"8:(32*1024)");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(file_distribution_rule,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.\n");
+    pChar += rozofs_string_append(pChar,"// 0         = Cluster size balancing                   + device size balancing\n");
+    pChar += rozofs_string_append(pChar,"// 1,2,3     = Cluster strict round robin               + device write spreading\n");
+    pChar += rozofs_string_append(pChar,"// 4         = Cluster strict round robin               + device read spreading\n");
+    pChar += rozofs_string_append(pChar,"// 5         = Cluster weighted round robin (nb SID)    + device write spreading\n");
+    pChar += rozofs_string_append(pChar,"// 6         = Cluster weighted round robin (nb SID)    + device read spreading\n");
+    pChar += rozofs_string_append(pChar,"// 7         = Cluster weighted round robin (free size) + device write spreading\n");
+    pChar += rozofs_string_append(pChar,"// 6         = Cluster weighted round robin (free size) + device read spreading\n");
+    COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:100");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_dscp,46);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the STORIO.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(storio_dscp,46,"0:46");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(export_dscp,34);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the EXPORTD.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(export_dscp,34,"0:34");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(standalone,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted, RozoFS operates in standalone mode only.\n");
+    COMMON_CONFIG_SHOW_BOOL(standalone,False);
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -1391,6 +1485,204 @@ char * show_common_config_module_export(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
+** export scope configuration parameters
+**
+*/
+char * show_common_config_module_export_short(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    EXPORT SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trashed_file_per_run,1000);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Max number of file that the exportd can remove from storages in a run.\n");
+    pChar += rozofs_string_append(pChar,"// A new run occurs every 2 seconds.\n");
+    COMMON_CONFIG_SHOW_INT(trashed_file_per_run,1000);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trash_high_threshold,1000);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// High trash water mark when FID recycling is activated.\n");
+    pChar += rozofs_string_append(pChar,"// When the trash has already this number of files, files are no more\n");
+    pChar += rozofs_string_append(pChar,"// deleted but recycled.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trash_high_threshold,1000,"0:1000000");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(fid_recycle,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether FID recycling feature is activated.\n");
+    COMMON_CONFIG_SHOW_BOOL(fid_recycle,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(export_buf_cnt,128);
+  if (isDefaultValue==0) {
+    COMMON_CONFIG_SHOW_INT_OPT(export_buf_cnt,128,"32:1024");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(export_attr_thread,True);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To activate export writebehind attributes thread.\n");
+    COMMON_CONFIG_SHOW_BOOL(export_attr_thread,True);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(export_versioning,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Support of deleted directory/file versioning.\n");
+    COMMON_CONFIG_SHOW_BOOL(export_versioning,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(alloc_estimated_mb,1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of MB to account a file for during file distribution phase\n");
+    COMMON_CONFIG_SHOW_INT(alloc_estimated_mb,1);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(client_flock_timeout,30);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Delay from which a rozofsmoun client is declared disconnected and its \n");
+    pChar += rozofs_string_append(pChar,"// file locks are automatically removed\n");
+    COMMON_CONFIG_SHOW_INT_OPT(client_flock_timeout,30,"15:600");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(mproto_timeout,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Time out between export and storage for remove and stat\n");
+    COMMON_CONFIG_SHOW_INT_OPT(mproto_timeout,10,"1:60");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(export_temporary_dir,"/tmp");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Directory to use on the export to build temporary files.\n");
+    pChar += rozofs_string_append(pChar,"// Used for instance to build list of files to rebuild.\n");
+    COMMON_CONFIG_SHOW_STRING(export_temporary_dir,"/tmp");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mkdir_ok_instead_of_eexist,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To activate workaround that make mkdir respond OK instead of EEXIST\n");
+    pChar += rozofs_string_append(pChar,"// when the directory is already created \n");
+    COMMON_CONFIG_SHOW_BOOL(mkdir_ok_instead_of_eexist,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mknod_ok_instead_of_eexist,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To activate workaround that make mknod respond OK instead of EEXIST\n");
+    pChar += rozofs_string_append(pChar,"// when the file is already created  \n");
+    COMMON_CONFIG_SHOW_BOOL(mknod_ok_instead_of_eexist,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(disable_sync_attributes,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To disable synchronous write of attributes when set to True\n");
+    COMMON_CONFIG_SHOW_BOOL(disable_sync_attributes,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(deletion_delay,30);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Minimum delay between the deletion request and the effective projections deletion\n");
+    COMMON_CONFIG_SHOW_INT(deletion_delay,30);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(min_metadata_inodes,262144);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation\n");
+    COMMON_CONFIG_SHOW_INT(min_metadata_inodes,262144);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(min_metadata_MB,2048);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation\n");
+    COMMON_CONFIG_SHOW_INT(min_metadata_MB,2048);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_trash_thread,2);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of trash threads that work in parallel\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_trash_thread,2,"1:8");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_thin_thread,2);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of thin provisioning threads that work in parallel\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_thin_thread,2,"1:4");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(thin_scan_file_per_run,1000);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Max number of files that the exportd can submit to storages to get the number of blocks (thin provisioning) in a run.\n");
+    pChar += rozofs_string_append(pChar,"// A new run occurs every 2 seconds.\n");
+    COMMON_CONFIG_SHOW_INT(thin_scan_file_per_run,1000);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(thin_lv1_hash_tb_size,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Thin provisioning Level 1 hash table size in power of 2 (changing this parameter will take effect on the next export restart) \n");
+    COMMON_CONFIG_SHOW_INT_OPT(thin_lv1_hash_tb_size,10,"6:128");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(expthin_guard_delay_sec,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Guard delay in seconds between two file scanning of a file that belongs to an exportd configured for thin provisioning\n");
+    COMMON_CONFIG_SHOW_INT_OPT(expthin_guard_delay_sec,10,"1:600");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(expdir_guard_delay_sec,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Guard delay associated with directory re-write used for tracking children changes within a directory \n");
+    COMMON_CONFIG_SHOW_INT_OPT(expdir_guard_delay_sec,10,"1:7200");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(level2_cache_max_entries_kb,512);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Maximum number of entries that the export level 2 cache can contain (unit is KB) \n");
+    COMMON_CONFIG_SHOW_INT_OPT(level2_cache_max_entries_kb,512,"1:4096");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(persistent_file_locks,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether file locks must be persistent on exportd restart/switchover or not\n");
+    COMMON_CONFIG_SHOW_BOOL(persistent_file_locks,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(minimum_free_size_percent,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Minimum % of free space in a volume.\n");
+    pChar += rozofs_string_append(pChar,"// When the free space of a volume reaches this value, file creation requests\n");
+    pChar += rozofs_string_append(pChar,"// receive back ENOSPC in order to try to avoid later write errors.\n");
+    pChar += rozofs_string_append(pChar,"// A value of 0 means there is no limit on the volume.\n");
+    pChar += rozofs_string_append(pChar,"// A value of 100 forbids every file creation.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(minimum_free_size_percent,4,"0:100");
+  }
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
 ** client scope configuration parameters
 **
 */
@@ -1477,6 +1769,109 @@ char * show_common_config_module_client(char * pChar) {
   pChar += rozofs_string_append(pChar,"// When that flag is asserted any storcli can be selected for reading.\n");
   COMMON_CONFIG_SHOW_BOOL(storcli_read_parallel,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** client scope configuration parameters
+**
+*/
+char * show_common_config_module_client_short(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    CLIENT SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(wr_ack_on_inverse,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether STORCLI acknowleges write request on inverse or forward STORIO responses.\n");
+    COMMON_CONFIG_SHOW_BOOL(wr_ack_on_inverse,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(wr_pending_anticipated,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To indicate if we can respond before write_pending reaches 0.\n");
+    COMMON_CONFIG_SHOW_BOOL(wr_pending_anticipated,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rozofsmount_fuse_reply_thread,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To activate rozofsmount reply fuse threads.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(rozofsmount_fuse_reply_thread,0,"0:4");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(client_fast_reconnect,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// To activate fast reconnect from client to exportd\n");
+    COMMON_CONFIG_SHOW_BOOL(client_fast_reconnect,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(archive_file_delay,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// delay is minutes after which a file is considered as an archived file (unit is minute)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(archive_file_delay,10,"0:3600");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(archive_file_dentry_timeout,30);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// dentry cache timeout for archive file type (unit is second)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(archive_file_dentry_timeout,30,"0:300");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(archive_file_attr_timeout,30);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// attribute cache timeout for archive file type (unit is second)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(archive_file_attr_timeout,30,"0:300");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(client_xattr_cache,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client can cache the extended attributes\n");
+    COMMON_CONFIG_SHOW_BOOL(client_xattr_cache,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(async_setattr,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode\n");
+    COMMON_CONFIG_SHOW_BOOL(async_setattr,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(statfs_period,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// statfs period in seconds. minimum is 0.\n");
+    COMMON_CONFIG_SHOW_INT(statfs_period,10);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(reply_thread_count,2);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// number of Fuse threads\n");
+    COMMON_CONFIG_SHOW_INT_OPT(reply_thread_count,2,"1:8");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(bufread_bypass,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Buffer read by-pass\n");
+    COMMON_CONFIG_SHOW_BOOL(bufread_bypass,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(storcli_read_parallel,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted any storcli can be selected for reading.\n");
+    COMMON_CONFIG_SHOW_BOOL(storcli_read_parallel,False);
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -1680,12 +2075,277 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)\n");
+  COMMON_CONFIG_SHOW_INT(rdma_delay_ms,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_threshold,12);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called\n");
+  COMMON_CONFIG_SHOW_INT_OPT(rdma_delay_threshold,12,"0:64");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
   COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether RozoFS devices must mandatorily be identified by a valid label.\n");
   pChar += rozofs_string_append(pChar,"// Storages will not mount any device not having a valid RozoFS label.\n");
   COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** storage scope configuration parameters
+**
+*/
+char * show_common_config_module_storage_short(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    STORAGE SCOPE CONFIGURATION PARAMETERS        ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_storaged_subthread,8);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of sub threads in the storaged\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_storaged_subthread,8,"2:16");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_disk_thread,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"/// Number of disk threads in the STORIO.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_write_rdma_threads,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"/// Number of RDMA write threads in the STORIO.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_write_rdma_threads,4,"2:64");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_write_thread_enable,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// assert that Boolean to activate the RDMA write threads.\n");
+    COMMON_CONFIG_SHOW_BOOL(rdma_write_thread_enable,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_check,True);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether CRC32 MUST be checked by STORIO.\n");
+    COMMON_CONFIG_SHOW_BOOL(crc32c_check,True);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_generate,True);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether CRC32 MUST be computed by STORIO.\n");
+    COMMON_CONFIG_SHOW_BOOL(crc32c_generate,True);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_hw_forced,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether CRC32 MUST be absolutly hardware computed by STORIO.\n");
+    COMMON_CONFIG_SHOW_BOOL(crc32c_hw_forced,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(allow_disk_spin_down,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether STORIO device monitoring should avoid reading from \n");
+    pChar += rozofs_string_append(pChar,"// devices when no access have occured for read or write. This\n");
+    pChar += rozofs_string_append(pChar,"// enables disk spin down to occur.\n");
+    COMMON_CONFIG_SHOW_BOOL(allow_disk_spin_down,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(disk_usage_threshold,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Over which device usage threashold should the STORIO log the event. \n");
+    COMMON_CONFIG_SHOW_INT_OPT(disk_usage_threshold,0,"0:100");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(disk_read_threshold,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Over which device read delay threashold should the STORIO log the event. \n");
+    COMMON_CONFIG_SHOW_INT(disk_read_threshold,0);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(disk_write_threshold,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Over which device write delay threashold should the STORIO log the event. \n");
+    COMMON_CONFIG_SHOW_INT(disk_write_threshold,0);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_buf_cnt,256);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(storio_buf_cnt,256,"32:1024");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(recycle_truncate_blocks,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of block to which the chunk files should be truncated on storage \n");
+    pChar += rozofs_string_append(pChar,"// node at the time it is recycled.\n");
+    COMMON_CONFIG_SHOW_INT(recycle_truncate_blocks,0);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(storaged_start_script,"");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Name of an executable file that the storaged should call at startup\n");
+    COMMON_CONFIG_SHOW_STRING(storaged_start_script,"");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(device_automount,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether the storage has to automount the devices\n");
+    COMMON_CONFIG_SHOW_BOOL(device_automount,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(device_automount_path,"/srv/rozofs/storages");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// automount path where the devices should be mounted\n");
+    COMMON_CONFIG_SHOW_STRING(device_automount_path,"/srv/rozofs/storages");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(device_automount_option,"");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Device mounting options\n");
+    COMMON_CONFIG_SHOW_STRING(device_automount_option,"");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(storage_temporary_dir,"/tmp");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Directory to use on the storage node to build temporary files.\n");
+    pChar += rozofs_string_append(pChar,"// Used for instance by the rebuild process.\n");
+    COMMON_CONFIG_SHOW_STRING(storage_temporary_dir,"/tmp");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(device_self_healing_process,8);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// self healing : Paralellism factor for device self healing feature\n");
+    pChar += rozofs_string_append(pChar,"// i.e the number of process to run rebuild in //\n");
+    COMMON_CONFIG_SHOW_INT_OPT(device_self_healing_process,8,"1:64");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_delay,15);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// self healing : Fault duration in minutes before device selfhealing starts\n");
+    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_delay,15,"0:10000");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,20);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// self healing :  throughput limitation in MB/s per rebuild process in //\n");
+    pChar += rozofs_string_append(pChar,"// for reading external projections. The writing on disk is only\n");
+    pChar += rozofs_string_append(pChar,"// 1/2 of that in layout 0, 1/4 in layout 1...\n");
+    pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
+    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,20,"0:10000");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_ENUM(device_selfhealing_mode,"spareOnly");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// self healing : possible modes\n");
+    pChar += rozofs_string_append(pChar,"// spareOnly  only self repair on a spare disk\n");
+    pChar += rozofs_string_append(pChar,"// relocate   also repair on remaining disks when no spare available\n");
+    pChar += rozofs_string_append(pChar,"// resecure   repair on spare device when available, and then resecure files on\n");
+    pChar += rozofs_string_append(pChar,"//            spare storages when no spare device is available\n");
+    COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,"spareOnly","spareOnly,resecure,relocate");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(export_hosts,"");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Export host names or IP addresses separated with / \n");
+    pChar += rozofs_string_append(pChar,"// Required for selfhealing.\n");
+    pChar += rozofs_string_append(pChar,"// Required for spare file restoring to its nominal location.\n");
+    COMMON_CONFIG_SHOW_STRING(export_hosts,"");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(spare_restore_enable,True);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Spare file restoring : whether the service is active or not\n");
+    COMMON_CONFIG_SHOW_BOOL(spare_restore_enable,True);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_loop_delay,240);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Spare file restoring : how often the process runs  \n");
+    COMMON_CONFIG_SHOW_INT(spare_restore_loop_delay,240);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(default_rebuild_reloop,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Default rebuild reloop value \n");
+    pChar += rozofs_string_append(pChar,"// Mainly used to help simulation\n");
+    COMMON_CONFIG_SHOW_INT(default_rebuild_reloop,4);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,2);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
+    pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
+    COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,2);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_fidctx_ctx,256);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Storio number of FID context in 1K unit\n");
+    COMMON_CONFIG_SHOW_INT(storio_fidctx_ctx,256);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_spare_ctx,16);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Spare file restoring : Number of spare file context in 1K unit\n");
+    COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)\n");
+    COMMON_CONFIG_SHOW_INT(rdma_delay_ms,0);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_threshold,12);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called\n");
+    COMMON_CONFIG_SHOW_INT_OPT(rdma_delay_threshold,12,"0:64");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether RozoFS devices must mandatorily be identified by a valid label.\n");
+    pChar += rozofs_string_append(pChar,"// Storages will not mount any device not having a valid RozoFS label.\n");
+    COMMON_CONFIG_SHOW_BOOL(mandatory_device_label,False);
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -1726,26 +2386,42 @@ char * show_common_config_module_storcli(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
-** storio scope configuration parameters
+** storcli scope configuration parameters
 **
 */
-char * show_common_config_module_storio(char * pChar) {
+char * show_common_config_module_storcli_short(char * pChar) {
 
   pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
-  pChar += rozofs_string_append_effect(pChar,"    STORIO SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    STORCLI SCOPE CONFIGURATION PARAMETERS        ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
   pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
-  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)\n");
-  COMMON_CONFIG_SHOW_INT(rdma_delay_ms,0);
-  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_threshold,12);
-  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called\n");
-  COMMON_CONFIG_SHOW_INT_OPT(rdma_delay_threshold,12,"0:64");
-  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_enable,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted, the storcli uses RDMA when storio supports it\n");
+    COMMON_CONFIG_SHOW_BOOL(rdma_enable,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rdma_full,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// When that flag is asserted, the storcli uses RDMA for data transfer and RPC messages\n");
+    COMMON_CONFIG_SHOW_BOOL(rdma_full,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(min_rmda_size_KB,64);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Minimum read/write size in KB to trigger RDMA transfer\n");
+    COMMON_CONFIG_SHOW_INT(min_rmda_size_KB,64);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(mojette_thread_count,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// number of Mojette threads\n");
+    COMMON_CONFIG_SHOW_INT_OPT(mojette_thread_count,4,"1:4");
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -2304,6 +2980,18 @@ char * save_common_config_module_storage(char * pChar) {
     COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
   }
 
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)\n");
+    COMMON_CONFIG_SHOW_INT(rdma_delay_ms,0);
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_threshold,12);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called\n");
+    COMMON_CONFIG_SHOW_INT_OPT(rdma_delay_threshold,12,"0:64");
+  }
+
   COMMON_CONFIG_IS_DEFAULT_BOOL(mandatory_device_label,False);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Whether RozoFS devices must mandatorily be identified by a valid label.\n");
@@ -2347,32 +3035,6 @@ char * save_common_config_module_storcli(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// number of Mojette threads\n");
     COMMON_CONFIG_SHOW_INT_OPT(mojette_thread_count,4,"1:4");
-  }
-  return pChar;
-}
-/*____________________________________________________________________________________________
-**
-** storio scope configuration parameters
-**
-*/
-char * save_common_config_module_storio(char * pChar) {
-
-  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
-  pChar += rozofs_string_append(pChar,"# ");
-  pChar += rozofs_string_append(pChar,"storio");
-  pChar += rozofs_string_append(pChar," scope configuration parameters\n");
-  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
-
-  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_ms,0);
-  if (isDefaultValue==0) {
-    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency)\n");
-    COMMON_CONFIG_SHOW_INT(rdma_delay_ms,0);
-  }
-
-  COMMON_CONFIG_IS_DEFAULT_INT(rdma_delay_threshold,12);
-  if (isDefaultValue==0) {
-    pChar += rozofs_string_append(pChar,"// RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called\n");
-    COMMON_CONFIG_SHOW_INT_OPT(rdma_delay_threshold,12,"0:64");
   }
   return pChar;
 }
@@ -2442,13 +3104,6 @@ static inline int common_config_generated_save(char * pChar) {
     close(fd);
     return -1;
   }
-  pBuff = save_common_config_module_storio(myBigBuffer);
-  if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
-    pChar += rozofs_string_append_error(pChar,"Can not write ");
-    pChar += rozofs_string_append_error(pChar,common_config_file_name);
-    close(fd);
-    return -1;
-  }
   pChar += rozofs_string_append(pChar,"Saved in ");
   pChar += rozofs_string_append(pChar,common_config_file_name);
   pChar += rozofs_eol(pChar);
@@ -2479,6 +3134,8 @@ char * common_config_generated_show_all_files(char * pChar) {
 void common_config_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 char *pChar = uma_dbg_get_buffer();
 char *pHead;
+int     longformat = 0;
+char  * moduleName = NULL;
 
   if (argv[1] != NULL) {
 
@@ -2523,88 +3180,110 @@ char *pHead;
       return;
     }
 
-    if (strcmp("global",argv[1])==0) {
-      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-        severe( "ruc_buf_getPayload(%p)", bufRef );
-        return;
-      }
-      /*
-      ** Set the command recall string
-      */
-      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
-      pChar = show_common_config_module_global(pChar);
-      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
-      return;
-    }
-    else if (strcmp("export",argv[1])==0) {
-      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-        severe( "ruc_buf_getPayload(%p)", bufRef );
-        return;
-      }
-      /*
-      ** Set the command recall string
-      */
-      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
-      pChar = show_common_config_module_export(pChar);
-      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
-      return;
-    }
-    else if (strcmp("client",argv[1])==0) {
-      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-        severe( "ruc_buf_getPayload(%p)", bufRef );
-        return;
-      }
-      /*
-      ** Set the command recall string
-      */
-      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
-      pChar = show_common_config_module_client(pChar);
-      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
-      return;
-    }
-    else if (strcmp("storage",argv[1])==0) {
-      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-        severe( "ruc_buf_getPayload(%p)", bufRef );
-        return;
-      }
-      /*
-      ** Set the command recall string
-      */
-      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
-      pChar = show_common_config_module_storage(pChar);
-      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
-      return;
-    }
-    else if (strcmp("storcli",argv[1])==0) {
-      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-        severe( "ruc_buf_getPayload(%p)", bufRef );
-        return;
-      }
-      /*
-      ** Set the command recall string
-      */
-      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
-      pChar = show_common_config_module_storcli(pChar);
-      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
-      return;
-    }
-    else if (strcmp("storio",argv[1])==0) {
-      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-        severe( "ruc_buf_getPayload(%p)", bufRef );
-        return;
-      }
-      /*
-      ** Set the command recall string
-      */
-      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
-      pChar = show_common_config_module_storio(pChar);
-      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
-      return;
+    if (strcmp(argv[1],"long")==0) {
+      longformat = 1;
+      moduleName = argv[2];
     }
     else {
-      pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
-      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
-      return;
+      moduleName = argv[1];
+      if (argv[2] != NULL) {
+        if (strcmp(argv[2],"long")==0) {
+          longformat = 1;
+        }
+      }
+    }
+
+    if (moduleName != NULL) {
+      if (strcasecmp("global",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_common_config_module_global(pChar);
+        } else {
+          pChar = show_common_config_module_global_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
+      else if (strcasecmp("export",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_common_config_module_export(pChar);
+        } else {
+          pChar = show_common_config_module_export_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
+      else if (strcasecmp("client",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_common_config_module_client(pChar);
+        } else {
+          pChar = show_common_config_module_client_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
+      else if (strcasecmp("storage",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_common_config_module_storage(pChar);
+        } else {
+          pChar = show_common_config_module_storage_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
+      else if (strcasecmp("storcli",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_common_config_module_storcli(pChar);
+        } else {
+          pChar = show_common_config_module_storcli_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
+      else {
+        pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
+        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+        return;
+      }
     }
   }
 
@@ -2621,7 +3300,11 @@ char *pHead;
   }
   
   
-  pChar = show_common_config_module_global(pChar);
+  if (longformat) {
+    pChar = show_common_config_module_global(pChar);
+  } else {
+    pChar = show_common_config_module_global_short(pChar);
+  } 
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
   bufRef = uma_dbg_get_new_buffer(tcpRef);
@@ -2636,7 +3319,11 @@ char *pHead;
   pChar = pHead+sizeof(UMA_MSGHEADER_S);
   *pChar = 0;
   
-  pChar = show_common_config_module_export(pChar);
+  if (longformat) {
+    pChar = show_common_config_module_export(pChar);
+  } else {
+    pChar = show_common_config_module_export_short(pChar);
+  } 
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
   bufRef = uma_dbg_get_new_buffer(tcpRef);
@@ -2651,7 +3338,11 @@ char *pHead;
   pChar = pHead+sizeof(UMA_MSGHEADER_S);
   *pChar = 0;
   
-  pChar = show_common_config_module_client(pChar);
+  if (longformat) {
+    pChar = show_common_config_module_client(pChar);
+  } else {
+    pChar = show_common_config_module_client_short(pChar);
+  } 
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
   bufRef = uma_dbg_get_new_buffer(tcpRef);
@@ -2666,7 +3357,11 @@ char *pHead;
   pChar = pHead+sizeof(UMA_MSGHEADER_S);
   *pChar = 0;
   
-  pChar = show_common_config_module_storage(pChar);
+  if (longformat) {
+    pChar = show_common_config_module_storage(pChar);
+  } else {
+    pChar = show_common_config_module_storage_short(pChar);
+  } 
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
   bufRef = uma_dbg_get_new_buffer(tcpRef);
@@ -2681,22 +3376,11 @@ char *pHead;
   pChar = pHead+sizeof(UMA_MSGHEADER_S);
   *pChar = 0;
   
-  pChar = show_common_config_module_storcli(pChar);
-  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
-  
-  bufRef = uma_dbg_get_new_buffer(tcpRef);
-  if (bufRef == NULL) {
-    warning( "uma_dbg_get_new_buffer() Buffer depletion");
-    return;
-  }
-  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-    severe( "ruc_buf_getPayload(%p)", bufRef );
-    return;
-  }
-  pChar = pHead+sizeof(UMA_MSGHEADER_S);
-  *pChar = 0;
-  
-  pChar = show_common_config_module_storio(pChar);
+  if (longformat) {
+    pChar = show_common_config_module_storcli(pChar);
+  } else {
+    pChar = show_common_config_module_storcli_short(pChar);
+  } 
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
   bufRef = uma_dbg_get_new_buffer(tcpRef);
@@ -2956,6 +3640,10 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(storio_fidctx_ctx,256);
   // Spare file restoring : Number of spare file context in 1K unit 
   COMMON_CONFIG_READ_INT(spare_restore_spare_ctx,16);
+  // RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency) 
+  COMMON_CONFIG_READ_INT(rdma_delay_ms,0);
+  // RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called 
+  COMMON_CONFIG_READ_INT_MINMAX(rdma_delay_threshold,12,0,64);
   // Whether RozoFS devices must mandatorily be identified by a valid label. 
   // Storages will not mount any device not having a valid RozoFS label. 
   COMMON_CONFIG_READ_BOOL(mandatory_device_label,False);
@@ -2970,13 +3658,6 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(min_rmda_size_KB,64);
   // number of Mojette threads 
   COMMON_CONFIG_READ_INT_MINMAX(mojette_thread_count,4,1,4);
-  /*
-  ** storio scope configuration parameters
-  */
-  // RDMA write dequeue delay: delay in ms before dequeueing a new request (for network with latency) 
-  COMMON_CONFIG_READ_INT(rdma_delay_ms,0);
-  // RDMA write dequeue delay: threshold when reached that prevents RDMA delay to be called 
-  COMMON_CONFIG_READ_INT_MINMAX(rdma_delay_threshold,12,0,64);
  
   config_destroy(&cfg);
 }

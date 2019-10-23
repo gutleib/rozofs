@@ -732,9 +732,9 @@ def go_build_man(struct_name,command):
   print "*/"
   print "void man_%s(char * pChar) {"%(struct_name)
   print "  pChar += rozofs_string_append_underscore(pChar,\"\\nUsage:\\n\");"
-  print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s\");"%(command)
+  print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s [long]\");"%(command)
   print "  pChar += rozofs_string_append     (pChar,\"\\t\\tdisplays the whole %s configuration.\\n\");"%(struct_name)
-  print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s <scope>\");"%(command)
+  print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s [long] <scope>\");"%(command)
   print "  pChar += rozofs_string_append     (pChar,\"\\tdisplays only the <scope> configuration part.\\n\");"
   print "  pChar += rozofs_string_append_bold(pChar,\"\\t%s search <parameter>\");"%(command)
   print "  pChar += rozofs_string_append     (pChar,\"\\tdisplays parameters approximatively like <parameter>.\\n\");"
@@ -748,8 +748,10 @@ def go_build_man(struct_name,command):
   print "  pChar += rozofs_string_append     (pChar,\"\\tReturns the name of the configuration file and the saved ones.\\n\");"
   print "}"
 
+  
 #_______________________________________________
 def build_show_module(module,struct_name): 
+
   print "/*____________________________________________________________________________________________"
   print "**"
   print "** %s scope configuration parameters"%(module)
@@ -759,13 +761,31 @@ def build_show_module(module,struct_name):
   print ""
   print "  pChar += rozofs_string_append_effect(pChar,\"#                                                            \\n#     \", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
   print "  pChar += rozofs_string_append_effect(pChar,\"%-50s\", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"%("    %s SCOPE CONFIGURATION PARAMETERS"%(module.upper()))
-  print "  pChar += rozofs_string_append_effect(pChar,\"     \\n#                                                            \\n\\n\", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
+  print "  pChar += rozofs_string_append_effect(pChar,\"     \\n#                                                            \\n\\n\", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"      
   for obj in objects:
     if obj.module == module:     
       print ""
       obj.write_in_show(struct_name) 
   print "  return pChar;"
   print "}"
+
+  print "/*____________________________________________________________________________________________"
+  print "**"
+  print "** %s scope configuration parameters"%(module)
+  print "**"
+  print "*/"
+  print "char * show_%s_module_%s_short(char * pChar) {"%(struct_name,module)  
+  print ""
+  print "  pChar += rozofs_string_append_effect(pChar,\"#                                                            \\n#     \", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"    
+  print "  pChar += rozofs_string_append_effect(pChar,\"%-50s\", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"%("    %s SCOPE CONFIGURATION PARAMETERS"%(module.upper()))
+  print "  pChar += rozofs_string_append_effect(pChar,\"     \\n#                                                            \\n\\n\", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);"      
+  for obj in objects:
+    if obj.module == module:     
+      print ""
+      obj.write_in_save(struct_name) 
+  print "  return pChar;"
+  print "}"
+
 #_______________________________________________
 def go_build_show_modules(struct_name): 
 
@@ -825,6 +845,8 @@ def go_build_show(struct_name):
   print "void %s_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {"%(struct_name)
   print "char *pChar = uma_dbg_get_buffer();"
   print "char *pHead;"
+  print "int     longformat = 0;"
+  print "char  * moduleName = NULL;"
   print ""
   print "  if (argv[1] != NULL) {"
   print ""
@@ -869,29 +891,48 @@ def go_build_show(struct_name):
   print "      return;"           
   print "    }" 
   print ""
-  first=True
+  print "    if (strcmp(argv[1],\"long\")==0) {"
+  print "      longformat = 1;"
+  print "      moduleName = argv[2];"
+  print "    }" 
+  print "    else {"
+  print "      moduleName = argv[1];"
+  print "      if (argv[2] != NULL) {"
+  print "        if (strcmp(argv[2],\"long\")==0) {"
+  print "          longformat = 1;"
+  print "        }" 
+  print "      }"
+  print "    }"
+  print ""
+  print "    if (moduleName != NULL) {"
+  first = True
   for module in modules:
     if first == True:
-      print "    if (strcmp(\"%s\",argv[1])==0) {"%(module)
+      print "      if (strcasecmp(\"%s\",moduleName)==0) {"%(module)
       first=False
     else:
-      print "    else if (strcmp(\"%s\",argv[1])==0) {"%(module)
-    print "      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {"
-    print "        severe( \"ruc_buf_getPayload(%p)\", bufRef );"
-    print "        return;"
-    print "      }"             
-    print "      /*"
-    print "      ** Set the command recall string"
-    print "      */"
-    print "      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);"   
-    print "      pChar = show_%s_module_%s(pChar);"%(struct_name,module)
-    print "      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);"
-    print "      return;"           
-    print "    }"
-  print "    else {"
-  print "      pChar += rozofs_string_append_error(pChar, \"Unexpected configuration scope\\n\");"
-  print "      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
-  print "      return;"           
+      print "      else if (strcasecmp(\"%s\",moduleName)==0) {"%(module)
+    print "        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {"
+    print "          severe( \"ruc_buf_getPayload(%p)\", bufRef );"
+    print "          return;"
+    print "        }"             
+    print "        /*"
+    print "        ** Set the command recall string"
+    print "        */"
+    print "        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);"   
+    print "        if (longformat) {"
+    print "          pChar = show_%s_module_%s(pChar);"%(struct_name,module)  
+    print "        } else {"
+    print "          pChar = show_%s_module_%s_short(pChar);"%(struct_name,module)  
+    print "        } "
+    print "        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);"
+    print "        return;"           
+    print "      }"
+  print "      else {"
+  print "        pChar += rozofs_string_append_error(pChar, \"Unexpected configuration scope\\n\");"
+  print "        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
+  print "        return;"           
+  print "      }"
   print "    }"
   print "  }"  
   print ""
@@ -909,7 +950,12 @@ def go_build_show(struct_name):
   print "  "    
   for module in modules:
     print "  "    
-    print "  pChar = show_%s_module_%s(pChar);"%(struct_name,module)
+
+    print "  if (longformat) {"
+    print "    pChar = show_%s_module_%s(pChar);"%(struct_name,module)  
+    print "  } else {"
+    print "    pChar = show_%s_module_%s_short(pChar);"%(struct_name,module)  
+    print "  } "
     print "  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);"
     print "  "
     print "  bufRef = uma_dbg_get_new_buffer(tcpRef);"

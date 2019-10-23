@@ -137,9 +137,9 @@ static inline int trash_process_config_generated_search(char * pChar, char *para
 */
 void man_trash_process_config(char * pChar) {
   pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
-  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config [long]");
   pChar += rozofs_string_append     (pChar,"\t\tdisplays the whole trash_process_config configuration.\n");
-  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config <scope>");
+  pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config [long] <scope>");
   pChar += rozofs_string_append     (pChar,"\tdisplays only the <scope> configuration part.\n");
   pChar += rozofs_string_append_bold(pChar,"\ttrash_process_config search <parameter>");
   pChar += rozofs_string_append     (pChar,"\tdisplays parameters approximatively like <parameter>.\n");
@@ -200,6 +200,61 @@ char * show_trash_process_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// See --verbose parameter of the CLI.\n");
   TRASH_PROCESS_CONFIG_SHOW_BOOL(verbose,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** global scope configuration parameters
+**
+*/
+char * show_trash_process_config_module_global_short(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    GLOBAL SCOPE CONFIGURATION PARAMETERS         ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(frequency,12);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// This option defines the scanning frequency in hours of the trash \n");
+    pChar += rozofs_string_append(pChar,"// process.\n");
+    pChar += rozofs_string_append(pChar,"// See the --frequency parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(frequency,12);
+  }
+
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_LONG(older,7);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Exclude files that are more recent than the specified delay. \n");
+    pChar += rozofs_string_append(pChar,"// The delay is defined in days.\n");
+    pChar += rozofs_string_append(pChar,"// See the --older parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_LONG(older,7);
+  }
+
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(deletion_rate,10);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option defines the maximun rate in msg/s allocated for\n");
+    pChar += rozofs_string_append(pChar,"// files/directories deletion.\n");
+    pChar += rozofs_string_append(pChar,"// See the --rate parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(deletion_rate,10);
+  }
+
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_INT(scan_rate,-1);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option defines the maximun rate in msg/s allocated for inode scanning\n");
+    pChar += rozofs_string_append(pChar,"// See the --scan parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_INT(scan_rate,-1);
+  }
+
+
+  TRASH_PROCESS_CONFIG_IS_DEFAULT_BOOL(verbose,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// That option when asserted sets the process in verbose mode\n");
+    pChar += rozofs_string_append(pChar,"// See --verbose parameter of the CLI.\n");
+    TRASH_PROCESS_CONFIG_SHOW_BOOL(verbose,False);
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -322,6 +377,8 @@ char * trash_process_config_generated_show_all_files(char * pChar) {
 void trash_process_config_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 char *pChar = uma_dbg_get_buffer();
 char *pHead;
+int     longformat = 0;
+char  * moduleName = NULL;
 
   if (argv[1] != NULL) {
 
@@ -366,23 +423,42 @@ char *pHead;
       return;
     }
 
-    if (strcmp("global",argv[1])==0) {
-      if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
-        severe( "ruc_buf_getPayload(%p)", bufRef );
-        return;
-      }
-      /*
-      ** Set the command recall string
-      */
-      pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
-      pChar = show_trash_process_config_module_global(pChar);
-      uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
-      return;
+    if (strcmp(argv[1],"long")==0) {
+      longformat = 1;
+      moduleName = argv[2];
     }
     else {
-      pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
-      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
-      return;
+      moduleName = argv[1];
+      if (argv[2] != NULL) {
+        if (strcmp(argv[2],"long")==0) {
+          longformat = 1;
+        }
+      }
+    }
+
+    if (moduleName != NULL) {
+      if (strcasecmp("global",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_trash_process_config_module_global(pChar);
+        } else {
+          pChar = show_trash_process_config_module_global_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
+      else {
+        pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
+        uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+        return;
+      }
     }
   }
 
@@ -399,7 +475,11 @@ char *pHead;
   }
   
   
-  pChar = show_trash_process_config_module_global(pChar);
+  if (longformat) {
+    pChar = show_trash_process_config_module_global(pChar);
+  } else {
+    pChar = show_trash_process_config_module_global_short(pChar);
+  } 
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
   bufRef = uma_dbg_get_new_buffer(tcpRef);
