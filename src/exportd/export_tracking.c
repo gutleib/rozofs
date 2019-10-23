@@ -10294,6 +10294,71 @@ out:
     return status;
 }
 /*
+*_______________________________________________________________________
+**
+**  Set a project value to a directory
+**  1rst parameter is the directory FID
+**  2nd parameter is the project
+**
+*/
+void rozofs_SecretSetProjectToDirectory(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char           * pChar = uma_dbg_get_buffer();
+  uuid_t           fid;
+  rozofs_inode_t * pFid = (rozofs_inode_t *)fid;
+  unsigned int     project;
+  uint32_t         eid;
+  export_t       * exp = NULL;
+  char             setXattrCmd[64];
+  char           * pCmd = setXattrCmd;
+
+  if ((argv[1] == NULL) || (argv[2] == NULL)) {
+    goto badParameter;
+  }
+  
+  if (rozofs_uuid_parse(argv[1], fid)<0) {
+    goto badParameter;
+  }
+ 
+  if (sscanf(argv[2], "%u", &project) != 1) {
+    goto badParameter;
+  } 
+  if (project > 0xFFFF) {
+    goto badParameter;
+  }
+
+  /*
+  ** Get export context
+  */
+  eid = pFid->s.eid;
+  exp = exports_lookup_export(eid);
+  if (exp == NULL) {
+    goto badParameter;
+  }
+
+  /*
+  ** Prepare thee set extended attribute command
+  */
+  pCmd += rozofs_string_append(pCmd, "project = ");
+  pCmd += rozofs_string_append(pCmd, argv[2]);
+
+  /*
+  ** Execute the set extended attribute 
+  */
+  export_setxattr(exp, (unsigned char *) fid, ROZOFS_ROOT_XATTR,
+                  setXattrCmd, strlen(setXattrCmd), 0, NULL);
+  goto out;
+
+badParameter: 
+  errno = EINVAL;
+out:     
+  pChar += rozofs_string_append(pChar, strerror(errno));   	      
+  *pChar++ = '\n';
+  *pChar   = 0;
+     	      
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	  
+  return;
+}
+/*
 **______________________________________________________________________________
 */
 /** remove an extended attribute from a file or directory.

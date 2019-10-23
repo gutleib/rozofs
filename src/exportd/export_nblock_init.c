@@ -78,7 +78,7 @@ int short_display = 0;
 
 
 void * decoded_rpc_buffer_pool = NULL;
-
+void rozofs_SecretSetProjectToDirectory(char * argv[], uint32_t tcpRef, void *bufRef);
 /*
 **_________________________________________________________________________
 *      PUBLIC FUNCTIONS
@@ -314,6 +314,8 @@ void show_profiler_short(char * argv[], uint32_t tcpRef, void *bufRef) {
   show_profiler(argv, tcpRef, bufRef);
   short_display = 0;  
 }
+
+
 /*
 *_______________________________________________________________________
 *
@@ -1300,6 +1302,10 @@ int expgwc_start_nb_blocking_th(void *args) {
     uma_dbg_addTopic("clients",show_flock_clients); 
     uma_dbg_addTopic_option("trk_thread", show_tracking_thread,UMA_DBG_OPTION_RESET);
     uma_dbg_addTopicAndMan("metadata",show_metadata_device,show_metadata_device_usage,0);        
+
+    if (exportd_is_master()==0) {
+      uma_dbg_addTopic_option("SecretSetProjectToDirectory", rozofs_SecretSetProjectToDirectory,UMA_DBG_OPTION_HIDE);
+    }
     /*
     ** add export versioning
     */
