@@ -336,6 +336,7 @@ void * storcli_exportd_config_supervision_thread_msite(void *exportd_context_p) 
     */
     if (ret_poll_p == 0) {
         errno = EPROTO;
+        STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,poll_counter);
         goto out;
     } 
     if (ret_poll_p->status_gw.status == EP_FAILURE) {
@@ -387,6 +388,7 @@ void * storcli_exportd_config_supervision_thread_msite(void *exportd_context_p) 
     ** Check if poll has been successful
     */
     if (ret_conf_p == 0) {
+        STORCLI_CONF_STATS_NOK(storcli_conf_ctx_p,conf_counter);
         errno = EPROTO;
         goto out;
     } 
