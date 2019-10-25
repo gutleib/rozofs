@@ -240,6 +240,7 @@ static void usage() {
     fprintf(stderr, "    -o pagecache\t\twhen set, the storcli can perform a direct write in the page cache for I/O greater than 256KB\n");
     fprintf(stderr, "    -o nb_writeThreads=N\tDefine the number of active write threads\n");
     fprintf(stderr, "    -o fuse_profile=N\tDefine the fuse profile to apply(default %u/max %u)\n",(unsigned int)ROZOFS_DEFAULT_FUSE_PROFILE,(unsigned int)(ROZOFS_MAX_PROFILE-1));
+    fprintf(stderr, "    -o rwMaxBw=<MB/s>\tDefine a read+write bandwith limitation in MB/s\n");
 
 }
 
@@ -326,6 +327,7 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("wbcache", wbcache,1),
     MYFS_OPT("pagecache", pagecache,1),
     MYFS_OPT("fuse_profile=%u", idx_fuse_profile,1),
+    MYFS_OPT("rwMaxBw=%llu", rwMaxBw, 0),
    
     FUSE_OPT_KEY("-H ", KEY_EXPORT_HOST),
     FUSE_OPT_KEY("-E ", KEY_EXPORT_PATH),
@@ -432,6 +434,9 @@ void rozofs_ll_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup) {
     fuse_reply_none(req);
 }
 
+#define DISPLAY_UINT64_CONFIG(field) {\
+  pChar += sprintf(pChar,"%-25s = %llu\n",#field, (long long unsigned int)conf.field);\
+}
 
 #define DISPLAY_UINT32_CONFIG(field) {\
   if (conf.field==-1) pChar += sprintf(pChar,"%-25s = UNDEFINED\n",#field);\
@@ -494,6 +499,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(kernel_max_read);  
   DISPLAY_UINT32_CONFIG(kernel_max_write);  
   DISPLAY_UINT32_CONFIG(rozo_module);  
+  DISPLAY_UINT64_CONFIG(rwMaxBw)
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
 /*__________________________________________________________________________
@@ -2465,6 +2471,7 @@ int main(int argc, char *argv[]) {
     conf.pagecache = 0;
     conf.rozo_module = 0;
     conf.idx_fuse_profile = ROZOFS_DEFAULT_FUSE_PROFILE;
+    conf.rwMaxBw = 0; /* 0 is no read+write bandwith limitation */
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
     }

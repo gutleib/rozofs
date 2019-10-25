@@ -617,7 +617,7 @@ void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
 *
 */
 void rozofs_throughput_counter_init(void) {
-
+  rozofs_thr_cnts_t * counters[2];
     
   /*
   ** allocate memory for bandwidth computation
@@ -638,6 +638,14 @@ void rozofs_throughput_counter_init(void) {
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_XATTR]= rozofs_thr_cnts_allocate(NULL, "XATTR");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER]= rozofs_thr_cnts_allocate(NULL, "OTHER");
 
+  
+  /*
+  ** CRead and write must not exceed a threshold
+  */
+  counters[0] = rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR];
+  counters[1] = rozofs_thr_counter[ROZOFSMOUNT_COUNTER_WRITE_THR];  
+  rozofs_thr_cnt_create_threshold(ROZOFSMOUNT_RWBW_THRESHOLD_IDX, conf.rwMaxBw*1000000, 2, counters);
+  
   
   /*
   ** Register the diagnostic function

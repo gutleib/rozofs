@@ -49,6 +49,7 @@ uint64_t rozofs_fuse_req_tic = 0;
 uint64_t rozofs_fuse_buffer_depletion_count = 0;
 uint64_t rozofs_fuse_rcv_buf_depletion_count = 0;
 uint64_t rozofs_storcli_buffer_depletion_count = 0;
+uint64_t rozofs_rwMaxBw_exceeded = 0;
 int rozofs_fuse_loop_count = 2;
 int fuse_sharemem_init_done = 0;
 int fuse_sharemem_enable = 1;
@@ -437,6 +438,16 @@ uint32_t rozofs_fuse_rcvReadysock(void * rozofs_fuse_ctx_p,int socketId)
       */
       return FALSE;
     }
+    
+    /*
+    ** Check whether READ+WRITE throughput threshold is exceeded
+    */
+    if (rozofs_thr_cnt_is_threshold_exceeded(ROZOFSMOUNT_RWBW_THRESHOLD_IDX)) {
+      status = rozofs_xoff();
+      rozofs_rwMaxBw_exceeded++;
+      return status;
+    }
+        
     /*
     ** There is no specific buffer pool needed for receiving the fuse request
     ** since the fuse library allocates memory to store the incoming request.
@@ -759,13 +770,15 @@ static char *rozofs_fuse_show_usage(char *pChar)
   pChar += sprintf(pChar,"fuse kernel               : generate a printk from the rozofs fuse.ko module \n");
   pChar += sprintf(pChar,"fuse loop <count>         : set the max. fuse requests polled from the device queue(default:2) \n");
   pChar += sprintf(pChar,"fuse bypass [size]        : set the minimum size in bytes of write size before using ioctl (default %u)\n",ROZOFS_MAX_FILE_BUF_SZ);
-  pChar += sprintf(pChar,"fuse dir <enable|disable> :enable/disable dir attributes invalidation on mkdir/rmdir/unlink/create and mknod \n");
-  pChar += sprintf(pChar,"fuse cnx                  :display connection info \n");
-  pChar += sprintf(pChar,"fuse ra_pages <nb_pages>  :set the max readahead (unit is Linux page) \n");
+  pChar += sprintf(pChar,"fuse dir <enable|disable> : enable/disable dir attributes invalidation on mkdir/rmdir/unlink/create and mknod \n");
+  pChar += sprintf(pChar,"fuse cnx                  : display connection info \n");
+  pChar += sprintf(pChar,"fuse ra_pages <nb_pages>  : set the max readahead (unit is Linux page) \n");
   pChar += sprintf(pChar,"fuse max_background <count>        :set fuse max background requests count \n");
   pChar += sprintf(pChar,"fuse congestion_threshold <count>  :set fuse congestion threshold \n");
   pChar += sprintf(pChar,"fuse pagecache <enable|disable>    :enable or disable page cache direct write for storcli on read greater than 256KB \n");
-  pChar += sprintf(pChar,"fuse                      :display statistics \n");
+  pChar += sprintf(pChar,"fuse rwMaxBw <MB/s>       : set a read+write throughput limitation in MB/s\n");
+  pChar += sprintf(pChar,"fuse rwMaxBw              : set no read+write throughput limitation\n");
+  pChar += sprintf(pChar,"fuse                      : display statistics \n");
   return pChar;
 }
 
@@ -1090,7 +1103,39 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
 	 return;
       }
  
- 
+      /*
+      ** Set or remove a read+write bandwith limitation
+      */
+      if (strcasecmp(argv[1],"rwMaxBw")==0) {
+         unsigned long long int threshold;
+	 if (argv[2] == NULL) {
+           threshold = 0;
+         }
+         else {
+           if (sscanf(argv[2],"%llu",&threshold) != 1) {
+             pChar += sprintf(pChar, "Bad read&write max bandwith value %s\n",argv[2]);
+  	     rozofs_fuse_show_usage(pChar);
+	     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+  	     return;	 
+           }
+         }  
+         if (rozofs_thr_cnt_update_threshold(ROZOFSMOUNT_RWBW_THRESHOLD_IDX, threshold*1000000) < 0) {
+           pChar += sprintf(pChar, "Error setting read&write max bandwith %s\n",strerror(errno));
+  	   rozofs_fuse_show_usage(pChar);
+         }
+         else {  
+           if (threshold==0) {
+             pChar += sprintf(pChar, "No read&write bandwith limitation\n");
+           }
+           else {           
+             pChar += sprintf(pChar, "New read&write max bandwith set to %lluMB/s\n",threshold);
+           }  
+         }
+	 uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+  	 return;	 	     
+      }
+      
+       
       pChar += sprintf(pChar, "unsupported command %s\n",argv[1]);
       rozofs_fuse_show_usage(pChar);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -1119,6 +1164,7 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar +=  sprintf(pChar,"fusectl    : /sys/fs/%s/connections/%d (%s)\n",(conf.rozo_module==0)?"fuse":"rozo",rozofs_fuse_ctx_p->dev,(rozofs_fuse_ctx_p->fuse_path_solved==0)?"NOT SOLVED":"SOLVED");  
   
   }
+    pChar +=  sprintf(pChar,"ioctl      : %s\n", rozofs_fuse_ctx_p->ioctl_supported?"supported":"no");
     pChar +=  sprintf(pChar,"pagecache  : %s/%s\n",(conf.pagecache)?"Enabled":"Disabled",(rozofs_fuse_ctx_p->dev > 0)?"Supported":"Not supported");    	       
   /*
   ** display the cache mode
@@ -1179,10 +1225,13 @@ void rozofs_fuse_show(char * argv[], uint32_t tcpRef, void *bufRef) {
   pChar +=sprintf(pChar,"fuse buffer depletion    : %8llu\n",(long long unsigned int)rozofs_fuse_buffer_depletion_count);  
   pChar +=sprintf(pChar,"fuse rcvbuf depletion    : %8llu\n",(long long unsigned int)rozofs_fuse_rcv_buf_depletion_count);  
   pChar +=sprintf(pChar,"storcli buffer depletion : %8llu\n",(long long unsigned int)rozofs_storcli_buffer_depletion_count);
+  pChar +=sprintf(pChar,"RW max BW value          : %8llu MB/s\n",(long long unsigned int)rozofs_thr_cnt_get_threshold_value(ROZOFSMOUNT_RWBW_THRESHOLD_IDX)/1000000);
+  pChar +=sprintf(pChar,"RW max BW exceeded       : %8llu\n",(long long unsigned int)rozofs_rwMaxBw_exceeded);
   pChar +=sprintf(pChar,"pending storcli requests : %8d\n",rozofs_storcli_pending_req_count);
   pChar +=sprintf(pChar,"fuse kernel xoff/xon     : %8llu/%llu\n",(long long unsigned int)rozofs_storcli_xoff_count,
                                                                    (long long unsigned int)rozofs_storcli_xon_count);
 
+  rozofs_rwMaxBw_exceeded = 0;
   rozofs_storcli_buffer_depletion_count =0;
   rozofs_fuse_buffer_depletion_count =0;
   rozofs_fuse_rcv_buf_depletion_count =0;

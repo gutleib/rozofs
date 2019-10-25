@@ -31,6 +31,11 @@
 #include "file.h"
 #include "rozofs_ext4.h"
 
+/*
+** Indexes of the thresholds defined in the RozoFS throughput counter service
+*/
+/* The sum of read and write throughput may be limited */
+#define ROZOFSMOUNT_RWBW_THRESHOLD_IDX 0
 
 #define ROZOFSMOUNT_MAX_EXPORT_TX 128
 #define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_STANDALONE  128
@@ -124,6 +129,10 @@ typedef struct rozofsmnt_conf {
     ** in case of poor network connection
     */
     unsigned localPreference;    
+    /*
+    ** read+write bandwith limitation in MB/s
+    */
+    unsigned long long int rwMaxBw;
     unsigned noReadFaultTolerant;   
     unsigned xattrcache;   /**< assert to 1 for extended attributes caching                        */      
     unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */
@@ -252,13 +261,10 @@ static inline int eid_check_free_quota(uint32_t bsize, uint64_t oldSize, uint64_
   if (newSize % bbytes) newBlocks++;  
   
   if ((newBlocks-oldBlocks) > eid_free_quota) {
-    errno = ENOSPC;
     return 0;
   }  
   return 1;
 }
-
-
 static inline uint32_t fuse_ino_hash_fnv_with_len( void *key1) {
 
     unsigned char *d = (unsigned char *) key1;
