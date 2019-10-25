@@ -127,7 +127,7 @@ void show_expgw_configuration(char * argv[], uint32_t tcpRef, void *bufRef)
      pchar += sprintf(pchar,"exportd id %d\n",expgw_conf_p->hdr.export_id);
      pchar += sprintf(pchar,"nb gateways : %d\n",expgw_conf_p->hdr.nb_gateways);
      pchar += sprintf(pchar,"nb eids     : %d\n",expgw_conf_p->eid.eid_len); 
-     pchar += sprintf(pchar,"hash config : 0x%x\n",expgw_conf_p->hdr.configuration_indice); 
+     pchar += sprintf(pchar,"hash config : 0x%x\n",export_configuration_file_hash); 
 
 pchar += sprintf(pchar,"     hostname        |  lbg_id  | state  | cnf. status |  poll (attps/ok/nok) | conf send (attps/ok/nok)\n");
 pchar += sprintf(pchar,"---------------------+----------+--------+-------------+----------------------+--------------------------\n");
