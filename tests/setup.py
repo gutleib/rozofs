@@ -96,7 +96,10 @@ class host_class:
       my_vols = []
       string=""
       for s in h.sid:
-        string+="%s/%-2s "%(s.cid.cid,s.sid)
+        if s.cid.frozen == True:
+          string+="\033[36m\033[40m%s/%-2s\033[0m "%(s.cid.cid,s.sid)
+        else:
+          string+="%s/%-2s "%(s.cid.cid,s.sid)            
 	if s.cid.volume not in my_vols: my_vols.append(s.cid.volume)
       d.set_column(5,"%s"%(string))
       string=""
@@ -426,15 +429,12 @@ class cid_class:
     self.dev_mapper = dev_mapper
     self.dev_red    = dev_red 
     self.volume     = volume
-    self.dev_size   = dev_size;
+    self.dev_size   = dev_size
+    self.frozen     = False
     cids.append(self) 
-    
-  @staticmethod
-  def get_cid(val):
-    global cids
-    for c in cids:
-      if c.cid == val: return c
-    return None  
+
+  def freeze(self,val=True):
+    self.frozen = val
    
   def get_sid(self,val):
     for s in self.sid:
@@ -584,7 +584,7 @@ class mount_point_class:
     if rozofs.read_mojette_threads == True: options += ",mojThreadRead=1"
     if rozofs.write_mojette_threads == False: options += ",mojThreadWrite=0"
     if rozofs.mojette_threads_threshold != None: options += ",mojThreadThreshold=%s"%(rozofs.mojette_threads_threshold)
-
+    
     os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_name(),self.get_mount_path(),options))
     os.system("chmod 0777 %s"%(self.get_mount_path()))
     if self.eid.striping_cmd != "":
@@ -958,6 +958,8 @@ class exportd_class:
 	print "     %s{"%(nextc)
 	nextc=","      
 	print "        cid = %s;"%(c.cid)
+        if c.frozen == True:
+          print "        admin = \"frozen\";"
 	print "        sids = "
 	print "        ("
 	nexts=" "

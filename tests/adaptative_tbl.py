@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import re
 
 red = '\033[91m'
 green = '\033[92m'
@@ -16,6 +17,16 @@ underline = '\033[4m'
 blink = '\033[5m'
 reverse = '\033[7m'
 
+
+strip_ANSI_pat = re.compile(r"""
+    \x1b     # literal ESC
+    \[       # literal [
+    [;\d]*   # zero or more digits or semicolons
+    [A-Za-z] # a letter
+    """, re.VERBOSE).sub
+
+def strip_ANSI(s):
+    return strip_ANSI_pat("", s)
 
 #_______________________________________________
 class constants:
@@ -235,8 +246,8 @@ class adaptative_tbl:
          
   def set_column(self,column,value,effect=None):
     self.current_row.set_column(column,value,effect)
-    self.column_desc.update_column(column,len(value))      
-
+    self.column_desc.update_column(column,len(strip_ANSI(value)))   
+       
   def join_preceding_column(self,column):
     self.current_row.join_preceding_column(column)
                 	
