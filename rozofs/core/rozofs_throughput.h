@@ -55,6 +55,15 @@ typedef enum _rozofs_thr_unit_e {
 } rozofs_thr_unit_e; 
  
 
+
+typedef struct _rozofs_thr_cnt_threshold_t {
+  uint64_t            threshold;
+  uint32_t            nbCounters;
+  rozofs_thr_cnts_t * counters[1];
+} rozofs_thr_cnt_threshold_t;
+#define ROZOFS_THR_CNT_MAX_THRESHOLD 8
+extern rozofs_thr_cnt_threshold_t * rozofs_thr_cnt_threshold_table[];
+
 /*_______________________________________________________________________
 * Update throughput counter
 *
@@ -232,6 +241,115 @@ void rozofs_thr_display_throughput_per_sec() ;
 *     throughput per minute
 */
 void rozofs_thr_display_throughput_per_step() ;
+/*_______________________________________________________________________
+* Declare a threshold as a value that a sum of counters should not exceed
+* An API (rozofs_thr_cnt_is_threshold_exceeded) enables to check whether
+* this threshold is respected or exceeded. 
+*
+* @param thresholdIx  Index of the threshold to create
+* @param threshold    Threshold value that should be respected
+* @param nbCounters   Number of counters per second to sum and check 
+*                     against the threshold
+* @param counters     Array of the counters to sum 
+*
+* @retval -1 on error, 0 on success
+*/
+int rozofs_thr_cnt_create_threshold(int thresholdIx, uint64_t threshold, int nbCounters, rozofs_thr_cnts_t * counters[]) ;
+/*_______________________________________________________________________
+* Update a threshold value 
+*
+* @param thresholdIx  Index of the threshold to update
+* @param threshold    New threshold value (0 is no threshold)
+*
+* @retval -1 on error, 0 on success
+*/
+int rozofs_thr_cnt_update_threshold(int thresholdIx, uint64_t threshold) ;
+/*_______________________________________________________________________
+* Check whether a defined threshold is exceeded
+*
+* @param thresholdIx  Index of the threshold to check
+*
+* @retval 0 when not exceeded, 1 else
+*/
+static inline int rozofs_thr_cnt_is_threshold_exceeded(int thresholdIx) {
+  rozofs_thr_cnt_threshold_t * thr;
+  int                          idx;
+  uint64_t                     sum;
+  uint64_t                     timeNow;
+  uint64_t                     slot;
+  rozofs_thr_cnts_t          * counters;
+
+  /*
+  ** Check input index is within an acceptable range
+  */      
+  if (thresholdIx >= ROZOFS_THR_CNT_MAX_THRESHOLD) {
+    return 0;
+  } 
+
+  /*
+  ** Check this threshold is defined
+  */  
+  thr = rozofs_thr_cnt_threshold_table[thresholdIx]; 
+  if (thr == NULL) {
+    return 0;
+  } 
+
+  /*
+  ** Null threshold is no threshold
+  */
+  if (thr->threshold == 0) return 0;
+  
+  /*
+  ** Get the current ticker and compute the index within the counter structure
+  */    
+  timeNow = rozofs_get_ticker_s();
+  slot    = timeNow % ROZOFS_THR_CNTS_NB;
+
+  /*
+  ** Sum every current value of the list of counters defined for this threshold
+  */      
+  sum = 0;
+  for (idx=0; idx < thr->nbCounters; idx++) {
+    counters = thr->counters[idx];
+    if (counters == NULL) continue;
+    if (counters->second[slot].ts != timeNow) continue;
+    sum += counters->second[slot].count;
+  }
+  /*
+  ** Compare the sum of counters with the given threashold
+  */
+  if (sum >= thr->threshold) {
+    return 1;
+  }  
+  return 0;
+}
+/*_______________________________________________________________________
+* Read the threshold value of a defined threshold
+*
+* @param thresholdIx  Index of the threshold to check
+*
+* @retval The threshold value (0 is no limit)
+*/
+static inline uint64_t rozofs_thr_cnt_get_threshold_value(int thresholdIx) {
+  rozofs_thr_cnt_threshold_t * thr;
+
+  /*
+  ** Check input index is within an acceptable range
+  */      
+  if (thresholdIx >= ROZOFS_THR_CNT_MAX_THRESHOLD) {
+    return 0;
+  } 
+
+  /*
+  ** Check this threshold is defined
+  */  
+  thr = rozofs_thr_cnt_threshold_table[thresholdIx]; 
+  if (thr == NULL) {
+    return 0;
+  } 
+
+  return thr->threshold;
+}
 #endif
 
 

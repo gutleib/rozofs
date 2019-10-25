@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <errno.h>
 #include "rozofs_throughput.h"
 
 static uint32_t COLS=1;
@@ -34,6 +35,9 @@ typedef uint64_t     colaverage_t[15];
 
 #define              ROZOFS_MAX_DISPLAY_COUNTER 16
 colaverage_t         elementaverage[ROZOFS_MAX_DISPLAY_COUNTER];
+
+#define ROZOFS_THR_CNT_MAX_THRESHOLD 8
+rozofs_thr_cnt_threshold_t * rozofs_thr_cnt_threshold_table[ROZOFS_THR_CNT_MAX_THRESHOLD] = {NULL};
 
  
 /*_______________________________________________________________________
@@ -354,4 +358,92 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
   PERSTEP = 1;
   AVERAGE = 0;
   return pChar;    
+}
+/*_______________________________________________________________________
+* Update a threshold value 
+*
+* @param thresholdIx  Index of the threshold to update
+* @param threshold    New threshold value (0 is no threshold)
+*
+* @retval -1 on error, 0 on success
+*/
+int rozofs_thr_cnt_update_threshold(int thresholdIx, uint64_t threshold) {
+  rozofs_thr_cnt_threshold_t * thr;
+  int                          size;
+  int                          idx;
+  
+  /*
+  ** Check input index is within an acceptable range
+  */
+  if (thresholdIx >= ROZOFS_THR_CNT_MAX_THRESHOLD) {
+    errno = EINVAL;
+    return -1;
+  }  
+
+  /*
+  ** Check this threshold is not alread defined
+  */  
+  if (rozofs_thr_cnt_threshold_table[thresholdIx] == NULL) {
+    errno = ENOENT;
+    return -1;
+  }  
+  
+  thr = rozofs_thr_cnt_threshold_table[thresholdIx];
+  thr->threshold  = threshold;
+  return 0;
+}
+/*_______________________________________________________________________
+* Declare a threshold as a value that a sum of counters should not exceed
+* An API (rozofs_thr_cnt_is_threshold_exceeded) enables to check whether
+* this threshold is respected or exceeded. 
+*
+* @param thresholdIx  Index of the threshold to create
+* @param threshold    Threshold value that should be respected
+* @param nbCounters   Number of counters per second to sum and check 
+*                     against the threshold
+* @param counters     Array of the counters to sum 
+*
+* @retval -1 on error, 0 on succes
+*/
+int rozofs_thr_cnt_create_threshold(int thresholdIx, uint64_t threshold, int nbCounters, rozofs_thr_cnts_t * counters[]) {
+  rozofs_thr_cnt_threshold_t * thr;
+  int                          size;
+  int                          idx;
+  
+  /*
+  ** Check input index is within an acceptable range
+  */
+  if (thresholdIx >= ROZOFS_THR_CNT_MAX_THRESHOLD) {
+    errno = EINVAL;
+    return -1;
+  }  
+
+  /*
+  ** Check this threshold is not alread defined
+  */  
+  if (rozofs_thr_cnt_threshold_table[thresholdIx] != NULL) {
+    errno = EEXIST;
+    return -1;
+  }  
+
+  /*
+  ** Allocate a context for this threshold
+  */  
+  size = sizeof(rozofs_thr_cnt_threshold_t) + ((nbCounters-1) * sizeof(rozofs_thr_cnts_t*));
+  thr = malloc(size);
+  if (thr == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }  
+
+  /*
+  ** Store information in the context
+  */    
+  rozofs_thr_cnt_threshold_table[thresholdIx] = thr;
+  thr->threshold  = threshold;
+  thr->nbCounters = nbCounters;
+  for (idx=0; idx <nbCounters; idx++) {
+    thr->counters[idx] = counters[idx];
+  }
+  return 0;
 }
