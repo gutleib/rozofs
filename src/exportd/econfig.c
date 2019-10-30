@@ -1260,12 +1260,21 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
         if (config_setting_lookup_string(mfs_setting, EFAST_MODE, &str) != CONFIG_FALSE) {
           if (strcasecmp(str,"hybrid")==0) {
             fast_mode = rozofs_econfig_fast_hybrid;
+            if (vid_fast == -1) {
+              severe("hybrid mode requires a vid_fast parameter");
+              goto out;
+            }
           }
           else if (strcasecmp(str,"aging")==0) {  
             fast_mode = rozofs_econfig_fast_aging;
+            if (vid_fast == -1) {
+              severe("aging mode requires a vid_fast parameter");
+              goto out;
+            }
           }
           else if (strcasecmp(str,"none")!=0) {  
             severe("Bad fast_mode for export %d : %s . Default to \"none\"", eid, str);
+            goto out;
           }           
         }
 
