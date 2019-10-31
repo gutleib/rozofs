@@ -587,8 +587,6 @@ class mount_point_class:
     
     os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_name(),self.get_mount_path(),options))
     os.system("chmod 0777 %s"%(self.get_mount_path()))
-    if self.eid.striping_cmd != "":
-      os.system("rozo_multifile -s -i %s %s > /dev/null"%(self.eid.striping_cmd,self.get_mount_path()))
           
   def stop(self):
     try: self.nfs(False)
@@ -730,16 +728,12 @@ class export_class:
       self.failures = rozofs.failures(layout)   
     else:
       self.failures = volume.get_failures()
-    self.striping_cmd = ""  
     exports.append(self)
-
-  def striping(self,cmd):
-    self.striping_cmd = cmd
     
   def set_fast_mode(self,fast_mode):
     self.fast_mode = fast_mode
 
-  def set_stripping(self,factor,unit):
+  def set_striping(self,factor,unit):
     self.striping_unit = unit
     self.striping_factor = factor
     
@@ -1054,11 +1048,14 @@ class exportd_class:
       d.set_column(1,"%s"%(e.eid))
       d.set_column(2,"%s"%(e.volume.vid))
       if e.vid_fast != None:
-        d.set_column(3,"%s"%(e.vid_fast.vid))
+        d.set_column(3,"%s/%s"%(e.fast_mode,e.vid_fast.vid))
       else:
-        d.set_column(3," ")
+        d.set_column(3,"none")
       d.set_column(4,"%s"%(e.layout))  
-      d.set_column(5,"%s"%(e.striping_cmd))
+      if e.striping_unit!= None:
+        d.set_column(5,"%s/%s"%(e.striping_factor,e.striping_unit))
+      else:
+        d.set_column(5,"none")
     d.display()
 
   
