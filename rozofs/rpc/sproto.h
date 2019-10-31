@@ -220,7 +220,7 @@ struct sp_truncate_arg_t {
 	uint32_t dist_set[ROZOFS_SAFE_MAX_RPC];
 	sp_uuid_t fid;
 	uint8_t proj_id;
-	uint32_t last_seg;
+	uint16_t last_seg;
 	uint64_t last_timestamp;
 	uint64_t bid;
 	struct {

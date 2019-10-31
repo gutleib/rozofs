@@ -435,7 +435,7 @@ xdr_sp_truncate_arg_t (XDR *xdrs, sp_truncate_arg_t *objp)
 		 return FALSE;
 	 if (!xdr_uint8_t (xdrs, &objp->proj_id))
 		 return FALSE;
-	 if (!xdr_uint32_t (xdrs, &objp->last_seg))
+	 if (!xdr_uint16_t (xdrs, &objp->last_seg))
 		 return FALSE;
 	 if (!xdr_uint64_t (xdrs, &objp->last_timestamp))
 		 return FALSE;
