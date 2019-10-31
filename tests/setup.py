@@ -166,7 +166,7 @@ class host_class:
         if s.cid.volume.vid == 1 :
           print "\t%s{cid = %s; sid = %s; nodeid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.cid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)      
         else:
-          print "\t%s{cid = %s; sid = %s; nodeid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; spare-mark = \"%s\";}"%(nexts,s.cid.cid,s.sid,s.cid.cids.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red,s.cid.volume.vid)                
+          print "\t%s{cid = %s; sid = %s; nodeid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; spare-mark = \"%s\";}"%(nexts,s.cid.cid,s.sid,s.cid.cid, s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red,s.cid.volume.vid)                
       else:
         print "\t%s{cid = %s; sid = %s; nodeid = %s; root =\"%s\"; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.cid,s.get_root_path(self.number),s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)
       nexts=","
@@ -527,7 +527,7 @@ class mount_point_class:
         if s.cid.volume.vid == self.eid.volume.vid:
 	  string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
         if self.eid.vid_fast != None:
-          if s.cid.volume.vid == self.eid.vid_fast.vid:
+          if s.cid.volume.vid == self.eid.vid_fast:
 	    string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
 
     print "sids = %s"%(string)	    
@@ -712,6 +712,9 @@ class export_class:
       # Find the 1Rst available eid
       eid = find_free_export_id()  
     self.vid_fast = None
+    self.fast_mode = None
+    self.striping_unit = None
+    self.striping_factor = None
     self.eid   = eid
     self.bsize = bsize
     self.volume= volume
@@ -732,6 +735,13 @@ class export_class:
 
   def striping(self,cmd):
     self.striping_cmd = cmd
+    
+  def set_fast_mode(self,fast_mode):
+    self.fast_mode = fast_mode
+
+  def set_stripping(self,factor,unit):
+    self.striping_unit = unit
+    self.striping_factor = factor
     
   def set_vid_fast(self,vid):
     self.vid_fast = vid
@@ -1005,18 +1015,29 @@ class exportd_class:
     for v in volumes:
       for e in v.eid:
         root_path=e.get_root_path()
-        if e.squota == "": squota=""
-        else             : squota="squota=\"%s\";"%(e.squota)
-        if e.hquota == "": hquota=""
-        else             : hquota="hquota=\"%s\";"%(e.hquota)
-        if e.thin == True: thin = "; thin-provisioning = True;"
-        else             : thin=";"
+        LINE = nexte
+        LINE += "{ eid=%s;"%(e.eid)
+        LINE += " bsize=\"%s\";"%(rozofs.bsize(e.bsize))
+        LINE += " root=\"%s\";"%(root_path)
+        LINE += " name=\"%s\";"%(e.get_name())        
+        LINE += " filter=\"flt_%d\";"%(e.eid)
+        if e.squota != "": 
+          LINE += " squota=\"%s\";"%(e.squota)
+        if e.hquota != "": 
+          LINE += " hquota=\"%s\";"%(e.hquota)
+        if e.thin == True: 
+          LINE += " thin-provisioning = True;"
+	LINE += " vid=%s;"%(v.vid)
+	LINE += " layout=%s;"%(rozofs.layout2int(e.layout))
         if e.vid_fast != None:
-          vid_fast = "vid_fast = %s;"%(e.vid_fast.vid)
-        else:
-          vid_fast = "" 
-	print "  %s{eid=%s; bsize=\"%s\"; root=\"%s\"; name=\"%s\", filter=\"flt_%d\"; %s%s vid=%s; layout=%s %s %s}"%(nexte,e.eid,rozofs.bsize(e.bsize),root_path,e.get_name(),e.eid,hquota,squota,v.vid,rozofs.layout2int(e.layout),thin,vid_fast)
+  	  LINE += " vid_fast=%s;"%(e.vid_fast.vid)
+        if e.fast_mode != None:
+  	  LINE += " fast_mode=\"%s\";"%(e.fast_mode)
+        if e.striping_unit != None:
+          LINE += " striping = { factor = %d; unit = %s;};"%(e.striping_factor,e.striping_unit)
 	nexte=","	
+        LINE += "}"
+        print LINE 
     print ");"
 
   def display(self):     
@@ -1035,7 +1056,7 @@ class exportd_class:
       if e.vid_fast != None:
         d.set_column(3,"%s"%(e.vid_fast.vid))
       else:
-        d.set_column(3,"%s"%(e.vid_fast))
+        d.set_column(3," ")
       d.set_column(4,"%s"%(e.layout))  
       d.set_column(5,"%s"%(e.striping_cmd))
     d.display()
@@ -1360,6 +1381,7 @@ class rozofs_class:
       display_config_int("min_metadata_MB",rozofs.min_metadata_MB)
     display_config_int("nb_trash_thread",8)
     display_config_bool("standalone",rozofs.standalone)
+    display_config_bool("rdma_enable",False)
     
   def create_common_config(self):
     if not os.path.exists("/usr/local/etc/rozofs"): os.system("mkdir -p /usr/local/etc/rozofs")  
