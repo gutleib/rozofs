@@ -16,7 +16,11 @@ def syntax(error):
   if error != None:
     print "\n\033[91m%s !!!\033[0m\n"%(error)
 
-  print "\nUsage: enum2String.py -n <enum> -f <file> [ -c <#char> ] [ extra options ]\n"
+  print "\nUsage: "
+  print "       enum2String.py -R"
+  print "          To regenerate every existing file.\n"
+  print "       enum2String.py -n <enum> -f <file> [ -c <#char> ] [ extra options ]"
+  print "          To generate a new file."
   print "  -n <enum>    provides the name of the enumeration"
   print "  -f <file>    provides the file name containing the enumeration definition"
   print "  -c <#char>   enables to truncate the <#char> first characters from the enumeration definitions"
