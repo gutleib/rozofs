@@ -64,6 +64,7 @@
 #include "storio_nblock_init.h"
 #include "storio_device_mapping.h"
 #include "storio_crc32.h"
+#include "storio_trc.h"
 
 int     storio_instance = 0;
 char storaged_config_file[PATH_MAX] = STORAGED_DEFAULT_CONFIG;
@@ -389,6 +390,8 @@ int main(int argc, char *argv[]) {
                 common_config.crc32c_check,
                 common_config.crc32c_hw_forced);
 		
+    storio_trc_init();
+                
     // Initialization of the storage configuration
     if (storaged_initialize() != 0) {
         fatal("can't initialize storaged: %s.", strerror(errno));

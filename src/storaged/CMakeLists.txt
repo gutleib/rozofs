@@ -170,7 +170,9 @@ add_executable(storio
     storio_crc32.h    
     
     storio_rdma_recv.h     
-    storio_rdma_recv.c     
+    storio_rdma_recv.c    
+    storio_trc.c 
+    storio_trc.h
 )
 
 if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)

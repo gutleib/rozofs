@@ -130,6 +130,7 @@ typedef struct _rozorpc_srv_ctx_t
   uint32_t   src_transaction_id;  /**< transaction id of the source request                                       */
   uint32_t   rdma;                /**< assert to 1 when the context is used with RDMA protocol                    */
   uint32_t   client_lbg_id;       /**< reference of the lbg_id on client side (between storcli & storio) needed for full rdma */
+  uint32_t   trcIdx;              /**< Index of the request in the trace */
   uint64_t            timestamp;
   int                 position;  /**< position of the last decoded arg in the request                 */
   void      *recv_buf;             /**< pointer to the receive buffer that carries the request        */

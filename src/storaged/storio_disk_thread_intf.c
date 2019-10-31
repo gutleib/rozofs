@@ -37,6 +37,7 @@
 #include "storio_device_mapping.h"
 #include "storio_serialization.h"
 #include "storio_north_intf.h"
+#include "storio_trc.h"
 
 DECLARE_PROFILING(spp_profiler_t); 
  
@@ -629,13 +630,22 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
   opcode = msg->opcode;
   tic    = msg->timeStart; 
 
+  /*
+  ** Retrieve FID context
+  */
+  dev_map_p = storio_device_mapping_ctx_retrieve(msg->fidIdx);
+ 
   switch (opcode) {
   
     case STORIO_DISK_THREAD_READ:
     {
       STOP_PROFILING_IO(read,msg->size);
       update_read_detailed_counters(toc - tic);      
-      storio_update_read_counter(tv.tv_sec,msg->size);        
+      storio_update_read_counter(tv.tv_sec,msg->size);
+      storio_trc_rsp(storio_trc_service_tcp_rd,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;
     }  
   
@@ -644,6 +654,10 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING_IO(read,msg->size);
       update_read_detailed_counters(toc - tic);      
       storio_update_read_counter(tv.tv_sec,msg->size);        
+      storio_trc_rsp(storio_trc_service_tcp_rd,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;
     }  
     
@@ -651,6 +665,10 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING_IO(write,msg->size);
       update_write_detailed_counters(toc - tic);  
       storio_update_write_counter(tv.tv_sec,msg->size);                      
+      storio_trc_rsp(storio_trc_service_tcp_wr,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;     
     }  
         
@@ -658,11 +676,19 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING_IO(write_empty,msg->size);
       //update_write_detailed_counters(toc - tic);  
       storio_update_write_counter(tv.tv_sec,msg->size);                      
+      storio_trc_rsp(storio_trc_service_tcp_wr_empty,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;     
     }  
     case STORIO_DISK_THREAD_TRUNCATE:
     {
       STOP_PROFILING(truncate);
+      storio_trc_rsp(storio_trc_service_trunc,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;
     }  
        
@@ -670,31 +696,49 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
     {  
       STOP_PROFILING_IO(repair,msg->size);
       update_write_detailed_counters(toc - tic); 
+      storio_trc_rsp(storio_trc_service_repair,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;
     }  
           
     case STORIO_DISK_THREAD_REMOVE:
     {
       STOP_PROFILING(remove);
+      storio_trc_rsp(storio_trc_service_remove,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break; 
     }  
           
     case STORIO_DISK_THREAD_REMOVE_CHUNK:
     {
       STOP_PROFILING(remove_chunk);
+      storio_trc_rsp(storio_trc_service_rm_chunk,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;    
     }  
           
     case STORIO_DISK_THREAD_REBUILD_START:
     {
       STOP_PROFILING(rebuild_start);
+      storio_trc_rsp(storio_trc_service_rb_start,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break; 
     }  
           
     case STORIO_DISK_THREAD_REBUILD_STOP:
     {
-      dev_map_p = storio_device_mapping_ctx_retrieve(msg->fidIdx);
-
+      storio_trc_rsp(storio_trc_service_rb_stop,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       if (dev_map_p != NULL) {
         sp_rebuild_stop_response(dev_map_p, rpcCtx);
       }
@@ -712,6 +756,10 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING_IO(read,msg->size);
       update_read_detailed_counters(toc - tic);      
       storio_update_read_counter(tv.tv_sec,msg->size);        
+      storio_trc_rsp(storio_trc_service_rdma_rd,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;
     }           
     case STORIO_DISK_THREAD_WRITE_RDMA:
@@ -719,6 +767,10 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING_IO(read,msg->size);
       update_write_detailed_counters(toc - tic);  
       storio_update_write_counter(tv.tv_sec,msg->size);         
+      storio_trc_rsp(storio_trc_service_rdma_wr,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;
     }     
     case STORIO_DISK_THREAD_READ_STDALONE:
@@ -726,6 +778,10 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING_IO(read,msg->size);
       update_read_detailed_counters(toc - tic);      
       storio_update_read_counter(tv.tv_sec,msg->size);        
+      storio_trc_rsp(storio_trc_service_local_rd,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;
     }  
     
@@ -733,31 +789,19 @@ void af_unix_disk_response(storio_disk_thread_msg_t *msg)
       STOP_PROFILING_IO(write,msg->size);
       update_write_detailed_counters(toc - tic);  
       storio_update_write_counter(tv.tv_sec,msg->size);                      
+      storio_trc_rsp(storio_trc_service_local_wr,
+                     msg->status,
+                     msg->size,
+                     rpcCtx->trcIdx);
       break;     
     }  
 
     default:
       severe("Unexpected opcode %d", opcode);
   }
-
-  /*
-  ** Retrieve FID context
-  */
-  if (dev_map_p == NULL) {
-    /* Get from given index in message */
-    dev_map_p = storio_device_mapping_ctx_retrieve(msg->fidIdx);
-  }
  
   
-  if (dev_map_p == NULL) {
-    severe("Missing context");
-  }
-  else { 
-    /*
-    ** Send waiting request if any
-    */
-    storio_serialization_end(dev_map_p,rpcCtx) ;	 
-  } 
+  storio_serialization_end(dev_map_p,rpcCtx) ;	  
     
   /*
   ** When the RPC request has been received over RDMA, we MUST not send it back on TCP

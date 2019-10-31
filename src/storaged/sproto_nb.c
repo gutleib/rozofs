@@ -41,6 +41,7 @@
 #include "storio_device_mapping.h"
 #include "storio_serialization.h"
 #include "storage_enumeration.h"
+#include "storio_trc.h"
 
 /*
 ** Detailed time counters for read and write operation
@@ -421,6 +422,12 @@ void sp_write_empty_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     
     START_PROFILING(write_empty);
 
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_tcp_wr_empty,
+                                       write_arg_p->cid, write_arg_p->sid,
+                                       (unsigned char*)write_arg_p->fid, 
+                                       write_arg_p->bid, 
+                                       write_arg_p->nb_proj);
+
     /*
     ** Use received buffer for the response
     */
@@ -615,9 +622,12 @@ send_to_disk_thread:
 
 
 error:    
+
     
     ret.status                 = SP_FAILURE;            
     ret.sp_write_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_tcp_wr_empty, ret.sp_write_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -645,6 +655,12 @@ void sp_write_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     int                       write_first;
     
     START_PROFILING(write);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_tcp_wr,
+                                       write_arg_p->cid, write_arg_p->sid,
+                                      (unsigned char *)write_arg_p->fid,
+                                       write_arg_p->bid, 
+                                       write_arg_p->nb_proj);
 
     /*
     ** Use received buffer for the response
@@ -843,6 +859,8 @@ error:
     
     ret.status                 = SP_FAILURE;            
     ret.sp_write_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_tcp_wr, ret.sp_write_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -888,6 +906,12 @@ void sp_read_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     int                       same_recycle_cpt;
     
     START_PROFILING(read);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_tcp_rd,
+                                       read_arg_p->cid, read_arg_p->sid,
+                                      (unsigned char*)read_arg_p->fid,
+                                      read_arg_p->bid, read_arg_p->nb_proj);
+                            
             
     /*
     ** Use received buffer for the response
@@ -962,6 +986,8 @@ void sp_read_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 error:
     ret.status                = SP_FAILURE;            
     ret.sp_read_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_tcp_rd, ret.sp_read_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -988,6 +1014,12 @@ void sp_read_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     int                       same_recycle_cpt;
     
     START_PROFILING(read);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_rdma_rd,
+                                       read_arg_p->cid, read_arg_p->sid,
+                                       (unsigned char*)read_arg_p->fid,
+                                        read_arg_p->bid, 
+                                        read_arg_p->nb_proj);
             
     /*
     ** Use received buffer for the response
@@ -1053,6 +1085,8 @@ void sp_read_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 error:
     ret.status                = SP_FAILURE;            
     ret.sp_read_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_rdma_rd, ret.sp_read_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -1087,6 +1121,12 @@ void sp_write_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     int                       write_first;
     
     START_PROFILING(write);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_rdma_wr,
+                                      write_arg_p->cid, write_arg_p->sid,
+                                      (unsigned char*)write_arg_p->fid,
+                                      write_arg_p->bid, 
+                                      write_arg_p->nb_proj);
 
     /*
     ** need to swap the buffer when the read request has been received over RDMA
@@ -1300,6 +1340,8 @@ error:
     
     ret.status                 = SP_FAILURE;            
     ret.sp_write_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_rdma_wr, ret.sp_write_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -1326,6 +1368,12 @@ void sp_rebuild_start_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p)
     int                             same_recycle_cpt;
     
     START_PROFILING(rebuild_start);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_rb_start,
+                                       rebuild_start_arg_p->cid, rebuild_start_arg_p->sid,
+                                       (unsigned char*)rebuild_start_arg_p->fid, 
+                                       rebuild_start_arg_p->start_bid, 
+                                       rebuild_start_arg_p->stop_bid);
                   
     /*
     ** Use received buffer for the response
@@ -1488,7 +1536,11 @@ error:
     ret.sp_rebuild_start_ret_t_u.error = errno;
     
 send_response:    
+    storio_trc_rsp(storio_trc_service_rb_start, (ret.status==SP_SUCCESS)?0:ret.sp_rebuild_start_ret_t_u.error, ret.sp_rebuild_start_ret_t_u.rebuild_ref, req_ctx_p->trcIdx);
+
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
+
+
     /*
     ** release the context
     */
@@ -1510,6 +1562,12 @@ void sp_rebuild_stop_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) 
     int                             same_recycle_cpt;
        
     START_PROFILING(rebuild_stop);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_rb_stop,
+                                       rebuild_stop_arg_p->cid, rebuild_stop_arg_p->sid,
+                                       (unsigned char*)rebuild_stop_arg_p->fid, 
+                                       rebuild_stop_arg_p->rebuild_ref, 
+                                       0);
             
     /*
     ** Use received buffer for the response
@@ -1609,6 +1667,9 @@ error:
     
 send_response:    
     ret.sp_rebuild_stop_ret_t_u.rebuild_ref = rebuild_stop_arg_p->rebuild_ref;
+
+    storio_trc_rsp(storio_trc_service_rb_stop, (ret.status==SP_SUCCESS)?0:ret.sp_rebuild_stop_ret_t_u.error, rebuild_stop_arg_p->rebuild_ref, req_ctx_p->trcIdx);
+
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
     ** release the context
@@ -1670,13 +1731,19 @@ void sp_rebuild_stop_response(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 void sp_truncate_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     static sp_status_ret_t ret;
     storio_device_mapping_t * dev_map_p = NULL;
-    sp_truncate_arg_t       * truncate_arg_p = (sp_truncate_arg_t *) pt;
+    sp_truncate_arg_no_bins_t * truncate_arg_p = (sp_truncate_arg_no_bins_t *) pt;
     uint8_t                         nb_rebuild;
     uint8_t                         storio_rebuild_ref;
     STORIO_REBUILD_T              * pRebuild; 
     int                             same_recycle_cpt;
 
     START_PROFILING(truncate);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_trunc,
+                                       truncate_arg_p->cid, truncate_arg_p->sid,
+                                       (unsigned char*)truncate_arg_p->fid,
+                                       truncate_arg_p->bid, 
+                                       truncate_arg_p->last_seg);
     
     /*
     ** Use received buffer for the response
@@ -1750,10 +1817,11 @@ void sp_truncate_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     severe("storio_disk_thread_intf_send %s", strerror(errno));
 
 error:    
-    severe("sp_truncate_1_svc_disk_thread storio_disk_thread_intf_send %s", strerror(errno));
     
     ret.status                  = SP_FAILURE;            
     ret.sp_status_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_trunc, ret.sp_status_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -1783,7 +1851,12 @@ void sp_remove_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     int                       same_recycle_cpt;
     
     START_PROFILING(remove);
-    
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_remove,
+                                       remove_arg_p->cid, remove_arg_p->sid,
+                                       (unsigned char*)remove_arg_p->fid,
+                                       0, 
+                                       0);    
     /*
     ** Use received buffer for the response
     */
@@ -1848,10 +1921,11 @@ void sp_remove_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
     
 error:    
-    severe("sp_remove_1_svc_disk_thread storio_disk_thread_intf_send %s", strerror(errno));
     
     ret.status                  = SP_FAILURE;            
     ret.sp_status_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_remove, ret.sp_status_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -1877,7 +1951,12 @@ void sp_remove_chunk_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) 
     int                       same_recycle_cpt;                    
     
     START_PROFILING(remove_chunk);
-    
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_rm_chunk,
+                                       remove_chunk_arg_p->cid, remove_chunk_arg_p->sid,
+                                       (unsigned char*)remove_chunk_arg_p->fid,
+                                       remove_chunk_arg_p->rebuild_ref,
+                                       remove_chunk_arg_p->chunk);        
     /*
     ** Use received buffer for the response
     */    
@@ -1943,10 +2022,11 @@ void sp_remove_chunk_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) 
 
     
 error:    
-    severe("sp_remove_chunk_1_svc_disk_thread %d %d %s", nb_rebuild, storio_rebuild_ref, strerror(errno));
     
     ret.status                  = SP_FAILURE;            
     ret.sp_status_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_rm_chunk, ret.sp_status_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -1971,6 +2051,11 @@ void sp_write_repair3_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p)
     
     START_PROFILING(repair);
 
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_repair,
+                                       repair3_arg_p->cid, repair3_arg_p->sid,
+                                       (unsigned char*)repair3_arg_p->fid,
+                                       repair3_arg_p->bid,
+                                       repair3_arg_p->nb_proj);    
     /*
     ** Use received buffer for the response
     */
@@ -2026,6 +2111,8 @@ error:
     
     ret.status                = SP_FAILURE;            
     ret.sp_write_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_repair, ret.sp_write_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -2151,7 +2238,10 @@ void sp_rdma_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
       
 //    START_PROFILING(clear_error);
-    
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_rdma_setup,
+                                       0, 0,
+                                       (unsigned char*)NULL,
+                                       0, 0);    
 
     /*
     ** Use received buffer for the response
@@ -2181,6 +2271,8 @@ error:
     ret.sp_rdma_setup_ret_t_u.error = errno;
 */
 out:    
+    storio_trc_rsp(storio_trc_service_rdma_setup, (ret.status == SP_SUCCESS)?0:ret.sp_rdma_setup_ret_t_u.error, 0, req_ctx_p->trcIdx);
+
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
     ** release the context
@@ -2224,6 +2316,9 @@ void sp_standalone_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
       
 //    START_PROFILING(clear_error);
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_local_setup,
+                                       0, 0,NULL,
+                                       0, 0);    
     
 
     /*
@@ -2283,6 +2378,9 @@ void sp_standalone_setup(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 error:        
     ret.status                  = SP_FAILURE;            
     ret.sp_status_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_local_setup, ret.sp_status_ret_t_u.error, 0, req_ctx_p->trcIdx);
+
     if (sharemem_p != NULL) free(sharemem_p);
     
 out:    
@@ -2310,6 +2408,12 @@ void sp_read_standalone_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_
     int                       same_recycle_cpt;
     
     START_PROFILING(read);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_local_rd,
+                                       read_arg_p->cid, read_arg_p->sid,
+                                       (unsigned char*)read_arg_p->fid,
+                                       read_arg_p->bid, 
+                                       read_arg_p->nb_proj);
             
     /*
     ** Use received buffer for the response
@@ -2375,6 +2479,8 @@ void sp_read_standalone_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_
 error:
     ret.status                = SP_FAILURE;            
     ret.sp_read_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_local_rd, ret.sp_read_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*
@@ -2410,6 +2516,12 @@ void sp_write_standalone_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx
     int                       write_first;
     
     START_PROFILING(write);
+
+    req_ctx_p->trcIdx = storio_trc_req(storio_trc_service_local_wr,
+                                       write_arg_p->cid, write_arg_p->sid,
+                                       (unsigned char*)write_arg_p->fid,
+                                        write_arg_p->bid, 
+                                        write_arg_p->nb_proj);
 
     /*
     ** Use received buffer for the response
@@ -2608,6 +2720,8 @@ error:
     
     ret.status                 = SP_FAILURE;            
     ret.sp_write_ret_t_u.error = errno;
+
+    storio_trc_rsp(storio_trc_service_local_wr, ret.sp_write_ret_t_u.error, 0, req_ctx_p->trcIdx);
     
     rozorpc_srv_forward_reply(req_ctx_p,(char*)&ret); 
     /*

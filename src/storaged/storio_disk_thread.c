@@ -356,7 +356,7 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }  
 
@@ -365,7 +365,7 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
     ret.sp_read_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }
   
@@ -378,7 +378,7 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
       ret.sp_read_ret_t_u.error = ENOENT;
       storio_encode_rpc_response(rpcCtx,(char*)&ret); 
       thread_ctx_p->stat.read_nosuchfile++ ;          
-      storio_send_response(thread_ctx_p,msg,-1);
+      storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
       return;
     }
   }  
@@ -421,7 +421,7 @@ static inline void storio_disk_read(rozofs_disk_thread_ctx_t *thread_ctx_p,stori
 				 (uint8_t*)args->fid);
     }     
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }  
  
@@ -713,7 +713,7 @@ void storio_disk_read_rdma_cbk(void *user_param,int status, int error)
     ret.sp_read_ret_t_u.error = error;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
     thread_ctx_p->stat.rdma_write_error++;
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;  
 #endif
   }                             
@@ -775,7 +775,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }  
 
@@ -784,7 +784,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
     ret.sp_read_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }
   
@@ -797,7 +797,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
       ret.sp_read_ret_t_u.error = ENOENT;
       storio_encode_rpc_response(rpcCtx,(char*)&ret); 
       thread_ctx_p->stat.read_nosuchfile++ ;          
-      storio_send_response(thread_ctx_p,msg,-1);
+      storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
       return;
     }
   }  
@@ -850,7 +850,7 @@ void storio_disk_read_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,storio_disk_th
 				 (uint8_t*)args->fid);
     }     
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }
   /*
@@ -1045,7 +1045,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return 0;
   }  
   /*
@@ -1085,7 +1085,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
     ret.sp_write_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
     thread_ctx_p->stat.rdma_read_error++;
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;  
   } 
   /*
@@ -1108,7 +1108,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
     ret.sp_write_ret_t_u.error = thread_ctx_p->rdma_ibv_post_send_ctx.error;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
     thread_ctx_p->stat.rdma_write_error++;
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;       
   }
   /*
@@ -1139,7 +1139,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
     ret.sp_write_ret_t_u.error = EPIPE;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++; 
-    storio_send_response(thread_ctx_p,msg,-1); 
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
     return;   
   }
 
@@ -1156,7 +1156,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
        ret.sp_write_ret_t_u.error = EIO;
        storio_encode_rpc_response(rpcCtx,(char*)&ret);  
        thread_ctx_p->stat.write_error++; 
-       storio_send_response(thread_ctx_p,msg,-1); 
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
        return;         
      }	        
   } 
@@ -1167,7 +1167,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
     ret.sp_write_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   
@@ -1189,7 +1189,7 @@ static inline void storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p
 				 (uint8_t*)args->fid);
     }       
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   msg->size = size;   
@@ -1311,7 +1311,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
     rpcCtx = msg->rpcCtx;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return 0;
   }  
   /*
@@ -1390,7 +1390,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
       ret.sp_write_ret_t_u.error = errno;
       storio_encode_rpc_response(rpcCtx,(char*)&ret);
       thread_ctx_p->stat.rdma_read_error++;
-      storio_send_response(thread_ctx_p,msg,-1);
+      storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
       break;  
     } 
 //#warning FDL process only one request start
@@ -1526,7 +1526,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
        ret.sp_write_ret_t_u.error = rdma_p->error;
        storio_encode_rpc_response(rpcCtx,(char*)&ret);
        thread_ctx_p->stat.rdma_write_error++;
-       storio_send_response(thread_ctx_p,msg,-1);
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
        /*
        ** need to check if there is some more pending RDMA read from remote
        */
@@ -1559,7 +1559,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
 	ret.sp_write_ret_t_u.error = EPIPE;
 	storio_encode_rpc_response(rpcCtx,(char*)&ret);  
 	thread_ctx_p->stat.write_error++; 
-	storio_send_response(thread_ctx_p,msg,-1); 
+	storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
 	continue;;   
       }
       /*
@@ -1575,7 +1575,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
 	   ret.sp_write_ret_t_u.error = EIO;
 	   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
 	   thread_ctx_p->stat.write_error++; 
-	   storio_send_response(thread_ctx_p,msg,-1); 
+	   storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
 	   continue;         
 	 }	        
       } 
@@ -1584,7 +1584,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
        ret.sp_write_ret_t_u.error = errno;
        storio_encode_rpc_response(rpcCtx,(char*)&ret);  
        thread_ctx_p->stat.write_badCidSid++ ;   
-       storio_send_response(thread_ctx_p,msg,-1);
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
        continue;
      }    
      /* Write projections */
@@ -1603,8 +1603,8 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
 				    args->sid,
 				    (uint8_t*)args->fid);
        }       
-       storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-       storio_send_response(thread_ctx_p,msg,-1);
+       storio_encode_rpc_response(rpcCtx,(char*)&ret); 
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
        continue;
      }
      msg->size = size;   
@@ -1743,7 +1743,7 @@ void *storio_rdma_write_thread(void *arg)
        severe("Bad FID ctx index %d",msg->fidIdx); 
        storio_encode_rpc_response(rpcCtx,(char*)&ret);  
        thread_ctx_p->stat.write_error++ ;   
-       storio_send_response(thread_ctx_p,msg,-1);
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
        continue;
      }  
      /*
@@ -1770,7 +1770,7 @@ void *storio_rdma_write_thread(void *arg)
        ret.sp_write_ret_t_u.error = rdma_p->error;
        storio_encode_rpc_response(rpcCtx,(char*)&ret);
        thread_ctx_p->stat.rdma_write_error++;
-       storio_send_response(thread_ctx_p,msg,-1);
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
        /*
        ** need to check if there is some more pending RDMA read from remote
        */
@@ -1803,7 +1803,7 @@ void *storio_rdma_write_thread(void *arg)
 	ret.sp_write_ret_t_u.error = EPIPE;
 	storio_encode_rpc_response(rpcCtx,(char*)&ret);  
 	thread_ctx_p->stat.write_error++; 
-	storio_send_response(thread_ctx_p,msg,-1); 
+	storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
 	continue;;   
       }
       /*
@@ -1819,7 +1819,7 @@ void *storio_rdma_write_thread(void *arg)
 	   ret.sp_write_ret_t_u.error = EIO;
 	   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
 	   thread_ctx_p->stat.write_error++; 
-	   storio_send_response(thread_ctx_p,msg,-1); 
+	   storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
 	   continue;         
 	 }	        
       } 
@@ -1828,7 +1828,7 @@ void *storio_rdma_write_thread(void *arg)
        ret.sp_write_ret_t_u.error = errno;
        storio_encode_rpc_response(rpcCtx,(char*)&ret);  
        thread_ctx_p->stat.write_badCidSid++ ;   
-       storio_send_response(thread_ctx_p,msg,-1);
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
        continue;
      }    
 
@@ -1849,7 +1849,7 @@ void *storio_rdma_write_thread(void *arg)
 				    (uint8_t*)args->fid);
        }       
        storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-       storio_send_response(thread_ctx_p,msg,-1);
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
        continue;
      }
      msg->size = size;   
@@ -1929,7 +1929,7 @@ static inline void storio_disk_resize(rozofs_disk_thread_ctx_t *thread_ctx_p,sto
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }  
 
@@ -1938,7 +1938,7 @@ static inline void storio_disk_resize(rozofs_disk_thread_ctx_t *thread_ctx_p,sto
     ret.sp_read_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }
   
@@ -1951,7 +1951,7 @@ static inline void storio_disk_resize(rozofs_disk_thread_ctx_t *thread_ctx_p,sto
       ret.sp_read_ret_t_u.error = ENOENT;
       storio_encode_rpc_response(rpcCtx,(char*)&ret); 
       thread_ctx_p->stat.read_nosuchfile++ ;          
-      storio_send_response(thread_ctx_p,msg,-1);
+      storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
       return;
     }
   }  
@@ -1994,12 +1994,12 @@ static inline void storio_disk_resize(rozofs_disk_thread_ctx_t *thread_ctx_p,sto
 				 (uint8_t*)args->fid);
     }     
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }  
  
   ret.status = SP_SUCCESS;  
-  msg->size = 0;        
+  msg->size = ret.sp_read_ret_t_u.rsp.filler1 * ROZOFS_BSIZE_BYTES(args->bsize) + ret.sp_read_ret_t_u.rsp.filler2;       
   storio_encode_rpc_response(rpcCtx,(char*)&ret);  
   thread_ctx_p->stat.read_Byte_count += ret.sp_read_ret_t_u.rsp.bins.bins_len;
   storio_send_response(thread_ctx_p,msg,0);
@@ -2054,7 +2054,7 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }  
     
@@ -2075,7 +2075,7 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
     ret.sp_write_ret_t_u.error = EPIPE;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++; 
-    storio_send_response(thread_ctx_p,msg,-1); 
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
     return;   
   }
 
@@ -2092,7 +2092,7 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
        ret.sp_write_ret_t_u.error = EIO;
        storio_encode_rpc_response(rpcCtx,(char*)&ret);  
        thread_ctx_p->stat.write_error++; 
-       storio_send_response(thread_ctx_p,msg,-1); 
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
        return;         
      }	        
   } 
@@ -2103,7 +2103,7 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
     ret.sp_write_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   
@@ -2125,7 +2125,7 @@ static inline void storio_disk_write(rozofs_disk_thread_ctx_t *thread_ctx_p,stor
 				 (uint8_t*)args->fid);
     }       
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   msg->size = size;   
@@ -2206,7 +2206,7 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }  
 
@@ -2220,7 +2220,7 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
     ret.sp_write_ret_t_u.error = EPIPE;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++; 
-    storio_send_response(thread_ctx_p,msg,-1); 
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
     return;   
   }
 
@@ -2237,7 +2237,7 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
        ret.sp_write_ret_t_u.error = EIO;
        storio_encode_rpc_response(rpcCtx,(char*)&ret);  
        thread_ctx_p->stat.write_error++; 
-       storio_send_response(thread_ctx_p,msg,-1); 
+       storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error); 
        return;         
      }	        
   } 
@@ -2248,7 +2248,7 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
     ret.sp_write_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   
@@ -2270,7 +2270,7 @@ static inline void storio_disk_write_empty(rozofs_disk_thread_ctx_t *thread_ctx_
 				 (uint8_t*)args->fid);
     }       
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   msg->size = size;   
@@ -2463,7 +2463,7 @@ static inline void storio_disk_write_repair3(rozofs_disk_thread_ctx_t *thread_ct
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.diskRepair_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }  
     
@@ -2480,7 +2480,7 @@ static inline void storio_disk_write_repair3(rozofs_disk_thread_ctx_t *thread_ct
     ret.sp_write_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.diskRepair_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   
@@ -2499,7 +2499,7 @@ static inline void storio_disk_write_repair3(rozofs_disk_thread_ctx_t *thread_ct
 				 (uint8_t*)args->fid);
     }       
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   msg->size = size;   
@@ -2559,7 +2559,7 @@ static inline void storio_disk_truncate(rozofs_disk_thread_ctx_t *thread_ctx_p,s
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   }  
     
@@ -2576,7 +2576,7 @@ static inline void storio_disk_truncate(rozofs_disk_thread_ctx_t *thread_ctx_p,s
     ret.sp_status_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.truncate_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   }
 
@@ -2595,7 +2595,7 @@ static inline void storio_disk_truncate(rozofs_disk_thread_ctx_t *thread_ctx_p,s
 				 (uint8_t*)args->fid);
     }           
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   }
   
@@ -2650,7 +2650,7 @@ static inline void storio_disk_remove(rozofs_disk_thread_ctx_t *thread_ctx_p,sto
     ret.sp_status_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.remove_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   }
   
@@ -2661,7 +2661,7 @@ static inline void storio_disk_remove(rozofs_disk_thread_ctx_t *thread_ctx_p,sto
     ret.sp_status_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.remove_error++; 
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   }
   
@@ -2714,7 +2714,7 @@ static inline void storio_disk_remove_chunk(rozofs_disk_thread_ctx_t *thread_ctx
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.remove_chunk_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   } 
   
@@ -2723,7 +2723,7 @@ static inline void storio_disk_remove_chunk(rozofs_disk_thread_ctx_t *thread_ctx
     ret.sp_status_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.remove_chunk_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   }
   
@@ -2743,7 +2743,7 @@ static inline void storio_disk_remove_chunk(rozofs_disk_thread_ctx_t *thread_ctx
     ret.sp_status_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.remove_chunk_error++; 
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_status_ret_t_u.error);
     return;
   }
   
@@ -2841,7 +2841,7 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }  
 
@@ -2850,7 +2850,7 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
     ret.sp_read_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.read_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }
   
@@ -2863,7 +2863,7 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
       ret.sp_read_ret_t_u.error = ENOENT;
       storio_encode_rpc_response(rpcCtx,(char*)&ret); 
       thread_ctx_p->stat.read_nosuchfile++ ;          
-      storio_send_response(thread_ctx_p,msg,-1);
+      storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
       return;
     }
   }      
@@ -2881,7 +2881,7 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
       ret.sp_read_ret_t_u.error = errno;
       storio_encode_rpc_response(rpcCtx,(char*)&ret); 
       thread_ctx_p->stat.rdma_read_error++ ;          
-      storio_send_response(thread_ctx_p,msg,-1);
+      storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
       return;
    }
 
@@ -2913,7 +2913,7 @@ static inline void storio_disk_read_standalone(rozofs_disk_thread_ctx_t *thread_
 				 (uint8_t*)args->fid);
     }     
     storio_encode_rpc_response(rpcCtx,(char*)&ret);
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_read_ret_t_u.error);
     return;
   }  
   /*
@@ -3006,7 +3006,7 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
     severe("Bad FID ctx index %d",msg->fidIdx); 
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_error++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }  
     
@@ -3024,7 +3024,7 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
       ret.sp_write_ret_t_u.error = errno;
       storio_encode_rpc_response(rpcCtx,(char*)&ret); 
       thread_ctx_p->stat.rdma_write_error++ ;          
-      storio_send_response(thread_ctx_p,msg,-1);
+      storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
       return;    
   }
   /*
@@ -3037,7 +3037,7 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
     ret.sp_write_ret_t_u.error = errno;
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
     thread_ctx_p->stat.write_badCidSid++ ;   
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   
@@ -3058,7 +3058,7 @@ static inline void storio_disk_write_standalone(rozofs_disk_thread_ctx_t *thread
 				 (uint8_t*)args->fid);
     }       
     storio_encode_rpc_response(rpcCtx,(char*)&ret);  
-    storio_send_response(thread_ctx_p,msg,-1);
+    storio_send_response(thread_ctx_p,msg,ret.sp_write_ret_t_u.error);
     return;
   }
   msg->size = size;   
