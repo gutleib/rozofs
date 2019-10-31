@@ -197,8 +197,14 @@ clients_nb = 1
 # Define default layout
 setLayout(1)
 
+unit_512K = 1
+unit_1M = 2
+factor_2_files = 1
+factor_3_files = 2
+factor_4_files = 3
+factor_5_files = 4
 
-config_choice = "hybrid"
+config_choice = "multiple"
 
 #_________________________________________________
 # Single 
@@ -213,11 +219,9 @@ if config_choice == "single":
 #
 if config_choice == "multiple":
 
-  rozofs.set_multiple(1,1)
-
   vol = setVolumeHosts(nbHosts = 4, nbclusters = 5)
   exp = addExport(vol,layout=1,eid=1)
-  exp.striping("-f none -m 3 -u 2")
+  exp.set_striping(factor_3_files,unit_1M)
 
   
 #_________________________________________________
@@ -230,20 +234,27 @@ if config_choice == "hybrid":
 
   exp = addExport(vol,layout=1,eid=1)
   exp.set_vid_fast(vfast)
-  exp.striping("-f hybrid -m 3 -u 2 -z 512k")
+  exp.set_fast_mode("hybrid")
+  exp.set_striping(factor_3_files,unit_1M)
   
 #_________________________________________________
 # aging 
 # 
 if config_choice == "aging":
 
-  vfast = setVolumeHosts(nbHosts = 4, nbclusters = 4)
-  vol   = setVolumeHosts(nbHosts = 4, nbclusters = 4)
+  vfast = setVolumeHosts(nbHosts = 4, nbclusters = 3)
+  vol   = setVolumeHosts(nbHosts = 4, nbclusters = 3)
 
   exp = addExport(vol,layout=1,eid=1)
   exp.set_vid_fast(vfast)
-  exp.striping("-f aging -m 3 -u 2")
+  exp.set_fast_mode("aging")
+  exp.set_striping(factor_3_files,unit_1M)
   
+
+# Freeze cluster 1
+#
+#c = get_cid(int(1))
+#c.freeze()
 
 
 # Set thin provisionning
@@ -252,7 +263,7 @@ if config_choice == "aging":
 #e = addExport(vol,layout=1,eid=9)
 #e = addExport(vol,layout=1,eid=17)
 
-#addPrivate(vol,layout=1)
+addPrivate(vol,layout=1)
 
 
 # Set host 1 faulty
