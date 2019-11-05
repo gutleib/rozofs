@@ -292,6 +292,11 @@ int main(int argc, char *argv[]) {
     ** KPI service per device
     */
     storage_device_kpi_init(common_config.nb_disk_thread);    
+
+    /*
+    ** Initialize the table of recorded faulty FID
+    */
+    storio_faulty_fid_init(); 
         
     // Initialize the list of storage config
     if (sconfig_initialize(&storaged_config) != 0) {

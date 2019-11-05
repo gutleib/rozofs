@@ -56,73 +56,148 @@ storio_device_mapping_stat_t storio_device_mapping_stat = { };
 STORIO_REBUILD_STAT_S        storio_rebuild_stat = {0};
 /*
 **______________________________________________________________________________
-
-      Attributes LOOKUP SECTION
+**
+**    List of FID having had a problem
+**
+**    storio_register_faulty_fid() is called to register a faulty FID
+**    storio_clear_faulty_fid()    is used to clear the table
 **______________________________________________________________________________
 */
+pthread_rwlock_t     storio_faulty_fid_lock;
 
-#define NB_STORIO_FAULTY_FID_MAX 15
-
+/*
+** Record a maximum of 16 faulty FIDs
+*/
+#define NB_STORIO_FAULTY_FID_MAX 16
 typedef struct _storio_disk_thread_file_desc_t {
   fid_t        fid;
   uint8_t      cid;
   uint8_t      sid;
 } storio_disk_thread_file_desc_t;
 
-typedef struct _storio_disk_thread_faulty_fid_t {
-   uint32_t                         nb_faulty_fid_in_table;
+typedef struct _storio_faulty_fid_t {
+   uint32_t                         storio_faulty_fid_nb;
    storio_disk_thread_file_desc_t   file[NB_STORIO_FAULTY_FID_MAX];
-} storio_disk_thread_faulty_fid_t;
+} storio_faulty_fid_t;
 
-storio_disk_thread_faulty_fid_t storio_faulty_fid[ROZOFS_MAX_DISK_THREADS] = {  };
+static storio_faulty_fid_t storio_faulty_fid;
 /*
 **____________________________________________________
-*/
-/*
-* Register the FID that has encountered an error
-  
-   @param threadNb the thread number
-   @param cid      the faulty cid 
-   @param sid      the faulty sid
-   @param fid      the FID in fault   
+**
+** Reset the Faulty FID table
+**
 */
 void storio_clear_faulty_fid() {
-  memset(storio_faulty_fid,0,sizeof(storio_faulty_fid));
+  pthread_rwlock_wrlock(&storio_faulty_fid_lock);
+  storio_faulty_fid.storio_faulty_fid_nb = 0;
+  pthread_rwlock_unlock(&storio_faulty_fid_lock);
 }
 /*
 **____________________________________________________
+**
+** Initialize the table of faulty FID at start up
+**
 */
+void storio_faulty_fid_init() {
+  pthread_rwlock_init(&storio_faulty_fid_lock,NULL);
+  storio_clear_faulty_fid();
+}
 /*
-* Register the FID that has encountered an error
-  
-   @param threadNb the thread number
-   @param cid      the faulty cid 
-   @param sid      the faulty sid
-   @param fid      the FID in fault   
+**____________________________________________________
+**
+** Display the list of faulty FID
+**
+** @param pBuffer   buffer to write the faulty FID list in
+** @param sid       SID to display faults for
+**
+** @retval    written size
 */
-void storio_register_faulty_fid(int threadNb, uint8_t cid, uint8_t sid, fid_t fid) {
-  storio_disk_thread_faulty_fid_t * p;
+int storio_faulty_fid_display(char * pBuffer, int sid) {
+  char                            * pChar = pBuffer;
+  storio_disk_thread_file_desc_t  * pf;
+  int                               idx;
+  int                               max;
+  int                               first = 1;
+  
+  if (storio_faulty_fid.storio_faulty_fid_nb == 0) return 0;
+  
+  max = storio_faulty_fid.storio_faulty_fid_nb;
+  if (max >= NB_STORIO_FAULTY_FID_MAX) max = NB_STORIO_FAULTY_FID_MAX;
+  
+  pf = &storio_faulty_fid.file[0];
+  for (idx=0; idx  < max; idx++,pf++) {
+    if (pf->sid != sid) continue;
+    if (first) {
+      pChar += rozofs_string_append(pChar,"Faulty FIDs:\n");
+      first = 0;
+    }  
+    pChar += rozofs_string_append(pChar,"    -s ");
+    pChar += rozofs_u32_append(pChar, pf->cid);
+    pChar += rozofs_string_append(pChar,"/");
+    pChar += rozofs_u32_append(pChar, pf->sid);
+    pChar += rozofs_string_append(pChar," -f ");	
+    pChar += rozofs_fid_append(pChar, pf->fid);
+    pChar += rozofs_eol(pChar);
+  }
+  
+  return (pChar-pBuffer);
+}   
+/*
+**____________________________________________________
+**
+** Register the FID that has encountered an error
+**  
+** @param NS       UNUSED
+** @param cid      the faulty cid 
+** @param sid      the faulty sid
+** @param fid      the FID in fault   
+*/
+void storio_register_faulty_fid(int NS, uint8_t cid, uint8_t sid, fid_t fid) {
   int                               idx;
   storio_disk_thread_file_desc_t  * pf;
-    
-  if (threadNb >= ROZOFS_MAX_DISK_THREADS) return;
+  int                               max;
   
-  p = &storio_faulty_fid[threadNb];
+  /*
+  ** Table is full
+  */  
+  if (storio_faulty_fid.storio_faulty_fid_nb >= NB_STORIO_FAULTY_FID_MAX) return; 
+
+  /*
+  ** Check this file is not yet registered
+  */
+  max = storio_faulty_fid.storio_faulty_fid_nb;
+  if (max >= NB_STORIO_FAULTY_FID_MAX) max = NB_STORIO_FAULTY_FID_MAX;
+
+  pf = &storio_faulty_fid.file[0];
+  for (idx=0; idx<max; idx++,pf++) {
+    if ((pf->cid == cid) && (pf->sid == sid) && (memcmp(pf->fid, fid, sizeof(fid_t))== 0)) {
+      return;
+    }  
+  }
+
+  /*
+  ** Get a free record number
+  */  
+  idx = -1;
+  pthread_rwlock_wrlock(&storio_faulty_fid_lock);
+  if (storio_faulty_fid.storio_faulty_fid_nb < NB_STORIO_FAULTY_FID_MAX) {
+    idx = storio_faulty_fid.storio_faulty_fid_nb++;
+  }  
+  pthread_rwlock_unlock(&storio_faulty_fid_lock);
+
+  /*
+  ** No free record
+  */
+  if (idx == -1) return;
+
   
-  // No space left to register this FID
-  if (p->nb_faulty_fid_in_table >= NB_STORIO_FAULTY_FID_MAX) return;
-  
-  // Check this FID is not already registered in the table
-  for (idx = 0; idx < p->nb_faulty_fid_in_table; idx++) {
-    if (memcmp(p->file[idx].fid, fid, sizeof(fid_t))== 0) return;
-  } 
-  
-  // Register this FID
-  pf = &p->file[p->nb_faulty_fid_in_table];
+  /*
+  ** Register this FID
+  */  
+  pf = &storio_faulty_fid.file[idx];
   pf->cid    = cid;  
   pf->sid    = sid;
   memcpy(pf->fid, fid, sizeof(fid_t));
-  p->nb_faulty_fid_in_table++;
   return;
 }
 
@@ -498,44 +573,7 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     }
 
     // Display faulty FID table
-    first = 1;
-    for (threadNb=0; threadNb < ROZOFS_MAX_DISK_THREADS; threadNb++) {
-      for (idx=0; idx < storio_faulty_fid[threadNb].nb_faulty_fid_in_table; idx++) {
-        if (first) {
-	  pChar += rozofs_string_append(pChar,"Faulty FIDs:\n");
-          first = 0;
-        }
-	pf = &storio_faulty_fid[threadNb].file[idx];
-
-	// Check whether this FID has already been listed
-	{
-	  int already_listed = 0;
-	  int prevThread,prevIdx;
-          storio_disk_thread_file_desc_t * prevPf;	    
-	  for (prevThread=0; prevThread<threadNb; prevThread++) {
-            for (prevIdx=0; prevIdx < storio_faulty_fid[prevThread].nb_faulty_fid_in_table; prevIdx++) {
-	      prevPf = &storio_faulty_fid[prevThread].file[prevIdx];
-	      if ((pf->cid == prevPf->cid) && (pf->sid == prevPf->sid)
-	      &&  (memcmp(pf->fid, prevPf->fid, sizeof(fid_t))==0)) {
-		already_listed = 1;
-		break; 
-	      }
-            }
-	    if (already_listed) break; 	      
-	  }
-	  if (already_listed) continue;
-	}
-
-        pChar += rozofs_string_append(pChar,"    -s ");
-	pChar += rozofs_u32_append(pChar, pf->cid);
-        pChar += rozofs_string_append(pChar,"/");
-	pChar += rozofs_u32_append(pChar, pf->sid);
-        pChar += rozofs_string_append(pChar," -f ");	
-	rozofs_uuid_unparse(pf->fid, pChar);
-	pChar += 36;
-	pChar += rozofs_eol(pChar);
-      }
-    } 
+    pChar += storio_faulty_fid_display(pChar, st->sid);
 
     if (fault == 0) continue;
 

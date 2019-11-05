@@ -62,7 +62,6 @@ extern int STORIO_DEVICE_MAPPING_MAX_ENTRIES;
 
 extern uint32_t STORIO_DEVICE_PERIOD;
 
-void storio_clear_faulty_fid();
 int storio_device_mapping_monitor_thread_start();
 
 /*
@@ -683,20 +682,43 @@ static inline storio_device_mapping_t * storio_device_mapping_search(uint8_t cid
 */
  
 uint32_t storio_device_mapping_init();
+
+
+
+
+
+/*
+** - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+*
+* Faulty FID table to recorda list of failed FID
+*
+** - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+*/
+
 /*
 **____________________________________________________
+**
+** Register the FID that has encountered an error
+**  
+** @param NS       UNUSED
+** @param cid      the faulty cid 
+** @param sid      the faulty sid
+** @param fid      the FID in fault   
 */
+void storio_register_faulty_fid(int NS, uint8_t cid, uint8_t sid, fid_t fid) ;
 /*
-* Register the FID that has encountered an error
-  
-   @param threadNb the thread number
-   @param cid      the faulty cid 
-   @param sid      the faulty sid      
-   @param fid      the FID in fault   
+**____________________________________________________
+** Reset the Faulty FID table
+**
 */
-void storio_register_faulty_fid(int threadNb, uint8_t cid, uint8_t sid, fid_t fid) ;
-
-
+void storio_clear_faulty_fid() ;
+/*
+**____________________________________________________
+**
+** Initialize the table of faulty FID at start up
+**
+*/
+void storio_faulty_fid_init();
 
 
 
