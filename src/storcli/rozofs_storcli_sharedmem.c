@@ -246,7 +246,6 @@ void  *rozofs_create_shared_memory(int key_instance,int pool_idx,uint32_t buf_nb
    key_t key = 0x724F0000 | key_instance;
    rozofs_numa_mem_t membind_data;
    int numa_requested = 0;
-   int i;
 
    rozofs_storcli_shared_mem[pool_idx].numa_node = -1;
    if (common_config.processor_model == common_config_processor_model_EPYC)
