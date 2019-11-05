@@ -369,8 +369,6 @@ char * rozofs_thr_display_bitmask(char * pChar, rozofs_thr_cnts_t * counters[], 
 */
 int rozofs_thr_cnt_update_threshold(int thresholdIx, uint64_t threshold) {
   rozofs_thr_cnt_threshold_t * thr;
-  int                          size;
-  int                          idx;
   
   /*
   ** Check input index is within an acceptable range
