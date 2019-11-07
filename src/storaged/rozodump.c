@@ -61,6 +61,7 @@ uint64_t  first=0,last=-1;
 unsigned int prjid = -1;
 int    display_blocks=0;
 uint64_t   patched_date = 0;
+int    silent_header = 0;
 
 #define HEXDUMP_COLS 16
 void hexdump(void *mem, unsigned int offset, unsigned int len) {
@@ -167,10 +168,13 @@ int read_hdr_file(char * root, int devices, int slice, rozofs_stor_bins_file_hdr
       int nb_read = pread(fd, hdr, sizeof (*hdr), 0);
       if (nb_read < 0) {
         printf("pread(%s) %s",path, strerror(errno));
-	return -1; 
+	return -1;  
       } 
       
       close(fd);  
+
+      if (silent_header) return 0;
+
       printf("{ \"header file\" : {\n");
       printf("  \"path\"    : \"%s\",\n",path);
       printf("  \"version\" : %d,\n",hdr->v0.version);
@@ -526,6 +530,7 @@ void usage() {
     printf("   -b :<last>           \tTo display from start to block number <last>.\n");  
     printf("   -b <block>           \tTo display only <block> block number.\n");   
     printf("   -D <date>            \tTo patch the date of the blocks given by -b option.\n");   
+    printf("   -s                   \tDo not display header files.\n");   
     exit(-1);  
 }
 
@@ -599,6 +604,14 @@ int main(int argc, char *argv[]) {
         printf("%s is not a directory !!!\n", pRoot);
         usage();
       }
+      idx++;
+      continue;    
+    }
+    
+    /* -s */
+    if (strcmp(argv[idx], "-s") == 0) {
+      idx++;
+      silent_header = 1;
       idx++;
       continue;    
     }
