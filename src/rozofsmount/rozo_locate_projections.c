@@ -313,7 +313,8 @@ int main(int argc, char *argv[]) {
   pChar += sprintf(pChar," > %s", remote_fname);    
 
   printf("\n{\n  \"fname\" : \"%s\",\n", fname);          
-
+  fflush(stdout);
+  
   /*
   ** Send the command
   */
