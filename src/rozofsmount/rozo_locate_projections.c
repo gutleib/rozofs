@@ -311,8 +311,6 @@ int main(int argc, char *argv[]) {
   ** Finalize the command
   */
   pChar += sprintf(pChar," > %s", remote_fname);    
-  printf("%s\n",param);
-
 
   printf("\n{\n  \"fname\" : \"%s\",\n", fname);          
 
