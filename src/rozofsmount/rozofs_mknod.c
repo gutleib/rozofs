@@ -300,7 +300,7 @@ void rozofs_ll_mknod_cbk(void *this,void *param)
     /**
     *  update the timestamp in the ientry context
     */
-    nie->timestamp = rozofs_get_ticker_us();
+    rozofs_update_timestamp(nie);
     /*
     ** get the parent attributes
     */
@@ -311,7 +311,7 @@ void rozofs_ll_mknod_cbk(void *this,void *param)
       /**
       *  update the timestamp in the ientry context
       */
-      pie->timestamp = rozofs_get_ticker_us();
+      rozofs_update_timestamp(pie);
       ientry_update_parent(nie,pie->fid);
     }    
     /*
@@ -321,7 +321,7 @@ void rozofs_ll_mknod_cbk(void *this,void *param)
     if (nie->attrs.attrs.size < stbuf.st_size) nie->attrs.attrs.size = stbuf.st_size;
     stbuf.st_size = nie->attrs.attrs.size;
         
-    fep.attr_timeout = rozofs_tmr_get_attr(0);
+    fep.attr_timeout = rozofs_get_linux_caching_time_second(nie);
     fep.entry_timeout = rozofs_tmr_get_entry(0);
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;

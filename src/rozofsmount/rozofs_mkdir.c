@@ -282,7 +282,7 @@ void rozofs_ll_mkdir_cbk(void *this,void *param)
     ** update the attributes in the ientry
     */
     memcpy(&nie->attrs,&attrs, sizeof (struct inode_internal_t));
-    nie->timestamp = rozofs_get_ticker_us();
+    rozofs_update_timestamp(nie);
     /*
     ** get the parent attributes
     */
@@ -290,7 +290,7 @@ void rozofs_ll_mkdir_cbk(void *this,void *param)
     if (pie != NULL)
     {
       memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
-      pie->timestamp = rozofs_get_ticker_us();
+      rozofs_update_timestamp(pie);
     }   
      /*
     ** check the length of the file, and update the ientry if the file size returned
@@ -299,7 +299,7 @@ void rozofs_ll_mkdir_cbk(void *this,void *param)
     if (nie->attrs.attrs.size < stbuf.st_size) nie->attrs.attrs.size = stbuf.st_size;
     stbuf.st_size = nie->attrs.attrs.size;
        
-    fep.attr_timeout = rozofs_tmr_get_attr(1);
+    fep.attr_timeout = rozofs_get_linux_caching_time_second(nie);
     fep.entry_timeout = rozofs_tmr_get_entry(1);
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
 
