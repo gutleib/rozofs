@@ -300,10 +300,10 @@ void rozofs_ll_link_cbk(void *this,void *param)
     if (pie != NULL)
     {
       memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
-      pie->timestamp = rozofs_get_ticker_us();
+      rozofs_update_timestamp(pie);
     }   
     
-    fep.attr_timeout = rozofs_tmr_get_attr(0);
+    fep.attr_timeout = rozofs_get_linux_caching_time_second(ie);
     /*
     Don't keep entry in cache (just for pjdtest)
     see: http://sourceforge.net/mailarchive/message.php?msg_id=28704462
@@ -856,10 +856,10 @@ void rozofs_ll_symlink_cbk(void *this,void *param)
     if (pie != NULL)
     {
       memcpy(&pie->attrs,&pattrs, sizeof (struct inode_internal_t));
-      pie->timestamp = time_us;
+      rozofs_update_timestamp(pie);
     }  
         
-    fep.attr_timeout = rozofs_tmr_get_attr(0);
+    fep.attr_timeout = rozofs_get_linux_caching_time_second(nie);
     fep.entry_timeout = rozofs_tmr_get_entry(0);
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
@@ -1141,7 +1141,7 @@ void rozofs_ll_unlink_cbk(void *this,void *param)
       /**
       *  update the timestamp in the ientry context
       */
-      pie->timestamp = rozofs_get_ticker_us();
+      rozofs_update_timestamp(pie);
     }    
     goto out;
 error:

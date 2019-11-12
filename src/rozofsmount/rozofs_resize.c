@@ -254,7 +254,7 @@ void rozofs_ll_resize_cbk(void *this,void *param) {
   }
   mattr_to_stat(&ie->attrs, &o_stbuf, exportclt.bsize);
   o_stbuf.st_ino = ino;
-  rz_fuse_reply_attr(req, &o_stbuf, rozofs_tmr_get_attr(0)); 
+  rz_fuse_reply_attr(req, &o_stbuf, rozofs_get_linux_caching_time_second(ie)); 
 
 out:
   rozofs_trc_rsp_attr(srv_rozofs_ll_setattr,ino,(ie==NULL)?0:ie->attrs.attrs.fid,(errno==0)?0:1,new_size,trc_idx);

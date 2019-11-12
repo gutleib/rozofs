@@ -55,7 +55,6 @@ uint64_t rozofs_max_getattr_duplicate = 0;
     struct stat stbuf;
     int trc_idx;
     errno = 0;
-    uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));
 
     /*
     ** Update the IO statistics
@@ -90,16 +89,10 @@ uint64_t rozofs_max_getattr_duplicate = 0;
     ** from the ie entry. For directories and links one ask to the exportd
     ** 
     */
-    if (
-         /* check regular file */
-         ((((ie->timestamp+attr_us) > rozofs_get_ticker_us()) || (rozofs_mode == 1))&&(S_ISREG(ie->attrs.attrs.mode))) ||
-	 /* check directory */
-	 (((ie->pending_getattr_cnt>0)||((ie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(ie->attrs.attrs.mode)))
-	 ) 
-    {
+    if (rozofs_is_attribute_valid(ie)) { 
       mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
       stbuf.st_ino = ino; 
-      rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+      rz_fuse_reply_attr(req, &stbuf, rozofs_get_linux_caching_time_second(ie));
       goto out;   
     }
     /*
@@ -125,7 +118,7 @@ uint64_t rozofs_max_getattr_duplicate = 0;
         if (ie->attrs.attrs.mtime != 0) {
 	  mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	  stbuf.st_ino = ino; 
-          rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+          rz_fuse_reply_attr(req, &stbuf, rozofs_get_linux_fast_reconnect_caching_time_second());
 	  goto out;           
 	} 
       }	     
@@ -150,7 +143,7 @@ uint64_t rozofs_max_getattr_duplicate = 0;
         if (ie->attrs.attrs.mtime != 0) {      
 	  mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	  stbuf.st_ino = ino; 
-	  rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+	  rz_fuse_reply_attr(req, &stbuf, rozofs_get_linux_fast_reconnect_caching_time_second());
 	  goto out;           
 	}
       }	
@@ -238,7 +231,7 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
 	 if ((ie != NULL) && (ie->attrs.attrs.mtime != 0)) { 
  	   mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	   stbuf.st_ino = ino; 
-	   rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+	   rz_fuse_reply_attr(req, &stbuf, rozofs_get_linux_fast_reconnect_caching_time_second());
 	   errno = EAGAIN;	   
 	   goto out; 
 	 }            
@@ -359,7 +352,7 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
 	/**
 	*  update the timestamp in the ientry context
 	*/
-	pie->timestamp = rozofs_get_ticker_us();
+	rozofs_update_timestamp(pie);
       }           
     }
     /*
@@ -394,7 +387,7 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
     ** update the getattr pending count
     */
     //if (ie->pending_getattr_cnt>=0) ie->pending_getattr_cnt--;
-    rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+    rz_fuse_reply_attr(req, &stbuf, rozofs_get_linux_caching_time_second(ie));
     goto out;
 error:
     fuse_reply_err(req, errno);
@@ -834,7 +827,7 @@ async_setattr:
     stat_to_mattr(stbuf, &ie->attrs.attrs, to_set);
     mattr_to_stat(&ie->attrs, &o_stbuf, exportclt.bsize);
     o_stbuf.st_ino = ino;
-    rz_fuse_reply_attr(req, &o_stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+    rz_fuse_reply_attr(req, &o_stbuf, rozofs_get_linux_caching_time_second(ie));
     rozofs_trc_rsp(srv_rozofs_ll_setattr,ino,NULL,1,trc_idx);
     STOP_PROFILING_NB(buffer_p,rozofs_ll_setattr);
 }
@@ -1017,7 +1010,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
 	/**
 	*  update the timestamp in the ientry context
 	*/
-	pie->timestamp = rozofs_get_ticker_us();
+	rozofs_update_timestamp(pie);
       }           
     }    
     mattr_to_stat(&attr, &o_stbuf, exportclt.bsize);
@@ -1066,7 +1059,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
 
     if (lkup_cpt == 0) 
     {
-      rz_fuse_reply_attr(req, &o_stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+      rz_fuse_reply_attr(req, &o_stbuf, rozofs_get_linux_caching_time_second(ie));
     }
 
     goto out;

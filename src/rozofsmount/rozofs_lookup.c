@@ -310,6 +310,7 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     int extra_length = 0;
     fuse_ino_t ino = 0;
     int trace_flag = 0;
+    int fast_reconnect = 0;
 
     /*
     ** Update the IO statistics
@@ -436,17 +437,10 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     */
     if ((child != 0) && ((lookup_flags & 0x100) == 0))
     {
-      uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));    
       nie = get_ientry_by_inode(child);
       if (nie != NULL)
       {
-	if (
-           /* check regular file */
-           ((((nie->timestamp+attr_us) > rozofs_get_ticker_us()) || (rozofs_mode == 1))&&(S_ISREG(nie->attrs.attrs.mode))) ||
-	   /* check directory */
-	   (((nie->pending_getattr_cnt>0)||((nie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(nie->attrs.attrs.mode)))
-	   ) 
-        {
+	if (rozofs_is_attribute_valid(nie)) {
 	  /*
 	  ** check if parent and child are either deleted/deleted or active/active
 	  */
@@ -515,6 +509,7 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
 	  }
 	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
 	  stbuf.st_ino = child;
+          fast_reconnect = 1;
 	  goto success;        
       }      
     }  
@@ -543,6 +538,7 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
 	  }
 	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
 	  stbuf.st_ino = child;
+          fast_reconnect = 1;
 	  goto success;
         }
       }
@@ -575,12 +571,13 @@ out:
 lookup_objectmode:
     if (!(nie = get_ientry_by_fid(mattr_obj.fid))) {
         nie = alloc_ientry(mattr_obj.fid);
+        nie->attrs.attrs.mtime = 0;
 	allocated=1;
     } 
     /**
     *  update the timestamp in the ientry context
     */
-    nie->timestamp = rozofs_get_ticker_us();
+    rozofs_update_timestamp(nie);
     if (allocated)
     {
       /*
@@ -603,7 +600,12 @@ lookup_objectmode:
 success:
     memset(&fep, 0, sizeof (fep));
     fep.ino =stbuf.st_ino;  
-    fep.attr_timeout = rozofs_tmr_get_attr(rozofs_is_directory_inode(nie->inode));
+    if (fast_reconnect) {
+      fep.attr_timeout = rozofs_get_linux_fast_reconnect_caching_time_second();
+    }
+    else {
+      rozofs_get_linux_caching_time_second(nie);
+    }  
     fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
@@ -651,6 +653,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
    int errcode=0;
    fuse_ino_t ino = 0;
    rozofs_inode_t *fake_id_p;
+   int            fast_reconnect = 0;
    
    GET_FUSE_CTX_P(fuse_ctx_p,param);  
    /*
@@ -689,7 +692,8 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
                goto error;
 	   }
            memcpy(&attrs, &nie->attrs, sizeof (struct inode_internal_t));
-	   errno = EAGAIN;	   
+	   errno = EAGAIN;
+           fast_reconnect = 1;	   
 	   goto success;
          }
        }        
@@ -847,7 +851,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
       /**
       *  update the timestamp in the ientry context
       */
-      pie->timestamp = rozofs_get_ticker_us();
+      rozofs_update_timestamp(pie);
       ientry_update_parent(nie,pie->fid);
     }   
 
@@ -879,7 +883,12 @@ success:
     }
     else
     {
-      fep.attr_timeout = rozofs_tmr_get_attr(rozofs_is_directory_inode(nie->inode));
+      if (fast_reconnect) {
+        fep.attr_timeout = rozofs_get_linux_fast_reconnect_caching_time_second();
+      }
+      else {  
+        fep.attr_timeout = rozofs_get_linux_caching_time_second(nie);
+      }  
       fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));    
     }
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));

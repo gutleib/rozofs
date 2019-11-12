@@ -1603,6 +1603,7 @@ def compil_openmpi():
 #___________________________________________________
   os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz  > %s/compil_openmpi 2>&1; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh /tmp/compil >> %s/compil_openmpi 2>&1;"%(exepath,exepath,exepath,exepath,exepath))
   
+  backline("Checking %s/tst_openmpi/hello.res"%(exepath))
   string="cat %s/tst_openmpi/hello.res"%(exepath)
   parsed = shlex.split(string)  
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1610,15 +1611,21 @@ def compil_openmpi():
   found = [ False,  False,  False,  False,  False,  False ]
   
   for line in cmd.stdout:
-    if line.split()[0] != "hello": continue
-    if line.split()[1] != "6": continue
-    found[int(line.split()[2])] = True     
-  
+    try:
+      if line.split()[0] != "hello": continue
+      if line.split()[1] != "6": continue
+      val=int(line.split()[2])
+      found[val] = True    
+      backline("Found result %s"%(val))   
+    except:
+      pass
+      
   for val in found: 
    if val == False:
-     report("Mising lines in hello.res"%(i))
+     report("Missing lines in hello.res")
      os.system("cat %s/tst_openmpi/hello.res"%(exepath))
      return 1
+  report("compil success")   
   return 0   
   
    

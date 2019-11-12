@@ -274,7 +274,7 @@ void rozofs_ll_rmdir_cbk(void *this,void *param)
       /**
       *  update the timestamp in the ientry context
       */
-      pie->timestamp = rozofs_get_ticker_us();
+      rozofs_update_timestamp(pie);
     }
     fuse_reply_err(req, 0);
     goto out;

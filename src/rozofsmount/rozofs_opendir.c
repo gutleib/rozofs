@@ -88,9 +88,7 @@ void rozofs_ll_opendir_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
     ** check if it is configured in block mode, in that case we avoid
     ** a transaction with the exportd
     */
-    if ((rozofs_mode == 1) ||
-       ((ie->timestamp+rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino))) > rozofs_get_ticker_us()))
-    {
+    if (rozofs_is_attribute_valid(ie)) {
       /*
       ** allocate a context for the file descriptor
       */

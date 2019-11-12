@@ -446,11 +446,7 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
     /*
     ** Check whether ientry is still valid 
     */
-    if ((rozofs_mode == 1) || 
-         (((ie->timestamp+rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino))) > rozofs_get_ticker_us())&&(S_ISREG(ie->attrs.attrs.mode))) ||
-	 (((ie->timestamp+500) > rozofs_get_ticker_us())&&(S_ISDIR(ie->attrs.attrs.mode)))
-	 )
-    {
+    if (rozofs_is_attribute_valid(ie)) {
       /*
       ** Check if the i-node has extended attributs that are not the rozofs extended attributes
       */

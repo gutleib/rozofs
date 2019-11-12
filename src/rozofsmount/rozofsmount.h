@@ -27,6 +27,7 @@
 #include <rozofs/core/rozofs_tx_common.h>
 #include <rozofs/core/af_unix_socket_generic.h>
 #include <rozofs/core/rozofs_throughput.h>
+#include <rozofs/rozofs_timer_conf.h>
 
 #include "file.h"
 #include "rozofs_ext4.h"
@@ -180,6 +181,7 @@ typedef struct ientry {
      */
     uint64_t    read_consistency;
     uint64_t    timestamp;
+    uint64_t    caching_time_us;
     uint64_t    xattr_timestamp;
     uint64_t    timestamp_wr_block;
     char      * symlink_target;
@@ -769,6 +771,141 @@ int export_write_block_asynchrone(void *fuse_ctx_p, file_t *file_p,
 int clear_read_data(file_t *p);
 
 /*
+**________________________________________________________________
+**
+** Decide the caching time to use for an ientry given
+** - the configured caching time value
+** - the mtime of this entry
+** When modification has occured recently, not all configured caching time
+** is given. The file is given the full caching value only when it is stable.
+**
+** @param ie    The ientry to compute the caching time for
+**
+** @retval      The caching time in micro seconds
+*/
+static inline uint64_t rozofs_compute_attribute_validity_us(ientry_t *ie) {
+  uint64_t stability;
+  uint64_t caching_time_us;
+  uint64_t limited_cache_us;
+  
+  if (S_ISDIR(ie->attrs.attrs.mode)) {
+    return rozofs_tmr_get_attr_us(1);
+  }
+
+  /*
+  ** Get the configured caching time
+  */
+  caching_time_us = rozofs_tmr_get_attr_us(0);
+
+
+  if (rozofs_mode == 1) return caching_time_us;
+
+  /*
+  ** Caching time lower than 1 sec are always granted
+  */
+  if (caching_time_us <= 1000000) {
+    return caching_time_us;
+  }  
+
+  /*
+  ** Reduce the caching time depending on how long the file has been stable
+  */  
+  stability = time(NULL) - 5;
+  if (stability <= ie->attrs.attrs.mtime) {
+    /*
+    ** When the file has changed within the last 5 second
+    ** the cache time is 1s
+    */
+    return 1000000;
+  }  
+  stability = stability - ie->attrs.attrs.mtime;
+  if (stability > 20) return caching_time_us;
+
+  /*
+  ** 5 seconds after a modification, cache is limited to 1 second
+  ** After one win 1/4 of second caching per second
+  ** Modif 0..5  6    7    8    9    10   11   12   13   14   15   16   17   18   19   20   21   22   23   24   25
+  ** cache 1  1  1,26 1,52 1,78 2,04 2,31 2,57 2,83 3,09 3,35 3,62 3,88 4,14 4,4  4,67 4,93 5,19 5,45 5,71 5,98 6,24
+  */
+  limited_cache_us = 1000000; 
+  limited_cache_us += (stability * 1024 * 1024)/4;
+
+  if (limited_cache_us < caching_time_us) return limited_cache_us;
+  return caching_time_us;
+} 
+/*
+**________________________________________________________________
+**
+** Update time stamp as well as caching time of an ientry
+**
+** @param ie    The ientry that is beeing updated
+** 
+*/
+static inline void rozofs_update_timestamp(ientry_t *ie) { 
+  ie->caching_time_us = rozofs_compute_attribute_validity_us(ie);
+  ie->timestamp       = rozofs_get_ticker_us();  
+}
+/*
+**________________________________________________________________
+**
+** Get the left caching time to give back to Linux
+**
+** @param ie    The ientry that is beeing updated
+** 
+*/
+static inline double rozofs_get_linux_caching_time_second(ientry_t *ie) { 
+  int64_t  leftTime;
+  
+  leftTime = (ie->timestamp+ie->caching_time_us) - rozofs_get_ticker_us();
+  
+  if (leftTime < 200000) {
+    return 0.2;
+  }  
+  return (((double)leftTime)/1000000);
+}
+/*
+**________________________________________________________________
+**
+** Get the left caching time to give back to Linux
+**
+** @param ie    The ientry that is beeing updated
+** 
+*/
+static inline double rozofs_get_linux_fast_reconnect_caching_time_second(void) { 
+  /*
+  ** In fast reconnect, when the export is switching, one returns the
+  ** current ientry information and asks Linux for a 1/2 second cache
+  */
+  return (0.5);
+}
+/*
+**________________________________________________________________
+**
+** Update time stamp as well as caching time of an ientry
+**
+** @param ie    The ientry who attribute validity are to be checked
+** 
+*/
+static inline int rozofs_is_attribute_valid(ientry_t *ie) { 
+
+  if ((ie->timestamp+ie->caching_time_us) > rozofs_get_ticker_us()) {
+    return 1;
+  }
+  /*
+  ** Directory case
+  */
+  if (S_ISDIR(ie->attrs.attrs.mode)) {
+    if (ie->pending_getattr_cnt>0) return 1;  
+    return 0;
+  }
+ 
+  /*
+  ** In block mode, files are always valid
+  */
+  if (rozofs_mode == 1) return 1;
+  return 0;
+}
+/*
 **__________________________________________________________________
 */
 /**
@@ -781,11 +918,7 @@ int clear_read_data(file_t *p);
 */
 static inline void rozofs_ientry_update(ientry_t *ie,struct inode_internal_t  *attr_p)
 {
-
-    /**
-    *  update the timestamp in the ientry context
-    */
-    ie->timestamp = rozofs_get_ticker_us();
+  
     /*
     ** check if there is a pending extension of the size
     */
@@ -795,7 +928,7 @@ static inline void rozofs_ientry_update(ientry_t *ie,struct inode_internal_t  *a
        ** nothing pending so full copy
        */
        memcpy(&ie->attrs,attr_p, sizeof (struct inode_internal_t));   
-       return;
+       goto out;
    }
    /*
    ** preserve the size of the ientry
@@ -803,6 +936,12 @@ static inline void rozofs_ientry_update(ientry_t *ie,struct inode_internal_t  *a
    uint64_t file_size = ie->attrs.attrs.size;
    memcpy(&ie->attrs,attr_p, sizeof (struct inode_internal_t));   
    ie->attrs.attrs.size = file_size;
+
+out:
+    /**
+    *  Compute the validity time of these information
+    */
+    rozofs_update_timestamp(ie);
 }
 /*
 **__________________________________________________________________
