@@ -1,0 +1,680 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+import shutil
+import json
+
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import sys
+import re
+
+red = '\033[91m'
+green = '\033[92m'
+yellow = '\033[93m'
+blue = '\033[94m'
+purple = '\033[95m'
+cyan = '\033[96m'
+white = '\033[97m'
+endeffect = '\033[0m'
+bold = '\033[1m'
+underline = '\033[4m'
+blink = '\033[5m'
+reverse = '\033[7m'
+
+
+strip_ANSI_pat = re.compile(r"""
+    \x1b     # literal ESC
+    \[       # literal [
+    [;\d]*   # zero or more digits or semicolons
+    [A-Za-z] # a letter
+    """, re.VERBOSE).sub
+
+def strip_ANSI(s):
+    return strip_ANSI_pat("", s)
+
+#_______________________________________________
+class constants:
+
+  def joined_column(self): return "#Zis_IZ_a_JoInED_ColUMn"
+  
+#_______________________________________________
+class column_desc:
+
+  def __init__(self,shift):  
+    self.column_nb    = 0
+    self.column_sizes = []
+    self.shift        = shift
+     
+  def update_column(self, num, size):
+  
+    # Column number extension
+    if int(num) > self.column_nb:
+      for i in range(self.column_nb,num):
+        self.column_sizes.append('0')
+      self.column_nb = num 	
+	
+    # Column size extension
+    if int(self.column_sizes[int(num)-1]) < int(size):
+      self.column_sizes[int(num)-1] = int(size)
+
+    
+#_______________________________________________
+class big_title:
+
+  def __init__(self,text,effect=None):  
+    self.text   = text
+    self.effect = effect
+
+  def display(self,column_desc):
+    l=0
+    for col in range(column_desc.column_nb):
+      l += (column_desc.column_sizes[col]+3)
+    l -= (len(self.text) +3)
+    
+    line = ''    
+    for i in range(int(column_desc.shift)): line+=' '		
+    line+="| "
+    start = int(l)/2
+    end   = int(l)-start
+    
+    if self.effect != None:
+      line+=self.effect+bold+reverse
+    for i in range(start): line+=" "
+    line+=self.text
+    for i in range(end): line+=" " 
+    line+=endeffect
+    line+=" |"   
+    print line  
+#_______________________________________________
+class separator_line:
+
+  def __init__(self,extreme,separator,previous_line=None):  
+    self.extreme    = extreme  
+    self.separator  = separator
+    self.separators = []
+    if previous_line == None: return
+      
+    const = constants()    
+    self.separators.append(extreme)
+    skip=True
+    for col in previous_line.column:
+      if skip==True: 
+        skip=False
+	continue
+      if col == const.joined_column(): self.separators.append('_')
+      else:                            self.separators.append(separator)
+    self.separators.append(extreme) 
+    
+  def display(self,column_desc):
+
+    const = constants()
+    line = ''    
+    for i in range(int(column_desc.shift)): line+=' '
+    
+    if len(self.separators) != 0:
+      for c in range(column_desc.column_nb):
+	line += self.separators[c]
+	line+='_'	
+	for ci in range(int(column_desc.column_sizes[c])): line+='_'	
+	line+='_' 
+      line+=self.extreme 
+      print line
+      return       
+    
+    first=True
+    for c in range(column_desc.column_nb):
+      if first == True:
+        # 1rst line begins with extreme separator
+        first = False
+	line += self.extreme
+      else:	
+        # Not a fisrt line
+	line += self.separator
+      line+='_'	
+      for ci in range(int(column_desc.column_sizes[c])): line+='_'	
+      line+='_' 
+    line+=self.extreme   
+    print line    
+#_______________________________________________
+class display_element:
+
+  def __init__(self,value,effect=None):  
+    self.value  = value 
+    self.effect = effect
+     
+
+#_______________________________________________
+class display_line:
+
+  def __init__(self,centered=False):  
+    self.column     = []   
+    self.centered   = centered
+      
+  def set_column(self,column,value,effect=None):
+    # Extend column number
+    if int(column) > len(self.column):
+      for i in range(len(self.column),int(column)):
+        self.column.append(display_element(''))
+    self.column[int(column)-1] = display_element(value,effect)
+
+  def check_column(self,column,value):
+    # Extend column number
+    if int(column) > len(self.column): return False
+    if self.column[int(column)-1].value == value: return True
+    return False
+    
+  # Join a colum with its preceding column  
+  def join_preceding_column(self,column):
+    const = constants()
+    # Extend column number
+    if int(column) > len(self.column):
+      for i in range(len(self.column),int(column)):
+        self.column.append(display_element(''))
+    self.column[int(column)-1] = display_element(const.joined_column())
+
+  def display(self,column_desc):
+    const = constants()
+    line=''	
+    for i in range(int(column_desc.shift)): line+=' '		
+    line+="| "
+    for col in range(column_desc.column_nb):
+    
+      try:     elt=self.column[col]
+      except:  elt=display_element('')	
+      
+      val = elt.value
+      eff = elt.effect
+      
+      if val == const.joined_column(): continue
+
+      l = column_desc.column_sizes[col]-len(val)
+      joined = 0
+      for jc in range(col+1,column_desc.column_nb):
+        try:    next = self.column[jc].value
+	except: next = ''
+        if next != const.joined_column(): break
+	l += column_desc.column_sizes[jc]+3
+	joined += 1	
+      if self.centered == True:
+	start = int(l)/2
+	end   = int(l)-start
+      else:
+	try:
+	  float(val)	  
+          start=l
+	  end=0
+	except:
+	  start = 0
+	  end = l
+          
+      if eff != None: line+=eff+bold+reverse
+      for i in range(start): line+=" "
+      line+=val
+      for i in range(end): line+=" " 
+      line+=endeffect
+      line+=" | "  
+      col+=joined 
+    print line
+        
+#_______________________________________________
+class adaptative_tbl:
+
+  def __init__(self, shift, title=None,effect=None):  
+    self.row_nb      = int(0)
+    self.row         = [] 
+    self.current_row = None 
+    self.column_desc = column_desc(shift)   
+    if title == None: 
+      self.separator(' ',' ')      
+    else:
+      self.separator(' ','_')
+      self.row.append(big_title(title,effect)) 
+      self.row_nb += 1
+      self.separator('|','_')
+    
+  def add_line(self,centered):
+    line = display_line(centered)
+    self.row.append(line) 
+    self.row_nb += 1
+    self.current_row = line
+    
+  def new_line(self):    self.add_line(False)
+  def new_center_line(self): self.add_line(True)
+  
+  def separator(self,extreme,separator):
+    self.row.append(separator_line(extreme,separator,self.current_row)) 
+    self.row_nb = int(self.row_nb)+1
+    self.current_row = None
+            
+  def end_separator(self): self.separator('|','|')	 
+         
+  def set_column(self,column,value,effect=None):
+    self.current_row.set_column(column,value,effect)
+    self.column_desc.update_column(column,len(strip_ANSI(value)))   
+       
+  def join_preceding_column(self,column):
+    self.current_row.join_preceding_column(column)
+                	
+  def display(self):
+    # Must we add and end separator ?
+    if self.current_row != None: self.end_separator()  
+    for row in range(int(self.row_nb)):              
+      self.row[row].display(self.column_desc)
+      previous_line=self.row[row]
+
+
+ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+
+def get_json_command_result(cmd) :
+  res1 = subprocess.check_output(cmd, shell=True)
+  if options.dump == True: print res1
+  res2 = ansi_escape.sub('', res1)
+  res3 = (json.loads(res2))
+  return res3
+
+from optparse import OptionParser
+
+#__________________________________________________
+# Check whether all values are equal or some values
+# are bad
+#
+def set_error(storage,error):
+  err = errors.get(storage)
+  if err == None:
+    errors[storage] = error
+  else:
+    errors[storage] = err + "+" + error 
+
+#__________________________________________________
+# Check whether all values are equal or some values
+# are bad
+#
+def check_equality(grp,error):
+
+  #
+  # Check whether every values are equal
+  #            
+  ref = 'X'
+
+  for i in range(2):
+    bad_val = []
+    good_val = []
+    for storage in storage_list:
+
+      val = grp.get(storage) 
+      if val == None: continue
+
+      if ref == 'X': 
+        ref = val
+        good_val.append(storage)
+        continue
+
+      if val == ref: 
+        good_val.append(storage)
+        continue   
+      bad_val.append(storage)
+
+    #
+    # No bad value
+    #
+    if len(bad_val) == int(0): return None
+
+    #
+    # Some bad values
+    #  
+    if len(good_val) > len(bad_val): break
+
+    #
+    # Lots of bad values. Change good reference
+    #  
+    if int(i) != int(0): break
+    
+    ref =  grp.get(bad_val[0])
+    del bad_val[:]
+    del good_val[:]
+
+  for storage in bad_val: set_error(storage,error)
+  return bad_val
+#__________________________________________________
+# Check whether all values are equal or some values
+# are bad
+#
+def check_different(grp, ref, error):
+  
+  for storage in storage_list:
+    val = grp.get(storage) 
+    if val != ref: continue   
+    set_error(storage,error)
+
+#__________________________________________________
+# Display results for one sub-sfile
+#
+def display_one_sub_file(f,slave=None):
+  no_error = True
+  
+  splitted = f['name'].split('/')
+  fid = splitted[len(splitted)-1]
+
+  if slave == None:
+    fname = "%s [%s] "%(options.fname,fid)
+  else:
+    fname = "%s [%s] %s"%(options.fname,slave,fid)
+
+  #
+  # Create result table
+  #
+  d = adaptative_tbl(2,fname,cyan+bold)
+  d.new_center_line()
+        
+  #
+  # Put 1rst line title (storage names)
+  # 
+  d.set_column(1,"BID")
+  idx = int(2)
+  for storage in storage_list:
+    d.set_column(idx,storage)
+    idx += 1
+  d.set_column(idx,"MISS")
+  d.new_center_line()
+
+  if len(storage_list) == 0:
+    d.end_separator()   
+    d.new_center_line()
+    d.set_column(1,"                                          No projections                                       ", yellow)
+    d.join_preceding_column(2) 
+    d.display()
+    d = None
+    return 0
+
+  #
+  # Put 2nd line title (host names)
+  #   
+  idx = int(2)
+  for host in host_list:
+    d.set_column(idx,host)
+    idx += 1      
+  d.set_column(idx,"")
+  d.end_separator()     
+
+  consitent_blocks = 0
+
+  #
+  # Loop on block ids
+  #   
+  for rank,bid in enumerate(timestamps):
+    #
+    # Get dicts for this block id
+    #
+    bidPrj    = projections[bid]
+    bidTs     = timestamps[bid]
+    bidCrc32  = checksums[bid]
+    bidSize   = blksizes[bid]
+
+    # 
+    # Prepare error dict
+    #
+    errors.clear()
+
+    #
+    # Check every projection is present
+    #
+    prjList = [0,1,2,3,4,5]
+    MISS = ""
+    for storage in storage_list:
+      try: prjList.remove(bidPrj.get(storage))
+      except: pass
+    if len(prjList) != int(0):
+      if len(prjList) != int(5) and 0 not in prjList:
+        beg=""
+        for prj in prjList: 
+          MISS += "%s%s"%(beg,prj)
+          beg=","
+
+    #
+    # Check every CRC32 is correct
+    #            
+    check_different(bidCrc32,"ERROR","CRC")  
+
+    #
+    # Check every blocksize are equal
+    #            
+    check_equality(bidSize,"SZ")        
+        
+    #
+    # Check all time stamps are equal
+    # 
+    check_equality(bidTs,"TS")            
+      
+    #
+    # Must this bid be display when only errors are to be displayeds
+    #   
+    if MISS  == "" and len(errors) == 0:
+      if options.error_only == True: 
+        consitent_blocks += 1
+        continue      
+    else:  
+      no_error = False
+
+    if consitent_blocks != 0:
+      d.new_center_line()
+      d.set_column(1,"--- %s consistent blocks ---"%(consitent_blocks))
+      idx = int(2)    
+      for storage in storage_list:
+        d.join_preceding_column(idx) 
+        idx += 1
+      d.join_preceding_column(idx)  
+      consitent_blocks = 0
+                     
+    #
+    # Add new line in the result array
+    #
+    d.new_line()  
+    d.set_column(1,"%s"%(bid))           
+    idx = int(2)    
+    for storage in storage_list:
+      error = errors.get(storage)
+      if error != None: 
+        d.set_column(idx,"%s %s %s"%(bidPrj.get(storage),bidTs.get(storage),error),red)
+      else:  
+        if bidPrj.get(storage) == None and bidTs.get(storage) == None:
+          d.set_column(idx,"")   
+        else:          
+          d.set_column(idx,"%s %s "%(bidPrj.get(storage),bidTs.get(storage)))   
+      idx += 1
+    d.set_column(idx, MISS)
+    
+  #
+  # Display the result table
+  #  
+  if consitent_blocks != 0:
+    d.new_center_line()
+    d.set_column(1,"-- %s consistent blocks --"%(consitent_blocks))
+    idx = int(2)    
+    for storage in storage_list:
+      d.join_preceding_column(idx) 
+      idx += 1
+    d.join_preceding_column(idx)  
+
+  d.display()
+  d = None
+  if no_error == True: return 0
+  return 1
+
+#__________________________________________________
+# Parse one sub-sfile
+#
+def parse_one_projection_rozodump(f):
+
+  #
+  # Do not care about header files
+  #
+  if "/hdr_" in f['name']: return
+
+  #
+  # Split file name to get fid, sid name and path
+  #  
+  splitted = f['name'].split('/')
+  fid = splitted[len(splitted)-1]
+  storage = splitted[len(splitted)-5]
+  if not storage in storage_list: 
+    storage_list.append(storage)
+    host_list.append(f['host'])
+  path=""
+  for i in range(len(splitted)-5): path += "/%s"%(splitted[i+1])
+
+  #
+  # Call rozodump via ssh to dump the block headers
+  #
+  if options.block == None:
+    cmd = "ssh %s \'%s -p %s -f %s -b 0:\'"%(f['host'],DUMP,path,fid)
+  else:
+    cmd = "ssh %s \'%s -p %s -f %s -b %s -s\'"%(f['host'],DUMP,path,fid,options.block)    
+
+  parsed = shlex.split(cmd)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:    
+
+    #
+    # Display the rozodump output when not only error
+    #
+    if options.dump == True: sys.stdout.write(line)
+
+    #
+    # Parse bid, prj, crc32 and time stamp 
+    L = ansi_escape.sub('', line)
+    LSplit = L.split('|')
+    try:
+      bid    = int(LSplit[1])
+    except:
+      continue
+    prj    = int(LSplit[4])
+    size   = int(LSplit[5])
+    crc32  = LSplit[6].strip()
+    if LSplit[7].strip() == "Empty":
+      ts = int(0)
+    else:   
+      ts = int(LSplit[7].split()[3])
+
+    #
+    # Get timestamp, projections and checksum dicts for this block id
+    #
+    bidTs     = timestamps.get(bid)
+    bidPrj    = projections.get(bid)
+    bidCrc32  = checksums.get(bid)
+    bidSize   = blksizes.get(bid)
+
+    if bidTs == None:
+      #
+      # Have to create one
+      #
+      timestamps[bid]  = {storage:ts}
+      projections[bid] = {storage:prj}
+      checksums[bid]   = {storage:crc32}
+      blksizes[bid]    = {storage:size}
+    else:  
+      # 
+      # Update the dicts
+      #
+      timestamps[bid].update({storage:ts})
+      projections[bid].update({storage:prj})
+      checksums[bid].update({storage:crc32})
+      blksizes[bid].update({storage:size})
+
+#_________________________
+# Cleanup dicts and list
+#
+def cleanup_dicts():
+  global storage_list, host_list, timestamps, checksums, projections, blksizes
+  del storage_list[:]
+  del host_list[:]
+  timestamps.clear()
+  checksums.clear()
+  blksizes.clear()
+  projections.clear() 
+
+#__________________________________________________
+# 
+# M A I N
+#
+#__________________________________________________
+parser = OptionParser()
+parser.add_option("-n","--name", action="store",type="string", dest="fname", help="Targeted file name")
+parser.add_option("-b","--block", action="store",type="string", dest="block", help="Block to check")
+parser.add_option("-s","--slave", action="store",type="string", dest="slave", default=None,help="Slave file index")
+parser.add_option("-e","--error", action="store_false",default=True, dest="error_only", help="Do not only display errors.")
+parser.add_option("-d","--dump", action="store_true",default=False, dest="dump", help="Display also projections dumps.")
+parser.add_option("-T","--TEST", action="store_true",default=False, dest="TEST", help="For simulation mode.")
+(options, args) = parser.parse_args()
+
+if options.TEST == True:
+  PATH = os.getenv("ROOT_ROZO")
+  LOCATE = PATH + "/tests/build/src/rozofsmount/rozo_locate_projections"
+  DUMP   = PATH + "/tests/build/src/storaged/rozodump"
+else:
+  LOCATE = "rozo_locate_projections"
+  DUMP   = "rozodump"
+
+if options.fname == None:
+  print "Option -n, --name is mandatory"
+  sys.exit(1)
+
+if os.path.isfile(options.fname) == False:
+  print "File %s does not exist"%(options.fname)
+  sys.exit(1)
+
+response = get_json_command_result("%s -n %s"%(LOCATE,options.fname))
+
+timestamps   = {}
+checksums    = {}
+projections  = {}
+blksizes     = {}
+errors       = {}
+storage_list = []
+host_list = []
+
+exit_code = 0
+
+release = int(0)
+try:
+  v3format = response['files'][0]
+  release = int(3)
+except:
+  try:
+    v4format = response['slaves'][0]['files'][0]
+    release = int(4)
+  except:
+    print "Unexpected rozo_locate_projections output format"
+    sys.exit(1)  
+
+print bold + underline + options.fname + " : " + endeffect
+#
+# Release 3
+#ss
+if release == int(3):  
+  for f in response['files']:
+    parse_one_projection_rozodump(f) 
+  exit_code = display_one_sub_file(f)
+  sys.exit(exit_code)  
+
+#
+# Release 4
+#
+slaveNb = int(-1)
+for slave in response['slaves']:
+
+  slaveNb  = slaveNb + int(1)
+  if options.slave != None:
+    if int(options.slave) != int(slaveNb): continue
+
+  for f in slave['files']:    
+   parse_one_projection_rozodump(f)    
+  exit_code += display_one_sub_file(f,slaveNb)
+  cleanup_dicts()
+sys.exit(exit_code)  
