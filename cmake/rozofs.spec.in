@@ -236,6 +236,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_multifile
 %{_bindir}/rozo_throughput
 %{_bindir}/rozo_io
+%{_bindir}/rozo_file_consistency
 %{_bindir}/rozofsmount_wrapper
 %{_bindir}/rozo_mount_send_stats
 %if 0%{?rhel} >= 7
