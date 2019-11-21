@@ -612,7 +612,6 @@ int main(int argc, char *argv[]) {
     if (strcmp(argv[idx], "-s") == 0) {
       idx++;
       silent_header = 1;
-      idx++;
       continue;    
     }
     

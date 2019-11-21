@@ -144,7 +144,8 @@ int storio_error_log_initialized = 0;
 */
 typedef struct _storio_device_error_log_record_t {
   fid_t            fid;
-  uint16_t         nb_blocks;
+  uint8_t          nb_blocks;
+  uint8_t          sid;
   uint8_t          chunk;
   uint8_t          device;
   uint32_t         line;
@@ -181,7 +182,7 @@ storio_device_error_log_t storio_device_error_log;
 * @param string     A string
 *
 */
-void storio_device_error_log_new(fid_t fid, int line, uint8_t device, uint8_t chunk, uint32_t bid, uint16_t nb_blocks, uint32_t error, char * string) {
+void storio_device_error_log_new(fid_t fid, uint8_t sid, int line, uint8_t device, uint8_t chunk, uint32_t bid, uint8_t nb_blocks, uint32_t error, char * string) {
   uint32_t                          record_nb;
   storio_device_error_log_record_t *p ;
   
@@ -221,6 +222,7 @@ void storio_device_error_log_new(fid_t fid, int line, uint8_t device, uint8_t ch
   p = &storio_device_error_log.record[record_nb];
   memcpy(p->fid, fid,sizeof(fid_t));
   p->nb_blocks   = nb_blocks;
+  p->sid         = sid;
   p->line        = line;
   p->device      = device;
   p->chunk       = chunk;
@@ -287,7 +289,7 @@ void storio_device_error_log_display (char * argv[], uint32_t tcpRef, void *bufR
   int                                nb_record = storio_device_error_log.next_record;
   storio_device_error_log_record_t * p = storio_device_error_log.record;
   struct tm                          ts;
-  char                             * line_sep = "+-----+--------------------------------------+-------+-----+-----+-----------+-----------+-------------------+-----------------+--------------------------------+\n";
+  char                             * line_sep = "+-----+-----+--------------------------------------+-------+-----+-----+-----------+-----------+-------------------+-----------------+--------------------------------+\n";
   
     
   pChar += rozofs_string_append(pChar,"nb log  : ");
@@ -306,12 +308,14 @@ void storio_device_error_log_display (char * argv[], uint32_t tcpRef, void *bufR
   pChar += rozofs_eol(pChar);
 
   pChar += rozofs_string_append(pChar, line_sep);
-  pChar += rozofs_string_append(pChar,"|  #  |                FID                   | line  | dev | chk |  block id |  nb block |   time stamp      |      action     |          error                 |\n");
+  pChar += rozofs_string_append(pChar,"|  #  | sid |                FID                   | line  | dev | chk |  block id |  nb block |   time stamp      |      action     |          error                 |\n");
   pChar += rozofs_string_append(pChar, line_sep);
 
   for (idx=0; idx < nb_record; idx++,p++) {
     *pChar++ = '|';
     pChar += rozofs_u32_padded_append(pChar, 4, rozofs_right_alignment, idx);   
+    pChar += rozofs_string_append(pChar," | ");
+    pChar += rozofs_u32_padded_append(pChar, 3, rozofs_right_alignment, p->sid);   
     pChar += rozofs_string_append(pChar," | ");
     rozofs_uuid_unparse(p->fid, pChar);
     pChar += 36;
@@ -392,8 +396,8 @@ void storio_device_error_log_init(void) {
 }
 
 
-#define storio_fid_error(fid,dev,chunk,bid,nb_blocks,string) storio_device_error_log_new(fid, __LINE__, dev, chunk, bid, nb_blocks, errno,string)
-#define storio_hdr_error(fid,dev,string)                     storio_device_error_log_new(fid, __LINE__, dev, 0, -1, -1, errno,string) 
+#define storio_fid_error(fid,dev,chunk,bid,nb_blocks,string) storio_device_error_log_new(fid, st->sid, __LINE__, dev, chunk, bid, nb_blocks, errno,string)
+#define storio_hdr_error(fid,dev,string)                     storio_device_error_log_new(fid, st->sid, __LINE__, dev, 0, -1, -1, errno,string) 
 
 /*
 =================== END OF STORIO LOG SERVICE ====================================

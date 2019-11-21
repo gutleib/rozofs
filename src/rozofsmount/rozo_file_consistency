@@ -274,10 +274,10 @@ ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
 def get_json_command_result(cmd) :
   res1 = subprocess.check_output(cmd, shell=True)
-  if options.dump == True: print res1
-  res2 = ansi_escape.sub('', res1)
-  res3 = (json.loads(res2))
-  return res3
+  if options.debug == True: print res1
+  res1 = ansi_escape.sub('', res1)
+  res1 = (json.loads(res1))
+  return res1
 
 from optparse import OptionParser
 
@@ -356,16 +356,19 @@ def check_different(grp, ref, error):
 #__________________________________________________
 # Display results for one sub-sfile
 #
-def display_one_sub_file(f,slave=None):
+def display_one_sub_file(rg,slave):
+  global fidChunk
   no_error = True
+  first_consistent_bid = None
+ 
+  if fidChunk == None: return 0
+  if len(timestamps) == 0: return 0
   
-  splitted = f['name'].split('/')
-  fid = splitted[len(splitted)-1]
+  splitted = fidChunk.split('-')
+  chk = int(splitted[5])
+  fid = "%s-%s-%s-%s-%s"%(splitted[0],splitted[1],splitted[2],splitted[3],splitted[4])
 
-  if slave == None:
-    fname = "%s [%s] "%(options.fname,fid)
-  else:
-    fname = "%s [%s] %s"%(options.fname,slave,fid)
+  fname = "SUBFILE[%s] BID[%s] CHUNK[%s]"%(slave,rg,chk)
 
   #
   # Create result table
@@ -380,16 +383,12 @@ def display_one_sub_file(f,slave=None):
   idx = int(2)
   for storage in storage_list:
     d.set_column(idx,storage)
-    idx += 1
+    idx += int(1)
   d.set_column(idx,"MISS")
   d.new_center_line()
 
   if len(storage_list) == 0:
-    d.end_separator()   
-    d.new_center_line()
-    d.set_column(1,"                                          No projections                                       ", yellow)
-    d.join_preceding_column(2) 
-    d.display()
+    print "      - CHUNK %s BID %20s : No projections"%(chk,rg)
     d = None
     return 0
 
@@ -399,11 +398,11 @@ def display_one_sub_file(f,slave=None):
   idx = int(2)
   for host in host_list:
     d.set_column(idx,host)
-    idx += 1      
+    idx += int(1)      
   d.set_column(idx,"")
   d.end_separator()     
 
-  consitent_blocks = 0
+  consitent_blocks = int(0)
 
   #
   # Loop on block ids
@@ -455,23 +454,25 @@ def display_one_sub_file(f,slave=None):
     #
     # Must this bid be display when only errors are to be displayeds
     #   
-    if MISS  == "" and len(errors) == 0:
+    if MISS  == "" and len(errors) == int(0):
       if options.error_only == True: 
-        consitent_blocks += 1
+        consitent_blocks += int(1)
+        if first_consistent_bid == None:
+          first_consistent_bid = bid
         continue      
     else:  
       no_error = False
 
-    if consitent_blocks != 0:
+    if consitent_blocks != int(0):
       d.new_center_line()
-      d.set_column(1,"--- %s consistent blocks ---"%(consitent_blocks))
-      idx = int(2)    
+      d.set_column(1,"%s"%(first_consistent_bid))     
+      d.set_column(2,"%s consistent blocks"%(consitent_blocks))
+      idx = int(3)    
       for storage in storage_list:
         d.join_preceding_column(idx) 
         idx += 1
-      d.join_preceding_column(idx)  
-      consitent_blocks = 0
-                     
+      consitent_blocks = int(0)
+      first_consistent_bid = None              
     #
     # Add new line in the result array
     #
@@ -493,14 +494,20 @@ def display_one_sub_file(f,slave=None):
   #
   # Display the result table
   #  
-  if consitent_blocks != 0:
+  
+  if options.error_only == True and no_error == True:
+    print "      - CHUNK %s BID %20s : %s consistent blocks"%(chk,rg,consitent_blocks)
+    d = None
+    return 0
+    
+  if consitent_blocks != int(0):
     d.new_center_line()
-    d.set_column(1,"-- %s consistent blocks --"%(consitent_blocks))
-    idx = int(2)    
+    d.set_column(1,"%s"%(first_consistent_bid))     
+    d.set_column(2,"%s consistent blocks"%(consitent_blocks))
+    idx = int(3)    
     for storage in storage_list:
       d.join_preceding_column(idx) 
-      idx += 1
-    d.join_preceding_column(idx)  
+      idx += int(1)
 
   d.display()
   d = None
@@ -510,18 +517,21 @@ def display_one_sub_file(f,slave=None):
 #__________________________________________________
 # Parse one sub-sfile
 #
-def parse_one_projection_rozodump(f):
-
+def parse_one_projection_rozodump(f,chunk,rg):
+  global fidChunk
   #
   # Do not care about header files
   #
   if "/hdr_" in f['name']: return
-
+  
   #
   # Split file name to get fid, sid name and path
   #  
   splitted = f['name'].split('/')
   fid = splitted[len(splitted)-1]
+  chk = int(fid.split('-')[5])
+  if chk != int(chunk): return
+  fidChunk = fid
   storage = splitted[len(splitted)-5]
   if not storage in storage_list: 
     storage_list.append(storage)
@@ -529,13 +539,13 @@ def parse_one_projection_rozodump(f):
   path=""
   for i in range(len(splitted)-5): path += "/%s"%(splitted[i+1])
 
+  #print "parse chunk %s %s %s"%(chunk,path,fid)
+
   #
   # Call rozodump via ssh to dump the block headers
   #
-  if options.block == None:
-    cmd = "ssh %s \'%s -p %s -f %s -b 0:\'"%(f['host'],DUMP,path,fid)
-  else:
-    cmd = "ssh %s \'%s -p %s -f %s -b %s -s\'"%(f['host'],DUMP,path,fid,options.block)    
+  cmd = "ssh %s \'%s -p %s -f %s -b %s -s\'"%(f['host'],DUMP,path,fid,rg)  
+  if options.debug == True: print cmd
 
   parsed = shlex.split(cmd)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -544,7 +554,7 @@ def parse_one_projection_rozodump(f):
     #
     # Display the rozodump output when not only error
     #
-    if options.dump == True: sys.stdout.write(line)
+    #if options.debug == True: sys.stdout.write(line)
 
     #
     # Parse bid, prj, crc32 and time stamp 
@@ -599,6 +609,60 @@ def cleanup_dicts():
   blksizes.clear()
   projections.clear() 
 
+#_________________________
+# Process on subfile 
+#
+def process_one_subfile(slave,rsp):
+  global fidChunk
+
+  print "  * subfile %s FID %s"%(slave,fid_list[slave]) 
+  blkPerChunk = int(16*1024*1024)
+  maxLoop     = int(256)
+  blkPerLoop  = int(blkPerChunk/maxLoop)
+
+  res = int(0)
+  offset = - blkPerLoop
+  for chunk in range(128):
+    fidChunk = None
+    for loop in range(maxLoop):
+      cleanup_dicts()
+      offset += blkPerLoop
+      rg = "%s:%s"%(offset,offset+blkPerLoop-1)
+      for f in rsp['files']:
+        if "/hdr_" in f['name']: continue
+        bidMax =  int(f['size'])/int(1048) + (blkPerChunk*chunk)
+        if bidMax > offset: 
+          parse_one_projection_rozodump(f,chunk,rg) 
+      res += display_one_sub_file(rg,slave)
+
+  return res
+#_________________________
+# Cleanup dicts and list
+#
+def get_version(response):
+
+  try:
+    v3format = response['files'][0]
+    fid_list.append(response['fid'])
+    return int(3), int(1)
+  except:
+    pass
+
+  count = int(0)
+  for i in range(10):
+    try:
+      v4format = response['slaves'][i]
+      fid_list.append(response['slaves'][i]['fid'])
+      count += int(1)
+    except:
+      pass
+     
+  if count != int(0):
+    return int(4), count
+        
+  print "Unexpected rozo_locate_projections output format"
+  sys.exit(1)  
+
 #__________________________________________________
 # 
 # M A I N
@@ -609,7 +673,7 @@ parser.add_option("-n","--name", action="store",type="string", dest="fname", hel
 parser.add_option("-b","--block", action="store",type="string", dest="block", help="Block to check")
 parser.add_option("-s","--slave", action="store",type="string", dest="slave", default=None,help="Slave file index")
 parser.add_option("-e","--error", action="store_false",default=True, dest="error_only", help="Do not only display errors.")
-parser.add_option("-d","--dump", action="store_true",default=False, dest="dump", help="Display also projections dumps.")
+parser.add_option("-d","--debug", action="store_true",default=False, dest="debug", help="Debug mode.")
 parser.add_option("-T","--TEST", action="store_true",default=False, dest="TEST", help="For simulation mode.")
 (options, args) = parser.parse_args()
 
@@ -638,33 +702,30 @@ blksizes     = {}
 errors       = {}
 storage_list = []
 host_list = []
-
+fid_list = []
 exit_code = 0
 
-release = int(0)
-try:
-  v3format = response['files'][0]
-  release = int(3)
-except:
-  try:
-    v4format = response['slaves'][0]['files'][0]
-    release = int(4)
-  except:
-    print "Unexpected rozo_locate_projections output format"
-    sys.exit(1)  
-
-print bold + underline + options.fname + " : " + endeffect
 #
-# Release 3
-#ss
-if release == int(3):  
-  for f in response['files']:
-    parse_one_projection_rozodump(f) 
-  exit_code = display_one_sub_file(f)
+# determine RozoFS version from response format
+#
+release, subfiles = get_version(response)
+
+if subfiles == int(1):
+  print underline + options.fname + endeffect + " : 1 subfile"
+else:
+  print underline + options.fname + endeffect + " : %s subfiles"%(subfiles) 
+fname=""
+
+
+#
+# Release 3 only one subfile
+#
+if release == int(3): 
+  exit_code = process_one_subfile(0,response)
   sys.exit(exit_code)  
 
 #
-# Release 4
+# Release 4 Up to 8 subfiles
 #
 slaveNb = int(-1)
 for slave in response['slaves']:
@@ -672,9 +733,5 @@ for slave in response['slaves']:
   slaveNb  = slaveNb + int(1)
   if options.slave != None:
     if int(options.slave) != int(slaveNb): continue
-
-  for f in slave['files']:    
-   parse_one_projection_rozodump(f)    
-  exit_code += display_one_sub_file(f,slaveNb)
-  cleanup_dicts()
+  exit_code += process_one_subfile(slaveNb,slave)
 sys.exit(exit_code)  
