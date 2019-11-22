@@ -1,3 +1,4 @@
+
 /*
  Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
  This file is part of Rozofs.
@@ -48,6 +49,8 @@
 #include "storage.h"
 #include "storio_crc32.h"
 
+#define VERY_LAST (0x100000000000)
+
 int firstBlock = 0;
 char * filename[128] = {NULL};
 int    fd[128] = {-1};
@@ -57,11 +60,12 @@ int    block_number=-1;
 int    bsize=0;
 int    bbytes=-1;
 int    dump_data=0;
-uint64_t  first=0,last=-1;
+uint64_t  first=0,last=VERY_LAST;
 unsigned int prjid = -1;
 int    display_blocks=0;
 uint64_t   patched_date = 0;
 int    silent_header = 0;
+int    nocolor = 0;
 
 #define HEXDUMP_COLS 16
 void hexdump(void *mem, unsigned int offset, unsigned int len) {
@@ -281,7 +285,7 @@ char * ts2string(uint64_t u64) {
   sprintf(&dateSting[len]," %llu",(unsigned long long int)u64);
   return dateSting;
 }    
-unsigned char buffer[2*1024*33];
+unsigned char * buffer;
 void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t * hdr, int spare, uint64_t firstBlock) {
   uint16_t rozofs_disk_psize;
   int      fd;
@@ -291,7 +295,9 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
   uint32_t bbytes = ROZOFS_BSIZE_BYTES(hdr->v0.bsize);
   char     crc32_string[64];
   uint64_t offset;
+  uint64_t last_offset;
   char    *color;
+  uint64_t bufferSize = 0;
   
   if (dump_data == 0) {
     printf ("+------------+------------------+------------+----+------+-------+--------------------------------------------\n");
@@ -338,25 +344,34 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
     
     /*  Version 0 without projection given as parameter*/
     else {
+      rozofs_stor_bins_hdr_t proj_hdr;
       // Read 1rst block
-      nb_read = pread(fd, buffer, sizeof(rozofs_stor_bins_hdr_t), 0);
+      nb_read = pread(fd, &proj_hdr, sizeof(rozofs_stor_bins_hdr_t), 0);
       if (nb_read<0) {
 	printf("pread(%s) %s\n",path,strerror(errno));
 	return;      
       }
-      pH = (rozofs_stor_bins_hdr_t*)buffer;
-      if (pH->s.timestamp == 0) {
+      if (proj_hdr.s.timestamp == 0) {
 	printf("Can not tell projection id\n");
 	return;            
       }
-      rozofs_disk_psize = rozofs_get_psizes_on_disk(hdr->v0.layout,hdr->v0.bsize,pH->s.projection_id);
+      rozofs_disk_psize = rozofs_get_psizes_on_disk(hdr->v0.layout,hdr->v0.bsize,proj_hdr.s.projection_id);
     }
   }
   
+  /*
+  ** Do not read more than 64K blocks in a run.
+  ** Try to read the exact requested number of block
+  */
+  bufferSize = (last + 1) - first; /* This is requested */
+  if (bufferSize > (64*1024)) bufferSize = 64*1024; /* Requested was too big */
+  bufferSize *= rozofs_disk_psize;
+  buffer = malloc(bufferSize);
 
   /*
   ** Where to start reading from 
   */
+  last_offset = (last + 1)*rozofs_disk_psize;
   if (first == 0) { 
     offset = 0;
   }
@@ -367,6 +382,7 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
     else {
       offset = (first-firstBlock)*rozofs_disk_psize;
     }
+    last_offset -= (firstBlock*rozofs_disk_psize);
   }
   
   int idx;
@@ -377,14 +393,24 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
   ** Reading blocks
   */  
   while (nb_read) {
+    uint64_t to_read;
   
     // Read nb_proj * (projection + header)
-    nb_read = pread(fd, buffer, rozofs_disk_psize*32, offset);
-    if (nb_read<0) {
-      printf("pread(%s) %s\n",path,strerror(errno));
-      close(fd);
+    
+    to_read = last_offset - offset; /* Left to read */
+    if (to_read > bufferSize) to_read = bufferSize; /* Requested was to big */
+    if (to_read == 0) {
+      close(fd); free(buffer);
       return;         
     }
+    //info("To read %llu",(long long unsigned int) to_read);   
+    nb_read = pread(fd, buffer, to_read , offset);
+    if (nb_read<0) {
+      printf("pread(%s) %s\n",path,strerror(errno));
+      close(fd); free(buffer);
+      return;         
+    }
+    //info("Read %llu",(long long unsigned int) nb_read);   
     
     nb_read = (nb_read / rozofs_disk_psize);
     
@@ -426,14 +452,14 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
         nb_read = pwrite(fd, pH, sizeof(rozofs_stor_bins_hdr_t), offset+((unsigned char*)pH-buffer));
         if (nb_read<sizeof(rozofs_stor_bins_hdr_t)) {
           printf("pwrite header %llu %s\n",(long long unsigned int)bid,strerror(errno));
-          close(fd);
+          close(fd); free(buffer);
           return;         
         }        
         /* Re-write footer */
         nb_read = pwrite(fd, pF, sizeof(rozofs_stor_bins_footer_t), offset+((unsigned char*)pF-buffer));
         if (nb_read<sizeof(rozofs_stor_bins_footer_t)) {
           printf("pwrite footer %llu %s\n",(long long unsigned int)bid,strerror(errno));
-          close(fd);
+          close(fd); free(buffer);
           return;         
         }                
       }
@@ -465,23 +491,23 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
                 pH->s.projection_id); 
                 
         if (pH->s.effective_length==0) {
-          printf(ROZOFS_COLOR_YELLOW);
+          if (!nocolor) printf(ROZOFS_COLOR_YELLOW);
           printf ("%4d",pH->s.effective_length);
-          printf(ROZOFS_COLOR_NONE);
+          if (!nocolor) printf(ROZOFS_COLOR_NONE);
         }       
         else {
           printf ("%4d",pH->s.effective_length);
         }       
         
-        printf("%s",color);
+        if (!nocolor) printf("%s",color);
 	printf (" | %5s | ", crc32_string);
-        printf(ROZOFS_COLOR_NONE);
+        if (!nocolor) printf(ROZOFS_COLOR_NONE);
                 
 	printf ("%s ", ts2string(pH->s.timestamp));
         if ((pH->s.timestamp!=0) && (pH->s.timestamp != pF->timestamp)){
-          printf(ROZOFS_COLOR_RED);
+          if (!nocolor) printf(ROZOFS_COLOR_RED);
  	  printf("%llu\n",(long long unsigned int)pF->timestamp);
-          printf(ROZOFS_COLOR_NONE);
+          if (!nocolor) printf(ROZOFS_COLOR_NONE);
         }
         else {
  	  printf("\n");
@@ -491,14 +517,22 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
 	printf("_________________________________________________________________________________________\n");
 	printf("Block# %llu / file offset %llu / projection offset %llu\n", 
         	(unsigned long long)bid, (unsigned long long)(bbytes * bid), (unsigned long long)(offset+(idx*rozofs_disk_psize)));
-	printf("prj id %d / length %d / CRC %s %s %s / time stamp %s", 
-        	pH->s.projection_id,pH->s.effective_length,
-                color, crc32_string, ROZOFS_COLOR_NONE,
-                ts2string(pH->s.timestamp));
+        if (nocolor) {
+	  printf("prj id %d / length %d / CRC %s / time stamp %s", 
+        	  pH->s.projection_id,pH->s.effective_length,
+                  crc32_string, 
+                  ts2string(pH->s.timestamp));
+        }
+        else {
+	  printf("prj id %d / length %d / CRC %s %s %s / time stamp %s", 
+        	  pH->s.projection_id,pH->s.effective_length,
+                  color, crc32_string, ROZOFS_COLOR_NONE,
+                  ts2string(pH->s.timestamp));
+        }          
         if (pH->s.timestamp != pF->timestamp){        
-          printf(ROZOFS_COLOR_RED);
+          if (!nocolor) printf(ROZOFS_COLOR_RED);
           printf(" %llu",(long long unsigned int)pF->timestamp); 
-          printf(ROZOFS_COLOR_NONE);
+          if (!nocolor) printf(ROZOFS_COLOR_NONE);
         }   	
 	printf("\n_________________________________________________________________________________________\n");
 	if ((pH->s.projection_id == 0)&&(pH->s.timestamp==0)) continue;
@@ -510,7 +544,8 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
   if (dump_data == 0) {
     printf ("+------------+------------------+------------+----+------+-------+--------------------------------------------\n");
   }
-  close(fd);
+  close(fd); free(buffer);
+  
 }    
 char * utility_name=NULL;
 char * input_file_name = NULL;
@@ -532,6 +567,7 @@ void usage() {
     printf("   -b <block>           \tTo display only <block> block number.\n");   
     printf("   -D <date>            \tTo patch the date of the blocks given by -b option.\n");   
     printf("   -s                   \tDo not display header files.\n");   
+    printf("   --nocolor            \tOutput without colorization.\n");   
     exit(-1);  
 }
 
@@ -616,6 +652,13 @@ int main(int argc, char *argv[]) {
       continue;    
     }
     
+    /* --nocolor */
+    if (strcmp(argv[idx], "--nocolor") == 0) {
+      idx++;
+      nocolor = 1;
+      continue;    
+    }
+    
     /* -D <date>*/
     if (strcmp(argv[idx], "-D") == 0) {
       idx++;
@@ -673,14 +716,15 @@ int main(int argc, char *argv[]) {
 	continue;
       }
             
+      ret = sscanf(argv[idx], "%llu:", (long long unsigned int *)&first);
+      if (ret == 1) {
+        last = VERY_LAST;
+        idx++;
+	continue;
+      }
       ret = sscanf(argv[idx], "%llu", (long long unsigned int *)&first);
       if (ret == 1) {
-        if (argv[idx][strlen(argv[idx])-1]==':') {
-          last = -1;
-	}
-	else {
-	  last = first;
-	}  
+        last = first;
         idx++;
 	continue;
       }
