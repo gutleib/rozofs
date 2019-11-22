@@ -56,6 +56,7 @@
 #define BUFFER_SIZE 4096
 char   value[BUFFER_SIZE];
 char  *pChar;
+char  *nocolor = "";
 
 #define FNAME "rozofs_locate_prjections"
 /*-----------------------------------------------------------------------------
@@ -117,6 +118,7 @@ void usage(char * fmt, ...) {
   printf("\t    -f, --fid\tfid to search for.\n");    
   printf("\t    -n, --name\tFile name to search for.\n");    
   printf ("  OPTIONS:\n");
+  printf("\t    -C, --nocolor\tDo not colorize output.\n");
   printf("\t    -h, --help  \tprint this message.\n");
   printf("\t    -k, --config\tconfiguration file to use (default: %s).\n",EXPORTD_DEFAULT_CONFIG);
   exit(EXIT_FAILURE);
@@ -146,6 +148,7 @@ int main(int argc, char *argv[]) {
       {"config", required_argument, 0, 'k'},
       {"fid", required_argument, 0, 'f'},
       {"cid", required_argument, 0, 'c'},
+      {"nocolor", no_argument, 0, 'C'},
       {"name", required_argument, 0, 'n'},
       {0, 0, 0, 0}
       };
@@ -153,7 +156,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = 0;
-    c = getopt_long(argc, argv, "hc:k:f:n:", long_options, &option_index);
+    c = getopt_long(argc, argv, "hCc:k:f:n:", long_options, &option_index);
 
     if (c == -1) break;
 
@@ -172,6 +175,10 @@ int main(int argc, char *argv[]) {
         if (sscanf(optarg, "%u", &cid) != 1) {
           usage("Bad CID value %s",optarg);
         }  
+        break;
+          
+      case 'C':
+        nocolor = "--nocolor"; 
         break;
 
       case 'f':
@@ -278,10 +285,10 @@ int main(int argc, char *argv[]) {
   sprintf(remote_fname,"/tmp/%s.%d",FNAME,getpid());
   sprintf(local_fname,"/tmp/%s.loc.%d",FNAME,getpid());
   if (exportd_config_file[0] == 0) {
-    sprintf(param,"-c %d -f %s  > %s", cid, fidString, remote_fname);    
+    sprintf(param,"-c %d -f %s %s > %s", cid, fidString, nocolor, remote_fname);    
   }
   else {
-    sprintf(param,"-c %d -f %s -k %s > %s", cid, fidString, exportd_config_file, remote_fname);    
+    sprintf(param,"-c %d -f %s -k %s %s > %s", cid, fidString, exportd_config_file, nocolor, remote_fname);    
   }  
   res = rozofs_rcmd_locate_projections(socketId, param);
   if (res != rozofs_rcmd_status_success) {
