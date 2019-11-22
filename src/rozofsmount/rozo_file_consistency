@@ -693,7 +693,7 @@ if os.path.isfile(options.fname) == False:
   print "File %s does not exist"%(options.fname)
   sys.exit(1)
 
-response = get_json_command_result("%s -n %s"%(LOCATE,options.fname))
+response = get_json_command_result("%s -n \"%s\""%(LOCATE,options.fname))
 
 timestamps   = {}
 checksums    = {}
