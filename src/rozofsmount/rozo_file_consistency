@@ -271,11 +271,18 @@ class adaptative_tbl:
 
 
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+#__________________________________________________
+#
+#  Run a command with json output 
+#
+def get_json_command_result(cmd,isColored=False,debug=False) :
 
-def get_json_command_result(cmd) :
+  if debug == True: print cmd
   res1 = subprocess.check_output(cmd, shell=True)
-  if options.debug == True: print res1
-  res1 = ansi_escape.sub('', res1)
+  if debug == True: print res1
+
+  if isColored == True: res1 = ansi_escape.sub('', res1)
+
   res1 = (json.loads(res1))
   return res1
 
@@ -360,6 +367,9 @@ def display_one_sub_file(rg,slave):
   global fidChunk
   no_error = True
   first_consistent_bid = None
+  
+  start = int(rg.split(':')[0])
+  stop  = int(rg.split(':')[1])
  
   if fidChunk == None: return 0
   if len(timestamps) == 0: return 0
@@ -407,14 +417,16 @@ def display_one_sub_file(rg,slave):
   #
   # Loop on block ids
   #   
-  for rank,bid in enumerate(timestamps):
+  for bid in range(start,stop+1):
     #
     # Get dicts for this block id
     #
-    bidPrj    = projections[bid]
-    bidTs     = timestamps[bid]
-    bidCrc32  = checksums[bid]
-    bidSize   = blksizes[bid]
+    bidPrj    = projections.pop(bid,None)
+    if bidPrj == None: continue  
+    
+    bidTs     = timestamps.pop(bid,None)
+    bidCrc32  = checksums.pop(bid,None)
+    bidSize   = blksizes.pop(bid,None)
 
     # 
     # Prepare error dict
@@ -613,7 +625,7 @@ def cleanup_dicts():
 # Process on subfile 
 #
 def process_one_subfile(slave,rsp):
-  global fidChunk
+  global fidChunk, block_start, block_stop
 
   print "  * subfile %s FID %s"%(slave,fid_list[slave]) 
   blkPerChunk = int(16*1024*1024)
@@ -622,12 +634,27 @@ def process_one_subfile(slave,rsp):
 
   res = int(0)
   offset = - blkPerLoop
+  
   for chunk in range(128):
+
     fidChunk = None
     for loop in range(maxLoop):
+
       cleanup_dicts()
       offset += blkPerLoop
-      rg = "%s:%s"%(offset,offset+blkPerLoop-1)
+      
+      start = offset
+      stop  = offset+blkPerLoop-1
+      
+      if int(start) > int(block_stop):  break
+      if int(stop) < int(block_start): continue
+      
+      if int(start) < int(block_start): rg = "%s"%(block_start)
+      else:                             rg = "%s"%(start)
+      rg += ":"
+      if int(stop) > int(block_stop): rg += "%s"%(block_stop)
+      else:                           rg += "%s"%(stop)
+            
       for f in rsp['files']:
         if "/hdr_" in f['name']: continue
         bidMax =  int(f['size'])/int(1048) + (blkPerChunk*chunk)
@@ -693,7 +720,27 @@ if os.path.isfile(options.fname) == False:
   print "File %s does not exist"%(options.fname)
   sys.exit(1)
 
-response = get_json_command_result("%s -n \"%s\""%(LOCATE,options.fname))
+if options.block == None:
+  block_start = int(0)
+  block_stop = int(1000000000000000)  
+else:  
+  if ':' in options.block:
+    try:
+      block_start = int(options.block.split(':')[0])
+    except:
+      block_start = int(0)
+    try:
+      block_stop = int(options.block.split(':')[1])
+    except:
+      block_stop = int(1000000000000000)
+  else:
+    try:
+      block_start = int(options.block)
+      block_stop  = block_start
+    except:    
+      print "Invalid block option"
+      sys.exit(1)
+response = get_json_command_result("%s -n \"%s\""%(LOCATE,options.fname),isColored=True,debug=options.debug)
 
 timestamps   = {}
 checksums    = {}
