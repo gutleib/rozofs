@@ -57,6 +57,7 @@
 char   value[BUFFER_SIZE];
 char   fidString[BUFFER_SIZE];
 char  *pChar;
+char  *nocolor = "";
 
 #define FNAME "rozofs_locate_prjections"
 /*-----------------------------------------------------------------------------
@@ -115,6 +116,7 @@ void usage(char * fmt, ...) {
   printf ("  MANDATORY: \n");
   printf("\t    -n, --name\tFile name to locate pieces for.\n");    
   printf ("  OPTIONS:\n");
+  printf("\t    -C, --nocolor\tDo not colorize output.\n");
   printf("\t    -h, --help  \tprint this message.\n");
   printf("\t    -k, --config\tconfiguration file to use (default: %s).\n",EXPORTD_DEFAULT_CONFIG);
   exit(EXIT_FAILURE);
@@ -144,6 +146,7 @@ int main(int argc, char *argv[]) {
   static struct option long_options[] = {
       {"help", no_argument, 0, 'h'},
       {"config", required_argument, 0, 'k'},
+      {"nocolor", no_argument, 0, 'C'},
       {"name", required_argument, 0, 'n'},
       {0, 0, 0, 0}
       };
@@ -151,7 +154,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = 0;
-    c = getopt_long(argc, argv, "hk:n:", long_options, &option_index);
+    c = getopt_long(argc, argv, "hCk:n:", long_options, &option_index);
 
     if (c == -1) break;
 
@@ -164,6 +167,10 @@ int main(int argc, char *argv[]) {
 
       case 'k':
         strcpy(exportd_config_file,optarg);
+        break;
+
+      case 'C':
+        nocolor = "--nocolor"; 
         break;
 
       case 'n':
@@ -257,6 +264,7 @@ int main(int argc, char *argv[]) {
   if (exportd_config_file[0] != 0) {
     pChar += sprintf(pChar," -k %s ", exportd_config_file);
   }
+  pChar += sprintf(pChar," %s ", nocolor);
   
   cid = 0;
   fidString[0] = 0;
