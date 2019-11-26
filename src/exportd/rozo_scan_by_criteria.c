@@ -5665,6 +5665,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
     */
     case 'n' :
       if (argLen == 1) return rozofs_scan_keyw_field_fname; 
+      rozofs_scan_check_against("ne", rozofs_scan_keyw_comparator_ne);
       rozofs_scan_check_against("name",rozofs_scan_keyw_field_fname);
       rozofs_scan_check_against("noxattr",rozofs_scan_keyw_criteria_has_no_xattr);
       rozofs_scan_check_against("notrash",rozofs_scan_keyw_criteria_not_in_trash);
