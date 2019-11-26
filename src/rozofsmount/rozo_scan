@@ -161,9 +161,24 @@ do
   #
   if [ ${ThisParameter} != "=" ]
   then
-    if [ -z "${ThisParameter##*(*}" -o -z "${ThisParameter##*)*}" -o -z "${ThisParameter##*<*}" -o -z "${ThisParameter##*>*}" ] 
+    if [ -z "${ThisParameter##*(*}"  ] 
     then
       ThisParameter=`echo ${ThisParameter} | sed -e 's#(#\\\(#g' -e 's#)#\\\)#g' -e 's#>#\\\>#g' -e 's#<#\\\<#g'`
+    else 
+      if [ -z "${ThisParameter##*)*}" ]
+      then 
+        ThisParameter=`echo ${ThisParameter} | sed -e 's#(#\\\(#g' -e 's#)#\\\)#g' -e 's#>#\\\>#g' -e 's#<#\\\<#g'`    
+      else 
+        if [ -z "${ThisParameter##*<*}" ] 
+        then
+          ThisParameter=`echo ${ThisParameter} | sed -e 's#(#\\\(#g' -e 's#)#\\\)#g' -e 's#>#\\\>#g' -e 's#<#\\\<#g'`    
+        else 
+          if [ -z "${ThisParameter##*>*}" ] 
+          then
+            ThisParameter=`echo ${ThisParameter} | sed -e 's#(#\\\(#g' -e 's#)#\\\)#g' -e 's#>#\\\>#g' -e 's#<#\\\<#g'`
+          fi
+        fi
+      fi
     fi
   fi
   
