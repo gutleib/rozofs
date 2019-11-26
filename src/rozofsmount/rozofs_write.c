@@ -3358,13 +3358,19 @@ int export_write_block_asynchrone(void *fuse_ctx_p, file_t *file_p, sys_recv_pf_
     arg.arg_gw.length = 0; //buf_flush_len;
     arg.arg_gw.offset = ie->attrs.attrs.size; //buf_flush_offset;
     
-    if (ie->write_error) {
-      arg.arg_gw.write_error = 1; /* Tell the export that a write error occured on the file */
-    }    
-    else {
-      arg.arg_gw.write_error = 0; /* Tell the export that a write error occured on the file */
-    }    
-    
+    /*
+    ** Do not set the write error flag in case the destination is a mover file
+    ** This destination file will be deleted
+    */
+    {
+      rozofs_inode_t * inode_p = (rozofs_inode_t*)file_p->fid; 
+      if ((ie->write_error) && (inode_p->s.key != ROZOFS_REG_D_MOVER)) {
+        arg.arg_gw.write_error = 1; /* Tell the export that a write error occured on the file */
+      }   
+      else {
+        arg.arg_gw.write_error = 0; /* Tell the export that a write error occured on the file */
+      }    
+    }
     arg.arg_gw.geo_wr_start = file_p->off_wr_start;
     arg.arg_gw.geo_wr_end = file_p->off_wr_end;
     /*
