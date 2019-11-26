@@ -713,6 +713,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1msctime|hctime\033[0m\t\tdisplay change time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
   printf("\t\033[1msupdate|hupdate\033[0m\t\tdisplay update directory time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
   printf("\t\033[1msatime|hatime\033[0m\t\tdisplay access time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
+  printf("\t\033[1mstime|htime\033[0m\t\tdisplay every date attribute in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
   printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
   printf("\t\033[1mxattr\033[0m\t\t \tdisplay extended attributes names and values.\n");
   printf("\t\t\t\t\t\033[1mall\033[0m or \033[1mallh\033[0m do not display extended attributes.\n");
@@ -5111,6 +5112,24 @@ int rozofs_parse_output_format(char * fmt, int argc, char * argv[]) {
 
     if (strncmp(p, "satime", 3)==0) {
       display_atime = DO_DISPLAY;
+      NEXT(p);
+    }  
+                
+    if (strncmp(p, "stime", 3)==0) {
+      display_atime  = DO_DISPLAY;
+      display_update = DO_DISPLAY;
+      display_ctime  = DO_DISPLAY;
+      display_mtime  = DO_DISPLAY;
+      display_cr8    = DO_DISPLAY;
+      NEXT(p);
+    }          
+        
+    if ((strncmp(p, "htime", 3)==0)||(strncmp(p, "time", 3)==0)) {
+      display_atime  = DO_HUMAN_DISPLAY;
+      display_update = DO_HUMAN_DISPLAY;
+      display_ctime  = DO_HUMAN_DISPLAY;
+      display_mtime  = DO_HUMAN_DISPLAY;
+      display_cr8    = DO_HUMAN_DISPLAY;
       NEXT(p);
     }              
 
