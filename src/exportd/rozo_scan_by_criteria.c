@@ -124,6 +124,8 @@ typedef enum _rozofs_scan_keyw_e {
   rozofs_scan_keyw_criteria_priv_other_not_r,
   rozofs_scan_keyw_criteria_is_hybrid,
   rozofs_scan_keyw_criteria_is_not_hybrid,
+  rozofs_scan_keyw_criteria_is_aging,
+  rozofs_scan_keyw_criteria_is_not_aging,
   
   rozofs_scan_keyw_criteria_max,
 
@@ -711,7 +713,7 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1mtrash\033[0m\t\t\tdisplay directory trash configuration.\n");
   printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
   printf("\t\033[1merror\033[0m\t\t\tdisplay file write error detected.\n");
-  printf("\t\033[1mstrip\033[0m\t\t\tdisplay file stripping information.\n");
+  printf("\t\033[1mstrip\033[0m\t\t\tdisplay file striping information.\n");
   printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
   printf("\t\033[1mcount<val>\033[0m\t\tStop after displaying the <val> first found entries.\n");
   printf("\t\033[1mnone\033[0m\t\t\tJust display the count of file/dir but no file/dir information.\n");
@@ -1204,6 +1206,97 @@ rozofs_scan_node_t * rozofs_scan_new_regex_field(rozofs_scan_keyw_e     name,
   leaf->l.comp         = rozofs_scan_keyw_comparator_regex;
   return rozofs_scan_new_node(leaf);
 }
+/*
+**_______________________________________________________________________
+*/
+/**
+*   Return striping information for a directory
+
+   @param inode_p         pointer to the inode of the directory
+   @param ishybrid        whether the directory is hybrid
+   @param hybridSize      The size of the hybrid chunk
+   @param slaveNb         Number of slave inodes
+   @param slaveSize       The size of a slave strip
+   @param isaging         whether the directory is aging
+      
+   @retval 0 no match
+   @retval 1 match
+*/
+void get_directory_striping_info(ext_mattr_t  * inode_p,
+                                  int          * ishybrid,  
+                                  uint32_t     * hybridSize,
+                                  uint32_t     * slaveNb,
+                                  uint32_t     * slaveSize,
+                                  int          * isaging) {
+
+  /*
+  ** Get default export config
+  */ 
+  *isaging    = 0;
+  *slaveNb    = export_config->stripping.factor+1;
+  *slaveSize  =  ROZOFS_STRIPING_UNIT_BASE << export_config->stripping.unit;
+  *ishybrid   = 0;
+  *hybridSize = 0;
+
+
+  if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) != 0) {
+    *isaging = 1;
+  }
+                               
+  /*
+  ** The directory has its own configuration
+  */                                
+  if (inode_p->s.multi_desc.byte != 0) {
+
+    /*
+    ** Number of slave and strip size is configured
+    */
+    if (inode_p->s.multi_desc.master.striping_factor == 0) {
+      *slaveNb    = 0; 
+      *slaveSize  = 0; 
+    }    
+    else {
+      *slaveNb    = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+      *slaveSize  = rozofs_get_striping_size(&inode_p->s.multi_desc); 
+    }
+    
+    /*
+    ** Not hybrid
+    */
+    if (inode_p->s.hybrid_desc.s.no_hybrid != 0) {
+      *ishybrid   = 0;
+      *hybridSize = 0;
+      return;  
+    }    
+    
+    /*
+    ** Hybrid mode
+    */
+    *ishybrid   = 1;      
+    *hybridSize = rozofs_get_hybrid_size(&inode_p->s.multi_desc,&inode_p->s.hybrid_desc);
+    return;
+  }
+  
+  /*
+  ** nothing defined at directory level so get the information from the export conf
+  */       
+
+  if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) != 0) {
+    *isaging = 1;
+    return;
+  }
+
+  switch (export_config->fast_mode) {
+    case rozofs_econfig_fast_aging:
+      *isaging = 1;
+      break;
+    case rozofs_econfig_fast_hybrid:
+      *ishybrid   = 1;
+      *hybridSize = *slaveSize;
+      break;
+  }
+  return;
+}  
 /*
 **_______________________________________________________________________
 ** API to get the pathname of the objet
@@ -1855,6 +1948,11 @@ int rozofs_scan_eval_one_criteria_inode(
                    
   ext_mattr_t        * inode_p = (ext_mattr_t *) entry;  
   int                  result = 1;              
+  int                  ishybrid;
+  int                  isaging;
+  uint32_t             hybridSize;
+  uint32_t             slaveNb = -1;
+  uint32_t             slaveSize;
                   
   switch(criteria_to_match) {
             
@@ -2049,11 +2147,25 @@ int rozofs_scan_eval_one_criteria_inode(
     ** Must be an hybrid file
     */
     case rozofs_scan_keyw_criteria_is_hybrid:
+      /*
+      ** Case of the directory
+      */
+      if (S_ISDIR(inode_p->s.attrs.mode)) {
+        get_directory_striping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize, &isaging);
+        if (ishybrid) {
+          break;
+        }
+        result = 0;
+        break;  
+      }  
+      /*
+      ** Regular file
+      */
       if (inode_p->s.multi_desc.byte == 0) {
         /*
         ** not a multifile 
         */
-        return 0;
+        result = 0;
         break;
       }  
       if (inode_p->s.hybrid_desc.s.no_hybrid == 0) { 
@@ -2066,6 +2178,20 @@ int rozofs_scan_eval_one_criteria_inode(
     ** Must not be an hybrid file
     */
     case rozofs_scan_keyw_criteria_is_not_hybrid:
+      /*
+      ** Case of the directory
+      */
+      if (S_ISDIR(inode_p->s.attrs.mode)) {
+        get_directory_striping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize, &isaging);
+        if (ishybrid) {
+          result = 0;
+          break;
+        }
+        break;  
+      }  
+      /*
+      ** Regular file
+      */
       if (inode_p->s.multi_desc.byte == 0) {
         /*
         ** not a multifile 
@@ -2077,6 +2203,61 @@ int rozofs_scan_eval_one_criteria_inode(
       }
       result = 0;
       break;
+      
+    /*
+    ** Must be an aging file
+    */
+    case rozofs_scan_keyw_criteria_is_aging:
+      /*
+      ** Case of the directory
+      */
+      if (S_ISDIR(inode_p->s.attrs.mode)) {
+        get_directory_striping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize, &isaging);
+        if (isaging) {
+          break;
+        }
+        result = 0;
+        break;  
+      } 
+      /*
+      ** Regular file
+      */       
+      if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) != 0) {
+        /*
+        ** is aging
+        */
+        break;
+      }  
+      result = 0;
+      break;
+      
+    /*
+    ** Must not be an aging file
+    */
+    case rozofs_scan_keyw_criteria_is_not_aging:
+      /*
+      ** Case of the directory
+      */
+      if (S_ISDIR(inode_p->s.attrs.mode)) {
+        get_directory_striping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize, &isaging);
+        if (isaging) {
+          result = 0;
+          break;
+        }
+        break;  
+      } 
+      /*
+      ** Regular file
+      */
+      if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) == 0) {
+        /*
+        ** no aging 
+        */
+        break;
+      }  
+      result = 0;
+      break;
+
 
    
    default:
@@ -2128,6 +2309,8 @@ int rozofs_scan_validate_one_criteria_directory(
     case rozofs_scan_keyw_criteria_priv_other_not_r: 
     case rozofs_scan_keyw_criteria_is_hybrid:
     case rozofs_scan_keyw_criteria_is_not_hybrid:
+    case rozofs_scan_keyw_criteria_is_aging:
+    case rozofs_scan_keyw_criteria_is_not_aging:
       return 1;
       break;
       
@@ -2181,6 +2364,8 @@ int rozofs_scan_validate_one_criteria_regular(
     case rozofs_scan_keyw_criteria_priv_other_not_r: 
     case rozofs_scan_keyw_criteria_is_hybrid:
     case rozofs_scan_keyw_criteria_is_not_hybrid:
+    case rozofs_scan_keyw_criteria_is_aging:
+    case rozofs_scan_keyw_criteria_is_not_aging:
       return 1;
       break;
    
@@ -3773,77 +3958,6 @@ void rozofs_scan_simplify_tree(rozofs_scan_node_t * node) {
 } 
 /*
 **_______________________________________________________________________
-*/
-/**
-*   Return stripping information for a directory
-
-   @param inode_p         pointer to the inode of the directory
-   @param ishybrid        whether the directory is hybrid
-   @param hybridSize      The size of the hybrid chunk
-   @param slaveNb         Number of slave inodes
-   @param slaveSize       The size of a slave strip
-      
-   @retval 0 no match
-   @retval 1 match
-*/
-void get_directory_stripping_info(ext_mattr_t  * inode_p,
-                                  int          * ishybrid,  
-                                  uint32_t     * hybridSize,
-                                  uint32_t     * slaveNb,
-                                  uint32_t     * slaveSize) {
-                               
-  /*
-  ** The directory has its own configuration
-  */                                
-  if (inode_p->s.multi_desc.byte != 0) {
-
-    /*
-    ** Number of slave and strip size is configured
-    */
-    if (inode_p->s.multi_desc.master.striping_factor == 0) {
-      *slaveNb    = 0; 
-      *slaveSize  = 0; 
-    }    
-    else {
-      *slaveNb    = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
-      *slaveSize  = rozofs_get_striping_size(&inode_p->s.multi_desc); 
-    }
-    
-    /*
-    ** Not hybrid
-    */
-    if (inode_p->s.hybrid_desc.s.no_hybrid != 0) {
-      *ishybrid   = 0;
-      *hybridSize = 0;
-      return;  
-    }    
-    
-    /*
-    ** Hybrid mode
-    */
-    *ishybrid   = 1;      
-    *hybridSize = rozofs_get_hybrid_size(&inode_p->s.multi_desc,&inode_p->s.hybrid_desc);
-    return;
-  }
-  
-  /*
-  ** nothing defined at directory level so get the information from the export conf
-  */   
-  *slaveNb   = export_config->stripping.factor+1;
-  *slaveSize =  ROZOFS_STRIPING_UNIT_BASE << export_config->stripping.unit;
-    
-  if (export_config->vid_fast == -1) {
-    *ishybrid   = 0;
-    *hybridSize = 0;
-  }
-  else {  
-    *ishybrid   = 1;
-    *hybridSize = *slaveSize;
-  }
-  return;
-}  
-/*
-**_______________________________________________________________________
 **
 **  Decode acl xattribute
 **
@@ -3932,6 +4046,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   export_t   * e = exportd;
   ext_mattr_t *slave_p;;
   int          ishybrid;
+  int          isaging;
   uint32_t     hybridSize;
   uint32_t     slaveNb = -1;
   uint32_t     slaveSize;
@@ -3939,7 +4054,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 
   nb_scanned_entries++;
  
-  /*
+  /*f
   ** Only process REG, DIR and SLINK
   */
   if ((!S_ISREG(inode_p->s.attrs.mode))
@@ -4201,7 +4316,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
 
     IF_DISPLAY(display_striping) {
       
-      get_directory_stripping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize);
+      get_directory_striping_info(inode_p, &ishybrid, &hybridSize, &slaveNb, &slaveSize, &isaging);
       
       NEW_FIELD(hybdrid); 
       if (ishybrid) {
@@ -4212,6 +4327,14 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       else {
         pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
       }
+      NEW_FIELD(aging); 
+      if (isaging) {
+        pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
+      }
+      else {
+        pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
+      }
+      
       NEW_FIELD(slaves); 
       pDisplay += rozofs_u32_append(pDisplay,slaveNb);   
       NEW_FIELD(stripe_size);       
@@ -4256,6 +4379,13 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
           pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
           NEW_FIELD(hybdrid_size); 
           pDisplay += rozofs_u64_append(pDisplay,rozofs_get_hybrid_size(&inode_p->s.multi_desc,&inode_p->s.hybrid_desc));
+        }
+        else {
+          pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
+        }
+        NEW_FIELD(aging); 
+        if (inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+          pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
         }
         else {
           pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
@@ -5356,11 +5486,13 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
      
     /*
     ** field:    atime          old[--hatime] old[--satime] old[--atime]
+    ** criteria: aging          
     ** operator: and
     */  
     case 'a' : 
       rozofs_scan_check_against("and",rozofs_scan_keyw_operator_and);
       rozofs_scan_check_against("atime",rozofs_scan_keyw_field_atime);  
+      rozofs_scan_check_against("aging",rozofs_scan_keyw_criteria_is_aging);  
       return rozofs_scan_keyw_input_error;
       break;
 
@@ -5488,6 +5620,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
     ** criteria:  noxattr            old[-X,--noxattr]
     ** criteria:  notrash            old[-T,--notrash]
     ** criteria:  nohybrid           old[--nohybrid]
+    ** criteria:  noaging            
     */
     case 'n' :
       if (argLen == 1) return rozofs_scan_keyw_field_fname; 
@@ -5495,6 +5628,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       rozofs_scan_check_against("noxattr",rozofs_scan_keyw_criteria_has_no_xattr);
       rozofs_scan_check_against("notrash",rozofs_scan_keyw_criteria_not_in_trash);
       rozofs_scan_check_against("nohybrid",rozofs_scan_keyw_criteria_is_not_hybrid);
+      rozofs_scan_check_against("noaging",rozofs_scan_keyw_criteria_is_not_aging);  
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_field_fname);;
       break;
 
