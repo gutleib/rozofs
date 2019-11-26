@@ -46,6 +46,9 @@ char *  rozo_scan_xattr_table[ROZO_SCAN_MAX_XATTR];
 lv2_entry_t      xattr_lv2;
 struct dentry    xattr_entry;
 
+fid_t            this_fid = {0};
+int              just_this_fid = 0;
+
 
 /*____________________________________________________________
 ** Global variables for argument populated while parsing command
@@ -133,6 +136,7 @@ typedef enum _rozofs_scan_keyw_e {
   
   rozofs_scan_keyw_field_min,  
   
+  rozofs_scan_keyw_field_fid,
   rozofs_scan_keyw_field_pfid,
   rozofs_scan_keyw_field_fname,
   rozofs_scan_keyw_field_cr8time,
@@ -227,6 +231,7 @@ typedef enum _rozofs_scan_scope_e {
   rozofs_scan_scope_directory,
   rozofs_scan_scope_junk_file
 } rozofs_scan_scope_e;
+#include "rozofs_scan_scope_e2String.h"
 /*
 ** Default scan scope is regular file
 */
@@ -600,8 +605,10 @@ static void usage(char * fmt, ...) {
   }
 
   printf("\n"ROZOFS_COLOR_BOLD"RozoFS File system scanning utility - %s"ROZOFS_COLOR_NONE"\n", VERSION);
-  printf("This RozoFS utility scans for files or (exclusive) directories matching several conditions in a RozoFS file system.\nIt by-passes the POSIX interface, and directly accesses the meta-data.\n");
-  printf("\n\033[1m\033[4mUSAGE:\033[0m\033[1m\trozo_scan [SCOPE] [FILESYSTEM] [OPTIONS] [CONDITION] [OUTPUT]\033[0m\n\n");
+  printf("This RozoFS utility displays some attributes of one file/directory known by its FID,\nor scans for files or (exclusive) directories matching several conditions in a RozoFS file system.\nIt by-passes the POSIX interface, and directly accesses the meta-data.\n");
+  printf("\n\033[1m\033[4mUSAGE:\033[0m\033[1m\trozo_scan fid=<FID> [OUTPUT]\n");
+  printf("\tor\n");
+  printf("\trozo_scan [SCOPE] [FILESYSTEM] [OPTIONS] [CONDITION] [OUTPUT]\033[0m\n\n");
   printf("\033[1m\033[4mSCOPE:\033[0m\033[1m\t{dir|slink|junk}\033[0m\n");
   printf("\tWhen SCOPE is omitted only the regular files are scanned.\n");
   printf("\t\033[1md, dir\033[0m\t\tScan directories only.\n");
@@ -724,6 +731,8 @@ static void usage(char * fmt, ...) {
   
   if (fmt == NULL) {
     printf("\n\033[4mExamples:\033[0m\n");
+    printf("Display every attributes of file with FID 00000000-0000-4000-1800-000000000310.\n");
+    printf("  \033[1mrozo_scan fid=00000000-0000-4000-1800-000000000310 out json,all,xattr\033[0m\n");
     printf("Searching for files having extended attributes with a size comprised between 76000 and 76100 or equal to 78M .\n");
     printf("  \033[1mrozo_scan [xattr and [[size\\>=76k and size\\<=76100] or size=78M]] out size,xattr\033[0m\n");
     printf("Searching for files having system extended attributes.\n");
@@ -4051,10 +4060,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   uint32_t     slaveNb = -1;
   uint32_t     slaveSize;
   char         fidString[40];      
-
+  int          result=0;
+  
   nb_scanned_entries++;
  
-  /*f
+  /*
   ** Only process REG, DIR and SLINK
   */
   if ((!S_ISREG(inode_p->s.attrs.mode))
@@ -4067,6 +4077,9 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   ** Check for symbolic link scope
   */
   if (S_ISLNK(inode_p->s.attrs.mode)) {
+    if (just_this_fid) {
+      rozofs_scan_scope = rozofs_scan_scope_symbolic_link;
+    }
     if (rozofs_scan_scope != rozofs_scan_scope_symbolic_link) {
       return 0;
     }  
@@ -4086,7 +4099,15 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
      
   rozofs_fid_append(fidString,inode_p->s.attrs.fid);
   VVERBOSE("\nVISIT: %s\n",fidString);
-  int result = rozofs_scan_eval_node (e, inode_attr_p, upNode);
+  if (just_this_fid) {
+    rozofs_inode_t * inode1 = (rozofs_inode_t *) this_fid;
+    rozofs_inode_t * inode2 = (rozofs_inode_t *) inode_p->s.attrs.fid;
+
+    result = 1;
+  }
+  else {
+    result = rozofs_scan_eval_node (e, inode_attr_p, upNode);
+  }  
   VVERBOSE("VISIT: %s %s\n",fidString, result?"OK":"Failed");
   if (!result) return 0;
    
@@ -4577,7 +4598,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   
   printf("%s",display_buffer);
   
-  if (nb_matched_entries >= max_display) {
+  if ((just_this_fid) || (nb_matched_entries >= max_display)) {
     rozo_lib_stop_var = 1;
   }    
   return 1;
@@ -5539,7 +5560,8 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_argument_eid);
       break;
 
-    case 'f' : 
+    case 'f' :
+      rozofs_scan_check_against("fid",rozofs_scan_keyw_field_fid);     
       return rozofs_scan_keyw_input_error;
 
     /*
@@ -6112,6 +6134,13 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
     }  
      
     if ((name > rozofs_scan_keyw_criteria_min) && (name < rozofs_scan_keyw_criteria_max)) {
+      /*
+      ** No criteria must be set when only one FID is requested
+      */
+      if (just_this_fid) {
+        rozofs_show_error("No criteria expected after \"fid\" field comparator.");              
+      }
+
       newNode = rozofs_scan_new_criteria(name);
       oldNode = rozofs_scan_add_node(oldNode,newNode);
       continue;
@@ -6121,6 +6150,13 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
       min_sid = 0;
       max_sid = LONG_VALUE_UNDEF;
 
+      /*
+      ** No field comparator must be set when only one FID is requested
+      */
+      if (just_this_fid) {
+        rozofs_show_error("No field comparator expected after \"fid\" field comparator.");              
+      }
+             
       /*
       ** Field comparison requires a comparator...
       */
@@ -6156,6 +6192,22 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
       }     
        
       switch(name) {
+
+        case rozofs_scan_keyw_field_fid:
+          if (comp!=rozofs_scan_keyw_comparator_eq) {
+            rozofs_show_error("%s expects only comparator eq but got %s instead",rozofs_scan_keyw_e2String (name), rozofs_scan_keyw_e2String(comp));                  
+          }
+          if (rozofs_scan_parse_fid(pArg,this_fid)!=0) {
+            rozofs_show_error("%s expects a fid value but got %s",rozofs_scan_keyw_e2String (name), pArg);                  
+          }  
+          if (verbose){
+            char  fidString[40];
+            rozofs_fid_append(fidString,this_fid);
+            printf("%s ", fidString);
+          }
+          just_this_fid = 1;
+          break;
+          
       
         case rozofs_scan_keyw_field_pfid:
           if (comp!=rozofs_scan_keyw_comparator_eq) {
@@ -6351,6 +6403,12 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
       */
       case rozofs_scan_keyw_separator_open:
         /*
+        ** No brackets must be set when only one FID is requested
+        */
+        if (just_this_fid) {
+          rozofs_show_error("No bracket expected after \"fid\" field comparator.");              
+        }
+        /*
         ** Push old node in the stack
         */
         if (rozofs_scan_push_node(oldNode)<0) {
@@ -6370,6 +6428,12 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
       ** Close bracket
       */
       case rozofs_scan_keyw_separator_close: 
+        /*
+        ** No brackets must be set when only one FID is requested
+        */
+        if (just_this_fid) {
+          rozofs_show_error("No bracket expected after \"fid\" field comparator.");              
+        }
         VERBOSE("(%d)",deep);        
         if (deep==0) {
           rozofs_show_error("unbalanced parantheses");                
@@ -6385,6 +6449,12 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
         break;
         
       case rozofs_scan_keyw_operator_or:
+        /*
+        ** No or must be set when only one FID is requested
+        */
+        if (just_this_fid) {
+          rozofs_show_error("No \"or\" expected after \"fid\" field comparator.");              
+        }
         if (oldNode) {
           rozofs_scan_set_ope_or(oldNode);
         }  
@@ -6394,6 +6464,12 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
         break;
         
       case rozofs_scan_keyw_operator_and:
+        /*
+        ** No and must be set when only one FID is requested
+        */
+        if (just_this_fid) {
+          rozofs_show_error("No \"and\" expected after \"fid\" field comparator.");              
+        }
         if (oldNode) {
           rozofs_scan_set_ope_and(oldNode);
         }  
@@ -6546,7 +6622,8 @@ int main(int argc, char *argv[]) {
   long long             usecs;
   struct timeval        start;
   struct timeval        stop;
-
+  rozofs_inode_t      * fake_inode_p;
+  
   rozofs_layout_initialize();       
 
   /*
@@ -6559,6 +6636,14 @@ int main(int argc, char *argv[]) {
   ** and build a tree of the conditions the files/directories have to fullfill.
   */
   rozofs_scan_parse_command(argc,argv); 
+  
+  /*
+  ** Case only one FID is requested
+  */
+   if (just_this_fid) {
+    fake_inode_p = (rozofs_inode_t *) this_fid;
+    eid = fake_inode_p->s.eid;
+  }
   
   /*
   ** Search for the given eid in configuration file
@@ -6619,7 +6704,30 @@ int main(int argc, char *argv[]) {
   /*
   ** Depending on the scope of the scan
   */
-  switch (rozofs_scan_scope) {
+  if (just_this_fid) {
+    scan_index_context_t   index;
+
+    index.file_id   = fake_inode_p->s.file_id;
+    index.user_id   = fake_inode_p->s.usr_id;
+    index.inode_idx = fake_inode_p->s.idx;
+    
+    switch(fake_inode_p->s.key) {
+      case ROZOFS_REG_S_MOVER:
+      case ROZOFS_REG_D_MOVER:
+      case ROZOFS_REG:   
+        rozofs_scan_scope = rozofs_scan_scope_regular_file;
+        rz_scan_all_inodes_from_context(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,NULL,NULL,&index);
+        break;
+      case ROZOFS_DIR: 
+        rozofs_scan_scope = rozofs_scan_scope_directory;
+        rz_scan_all_inodes_from_context(rozofs_export_p,ROZOFS_DIR,1,rozofs_visit,NULL,NULL,NULL,&index);
+        break;
+    default:
+      usage("Bad FID value");
+    }            
+  }
+  
+  else switch (rozofs_scan_scope) {
   
     case rozofs_scan_scope_directory:  
       /*
@@ -6689,6 +6797,7 @@ int main(int argc, char *argv[]) {
 
   if (display_json) {
     printf("\n  ],\n");
+    printf("  \"scope\"            : \"%s\",\n", rozofs_scan_scope_e2String(rozofs_scan_scope));
     printf("  \"scanned entries\"  : %llu,\n", (long long unsigned int)nb_scanned_entries);
     printf("  \"in scope\"         : %llu,\n", (long long unsigned int)nb_scanned_entries_in_scope);
     printf("  \"matched entries\"  : %llu,\n", (long long unsigned int)nb_matched_entries);

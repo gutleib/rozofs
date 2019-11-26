@@ -54,6 +54,7 @@ eid=""
 parameters=''
 help_requested="NO"
 verbose=""
+fidMode="NO"
 
 #
 # Need to be root
@@ -78,6 +79,14 @@ do
   then
     set -x
     continue
+  fi
+  
+  #___________
+  # FID mode
+  #
+  if [ ${ThisParameter} == "fid" -o -z "${ThisParameter##fid=*}" ]
+  then
+    fidMode="YES"
   fi
 
   #_______________________________
@@ -212,7 +221,7 @@ else
   #
   # This is not a RozoFS mountpoint and eid is missing
   #
-  if [ "${eid}" == "" -a "${help_requested}" == "NO" ];
+  if [ "${fidMode}" != "YES" -a "${eid}" == "" -a "${help_requested}" == "NO" ];
   then
     echo ""
     echo "\"${PWD}\" is not a RozoFS mountpoint,"
