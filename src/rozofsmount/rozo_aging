@@ -19,8 +19,6 @@
 #
 # This script is used to moved old files of a hybrig/tiering export 
 # from the fast volume toward the slow volume
-MOVECMD="rozo_vmove"
-#MOVECMD="/home/jean-pierre/rozoClients/mfile/tests/build/src/exportd/rozo_vmove"
 
 #
 # USAGE
@@ -33,9 +31,10 @@ usage() {
   echo "rozo_aging - RozoFS utility to move the old files from the fast volume"
   echo "             toward the slow volume when in aging tiering mode."
   echo " "
-  echo "usage: rozo_aging --age <#hours> <mountpoint>"
-  echo "  -a, --age <#hours>  Move all files that have not been mdified within the last <#hours>."  
-  echo "  <mountpoint>        This is a RozoFS mountpoint on which to move the aging files."
+  echo "usage: rozo_aging [--throughput <MB/s>] --age <#hours> <mountpoint>"
+  echo "  -a, --age <#hours>       Move all files that have not been mdified within the last <#hours>."  
+  echo "  -t, --throughput <MB/s>  Optional throughput limitation."  
+  echo "  <mountpoint>             This is a RozoFS mountpoint on which to move the aging files."
   exit 1
 }
 #
@@ -44,8 +43,10 @@ usage() {
 eid=""
 local="NO"
 path=""
+throughput=""
 hours=""
 path=${PWD}
+TEST="No"
 while [ ! -z $1 ]
 do
   
@@ -69,6 +70,32 @@ do
   if [ "$1" == "--help" ]
   then
     usage
+  fi
+
+  #
+  # local mode : use local host name as active export
+  #  
+  if [ "$1" == "--TEST" ]  || [ "$1" == "-T" ]
+  then
+    TEST="YES"
+    shift 1
+    continue
+  fi
+
+  #
+  # local mode : use local host name as active export
+  #  
+  if [ "$1" == "--throughput" ]  || [ "$1" == "-t" ]
+  then
+    if [[ "$2" =~ ^[0-9]+$ ]]
+    then
+      throughput="--throughput $2"
+      shift 2
+    else
+      echo "Bad --throughput value"
+      exit 1
+    fi  
+    continue
   fi
     
   #
@@ -108,6 +135,14 @@ do
   continue 
   
 done
+
+if [ $TEST == "YES" ];
+then
+  MOVECMD="${ROOT_ROZO}/tests/build/src/exportd/rozo_vmove"  
+else
+  MOVECMD="rozo_vmove"
+fi
+
 
 if [[ ${hours} == "" ]]
 then
@@ -161,11 +196,11 @@ then
   #
   # Curent node is the active export 
   #
-  ${MOVECMD} --eid ${eid} --mount ${path} --slow --modified ${hours} 
+  ${MOVECMD} --eid ${eid} --mount ${path} ${throughput} --slow --modified ${hours} 
 else
   #
   # Forward the command to the active axport
   #
-  ssh ${active} "${MOVECMD} --eid ${eid} --mount ${path} --slow --modified ${hours}"
+  ssh ${active} "${MOVECMD} --eid ${eid} --mount ${path} ${throughput} --slow --modified ${hours}"
 fi
 exit $?
