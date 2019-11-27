@@ -4499,15 +4499,39 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       pDisplay += rozofs_u64_append(pDisplay,inode_p->s.hpc_reserved.reg.share_id);
     }    
     IF_DISPLAY((display_distrib)&&(inode_p->s.i_link_name)) {
-       rozofs_inode_t slinkFid;
-       fid_t          fid;
-       slinkFid.fid[1] = inode_p->s.i_link_name;
-       slinkFid.fid[0] = 0;
-       memcpy(fid,&slinkFid.fid[0],sizeof(fid_t));
-       NEW_QUOTED_FIELD(lfid);  
-       pDisplay += rozofs_fid_append(pDisplay,inode_p->s.attrs.fid);
-       pDisplay += rozofs_string_append(pDisplay,"\"");   
-    }
+      rozofs_inode_t * inode_fid = (rozofs_inode_t*) inode_p->s.attrs.fid;
+      rozofs_inode_t slinkFid;
+      fid_t          fid;
+      slinkFid.fid[1] = inode_p->s.i_link_name;
+      slinkFid.fid[0] = 0;
+      slinkFid.s.eid  = inode_fid->s.eid;
+      memcpy(fid,&slinkFid.fid[0],sizeof(fid_t));
+      NEW_QUOTED_FIELD(lfid);  
+      pDisplay += rozofs_fid_append(pDisplay,fid);
+      pDisplay += rozofs_string_append(pDisplay,"\""); 
+      NEW_QUOTED_FIELD(slc/file/idx);
+      pDisplay += rozofs_u32_append(pDisplay,slinkFid.s.usr_id);
+      *pDisplay++ = '/';
+      pDisplay += rozofs_u32_append(pDisplay,slinkFid.s.file_id);
+      *pDisplay++ = '/';
+      pDisplay += rozofs_u32_append(pDisplay,slinkFid.s.idx);
+      pDisplay += rozofs_string_append(pDisplay,"\"");                
+      NEW_QUOTED_FIELD(lname); 
+      if (slinkFid.s.key != ROZOFS_SLNK) {  
+        pDisplay += rozofs_string_append(pDisplay,"NOT A SLINK FID\"");  
+      }
+      else {
+        char link[ROZOFS_PATH_MAX+2];
+        if (exp_metadata_read_attributes(e->trk_tb_p->tracking_table[ROZOFS_SLNK],&slinkFid,link,inode_p->s.attrs.size)<0){
+          pDisplay += rozofs_string_append(pDisplay,"NOT SUCH FID\"");  
+        }
+        else {        
+          link[inode_p->s.attrs.size] = '"'; 
+          link[inode_p->s.attrs.size+1] = 0; 
+          pDisplay += rozofs_string_append(pDisplay,link);  
+        }
+      }
+    }   
   } 
   
   IF_DISPLAY(display_cr8) {
