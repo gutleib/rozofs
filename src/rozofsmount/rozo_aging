@@ -46,7 +46,6 @@ path=""
 throughput=""
 hours=""
 path=${PWD}
-TEST="No"
 while [ ! -z $1 ]
 do
   
@@ -73,17 +72,7 @@ do
   fi
 
   #
-  # local mode : use local host name as active export
-  #  
-  if [ "$1" == "--TEST" ]  || [ "$1" == "-T" ]
-  then
-    TEST="YES"
-    shift 1
-    continue
-  fi
-
-  #
-  # local mode : use local host name as active export
+  # Optional throughput limitation
   #  
   if [ "$1" == "--throughput" ]  || [ "$1" == "-t" ]
   then
@@ -136,11 +125,21 @@ do
   
 done
 
-if [ $TEST == "YES" ];
+#
+# Test environment ?
+#
+if [ "${ROOT_ROZO}" == "" ];
 then
-  MOVECMD="${ROOT_ROZO}/tests/build/src/exportd/rozo_vmove"  
-else
   MOVECMD="rozo_vmove"
+  DIAG="rozodiag"
+  which ${DIAG} >> /dev/null
+  if [ $? -ne 0 ];
+  then 
+    usage "${DIAG} not found !!!"
+  fi
+else
+  MOVECMD="${ROOT_ROZO}/tests/build/src/exportd/rozo_vmove"  
+  DIAG="${ROOT_ROZO}/tests/build/src/rozodiag/rozodiag"
 fi
 
 
@@ -173,7 +172,7 @@ then
 else
   for active in `echo $exports | tr \/ ' '`
   do
-    rozodiag -i ${active} -T export:0 -c up | grep uptime >> /dev/null
+    ${DIAG} -i ${active} -T export:0 -c up | grep uptime >> /dev/null
     case "$?" in
       "0") break;;
       *)   active="";;

@@ -163,7 +163,7 @@ def get_device_numbers(hid,cid):
 
   storio_name="storio:0"
   
-  string="rozodiag -i localhost%s -T storaged -c storio"%(hid)
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T storaged -c storio"%(hid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -172,7 +172,7 @@ def get_device_numbers(hid,cid):
         storio_name="storio:%s"%(cid)
       break; 
      
-  string="rozodiag -i localhost%s -T %s -c device 1> /dev/null"%(hid,storio_name)
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T %s -c device 1> /dev/null"%(hid,storio_name)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -206,7 +206,7 @@ def get_sid_nb():
   global vid
   global vid_fast
   
-  string="rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -215,7 +215,7 @@ def get_sid_nb():
     if "UP" in line or "DOWN" in line:
       storcli_sid=storcli_sid+1
           
-  string="rozodiag -T export -c vfstat_stor"
+  string="./build/src/rozodiag/rozodiag -T export -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -233,7 +233,7 @@ def reset_storcli_counter():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   
@@ -246,7 +246,7 @@ def check_storcli_crc(expect):
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="rozodiag -T mount:%s:1-4 -c profiler"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1-4 -c profiler"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -267,7 +267,7 @@ def export_count_sid_up ():
   global vid
   global vid_fast
   
-  string="rozodiag -T export:1 -t 12 -c vfstat_stor"
+  string="./build/src/rozodiag/rozodiag -T export:1 -t 12 -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -289,7 +289,7 @@ def export_all_sid_available (total):
   global vid
   global vid_fast
   
-  string="rozodiag -T export:1 -t 12 -c vfstat_stor"
+  string="./build/src/rozodiag/rozodiag -T export:1 -t 12 -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -330,7 +330,7 @@ def storcli_all_sid_available (total):
 # Use debug interface to check all SID are seen UP
 #___________________________________________________
   
-  string="rozodiag -T mount:%s -c stc"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s -c stc"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   
@@ -344,7 +344,7 @@ def storcli_all_sid_available (total):
   nbstorcli = nbstorcli + 1
   for storcli in range(1,nbstorcli):
   
-    string="rozodiag -T mount:%s:%d -c storaged_status"%(instance,storcli)       
+    string="./build/src/rozodiag/rozodiag -T mount:%s:%d -c storaged_status"%(instance,storcli)       
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -385,7 +385,7 @@ def storcli_count_sid_available ():
 # available seen from the storcli. 
 #___________________________________________________
 
-  string="rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c storaged_status"%(instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -1782,7 +1782,7 @@ def resize():
 #___________________________________________________   
 def crash_process(process,main):
 
-  string="rozodiag %s -c ps"%(process)
+  string="./build/src/rozodiag/rozodiag %s -c ps"%(process)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   pid="?"
@@ -1805,7 +1805,7 @@ def check_core_process(process,cores):
 
   time.sleep(8)
   
-  string="rozodiag %s -c core"%(process)
+  string="./build/src/rozodiag/rozodiag %s -c core"%(process)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   nb=0
@@ -2115,7 +2115,7 @@ def rebuild_1dev() :
 def get_device_state(hid, cid, sid, dev) :
 
   # Check The status of the device
-  string="rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   curcid=0
@@ -2173,7 +2173,7 @@ def loop_on_waiting_device_status(hid, cid, sid, dev, expected_status) :
 def selfhealing_spare(hid, cid, sid, dev) :
 
   # Check wether automount is configured
-  string="rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode spareOnly"%(hid,cid)
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode spareOnly"%(hid,cid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -2190,7 +2190,7 @@ def selfhealing_resecure(hid, cid, sid, dev) :
   log("Wait resecure host %s cid %s sid %s device %s"%(hid,cid,sid,dev))	          
   
   # Check wether automount is configured
-  string="rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode resecure"%(hid,cid)
+  string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode resecure"%(hid,cid)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 

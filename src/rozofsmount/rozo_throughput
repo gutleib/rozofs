@@ -126,7 +126,7 @@ def common_bytes_with_unit(inBytes):
 #______________________________
 def is_this_export_active(export):
 
-  string="rozodiag -i %s -T export:1 -c up"%(export)
+  string="%s -i %s -T export:1 -c up"%(DIAG,export)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -208,7 +208,7 @@ def get_client_list(active_export,eid):
   count = int(0) 
   idx = int(eid) % 8
   clients=""
-  string="rozodiag -i %s -T export:%s -c client"%(active_export,idx)
+  string="%s -i %s -T export:%s -c client"%(DIAG,active_export,idx)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
@@ -222,7 +222,7 @@ def get_client_list(active_export,eid):
     ip = words[4].split(':')[0]
     if check_netmwork_filters(ip) == False: continue
     port = words[4].split(':')[1]
-    string="rozodiag -i %s -p %s -c mount"%(ip,port)
+    string="%s -i %s -p %s -c mount"%(DIAG,ip,port)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
@@ -282,6 +282,16 @@ def syntax(string=None):
   print "  rozo_throughput -p 10 /mnt/rfs /mnt/private" 
   print 
   sys.exit(-1)
+#__________________________________________________
+# Find whether a program is defined
+#
+def which(pgm):
+  path=os.getenv('PATH')
+  for p in path.split(os.path.pathsep):
+    p=os.path.join(p,pgm)
+    if os.path.exists(p) and os.access(p,os.X_OK):
+      return pgm   
+  syntax("utility %s not found"%(pgm))  
 #______________________________________    
 
 RED='\033[91m\033[40m'
@@ -320,6 +330,15 @@ if options.period != None:
     period = int(options.period)
   except:
     syntax( "Bad period value %s"%(options.period))
+
+#
+# Test environment ?
+#
+ROZO_PATH = os.getenv("ROOT_ROZO")
+if ROZO_PATH != None:
+  DIAG   = ROZO_PATH + "/tests/build/src/rozodiag/rozodiag"
+else:
+  DIAG   = which("rozodiag")
 
 natural_time_order = True
 if options.natural == True:
@@ -471,7 +490,7 @@ while True :
     #
     # Run the rozodiag command against all cliets
     #
-    string="rozodiag %s -c throughput col 6 avg "%(clients)
+    string="%s %s -c throughput col 6 avg "%(DIAG,clients)
     string += history
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

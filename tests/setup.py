@@ -124,11 +124,11 @@ class host_class:
   def start(self):
     if self.admin == False: return
     self.add_if() 
-    os.system("rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s&"%(self.number,self.get_config_name()))
+    os.system("./build/src/launcher/rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s&"%(self.number,self.get_config_name()))
 #    os.system("valgrind storaged -c %s&"%(self.get_config_name()))
 
   def stop(self):
-    os.system("rozolauncher stop /var/run/launcher_storaged_%s.pid storaged"%(self.number))
+    os.system("./build/src/launcher/rozolauncher stop /var/run/launcher_storaged_%s.pid storaged"%(self.number))
 
   def del_if(self,nb=None):
     # Delete one interface
@@ -173,7 +173,7 @@ class host_class:
     print "); "
        
   def process(self,opt):
-    string="ps -fC rozolauncher"
+    string="ps -fC %s/build/src/launcher/rozolauncher"%(os.getcwd())
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
@@ -515,7 +515,7 @@ class mount_point_class:
 	    list.append(h)
 	    string += " %s"%(h.number)	    
         if self.eid.vid_fast != None:
-          if s.cid.volume.vid == self.eid.vid_fast:
+          if s.cid.volume.vid == self.eid.vid_fast.vid:
             if not h in list:
 	      list.append(h)
 	      string += " %s"%(h.number)	                 	
@@ -524,10 +524,10 @@ class mount_point_class:
     string=""
     for h in hosts:
       for s in h.sid:
-        if s.cid.volume.vid == self.eid.volume.vid:
-	  string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
+        if int(s.cid.volume.vid) == int(self.eid.volume.vid):
+	  string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)             
         if self.eid.vid_fast != None:
-          if s.cid.volume.vid == self.eid.vid_fast:
+          if s.cid.volume.vid == self.eid.vid_fast.vid:
 	    string += " %s-%s-%s"%(h.number,s.cid.cid,s.sid)   
 
     print "sids = %s"%(string)	    
@@ -1464,7 +1464,7 @@ class rozofs_class:
     exportd.stop() 
     
 #    time.sleep(1)
-#    os.system("killall rozolauncher 2>/dev/null")
+#    os.system("killall ./build/src/launcher/rozolauncher 2>/dev/null")
 #    self.delete_config()
 
   def stop(self):
@@ -1474,7 +1474,7 @@ class rozofs_class:
     self.delete_path()
 
   def ddd(self,target):
-    string="rozodiag %s -c ps"%(target)
+    string="./build/src/rozodiag/rozodiag %s -c ps"%(target)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     prog = None
@@ -1785,7 +1785,7 @@ def diag(argv) :
   if len(argv) < 3 : syntax("Missing target","diag")
   if len(argv) < 4 : syntax("Missing diag command","diag")
 
-  rzcmd="rozodiag"
+  rzcmd="./build/src/rozodiag/rozodiag"
 
   if argv[2] == "mount":    
     for m in mount_points: 
