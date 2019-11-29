@@ -16,7 +16,6 @@ clusters = []
 #____________________________________
 class cluster:
   def __init__(self, cid): 
-    if len(clusters) == 0 and cid != 0: cluster(0) 
     self.cid = cid
     self.nbFiles = 0
     self.sidMax = 0
@@ -36,33 +35,24 @@ class cluster:
     return None
 	
   def add_file(self,dist):
-    c0 = cluster.get_cluster(0)
-    c0.nbFiles = c0.nbFiles + 1
     self.nbFiles = self.nbFiles + 1
     nb=int(0)
     for id in dist.split('-'):
       id=int(id)
       if id > self.sidMax: self.sidMax = id
-      if id > c0.sidMax: c0.sidMax = id
       if nb<inv :  
         self.inverse[id] = self.inverse[id] +1
-        c0.inverse[id]   = c0.inverse[id] +1
       if nb<fwd :  
         self.forward[id] = self.forward[id] +1
-        c0.forward[id]   = c0.forward[id] +1		
       if nb>=fwd : 
         self.spare[id] = self.spare[id] +1
-        c0.spare[id]   = c0.spare[id] +1		
       nb=nb+1
 	  
   @staticmethod
   def display_cluster():  
     for c in  clusters: 	
       i = 1
-      if c.cid == 0:
-        print "\n  %s files in all clusters"%(c.nbFiles)	  
-      else:
-        print "\n  %s files in cluster %d"%(c.nbFiles,int(c.cid))
+      print "\n  %s files in cluster %d"%(c.nbFiles,int(c.cid))
       print "   ____ _______ _______ _______"
       print "  |SID |  Read | Write | Spare |"
       print "  |____|_______|_______|_______|"
@@ -106,21 +96,42 @@ elif layout == 2:
   fwd=12
   safe=16
   
-nbFiles=0  
+nbFiles    = int(0)
+nbSubFiles = int(0)
+  
 sidMax=int(0)
+
 for f in os.listdir(path):  
+
+  isFile  = False
+
   string="attr -g rozofs %s/%s"%(path,f)
-  nbFiles=nbFiles+1
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
   for line in cmd.stdout:
-    if "CLUSTER" in line: cid=line.split(':')[1]
+
+    if isFile == False:
+      try:
+        if line.split()[0] != "MODE": continue
+        if line.split()[2] != "REGULAR": break
+        isFile = True
+        nbFiles += int(1)
+        cid = int(0)
+      except: pass
+      continue
+        
+    if "CLUSTER" in line: 
+      cid = int(line.split(':')[1])
+      continue
+           
     if not "STORAGE" in line: continue
-    dist=line.split(':')[1]
-#    print "%2d: %s"%(i,dist)
+    if cid == int(0): continue           
+    
+    dist = line.split(':')[1]
     c = cluster.get_cluster(cid)
     c.add_file(dist)
-    break
+    nbSubFiles += int(1)
 
-print "%s files under %s"%(nbFiles,path)
+print "%s files / %s subfiles under %s"%(nbFiles,nbSubFiles,path)
 cluster.display_cluster()
