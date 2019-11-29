@@ -236,6 +236,12 @@ class adaptative_tbl:
     
   def new_line(self):    self.add_line(False)
   def new_center_line(self): self.add_line(True)
+
+  def new_title_line(self,title,effect=None): 
+    self.separator('|','|')
+    self.row.append( big_title(title,effect)) 
+    self.row_nb += 1
+    self.current_row = None
   
   def separator(self,extreme,separator):
     self.row.append(separator_line(extreme,separator,self.current_row)) 
@@ -243,6 +249,7 @@ class adaptative_tbl:
     self.current_row = None
             
   def end_separator(self): self.separator('|','|')	 
+  def title_separator(self): self.separator('|','_')	 
          
   def set_column(self,column,value,effect=None):
     self.current_row.set_column(column,value,effect)

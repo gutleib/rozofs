@@ -240,9 +240,9 @@ class adaptative_tbl:
   def new_line(self):    self.add_line(False)
   def new_center_line(self): self.add_line(True)
 
-  def new_title_line(self,title): 
+  def new_title_line(self,title,effect=None): 
     self.separator('|','|')
-    self.row.append( big_title(title)) 
+    self.row.append( big_title(title,effect)) 
     self.row_nb += 1
     self.current_row = None
   
@@ -310,59 +310,46 @@ class cluster:
       if nb>=fwd : 
         self.spare[id] = self.spare[id] +1
       nb=nb+1
-	  
-  @staticmethod
-  def display_cluster_old():  
-    for c in  sorted(clusters, key=lambda cluster: cluster.cid) : 	
-      i = 1
-      print "\n  %s files in cluster %d"%(c.nbFiles,int(c.cid))
-      print "   ____ _______ _______ _______"
-      print "  |SID |  Read | Write | Spare |"
-      print "  |____|_______|_______|_______|"
-      while i <= c.sidMax:
-        print "  | %2d | %5d | %5d | %5d |"%(i,c.inverse[i],c.forward[i],c.spare[i])
-        i=i+1
-      print "  |____|_______|_______|_______|"
       
   @staticmethod
   def display_cluster():  
     sc = sorted(clusters, key=lambda cluster: cluster.cid)
     d = adaptative_tbl(2,"DISTRIBUTION ON %s CLUSTERS"%(len(clusters)),cyan+bold)
     d.new_center_line()
-    d.set_column(1,"SIDs->")
+    d.set_column(1,"SID")
     for s in range(sidMax):
       sid = "%s"%(s+1)
       col = s + int(2)
       d.set_column(col,sid)
 
-    d.new_title_line("READ")
+    d.new_title_line("occurences within the 1rst %s in distribution(read)"%(inv),white)
     d.title_separator()
     
     for c in  sc: 	
       d.new_line()
-      d.set_column(1,"%s"%(c.cid))
+      d.set_column(1,"CID %s"%(c.cid))
       for s in range(sidMax):
         sid = (s+1)
         col = s + int(2)
         d.set_column(col,"%s"%(c.inverse[sid]))             
 
-    d.new_title_line("WRITE")
+    d.new_title_line("occurences within the next %s in distribution(write)"%(fwd-inv),white)
     d.title_separator()
 
     for c in  sc: 	
       d.new_line()
-      d.set_column(1,"%s"%(c.cid))
+      d.set_column(1,"CID %s"%(c.cid))
       for s in range(sidMax):
         sid = (s+1)
         col = s + int(2)
         d.set_column(col,"%s"%(c.forward[sid]))             
 
-    d.new_title_line("SPARE")
+    d.new_title_line("occurences within the last %s in distribution(spare)"%(safe-fwd),white)
     d.title_separator()
 
     for c in  sc: 	
       d.new_line()
-      d.set_column(1,"%s"%(c.cid))
+      d.set_column(1,"CID %s"%(c.cid))
       for s in range(sidMax):
         sid = (s+1)
         col = s + int(2)
