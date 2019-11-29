@@ -620,7 +620,38 @@ def cleanup_dicts():
   checksums.clear()
   blksizes.clear()
   projections.clear() 
+#_________________________
+# Display syntax and exit
+#
+def syntax(string=None):
 
+  if string != None:
+    print "\n" + red + bold + string + " !!!" + endeffect + "\n"
+    
+  print "Usage: " 
+  print "      "+ bold + "rozo_file_consistency -a [ -n <mount point> ] "+ endeffect
+  print "         To check consistency of every RozoFS file having experienced a write error under eid designated by -n, ."
+  print "         When -n is not set, local path is used.\n"
+  print "      "+ bold + "rozo_file_consistency -n <file> [-s <subfile>] [-b <bid>] [-e]"+ endeffect
+  print "         To check consistency of RozoFS file designated by -n."
+  print "         When -e is set all blocks are displayed, and not only those in error."
+  print "         -s <sub file> limits the examination to the given subfile."
+  print "         -b <bids> limits the examination to the given blocks. <bids> format is"
+  print "             <1rst>:<last> or :<last> or <first>: or <one bid>"
+  print ""
+  print "examples:"
+  print "  To check all file of an eid"
+  print "    cd /mnt/rfs; rozo_file_consitency -a"
+  print "    rozo_file_consitency -a -n  /mnt/rfs"
+  print "  To check one file"  
+  print "    rozo_file_consitency -n /mnt/rfs/project/badFile"
+  print "  To examine in details a portion of a file"    
+  print "    rozo_file_consitency -n /mnt/rfs/project/badFile -e -s 0 -b 1000:2000   (from block 1000 to 2000)"
+  print "    rozo_file_consitency -n /mnt/rfs/project/badFile -e -s 0 -b 156         (only block 156)"
+  print "    rozo_file_consitency -n /mnt/rfs/project/badFile -e -s 0 -b :20         (from block 0 to 20)"
+  print "    rozo_file_consitency -n /mnt/rfs/project/badFile -e -s 0 -b 1250:       (from block 1250 to the end)"
+  
+  sys.exit(-1)
 #_________________________
 # Process on subfile 
 #
@@ -687,9 +718,81 @@ def get_version(response):
   if count != int(0):
     return int(4), count
         
-  print "Unexpected rozo_locate_projections output format"
-  sys.exit(1)  
+  syntax("Unexpected rozo_locate_projections output format")
+#_________________________
+# Scan every file having experieced a write error
+#
+def inspect_all_write_errors():
 
+  count          = int(0)
+  mount_instance = None
+  eid            = None
+
+  #
+  # Get the eid to inspect from local path
+  # or given name using a get attribute API
+  if options.fname == None: 
+    name = os.getcwd()
+  else:
+    name = options.fname      
+  cmd = "attr -qg rozofs.export %s"%(name)        
+  parsed = shlex.split(cmd)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:    
+    try:
+      eid = int(line.split()[1])
+      mount_instance = int(line.split()[3])
+      break
+    except:
+      syntax ("\"%s\" is not a RozoFS path."%(name))
+  if mount_instance == None:
+    syntax ("\"%s\" is not a RozoFS path."%(name)) 
+
+  #
+  # Get the mount path from the rozofsmount via rozodiag
+  #  
+  path = None
+  cmd = "%s -T mount:%s -c mount"%(DIAG,mount_instance)
+  parsed = shlex.split(cmd)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:    
+    values = line.split()
+    if values[0] != "mount" : continue
+    path = values[2]
+    break
+    
+  if path == None:
+    syntax ("Can not get mount path \"%s\""%(cmd))
+
+  #
+  # Get lis of files having experienced a write error using rozo_scan
+  #
+  print "Scanning files under eid %s having experienced a write error."%(eid)
+  cmd = "%s e %s w"%(SCAN,eid)
+  parsed = shlex.split(cmd)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for f in cmd.stdout:  
+    os.system("rozo_file_consistency -n %s/%s"%(path,f)) 
+    count += int(1)
+    
+  if count == int(0):    
+    print "No file to process"
+  elif count == int(1): 
+    print "1 file found"
+  else:   
+    print "%s files found"%(count) 
+  sys.exit(0)    
+
+#__________________________________________________
+# Find whether a program is defined
+#
+def which(pgm):
+  path=os.getenv('PATH')
+  for p in path.split(os.path.pathsep):
+    p=os.path.join(p,pgm)
+    if os.path.exists(p) and os.access(p,os.X_OK):
+      return pgm   
+  syntax("utility %s not found"%(pgm))  
 #__________________________________________________
 # 
 # M A I N
@@ -701,24 +804,33 @@ parser.add_option("-b","--block", action="store",type="string", dest="block", he
 parser.add_option("-s","--slave", action="store",type="string", dest="slave", default=None,help="Slave file index")
 parser.add_option("-e","--error", action="store_false",default=True, dest="error_only", help="Do not only display errors.")
 parser.add_option("-d","--debug", action="store_true",default=False, dest="debug", help="Debug mode.")
-parser.add_option("-T","--TEST", action="store_true",default=False, dest="TEST", help="For simulation mode.")
+parser.add_option("-a","--all", action="store_true",default=False, dest="all", help="Inspect all files having experienced a write error.")
 (options, args) = parser.parse_args()
 
-if options.TEST == True:
-  PATH = os.getenv("ROOT_ROZO")
-  LOCATE = PATH + "/tests/build/src/rozofsmount/rozo_locate_projections"
-  DUMP   = PATH + "/tests/build/src/storaged/rozodump"
-else:
+#
+# Test environment ?
+#
+ROZO_PATH = os.getenv("ROOT_ROZO")
+if ROZO_PATH != None:
+  LOCATE = ROZO_PATH + "/tests/build/src/rozofsmount/rozo_locate_projections"
+  DUMP   = ROZO_PATH + "/tests/build/src/storaged/rozodump"
+  SCAN   = ROZO_PATH + "/src/rozofsmount/rozo_scan"
+  DIAG   = ROZO_PATH + "/tests/build/src/rozodiag/rozodiag"
+else:  
   LOCATE = "rozo_locate_projections"
   DUMP   = "rozodump"
+  DIAG   = which("rozodiag")
+  SCAN   = which("rozo_scan")
 
+if options.all == True:
+  inspect_all_write_errors()
+  
+    
 if options.fname == None:
-  print "Option -n, --name is mandatory"
-  sys.exit(1)
+  syntax("Either -a or -n option must be set.")
 
 if os.path.isfile(options.fname) == False:
-  print "File %s does not exist"%(options.fname)
-  sys.exit(1)
+  syntax( "\"%s\" is not a file"%(options.fname))
 
 if options.block == None:
   block_start = int(0)
@@ -738,8 +850,8 @@ else:
       block_start = int(options.block)
       block_stop  = block_start
     except:    
-      print "Invalid block option"
-      sys.exit(1)
+      syntax("Invalid block option")
+      
 response = get_json_command_result("%s -n \"%s\""%(LOCATE,options.fname),isColored=True,debug=options.debug)
 
 timestamps   = {}
