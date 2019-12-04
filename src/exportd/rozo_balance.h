@@ -64,6 +64,13 @@ typedef struct _rozo_balancing_ctx_t
   int throughput;                    /**< file throughput in MBytes/s */
   int file_mode;                     /**< either relative/absolute or fid node (see rebalance_file_mode_e) */
   /*
+  ** This indicator may be given on rebalancer command to tell that the nodes are unbalanced
+  ** They may not have the same number of SID and/or not the device size. So the first SID
+  ** of the distribution are allocated in size balancing also respecting collocation constraints.
+  ** The last unbalancedNodes SID are then chosen in size balancing forgetting prior collocation constraints.
+  */
+  int unbalancedNodes; /* 0, 1 or 2 */
+  /*
   ** statistics 
   */
   int eagain_volume;
