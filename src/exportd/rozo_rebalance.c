@@ -138,13 +138,6 @@ time_t rebalance_config_file_mtime = 0;
 
 
 /*
-** This indicator may be given on rebalancer command to tell that the nodes are unbalanced
-** They may not have the same number of SID and/or not the device size.
-** When this indicator is set and the number of nodes is 6, the 6th projection is put on the same
-** node as the 1rst one.
-*/
-static int unbalancedNodes = 0;
-/*
 **_______________________________________________________________________
 */
 /** Find out the export root path from its eid reading the configuration file
@@ -1504,8 +1497,8 @@ int rozo_rebalance_do_cluster_distribute_size_balancing(uint8_t layout,int site_
 		//info("selection done");
 		goto success;
       }	  
-      /* When unbalanced nodes, the last projection is taken to balance the nodes no matter if the same node is taken 2 times */
-      if ((unbalancedNodes) && (nb_selected==(rozofs_forward-1))){
+      /* When unbalanced nodes, the 1 or 2 last projection(s) is/are taken to balance the nodes size no matter if the same node is taken 2 times */
+      if ((rozo_balancing_ctx.unbalancedNodes) && (nb_selected==(rozofs_forward-rozo_balancing_ctx.unbalancedNodes))){
         location_collision = rozofs_safe;
         break;
       }
@@ -1748,14 +1741,7 @@ void rozo_bal_read_configuration_file(void) {
     rozo_balancing_ctx.max_move_size_config = val64;    
   } 
   
-  
-  if (strcmp(rebalance_config.mode,"fid") != 0)
-  {
-
-    severe("unsupported file_mode: %s\n",rebalance_config.mode);
-  }
   rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
-     
   info("cfg file %s reread", rozo_balancing_ctx.rebalanceConfigFile);
 
 }
@@ -1792,8 +1778,9 @@ static void usage() {
           display_size_not_aligned(REBALANCE_MAX_MOVE_SIZE,bufall));
     printf("\t--throughput <value> \t\tfile move througput in MBytes/s (default:%d MB/s)\n",REBALANCE_DEFAULT_THROUGPUT);
     printf("\t--cfg <fileName> \t\tThe rebalance configuration file name.\n");
-    printf("\t--unbalancedNodes \t\tFor the case of 6 unbalanced nodes (not the same SID number and/or disk size).\n");
     printf("\t-T, --threads <nb_threads>\tThe number of threads of the file mover (default %u)\n",20);
+    printf("\t--unbalancedNodes {1|2} \t\tFor the case of unbalanced nodes (not the same SID number and/or disk size).\n");
+    printf("\t                        \t\tThe last {1|2} SIDs are allocated just for size rebalancing purpose without location constraints.\n");
     printf("\n");
 };
 
@@ -1882,6 +1869,7 @@ int main(int argc, char *argv[]) {
     rozo_balancing_ctx.throughput = REBALANCE_DEFAULT_THROUGPUT;
     rozo_balancing_ctx.file_mode = REBALANCE_MODE_FID;
     rozo_balancing_ctx.nb_threads = 20;
+    rozo_balancing_ctx.unbalancedNodes = 0;
            
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -1904,9 +1892,8 @@ int main(int argc, char *argv[]) {
         {"cfg", required_argument, &long_opt_cur, 10},
         {"minfilesz", required_argument, &long_opt_cur, 11},
         {"maxfilesz", required_argument, &long_opt_cur, 12},
-        {"unbalancedNodes", no_argument, &long_opt_cur, 13},
         {"threads", required_argument, 0, 'T'},
-
+        {"unbalancedNodes", required_argument, &long_opt_cur, 13},
         {0, 0, 0, 0}
     };
     
@@ -2021,7 +2008,16 @@ int main(int argc, char *argv[]) {
 		break; 
                                  
 	      case 13:
-		unbalancedNodes = 1;
+                if (sscanf(optarg,"%d",&rozo_balancing_ctx.unbalancedNodes)!= 1) {
+                  severe("--unbalancedNodes should be an integer : \"%s\"",optarg);	  
+                  usage();
+                  exit(EXIT_FAILURE);			  
+                }	
+                if ((rozo_balancing_ctx.unbalancedNodes <= 0)||(rozo_balancing_ctx.unbalancedNodes>2)) {
+                  severe("--unbalancedNodes should be within [0..2] : \"%s\"",optarg);	  
+                  usage();
+                  exit(EXIT_FAILURE);			  
+                }	
 		break;                  
                 
 	      default:

@@ -95,6 +95,10 @@ typedef struct _rebalance_config_t {
   int64_t     minfilesz;
   // That option gives the mximum size(in bytes) of an eligible file to rebalancing
   int64_t     maxfilesz;
+  // This indicator may tell that the nodes are unbalanced. So the first SIDs of the new distribution are allocated 
+  // in size balancing maner, but also respecting collocation constraints. The last unbalancedNodes SIDs are then chosen 
+  // in size balancing maner, forgetting prior collocation constraints. This enables to balance a 6 node unbalanced cluster.
+  int32_t     unbalancedNodes;
 } rebalance_config_t;
 
 extern rebalance_config_t rebalance_config;

@@ -110,7 +110,7 @@ char *show_conf_with_buf(char * buf)
                                                                 display_size_not_aligned((long long unsigned int)p->cur_move_size,buffer2));
      pChar +=sprintf(pChar,"min. file size             :  %s\n",display_size_not_aligned((long long unsigned int)p->min_filesize_config,buffer));
      pChar +=sprintf(pChar,"max. file size             :  %s\n",display_size_not_aligned((long long unsigned int)p->max_filesize_config,buffer));
-     pChar +=sprintf(pChar,"\n");
+     pChar +=sprintf(pChar,"unbalancedNodes            :  %d\n",rozo_balancing_ctx.unbalancedNodes);
      pChar +=sprintf(pChar,"file read retry            :  V%d/C%d\n",p->eagain_volume,p->eagain_cluster);
      pChar +=sprintf(pChar,"newer delay                :  ");
      pChar =display_delay(pChar,p->newer_time_sec_config);

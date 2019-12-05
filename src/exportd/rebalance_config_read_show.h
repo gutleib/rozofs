@@ -76,6 +76,9 @@ static inline int rebalance_config_generated_set(char * pChar, char *parameter, 
   if (strcmp(parameter,"maxfilesz")==0) {
     REBALANCE_CONFIG_SET_LONG(maxfilesz,value);
   }
+  if (strcmp(parameter,"unbalancedNodes")==0) {
+    REBALANCE_CONFIG_SET_INT_MINMAX(unbalancedNodes,value,0,2);
+  }
   pChar += rozofs_string_append_error(pChar,"No such parameter ");
   pChar += rozofs_string_append_error(pChar,parameter);
   pChar += rozofs_eol(pChar);\
@@ -224,6 +227,17 @@ static inline int rebalance_config_generated_search(char * pChar, char *paramete
     REBALANCE_CONFIG_SHOW_LONG(maxfilesz,137438953472);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
+
+  if (strcasestr("unbalancedNodes",parameter) != NULL) {
+    match++;
+    REBALANCE_CONFIG_IS_DEFAULT_INT(unbalancedNodes,0);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// This indicator may tell that the nodes are unbalanced. So the first SIDs of the new distribution are allocated \n");
+    pChar += rozofs_string_append(pChar,"// in size balancing maner, but also respecting collocation constraints. The last unbalancedNodes SIDs are then chosen \n");
+    pChar += rozofs_string_append(pChar,"// in size balancing maner, forgetting prior collocation constraints. This enables to balance a 6 node unbalanced cluster.\n");
+    REBALANCE_CONFIG_SHOW_INT_OPT(unbalancedNodes,0,"0:2");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
   if (match == 0) {
     pChar += rozofs_string_append_error(pChar,"No such parameter like ");
     pChar += rozofs_string_append_error(pChar,parameter);
@@ -359,6 +373,14 @@ char * show_rebalance_config_module_global(char * pChar) {
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// That option gives the mximum size(in bytes) of an eligible file to rebalancing\n");
   REBALANCE_CONFIG_SHOW_LONG(maxfilesz,137438953472);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  REBALANCE_CONFIG_IS_DEFAULT_INT(unbalancedNodes,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// This indicator may tell that the nodes are unbalanced. So the first SIDs of the new distribution are allocated \n");
+  pChar += rozofs_string_append(pChar,"// in size balancing maner, but also respecting collocation constraints. The last unbalancedNodes SIDs are then chosen \n");
+  pChar += rozofs_string_append(pChar,"// in size balancing maner, forgetting prior collocation constraints. This enables to balance a 6 node unbalanced cluster.\n");
+  REBALANCE_CONFIG_SHOW_INT_OPT(unbalancedNodes,0,"0:2");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -591,6 +613,14 @@ char * save_rebalance_config_module_global(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// That option gives the mximum size(in bytes) of an eligible file to rebalancing\n");
     REBALANCE_CONFIG_SHOW_LONG(maxfilesz,137438953472);
+  }
+
+  REBALANCE_CONFIG_IS_DEFAULT_INT(unbalancedNodes,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// This indicator may tell that the nodes are unbalanced. So the first SIDs of the new distribution are allocated \n");
+    pChar += rozofs_string_append(pChar,"// in size balancing maner, but also respecting collocation constraints. The last unbalancedNodes SIDs are then chosen \n");
+    pChar += rozofs_string_append(pChar,"// in size balancing maner, forgetting prior collocation constraints. This enables to balance a 6 node unbalanced cluster.\n");
+    REBALANCE_CONFIG_SHOW_INT_OPT(unbalancedNodes,0,"0:2");
   }
   return pChar;
 }
@@ -871,6 +901,10 @@ static inline void rebalance_config_generated_read(char * fname) {
   REBALANCE_CONFIG_READ_LONG(minfilesz,268435456);
   // That option gives the mximum size(in bytes) of an eligible file to rebalancing 
   REBALANCE_CONFIG_READ_LONG(maxfilesz,137438953472);
+  // This indicator may tell that the nodes are unbalanced. So the first SIDs of the new distribution are allocated  
+  // in size balancing maner, but also respecting collocation constraints. The last unbalancedNodes SIDs are then chosen  
+  // in size balancing maner, forgetting prior collocation constraints. This enables to balance a 6 node unbalanced cluster. 
+  REBALANCE_CONFIG_READ_INT_MINMAX(unbalancedNodes,0,0,2);
  
   config_destroy(&cfg);
 }
