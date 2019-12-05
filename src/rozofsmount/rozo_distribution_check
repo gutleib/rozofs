@@ -255,6 +255,7 @@ class adaptative_tbl:
   def title_separator(self): self.separator('|','_')	 
          
   def set_column(self,column,value,effect=None):
+    value="%s"%(value)
     self.current_row.set_column(column,value,effect)
     self.column_desc.update_column(column,len(strip_ANSI(value)))   
        
@@ -331,7 +332,7 @@ class cluster:
       for s in range(sidMax):
         sid = (s+1)
         col = s + int(2)
-        d.set_column(col,"%s"%(c.inverse[sid]))             
+        d.set_column(col,c.inverse[sid])             
 
     d.new_title_line("occurences within the next %s in distribution(write)"%(fwd-inv),white)
     d.title_separator()
@@ -342,7 +343,7 @@ class cluster:
       for s in range(sidMax):
         sid = (s+1)
         col = s + int(2)
-        d.set_column(col,"%s"%(c.forward[sid]))             
+        d.set_column(col,c.forward[sid])             
 
     d.new_title_line("occurences within the last %s in distribution(spare)"%(safe-fwd),white)
     d.title_separator()
@@ -353,7 +354,7 @@ class cluster:
       for s in range(sidMax):
         sid = (s+1)
         col = s + int(2)
-        d.set_column(col,"%s"%(c.spare[sid]))             
+        d.set_column(col,c.spare[sid])             
     d.display()
 
 #___________________________________________    

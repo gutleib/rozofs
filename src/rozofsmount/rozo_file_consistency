@@ -256,6 +256,7 @@ class adaptative_tbl:
   def end_separator(self): self.separator('|','|')	 
          
   def set_column(self,column,value,effect=None):
+    value="%s"%(value)
     self.current_row.set_column(column,value,effect)
     self.column_desc.update_column(column,len(strip_ANSI(value)))   
        
@@ -477,7 +478,7 @@ def display_one_sub_file(rg,slave):
 
     if consitent_blocks != int(0):
       d.new_center_line()
-      d.set_column(1,"%s"%(first_consistent_bid))     
+      d.set_column(1,first_consistent_bid)     
       d.set_column(2,"%s consistent blocks"%(consitent_blocks))
       idx = int(3)    
       for storage in storage_list:
@@ -489,7 +490,7 @@ def display_one_sub_file(rg,slave):
     # Add new line in the result array
     #
     d.new_line()  
-    d.set_column(1,"%s"%(bid))           
+    d.set_column(1,bid)           
     idx = int(2)    
     for storage in storage_list:
       error = errors.get(storage)
@@ -514,7 +515,7 @@ def display_one_sub_file(rg,slave):
     
   if consitent_blocks != int(0):
     d.new_center_line()
-    d.set_column(1,"%s"%(first_consistent_bid))     
+    d.set_column(1,first_consistent_bid)     
     d.set_column(2,"%s consistent blocks"%(consitent_blocks))
     idx = int(3)    
     for storage in storage_list:

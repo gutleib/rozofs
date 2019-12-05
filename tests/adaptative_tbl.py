@@ -252,6 +252,7 @@ class adaptative_tbl:
   def title_separator(self): self.separator('|','_')	 
          
   def set_column(self,column,value,effect=None):
+    value="%s"%(value)
     self.current_row.set_column(column,value,effect)
     self.column_desc.update_column(column,len(strip_ANSI(value)))   
        
