@@ -152,6 +152,7 @@ typedef struct _storio_disk_thread_msg_t
   uint32_t            status;
   uint32_t            transaction_id;
   int                 fidIdx;
+  int                 queueIdx;
   uint64_t            timeStart;
   uint64_t            size;
   rozorpc_srv_ctx_t * rpcCtx;
@@ -213,6 +214,22 @@ void storio_send_response (rozofs_disk_thread_ctx_t *thread_ctx_p, storio_disk_t
 */
 int storio_disk_thread_intf_serial_send(storio_device_mapping_t      * fidCtx,
 				         uint64_t       timeStart);
+/*__________________________________________________________________________
+*/
+/**
+*  Send a disk request to the disk threads to activate the processing of the requests
+   associated with a FID
+*
+* @param fidCtx     FID context
+* @param timeStart  time stamp when the request has been decoded
+* @param queueIdx: index of the queue to process
+*
+* @retval 0 on success -1 in case of error
+*  
+*/
+int storio_disk_thread_intf_serial_queue_send(storio_device_mapping_t      * fidCtx,
+				         uint64_t        timeStart,
+                                         int             queueIdx);
 
 /*
 ** Create the RDMA write threads that will handle all the disk write requests after the RDMA transfer

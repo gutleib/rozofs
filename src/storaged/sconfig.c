@@ -56,6 +56,11 @@
 #define SDEV_MAPPER     "device-mapper"
 #define SDEV_RED        "device-redundancy"
 
+
+#define SCLUSTERS  "clusters"
+#define SREADQ     "FID-read-queues"
+
+
 int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
         const char *root, int dev, int dev_mapper, int dev_red, const char * spare_mark) {
     DEBUG_FUNCTION;
@@ -81,7 +86,14 @@ int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
     list_init(&s->list);
     return 0;
 }
+int cluster_config_initialize(cluster_config_t *c, cid_t cid, int readQ) {
+    DEBUG_FUNCTION;
 
+    c->cid = cid;
+    c->readQ = readQ;
+    list_init(&c->list);
+    return 0;
+}
 void storage_config_release(storage_config_t *s) {
     if (s->spare_mark != NULL) {
       xfree(s->spare_mark);
@@ -89,11 +101,14 @@ void storage_config_release(storage_config_t *s) {
     }  
     return;
 }
-
+void cluster_config_release(cluster_config_t *c) {
+    return;
+}
 int sconfig_initialize(sconfig_t *sc) {
     DEBUG_FUNCTION;
     memset(sc, 0, sizeof (sconfig_t));
     list_init(&sc->storages);
+    list_init(&sc->clusters);
     return 0;
 }
 
@@ -107,12 +122,20 @@ void sconfig_release(sconfig_t *config) {
         list_remove(p);
         free(entry);
     }
+
+    list_for_each_forward_safe(p, q, &config->clusters) {
+        cluster_config_t *entry = list_entry(p, cluster_config_t, list);
+        cluster_config_release(entry);
+        list_remove(p);
+        free(entry);
+    }    
 }
 
 int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
     int status = -1;
     config_t cfg;
     struct config_setting_t *stor_settings = 0;
+    struct config_setting_t *cluster_settings = 0;
     struct config_setting_t *ioaddr_settings = 0;
     int i = 0;
 //    const char              *char_value = NULL;    
@@ -120,9 +143,11 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
                || (LIBCONFIG_VER_MAJOR > 1))
     int port;
     int devices, mapper, redundancy, nodeid;
+    int readQ;
 #else
     long int port;
     long int devices, mapper, redundancy, nodeid;
+    long int readQ;
 #endif      
     DEBUG_FUNCTION;
 
@@ -143,6 +168,21 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
     }    
     else {
         config->numa_node_id = nodeid;
+    }    
+
+    
+    /*
+    ** Read default number of read queues per FID
+    */
+    if (config_lookup_int(&cfg, SREADQ, &readQ) == CONFIG_FALSE) {
+        config->readQ = 1;
+    }    
+    else {
+        if ((readQ <= 0) || (readQ > 7))  {
+          severe("Bad %s value %d. Out of range [1..7]", SREADQ, readQ);
+          goto out;
+        }
+        config->readQ = readQ;
     }    
 
 
@@ -211,6 +251,61 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
 
         config->io_addr[i].port = port;
     }
+
+    /*
+    ** Read cluster configuration
+    */
+    if (!(cluster_settings = config_lookup(&cfg, SCLUSTERS))) {
+        /*
+        ** No cluster configuration
+        */
+    }
+    else for (i = 0; i < config_setting_length(cluster_settings); i++) {
+        cluster_config_t        * new = 0;
+        struct config_setting_t * cl = 0;
+#if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
+               || (LIBCONFIG_VER_MAJOR > 1))
+        int readQ;
+        int cid;
+#else
+        long int readQ;
+        long int cid;
+#endif
+        
+        if (!(cl = config_setting_get_elem(cluster_settings, i))) {
+            errno = ENOKEY;
+            severe("can't fetch cluster %d.",i);
+            goto out;
+        }
+
+        if (config_setting_lookup_int(cl, SCID, &cid) == CONFIG_FALSE) {
+            errno = ENOKEY;
+            severe("can't lookup cid for cluster %d.", i);
+            goto out;
+        }      
+
+        /*
+	** Only keep the clusters we take care of
+	*/
+	if ((cluster_id!=0)&&(cluster_id!=cid)) continue;
+        
+        if (config_setting_lookup_int(cl, SREADQ, &readQ) == CONFIG_FALSE) {
+            readQ = config->readQ; /* Get default parallel read queue count */
+        }    
+        else {
+            if ((readQ <= 0) || (readQ > 7))  {
+              severe("Bad %s value %d for cluster %d. Out of range [1..7]", SREADQ, readQ,i);
+              goto out;
+            }
+        }    
+        new = xmalloc(sizeof (cluster_config_t));
+        if (cluster_config_initialize(new, (cid_t) cid, readQ) != 0) {
+            if (new) free(new);
+            goto out;
+        }
+        list_push_back(&config->clusters, &new->list);
+    }
+
 
     if (!(stor_settings = config_lookup(&cfg, SSTORAGES))) {
         errno = ENOKEY;
@@ -551,6 +646,20 @@ int sconfig_validate(sconfig_t *config) {
         goto out;
     }
 
+    list_for_each_forward(p, &config->clusters) {
+        list_t *q;
+        cluster_config_t *c1 = list_entry(p, cluster_config_t, list);
+
+        list_for_each_forward(q, &config->clusters) {
+            cluster_config_t *c2 = list_entry(q, cluster_config_t, list);
+            if (c1 == c2) continue;
+            if (c1->cid == c2->cid) {
+                severe("duplicated cid in cluster config (cid: %u)", c1->cid);
+                errno = EINVAL;
+                goto out;
+            }
+        }
+    }
     status = 0;
 out:
     return status;

@@ -46,13 +46,21 @@ typedef struct storage_config {
     list_t list;
 } storage_config_t;
 
+typedef struct cluster_config {
+    cid_t cid;
+    int   readQ; /* Number of queues in FID context for parallel reading */
+    list_t list;
+} cluster_config_t;
+
    
 typedef struct sconfig {
     int                     numa_node_id;
+    int                     readQ;       /* Default number of queue for parallel reading */
     int                     io_addr_nb; 
     struct mp_io_address_t  io_addr[STORAGE_NODE_PORTS_MAX];
     char                  * export_hosts;
     list_t storages;
+    list_t clusters;
 } sconfig_t;
 
 int sconfig_initialize(sconfig_t *config);
@@ -64,6 +72,7 @@ int sconfig_read(sconfig_t *config, const char *fname,int cid);
 int sconfig_validate(sconfig_t *config);
 
 extern sconfig_t storaged_config;
+
 /*____________________________________________________
 **
 ** Get the number of configured IP address in storage config file

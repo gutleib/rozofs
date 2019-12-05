@@ -34,9 +34,22 @@ Specifies list of IP(s) (or hostname(s)) and port(s) the storio process must lis
     In single storio mode, only one storio is started that listens on this port to service every configured cluster.
     In multiple storio mode, one storio is started per cluster that listen on this port + the cluster number to service the given cluster only.
 
+.SS FID-read-queues (optional)
+This is the default number of read requests that can be run in parallel per FID context. 
+The value must be chosen within the [1..7] interval. 
+When not set the value is assumed to be 1. A value of 1 means that there is a total serialization of the requests per FID.
+.SS clusters (optional)
+This list of cluster, enables to provision for each of them some specific configuration paameters.
+ 
+    cid: (cluster identifier)
+            - must be an integer.
+            - should exist in exportd configuration file.
+
+    FID-read-queues: number of read requests that can run in parallel per FID context on this specific cluster.
+            - can be omitted when the default value applies to this cluster.
+            - must be an integer within [1..7].
 
 .SS storages (mandatory)
-
 It is the list of logical storages managed by this storage node.
 The storage node is subdivided in several logical storages, each managing its set of disk. 
 Each logical storage is identified by its cluster identifier (cid) and logical storage identifier (sid) within the cluster. 
@@ -123,7 +136,9 @@ listen = (
     {addr = "192.168.1.1"; port = 41001; },
     {addr = "192.168.2.1"; port = 41001; }
 );
-
+clusters = (
+  {cid = 1; FID-read-queues = 7; }    
+);
 storages = (
     {cid = 1; sid = 1; root = "/srv/rozofs/storages/storage_1_1"; device-total = 6; device-mapper = 3; device-redundancy = 3;},
     {cid = 1; sid = 2; root = "/srv/rozofs/storages/storage_1_2"; device-total = 6; device-mapper = 3; device-redundancy = 3;},

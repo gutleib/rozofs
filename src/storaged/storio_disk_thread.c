@@ -1406,7 +1406,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
        ** check if it is the end of processing: this true with the
        ** diskthread list is empty
        */
-       if ((list_empty(&fidCtx->serial_pending_request)) && (list_empty(diskthread_list_p)))
+       if ((list_empty(&fidCtx->serial_pending_request[msg->queueIdx])) && (list_empty(diskthread_list_p)))
        {
 	 /*
 	 ** check if we have a network with latency
@@ -1441,7 +1441,7 @@ static inline int storio_disk_write_rdma(rozofs_disk_thread_ctx_t *thread_ctx_p,
     /*
     ** Check if there are some other pending Write requests
     */
-    empty = storio_get_pending_request_list(fidCtx,diskthread_list_p,1);
+    empty = storio_get_pending_request_list(fidCtx,diskthread_list_p,1,msg->queueIdx);
     if (empty) 
     {
       /*
@@ -3461,6 +3461,7 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
   rozorpc_srv_ctx_t      * rpcCtx;
   storio_disk_thread_msg_t   msg;  
   int fdl_count = 0;
+  int queueIdx;
   
   memcpy(&msg,msg_in,sizeof(storio_disk_thread_msg_t));
   /*
@@ -3472,6 +3473,8 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
     return;
   }
   
+  queueIdx = msg_in->queueIdx;
+  
   /*
   ** init of the local list
   */
@@ -3482,7 +3485,7 @@ void storio_disk_serial(rozofs_disk_thread_ctx_t *ctx_p,storio_disk_thread_msg_t
   while(1)
   {
      
-     empty = storio_get_pending_request_list(fidCtx,&diskthread_list,0);
+     empty = storio_get_pending_request_list(fidCtx,&diskthread_list,0, queueIdx);
      if (empty) 
      {  
        break;

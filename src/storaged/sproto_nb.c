@@ -972,16 +972,13 @@ void sp_read_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     }
         
     /*
-    ** If any request is already running, chain this request on the FID context
+    ** Post on the best queue to parallelize the reads but still  
+    ** have serialization between read and other requests
     */
-    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
+    if (!storio_read_serialization_begin(dev_map_p,req_ctx_p)){
       goto out;
     }  
-    
-    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
-      goto out;
-    }
-    severe("storio_disk_thread_intf_send %s", strerror(errno));
+    severe("storio_read_serialization_begin %s", strerror(errno));
     
 error:
     ret.status                = SP_FAILURE;            
@@ -1071,16 +1068,13 @@ void sp_read_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     req_ctx_p->opcode = STORIO_DISK_THREAD_READ_RDMA;
         
     /*
-    ** If any request is already running, chain this request on the FID context
+    ** Post on the best queue to parallelize the reads but still  
+    ** have serialization between read and other requests
     */
-    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
+    if (!storio_read_serialization_begin(dev_map_p,req_ctx_p)){
       goto out;
-    }  
-    
-    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
-      goto out;
-    }
-    severe("storio_disk_thread_intf_send %s", strerror(errno));
+    } 
+    severe("storio_read_serialization_begin %s", strerror(errno));
     
 error:
     ret.status                = SP_FAILURE;            
@@ -2465,16 +2459,13 @@ void sp_read_standalone_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_
     req_ctx_p->opcode = STORIO_DISK_THREAD_READ_STDALONE;
         
     /*
-    ** If any request is already running, chain this request on the FID context
+    ** Post on the best queue to parallelize the reads but still  
+    ** have serialization between read and other requests
     */
-    if (!storio_serialization_begin(dev_map_p,req_ctx_p)){
+    if (!storio_read_serialization_begin(dev_map_p,req_ctx_p)){
       goto out;
     }  
-    
-    if (storio_disk_thread_intf_send(dev_map_p, req_ctx_p, tic) == 0) {
-      goto out;
-    }
-    severe("storio_disk_thread_intf_send %s", strerror(errno));
+    severe("storio_read_serialization_begin %s", strerror(errno));
     
 error:
     ret.status                = SP_FAILURE;            

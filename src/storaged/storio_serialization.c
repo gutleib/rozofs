@@ -35,6 +35,7 @@
 
 #include "storio_serialization.h"
 
+extern uint16_t storio_read_parallel;
 
 uint64_t   storage_unqueued_req[STORIO_DISK_THREAD_MAX_OPCODE]={0};
 uint64_t   storage_queued_req[STORIO_DISK_THREAD_MAX_OPCODE]={0};
@@ -151,10 +152,50 @@ int storio_serialization_begin(storio_device_mapping_t * dev_map_p, rozorpc_srv_
 /*
 **___________________________________________________________
 */
+
+int storio_read_serialization_begin(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) {
+  int queueIdx;
+  storio_device_mapping_refresh(dev_map_p);
+  
+  /*
+  ** put the start timestamp in the current context
+  */
+  req_ctx_p->profiler_time = rozofs_get_ticker_us();
+  /*
+  ** update the number of pending request
+  */
+  af_unix_disk_pending_req_count++;
+  if (af_unix_disk_pending_req_count<MAX_PENDING_REQUEST) {
+    af_unix_disk_pending_req_tbl[af_unix_disk_pending_req_count]++;
+  }
+  else {
+    af_unix_disk_pending_req_tbl[MAX_PENDING_REQUEST-1]++;    
+  }  
+  /*
+  ** queue the RPC request in the FID context
+  */   
+  if (storio_insert_pending_read_request_list(dev_map_p,&req_ctx_p->list,&queueIdx))
+  {
+    /*
+    ** Need to activate a thread
+    */
+    storage_direct_req[req_ctx_p->opcode]++; 
+    storio_disk_thread_intf_serial_queue_send(dev_map_p,0, queueIdx);
+  }
+  else
+  {
+    /*
+    ** Request has just been added to a queue. No need to activate a thread.
+    */
+    storage_queued_req[req_ctx_p->opcode]++;
+  }
+  return 0;
+}
+/*
+**___________________________________________________________
+*/
 void storio_serialization_end(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) {	
-  
-  if (dev_map_p == NULL) return;
-  
+    
   /*
   ** Remove this request
   */
@@ -205,16 +246,17 @@ void storio_get_serial_lock(pthread_rwlock_t *lock)
   @param p: pointer the FID context that contains the requests lisk
   @param diskthread_list: pointer to the current disk thread list
   @param do_not_clear_running: if asserted serial_is_running is not cleared when both queues are empty
+  @param queueIdx: index of the queue to process
 
   @retval 1: no more request to process
   @retval 0: the list is not empty
 */
-int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list,int do_not_clear_running)
+int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list,int do_not_clear_running, int queueIdx)
 {
    /*
    ** check if the serial_pending_request list is empty
    */
-   if (list_empty(&p->serial_pending_request))
+   if (list_empty(&p->serial_pending_request[queueIdx]))
    {
       /*
       ** check if it is the end of processing: this true with the
@@ -224,12 +266,12 @@ int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthrea
       {
         /* LOCK */
         storio_get_serial_lock(&p->serial_lock);
-	if (list_empty(&p->serial_pending_request))
+	if (list_empty(&p->serial_pending_request[queueIdx]))
 	{
 	  /*
 	  ** no more request to process-> go the IDLE state for that context
 	  */
-	  if (do_not_clear_running == 0) p->serial_is_running=0;
+	  if (do_not_clear_running == 0) p->serial_is_running[queueIdx] = 0;
           /* UNLOCK */
 	  pthread_rwlock_unlock(&p->serial_lock);
 	  
@@ -238,7 +280,7 @@ int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthrea
 	/*
 	** there is some more request to process
 	*/
-        list_move_nocheck(diskthread_list,&p->serial_pending_request);
+        list_move_nocheck(diskthread_list,&p->serial_pending_request[queueIdx]);
 	if (list_empty(diskthread_list))
 	{
 	   fatal("FDL empty queue while not empty");     
@@ -271,7 +313,7 @@ int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthrea
    /*
    ** append the pending list to the disk thread list
    */
-   list_move_nocheck(diskthread_list,&p->serial_pending_request);
+   list_move_nocheck(diskthread_list,&p->serial_pending_request[queueIdx]);
    /* UNLOCK */
 
 	if (list_empty(diskthread_list))
@@ -313,15 +355,78 @@ int storio_insert_pending_request_list(storio_device_mapping_t *p,list_t *reques
    list_init(request);
     /* LOCK */
     storio_get_serial_lock(&p->serial_lock);
-    if (p->serial_is_running==0)
+    if (p->serial_is_running[ROZOFS_FIDCTX_DEFAULT_QUEUE] == 0)
     {
-      p->serial_is_running=1;
+      p->serial_is_running[ROZOFS_FIDCTX_DEFAULT_QUEUE] = 1;
       need2activate = 1;      
     }
-    list_push_back(&p->serial_pending_request,request);
+    list_push_back(&p->serial_pending_request[ROZOFS_FIDCTX_DEFAULT_QUEUE],request);
     pthread_rwlock_unlock(&p->serial_lock);
 
     return need2activate;
 }
+/**
+**_______________________________________________________
+  That function is intended to be used by the main thread
+  
+  @param p: pointer the FID context that contains the requests lisk
+  @param request: pointer to the request to append to the FID context
+  @param queueIdx: index of the queue choosen
 
+  @retval 0: FID context already active
+  @retval 1: not to post a message to activate the FID context 
+*/
+int storio_insert_pending_read_request_list(storio_device_mapping_t *p,list_t *request, int * queueIdx)
+{
+   int need2activate = 0;
+   int q;
+   
+   list_init(request);
+    /* LOCK */
+    storio_get_serial_lock(&p->serial_lock);
+    /*
+    ** When default queue is active, use it
+    */
+    if (p->serial_is_running[ROZOFS_FIDCTX_DEFAULT_QUEUE] != 0) {
+      list_push_back(&p->serial_pending_request[ROZOFS_FIDCTX_DEFAULT_QUEUE],request);
+      *queueIdx = ROZOFS_FIDCTX_DEFAULT_QUEUE;
+      goto out;      
+    }
+    /*
+    ** When only one queue, use the default one
+    */
+    if (storio_read_parallel <= 1) {
+      p->serial_is_running[ROZOFS_FIDCTX_DEFAULT_QUEUE] = 1;
+      need2activate = 1;      
+      *queueIdx = ROZOFS_FIDCTX_DEFAULT_QUEUE;
+      list_push_back(&p->serial_pending_request[ROZOFS_FIDCTX_DEFAULT_QUEUE],request);
+      goto out;      
+    }    
+    /*
+    ** post on the first found free queue
+    */
+    for (q=1; q < (storio_read_parallel+1); q++) {
+      if (p->serial_is_running[q] == 0)
+      {
+        p->serial_is_running[q] = 1;
+        need2activate = 1;   
+        *queueIdx = q;   
+        list_push_back(&p->serial_pending_request[q],request);
+        goto out;      
+      }
+    }  
+    /*
+    ** No free queue : Put on the next queue
+    */
+    *queueIdx = p->nextReadQ;
+    list_push_back(&p->serial_pending_request[p->nextReadQ++],request); 
+    if (p->nextReadQ >= (storio_read_parallel+1)) p->nextReadQ = 1;  
+            
+
+
+out:
+    pthread_rwlock_unlock(&p->serial_lock);
+
+    return need2activate;
+}
 

@@ -124,12 +124,14 @@ typedef union _storio_device_u {
     uint8_t * ptr;                                    // Pointer to a big array of ROZOFS_STORAGE_MAX_CHUNK_PER_FILE devices
     uint8_t   small[ROZOFS_MAX_SMALL_ARRAY_CHUNK+1];  // A small array of the first (ROZOFS_MAX_SMALL_ARRAY_CHUNK+1) devices
 } storio_device_u;
+
+#define ROZOFS_FIDCTX_QUEUE_NB      (8)
+#define ROZOFS_FIDCTX_DEFAULT_QUEUE (0)
 typedef struct _storio_device_mapping_t
 {
   list_t               link;  
-//  uint32_t             padding:3;
+//  uint32_t             padding:4;
   uint32_t             recycle_cpt:2;
-  uint32_t             serial_is_running:1;     /**< assert to one when a disk thread is processing the requests         */
   uint32_t             small_device_array:1;    // how to read device union
   uint32_t             device_unknown:1;        // Set to 1 when device distr. is unknown
   uint32_t             index:24;
@@ -137,8 +139,10 @@ typedef struct _storio_device_mapping_t
   storio_device_u      device;                  // List of devices per chunk number
   /*
   ** storio serialise
-  */
-  list_t               serial_pending_request;  /**< list the pending request for the FID   */
+  */  
+  uint8_t              serial_is_running[ROZOFS_FIDCTX_QUEUE_NB];  /**< Whether the queues are active   */
+  uint8_t              nextReadQ;                                  /**< To spread the extra reads evenly on the occupied queues */
+  list_t               serial_pending_request[ROZOFS_FIDCTX_QUEUE_NB];  /**< list the pending request for the FID   */
   pthread_rwlock_t     serial_lock;             /**< lock associated with serial_pending_request list & running flag     */
     
   STORIO_REBUILD_REF_U storio_rebuild_ref;
@@ -414,16 +418,18 @@ static inline uint32_t storio_device_mapping_hash32bits_compute(storio_device_ma
  
 */
 static inline void storio_device_mapping_ctx_reset(storio_device_mapping_t * p) {
-
+  int idx;
   
   memset(&p->key,0,sizeof(storio_device_mapping_key_t));
   p->device_unknown     = 1;
   p->small_device_array = 1;
   p->device.ptr         = NULL;
 //  p->consistency   = storio_device_mapping_stat.consistency;
-  list_init(&p->serial_pending_request);
-  p->serial_is_running = 0;
-
+  for (idx=0; idx<ROZOFS_FIDCTX_QUEUE_NB; idx++) { 
+    list_init(&p->serial_pending_request[idx]);
+    p->serial_is_running[idx] = 0;
+  }  
+  p->nextReadQ = 1;
   p->storio_rebuild_ref.u64 = 0xFFFFFFFFFFFFFFFF;
 }
 /*
@@ -449,6 +455,7 @@ static inline void storio_device_mapping_refresh(storio_device_mapping_t *p) {
 */
 static inline void storio_device_mapping_release_entry(storio_device_mapping_t *p) {
   uint32_t hash;
+  int idx;
 
   storio_device_mapping_stat.release++;
   
@@ -460,11 +467,12 @@ static inline void storio_device_mapping_release_entry(storio_device_mapping_t *
     severe("storio_fid_cache_remove");
   }
      
-
-  if ((p->serial_is_running)||(!list_empty(&p->serial_pending_request)))
-  {
-    severe("storio_device_mapping_ctx_free but ctx is running");
-  }
+  for (idx=0; idx<ROZOFS_FIDCTX_QUEUE_NB; idx++) { 
+    if ((p->serial_is_running[idx])||(!list_empty(&p->serial_pending_request[idx])))
+    {
+      severe("storio_device_mapping_ctx_free but queue %d ctx is running",idx);
+    }
+  }  
    
   /*
   ** Unchain the context

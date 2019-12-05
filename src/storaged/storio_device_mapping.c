@@ -46,6 +46,7 @@
 #include "storio_fid_cache.h"
 
 
+extern int storio_read_parallel;
 extern sconfig_t storaged_config;
 
 int STORIO_DEVICE_MAPPING_MAX_ENTRIES = 0;
@@ -248,23 +249,23 @@ char * storio_display_one_mapping_ctx(char * pChar, storio_device_mapping_t * p)
   uint8_t                        nb_rebuild;
   uint8_t                        storio_rebuild_ref;
   STORIO_REBUILD_T           *   pRebuild;
+  int                            idx;
   
   pChar += rozofs_string_append(pChar,"    { \"index\" : ");
-  pChar += rozofs_u32_append(pChar,p->index);    
+  pChar += rozofs_u32_padded_append(pChar,6, rozofs_right_alignment, p->index);    
   pChar += rozofs_string_append(pChar,", \"cid\" : ");
-  pChar += rozofs_u32_append(pChar,p->key.cid);
+  pChar += rozofs_u32_padded_append(pChar,2, rozofs_right_alignment, p->key.cid);
   pChar += rozofs_string_append(pChar,", \"sid\" : ");
-  pChar += rozofs_u32_append(pChar,p->key.sid);
+  pChar += rozofs_u32_padded_append(pChar,2, rozofs_right_alignment,p->key.sid);
   pChar += rozofs_string_append(pChar,", \"FID\" : \"");
   pChar += rozofs_fid_append(pChar,p->key.fid);
-  pChar += rozofs_string_append(pChar,"\", \"running\" : ");
-  if (p->serial_is_running) {    
-    pChar += rozofs_string_append(pChar,"\"YES\",\n");
-  }
-  else {  
-    pChar += rozofs_string_append(pChar,"\"NO\",\n");
-  }
-  
+  pChar += rozofs_string_append(pChar,"\", \"queues\" : { ");
+  for (idx=0; idx<ROZOFS_FIDCTX_QUEUE_NB; idx++) {
+    if (idx != 0) pChar += rozofs_string_append(pChar,", ");
+    pChar += rozofs_u32_append(pChar,p->serial_is_running[idx]); 
+  }  
+  pChar += rozofs_string_append(pChar,"},\n");
+
   /*
   ** Display the list of devices per chunk until the end of file
   */
@@ -346,17 +347,19 @@ void storage_fid_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += rozofs_string_append(pChar,"{ \"FID mapping statistics\" : {\n");
     pChar = display_cache_fid_stat(pChar);
     
-    pChar += rozofs_string_append(pChar,",\n  \"FID ctx statistics\" : {\n    \"chunk size\"  : ");    
+    pChar += rozofs_string_append(pChar,",\n  \"FID ctx statistics\" : {\n    \"chunk size\"     : ");    
     pChar += rozofs_u64_append(pChar,ROZOFS_STORAGE_FILE_MAX_SIZE/ROZOFS_STORAGE_MAX_CHUNK_PER_FILE);  
-    pChar += rozofs_string_append(pChar,",\n    \"context size\" : ");
+    pChar += rozofs_string_append(pChar,",\n    \"read // Q\"      : ");
+    pChar += rozofs_u32_append(pChar,storio_read_parallel);
+    pChar += rozofs_string_append(pChar,",\n    \"context size\"   : ");
     pChar += rozofs_u32_append(pChar,sizeof(storio_device_mapping_t));
     pChar += rozofs_string_append(pChar,",\n    \"context number\" : ");    
     pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES);
-    pChar += rozofs_string_append(pChar,",\n    \"total size\" : ");
+    pChar += rozofs_string_append(pChar,",\n    \"total size\"     : ");
     pChar += rozofs_u32_append(pChar,STORIO_DEVICE_MAPPING_MAX_ENTRIES * sizeof(storio_device_mapping_t));
-    pChar += rozofs_string_append(pChar,",\n    \"allocation\"  : ");
+    pChar += rozofs_string_append(pChar,",\n    \"allocation\"     : ");
     pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.allocation);
-    pChar += rozofs_string_append(pChar,",\n    \"release\" : ");
+    pChar += rozofs_string_append(pChar,",\n    \"release\"        : ");
     pChar += rozofs_u64_append(pChar,storio_device_mapping_stat.release);
     pChar += rozofs_string_append(pChar,"\n  }\n}}\n");
 
@@ -492,8 +495,6 @@ void storage_device_man(char * pChar) {
 }
 void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   char                         * pChar=uma_dbg_get_buffer();
-  int                            idx,threadNb; 
-  int                            first;
 
   storage_t   * st;
   int           faulty_devices[STORAGE_MAX_DEVICE_NB];
@@ -512,7 +513,6 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   while ((st = storaged_next(st)) != NULL) {
     int           dev;
     int           fault=0;
-    storio_disk_thread_file_desc_t * pf;
 
     pChar += rozofs_string_append(pChar,"cid = ");
     pChar += rozofs_u32_append(pChar,st->cid);

@@ -54,6 +54,12 @@ int storio_serialization_begin(storio_device_mapping_t * dev_map_p, rozorpc_srv_
 /*
 **___________________________________________________________
 */
+
+int storio_read_serialization_begin(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) ;
+
+/*
+**___________________________________________________________
+*/
 void storio_serialization_end(storio_device_mapping_t * dev_map_p, rozorpc_srv_ctx_t *req_ctx_p) ;
 
 /*
@@ -70,6 +76,18 @@ void storio_serialization_end(storio_device_mapping_t * dev_map_p, rozorpc_srv_c
   @retval 1: not to post a message to activate the FID context 
 */
 int storio_insert_pending_request_list(storio_device_mapping_t *p,list_t *request);
+/**
+**_______________________________________________________
+  That function is intended to be used by the main thread
+  
+  @param p: pointer the FID context that contains the requests lisk
+  @param request: pointer to the request to append to the FID context
+  @param queueIdx: index of the queue choosen
+
+  @retval 0: FID context already active
+  @retval 1: not to post a message to activate the FID context 
+*/
+int storio_insert_pending_read_request_list(storio_device_mapping_t *p,list_t *request, int * queueIdx);
 
 /*
 **_______________________________________________________
@@ -81,10 +99,11 @@ int storio_insert_pending_request_list(storio_device_mapping_t *p,list_t *reques
   @param p: pointer the FID context that contains the requests lisk
   @param diskthread_list: pointer to the current disk thread list
   @param do_not_clear_running: if asserted serial_is_running is not cleared when both queues are empty
+  @param queueIdx: index of the queue to process
 
   @retval 1: no more request to process
   @retval 0: the list is not empty
 */
-int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list,int do_not_clear_running);
+int storio_get_pending_request_list(storio_device_mapping_t *p,list_t *diskthread_list,int do_not_clear_running, int queueIdx);
 
 #endif

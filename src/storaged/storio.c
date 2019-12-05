@@ -76,6 +76,11 @@ storage_t storaged_storages[STORAGES_MAX_BY_STORAGE_NODE] = {
 };
 uint16_t storaged_nrstorages = 0;
 
+/*
+** Number of queues per FID context to process read in parallel
+*/
+uint16_t storio_read_parallel = 1;
+
 
 
 extern void storage_program_1(struct svc_req *rqstp, SVCXPRT *ctl_svc);
@@ -125,8 +130,28 @@ static int storaged_initialize() {
 out:
     return status;
 }
+/*
+** Determine from the configuration the number of queues per FID context
+** for parallel read
+*/
+void storio_set_read_parallel(cid_t cid) {
+  list_t * p;
+    
+  /* Find out if any cluster configuration is set */
+  list_for_each_forward(p, &storaged_config.clusters) {
+      
+    cluster_config_t * cl = list_entry(p, cluster_config_t, list);
+    if (cl->cid == cid) {
+      storio_read_parallel = cl->readQ;
+      return;
+    }   
+  }
 
-
+  /*
+  ** Get default configuration value
+  */
+  storio_read_parallel = storaged_config.readQ;
+}
 
 char storage_process_filename[NAME_MAX];
 
@@ -323,6 +348,12 @@ int main(int argc, char *argv[]) {
 
 	 ALLOC_KPI_FILE_PROFILING(path,"profiler",spp_profiler_t);    
     }
+    
+    /*
+    ** Determine the number of queue to use int parallel par FID context
+    ** for reading
+    */
+    storio_set_read_parallel(storio_instance);
     
     /*
     **  set the numa node for storio and its disk threads
