@@ -49,6 +49,7 @@ typedef struct storage_config {
 typedef struct cluster_config {
     cid_t cid;
     int   readQ; /* Number of queues in FID context for parallel reading */
+    char                  * spare_mark;  
     list_t list;
 } cluster_config_t;
 

@@ -39,7 +39,7 @@ This is the default number of read requests that can be run in parallel per FID 
 The value must be chosen within the [1..7] interval. 
 When not set the value is assumed to be 1. A value of 1 means that there is a total serialization of the requests per FID.
 .SS clusters (optional)
-This list of cluster, enables to provision for each of them some specific configuration paameters.
+This list of cluster, enables to provision some clusters with some specific configuration paameters.
  
     cid: (cluster identifier)
             - must be an integer.
@@ -48,6 +48,11 @@ This list of cluster, enables to provision for each of them some specific config
     FID-read-queues: number of read requests that can run in parallel per FID context on this specific cluster.
             - can be omitted when the default value applies to this cluster.
             - must be an integer within [1..7].
+
+    spare-mark: content of the rozofs_spare mark file of the spare devices usable on this cluster.
+            - can be omitted if its spare devices have an empty "rozofs_spare" mark file.
+            - must be a string
+            - must not exceed 9 characters
 
 .SS storages (mandatory)
 It is the list of logical storages managed by this storage node.
@@ -137,11 +142,11 @@ listen = (
     {addr = "192.168.2.1"; port = 41001; }
 );
 clusters = (
-  {cid = 1; FID-read-queues = 7; }    
+  {cid = 1; FID-read-queues = 7; spare-mark = "nvme" }    
 );
 storages = (
-    {cid = 1; sid = 1; root = "/srv/rozofs/storages/storage_1_1"; device-total = 6; device-mapper = 3; device-redundancy = 3;},
-    {cid = 1; sid = 2; root = "/srv/rozofs/storages/storage_1_2"; device-total = 6; device-mapper = 3; device-redundancy = 3;},
+    {cid = 1; sid = 1; root = "/srv/rozofs/storages/storage_1_1"; device-total = 1; device-mapper = 1; device-redundancy = 1;},
+    {cid = 1; sid = 2; root = "/srv/rozofs/storages/storage_1_2"; device-total = 1; device-mapper = 1; device-redundancy = 1;},
     {cid = 2; sid = 1; root = "/srv/rozofs/storages/storage_2_1"; device-total = 3; device-mapper = 3; device-redundancy = 3;}
  );
 

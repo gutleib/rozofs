@@ -86,13 +86,34 @@ int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
     list_init(&s->list);
     return 0;
 }
-int cluster_config_initialize(cluster_config_t *c, cid_t cid, int readQ) {
+int cluster_config_initialize(cluster_config_t *c, cid_t cid, int readQ, const char * spare_mark) {
     DEBUG_FUNCTION;
 
     c->cid = cid;
     c->readQ = readQ;
+    if (spare_mark == NULL) {
+      /*
+      ** Spare device have an empty "rozofs_spare" file
+      */
+      c->spare_mark = NULL;
+    }
+    else {
+      /*
+      ** Spare device have a "rozofs_spare" file with <spare_mark> string in it
+      */      
+      c->spare_mark = xstrdup(spare_mark);
+    }
     list_init(&c->list);
     return 0;
+}
+cluster_config_t * cluster_config_get(sconfig_t *config, cid_t cid) {
+    list_t *p;
+    
+    list_for_each_forward(p,  &config->clusters) {
+        cluster_config_t *entry = list_entry(p, cluster_config_t, list);
+        if (entry->cid == cid) return entry;
+    }
+    return NULL;
 }
 void storage_config_release(storage_config_t *s) {
     if (s->spare_mark != NULL) {
@@ -102,6 +123,10 @@ void storage_config_release(storage_config_t *s) {
     return;
 }
 void cluster_config_release(cluster_config_t *c) {
+    if (c->spare_mark != NULL) {
+      xfree(c->spare_mark);
+      c->spare_mark = NULL;
+    }      
     return;
 }
 int sconfig_initialize(sconfig_t *sc) {
@@ -271,6 +296,7 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         long int readQ;
         long int cid;
 #endif
+        const char *spare_mark = NULL;
         
         if (!(cl = config_setting_get_elem(cluster_settings, i))) {
             errno = ENOKEY;
@@ -298,8 +324,17 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
               goto out;
             }
         }    
+        
+        if (config_setting_lookup_string(cl, SSPARE_MARK, &spare_mark) == CONFIG_FALSE) {
+          spare_mark = NULL;
+        }
+        else {
+          if (strlen(spare_mark) > 9) {
+            severe("cid%d has too long spare-mark : strlen(%s) = %d >9.", (int)cid, spare_mark, (int)strlen(spare_mark));
+          }
+        }        
         new = xmalloc(sizeof (cluster_config_t));
-        if (cluster_config_initialize(new, (cid_t) cid, readQ) != 0) {
+        if (cluster_config_initialize(new, (cid_t) cid, readQ, spare_mark) != 0) {
             if (new) free(new);
             goto out;
         }
@@ -471,6 +506,13 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         spare_mark = NULL;
         if (config_setting_lookup_string(ms, SSPARE_MARK, &spare_mark) == CONFIG_FALSE) {
           spare_mark = NULL;
+          /*
+          ** Get the configured value for this cluster
+          */
+          cluster_config_t * cl = cluster_config_get(config, cid);
+          if (cl) {
+            spare_mark = cl->spare_mark;
+          }        
         }
         else {
           if (strlen(spare_mark) > 9) {
@@ -654,7 +696,7 @@ int sconfig_validate(sconfig_t *config) {
             cluster_config_t *c2 = list_entry(q, cluster_config_t, list);
             if (c1 == c2) continue;
             if (c1->cid == c2->cid) {
-                severe("duplicated cid in cluster config (cid: %u)", c1->cid);
+                severe("duplicated cid in cluster config (cid: %u %u) %p %p", c1->cid, c2->cid, c1, c2);
                 errno = EINVAL;
                 goto out;
             }
