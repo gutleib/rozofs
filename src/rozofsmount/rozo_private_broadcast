@@ -1,0 +1,359 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
+# This file is part of Rozofs.
+#
+# Rozofs is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, version 2.
+#
+# Rozofs is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+import datetime
+import shutil
+import syslog
+
+from optparse import OptionParser
+
+#_________________________________________________
+#
+# Print when debug option is set
+#
+def debug(message):    
+  if not options.debug: return
+  print message
+ 
+#_________________________________________________
+#
+# Append some error string to the general error string
+#
+def add_general_error(err):
+  global general_error
+  
+  # 1rst general error
+  if general_error == None: 
+    general_error = err
+  
+  # More general error  
+  else:             
+    general_error += " / %s"%(err)
+    
+  debug(err)
+    
+#_________________________________________________
+#
+# Get RozoFS proprieratary update time attribute of 
+# the broadcast directory
+#
+def get_broadcast_update_time(broadcast_path):
+
+  #
+  # get rozofs xattribute to have the update time of the broadcast directory
+  # Attribute is dispalyed as UTIME    : <date>
+  try:
+    parsed =  shlex.split("attr -g rozofs %s"%(broadcast_path))
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:    
+      if line.split()[0] != "UTIME": continue
+      return line[10:].rstrip()        
+  except: 
+    return None
+  return None
+#_________________________________________________
+#
+# Find out a RozoFS private mount point and get the 
+# broadcast directory path
+#
+def get_broadcast_path():
+            
+  #
+  # Use mount command to check all the mounted point
+  # to find out a RozoFS mount point with private in
+  # its path
+  #
+  parsed = shlex.split("mount")
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:    
+  
+    try:
+      if not "rozofs" in line: continue
+      private = line.split()[2]
+      if not "private" in private: continue
+      
+      debug("Private path is %s"%(private))
+        
+      #
+      # get rozofs xattribute to have the update time of the broadcast directory
+      #  
+      broadcast_path = "%s/.broadcast"%(private)
+      #
+      # Broadcast directory does not exist, so create it
+      #
+      if not os.path.isdir(broadcast_path): os.mkdir(broadcast_path)
+      return broadcast_path     
+
+    except: pass
+    continue  
+
+  add_general_error("No private mount point")
+  return None
+  
+#_________________________________________________
+#
+# Get configuration file path
+#
+def get_cfg_path(broadcast_path):
+  
+  #
+  # Check the configuration file exists
+  #
+  cfg = "%s/cfg"%(broadcast_path)
+  
+  if os.path.isfile(cfg) == True: 
+    debug("configuration file is %s"%(cfg))
+    return cfg
+  
+  add_general_error("No broadcast configuration file")
+  return None  
+#_________________________________________________
+#
+# Check source file exists
+#
+def check_source_path(broadcast_path,name):
+  
+  src = "%s/%s"%(broadcast_path,name)
+  if not os.path.isfile(src): 
+    # broadcast directory is not consistent
+    add_general_error("no source file")
+    file_status  = "no source file" 
+    debug("    %s"%(file_status))
+    return None, file_status
+  return src, "success"
+#_________________________________________________
+#
+# Check destination file is to be updated
+# 
+def check_destination_path(dst,src):
+
+  if options.force:
+    file_status  = "force update" 
+    debug("    %s"%(file_status))
+    return dst, file_status  
+  
+  #
+  # When destination file does not exist, create it
+  #
+  if not os.path.isfile(dst): 
+    file_status  = "created" 
+    debug("    %s"%(file_status))
+    return dst, file_status  
+  
+  #
+  # Compare source and destination dates
+  #
+  d = int(os.path.getmtime(dst))
+  s = int(os.path.getmtime(src))
+  if d == s: 
+    file_status  = "uptodate" 
+    debug("    %s"%(file_status))
+    return None, file_status  
+    
+  if d > s:
+    add_general_error("older file")
+    file_status  = "older" 
+    debug("    %s"%(file_status))
+    return None, file_status  
+
+  file_status  = "updated" 
+  debug("    %s"%(file_status))
+  return dst, file_status       
+
+#_________________________________________________
+#
+# M A I N
+#
+
+parser = OptionParser()
+parser.add_option("-d","--debug", action="store_true",default=False, dest="debug", help="Debug option.")
+parser.add_option("-f","--force", action="store_true",default=False, dest="force", help="Force an update.")
+parser.add_option("-p","--period", action="store",default=0, dest="period", help="Periodicity.")
+parser.add_option("-H","--history", action="store_true",default=False, dest="history", help="Display history of filess.")
+
+(options, args) = parser.parse_args()
+
+period = None
+update_time = ""
+broadcast_path = None
+general_error = None
+action = "uptodate"
+CYAN='\033[96m\033[40m'
+NORMAL='\033[0m'
+
+if options.history:
+  options.debug = True
+  broadcast_path = get_broadcast_path()
+  if broadcast_path == None: sys.exit(1)
+  cfg = get_cfg_path(broadcast_path)
+  if cfg == None: sys.exit(1)
+  f = open(cfg)
+  line = "#"
+  
+  while True:
+  
+    line = f.readline().rstrip()
+    if not line: break
+ 
+    try:
+      sp = line.split()
+      s = sp[0]
+      d = sp[1] 
+      print CYAN + "____%s____"%(line) + NORMAL
+      os.system("ls -ls %s/%s"%(broadcast_path,s))
+      os.system("ls -ls %s"%(d))       
+      os.system("ls -lrs %s.saved_at_* 2>/dev/null"%(d))       
+    except:
+      pass   
+  sys.exit(0)    
+      
+syslog.openlog("rozo_private_broadcast[%s]"%(os.getpid()))
+
+while True:
+
+  #
+  # 1rst time 
+  # do not sleep, but install configured period and execute one loop 
+  #
+  if period == None: period = int(options.period)   
+    
+  # 
+  # One shot. 
+  # Do not reloop . But display execution information and exit
+  #
+  elif period == int(0): 
+    print "{ \"broadcast\" : {"
+    print "  \"path\"        : \"%s\","%(broadcast_path) 
+    print "  \"update time\" : \"%s\","%(update_time)
+    # some error occured    
+    if general_error != None :
+      print "  \"status\"      : \"%s\","%(general_error) 
+    # Say whether it has beene updated  
+    else:
+      print "  \"status\"      : \"%s\","%(action)         
+    print "  \"files\"       : ["
+    print PER_FILE_STATUS
+    print "  ]"
+    print "}}"
+    if general_error != None : sys.exit(1)
+    sys.exit(0)
+    break
+    
+  # 
+  #  Sleep before relooping
+  #
+  else: time.sleep(period)
+
+
+
+  PER_FILE_STATUS = ""
+  now = datetime.datetime.now()
+    
+  #
+  # Find out broadcast path if not yet done
+  #
+  if broadcast_path == None: 
+    broadcast_path = get_broadcast_path()
+    if broadcast_path == None: continue   
+  
+  #
+  # Get the new uptime of the broadcast directory
+  #
+  read_update_time = get_broadcast_update_time(broadcast_path)
+  if read_update_time == None : 
+    # Reset broadcast path
+    broadcast_path = None
+    continue
+
+  #
+  # Is there any change in the broadcast directory
+  #
+  if read_update_time == update_time: 
+    debug("No change in %s"%(broadcast_path))
+    # With force mode update anyway  
+    if options.force == False: continue  
+
+  #
+  # Update time has changed or force mode is set
+  #
+  update_time = read_update_time
+        
+  #
+  # Check the configuration file exists
+  #
+  cfg = get_cfg_path(broadcast_path)
+  if cfg == None: continue
+
+  #
+  # Process line per line : (source file) (full destination file path)
+  #
+  f = open(cfg)
+  line = "#"
+  
+  while True:
+  
+    line = f.readline().rstrip()
+    if not line: break
+    
+    debug("  - %s"%(line))
+    try:
+      sp = line.split()
+      s = sp[0]
+      d = sp[1]
+      
+      if PER_FILE_STATUS != "": PER_FILE_STATUS += ",\n"
+      PER_FILE_STATUS += "      { \"source\" :\"%s/%s\", \"destination\" : \"%s\", \"status\" : "%(broadcast_path,s,d)
+
+      #
+      # Check source file exists
+      #
+      src, file_status = check_source_path(broadcast_path,s)
+      if src == None: 
+        PER_FILE_STATUS += "\"%s\" }"%(file_status)
+        continue
+
+      #
+      # Check destination is to be updated
+      #
+      dst, file_status = check_destination_path(d,src)
+      PER_FILE_STATUS += "\"%s\" }"%(file_status)      
+      if dst == None: continue
+
+      #
+      # Copy the file and preserve all attributes
+      #  
+      action = "updated"
+      # Save previous file
+      try:
+        cmd = "cp -f -a %s %s.saved_at_%s"%(dst,dst,now.strftime("%Y-%m-%d-%H_%M_%S"))
+        os.system(cmd)
+      except: pass  
+      # update from source
+      cmd = "cp -f -a %s %s"%(src,dst)
+      os.system(cmd)
+      syslog.syslog(cmd)
+      debug("    copy %s to %s "%(src,dst))
+
+    except:
+      continue 
+  f.close()  

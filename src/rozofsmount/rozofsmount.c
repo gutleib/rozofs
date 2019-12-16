@@ -1841,7 +1841,22 @@ void rozofs_start_storcli() {
 		i--;
 	}
 }
+/*_______________________________________________________________________
+** Start a thread that will call the script that synchronizes some files
+** from private .broadcast directory
+**
+*/
+void rozofs_private_broadcast(int start) {
+  char pid_file[128];
+  char cmd[1024*2];
 
+  if (strstr(rozofs_mountpoint,"/private") == NULL) return;  
+  sprintf(pid_file,"/var/run/rozofs/pid/launcher_rozofsmount_%d_broadcast.pid", conf.instance);  
+  sprintf(cmd, "rozo_private_broadcast -p 10");
+  
+  if (start) rozo_launcher_start(pid_file,cmd);
+  else       rozo_launcher_stop(pid_file); 
+}
 
 int fuseloop(struct fuse_args *args, int fg) {
     int i = 0;
@@ -2248,6 +2263,12 @@ int fuseloop(struct fuse_args *args, int fg) {
     */ 
     rozofs_start_storcli();
 
+    /*
+    ** In case this is the private mount point
+    ** we have to start synchronizing files from its .broadcast directory
+    */
+    rozofs_private_broadcast(1);
+
     for (;;) {
         int ret;
         ret = sem_wait(semForEver);
@@ -2260,6 +2281,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     }
 
     rozofs_kill_storcli();
+    rozofs_private_broadcast(0);
 
     fuse_remove_signal_handlers(se);
     fuse_session_remove_chan(ch);
