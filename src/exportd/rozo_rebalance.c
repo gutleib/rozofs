@@ -1564,8 +1564,22 @@ success:
 int build_eid_table_associated_with_volume(vid_t vid)
 {
   list_t          * e=NULL;
+  list_t          * v=NULL;
   export_config_t * econfig;
+  volume_config_t * vconfig;
   int index=0;
+  
+  list_for_each_forward(v, &exportd_config.volumes) {
+
+    vconfig = list_entry(v, volume_config_t, list);
+    
+    if (vconfig->vid == vid) 
+    {
+       break;
+    }
+    vconfig = NULL; 
+  }
+  if (vconfig == NULL) return 0;
   
   list_for_each_forward(e, &exportd_config.exports) {
 
@@ -1574,6 +1588,9 @@ int build_eid_table_associated_with_volume(vid_t vid)
     if ((econfig->vid == vid) || (econfig->vid_fast == vid))
     {
        volume_export_table[index] =  econfig;
+       if (econfig->layout >= LAYOUT_MAX) {
+         econfig->layout = vconfig->layout;
+       }
        index++;
     } 
   }
