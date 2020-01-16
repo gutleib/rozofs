@@ -907,6 +907,17 @@ def reread():
       
   os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action delete"%(exepath,NBFILE,SIZE))        
   return 0
+
+#___________________________________________________  
+def get_cid_sid_from_path(path):
+#___________________________________________________
+  for directory in path.split('/'):
+    if not "storage_" in directory: continue
+    try:
+      return int(directory.split('_')[1]), int(directory.split('_')[2])
+    except:
+      backline("%s is not a sid path !!!"%(directory))
+      return int(0), int(0)
   
 #___________________________________________________
 def crc32():
@@ -944,27 +955,22 @@ def crc32():
     return -1
     
   # Find the 1rst bins file
-  bins = None
+  bins1 = None
+  bins2 = None
   with open("/tmp/crc32loc","r") as f: 
     for line in f.readlines():
       if "/bins_0/" in line:
-        bins = line.split()[3]
-        break;
-  if bins == None:
-    report("Fail to find bins file name in /tmp/crc32loc")
+        if bins1 == None: 
+          bins1 = line.split()[3] 
+          continue
+        bins2 = line.split()[3]   
+        break
+  if bins2 == None:
+    report("Fail to find bins files name in /tmp/crc32loc")
     return -1    
 
   # Find the cid
-  cid = 0
-  sid = 0
-  with open("/tmp/crc32loc","r") as f: 
-    for line in f.readlines():
-      if "CLUSTER" in line:
-        cid = line.split()[2]
-        continue;
-      if "STORAGE" in line:
-        sid =  int(line.split()[2].split('-')[0])   
-        break;
+  cid, sid = get_cid_sid_from_path(mapper)
  
   hid = get_hid(cid,sid)
   device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
@@ -1022,28 +1028,30 @@ def crc32():
       backline("mapper/header has been repaired ")
 
   # Corrupt the bins file
-  f = open(bins, 'r+b')     
-  f.seek(1211) 
-  f.write("DDT")
-  f.seek(3111) 
-  f.write("DDT")
-  f.seek(4444) 
-  f.write("DDT")    
-  f.seek(1024*112) 
-  f.write("DDT")    
-  f.seek(1024*114) 
-  f.write("DDT")    
-  f.seek(1024*115) 
-  f.write("DDT")    
-  f.seek(1024*118) 
-  f.write("DDT")    
-  f.seek(1024*120) 
-  f.write("DDT")    
-  size = os.path.getsize(bins)
-  f.seek(size-11);
-  f.write("DDT")       
-  f.close()
-  backline("Corrupt bins file %s"%(bins))
+  backline("Corrupt 1rst bins file %s"%(bins1))
+  for bins in [ bins1, bins2]:
+    f = open(bins, 'r+b')     
+    f.seek(1211) 
+    f.write("DDT")
+    f.seek(3111) 
+    f.write("DDT")
+    f.seek(4444) 
+    f.write("DDT")    
+    f.seek(1024*112) 
+    f.write("DDT")    
+    f.seek(1024*114) 
+    f.write("DDT")    
+    f.seek(1024*115) 
+    f.write("DDT")    
+    f.seek(1024*118) 
+    f.write("DDT")    
+    f.seek(1024*120) 
+    f.write("DDT")    
+    size = os.path.getsize(bins)
+    f.seek(size-11);
+    f.write("DDT")       
+    f.close()
+  backline("Corrupt 2nd bins file %s"%(bins2))
 
   # Reset storages
   os.system("./setup.py storage all reset; echo 3 > /proc/sys/vm/drop_caches")
@@ -1940,7 +1948,7 @@ def trashNrebuild():
   # Put del dir to trash
   if trash_delete(trash_dir,nb) != 0:  return 1
   # Rebuild every node
-  if rebuild_1node() != 0:  return 1
+  if rebuild_node() != 0:  return 1
   # Restore files
   if trash_restore(trash_dir,nb) != 0: return 1
   return 0
@@ -1986,7 +1994,7 @@ def gruyere():
     return ret
   return 0
 #___________________________________________________
-def rebuild_1dev() :
+def rebuild_device() :
 # test rebuilding device per device
 #___________________________________________________
   global sids
@@ -2005,8 +2013,11 @@ def rebuild_1dev() :
     
     dev=int(hid)%int(mapper_modulo)
     clean_rebuild_dir()    
+
+    os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev)) 
+    backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
+    time.sleep(5) 
     string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s"%(cid,sid,dev,cid,sid,dev)
-    os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
     ret = cmd_returncode(string)
     if ret != 0:
       return ret
@@ -2015,7 +2026,9 @@ def rebuild_1dev() :
       dev=(dev+1)%int(mapper_modulo)
       os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
       backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
-      ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev))
+      time.sleep(5) 
+      string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev)
+      ret = cmd_returncode(string)
       if ret != 0:
 	return ret
 	
@@ -2105,7 +2118,7 @@ def selfhealing_spare(hid, cid, sid, dev) :
   return 0
 #___________________________________________________
 def selfhealing_resecure(hid, cid, sid, dev) :
-  log("Wait resecure %s:%s:%s"%(cid,sid,dev))	          
+  log("Wait resecure host %s cid %s sid %s device %s"%(hid,cid,sid,dev))	          
   
   # Check wether automount is configured
   string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc set device_selfhealing_mode resecure"%(hid,cid)
@@ -2134,7 +2147,8 @@ def get_hid(cid,sid) :
     if int(zsid) != int(sid): continue
    
     return hid
-  return -1  
+  report("get_hid( cid=%s, sid=%s) No such cid/sid"%(cid,hid))
+  sys.exit(1) 
      
 #___________________________________________________
 def selfhealing() :
@@ -2144,7 +2158,7 @@ def selfhealing() :
   clean_rebuild_dir()
 
   # Create reference file
-  dir="%s/selHealing"%(mnt)
+  dir="%s/selfHealing"%(mnt)
   os.system("rm -rf %s; mkdir -p %s"%(dir,dir))
   for i in range(60):
     zefile="%s/ref%s"%(dir,i)
@@ -2173,18 +2187,22 @@ def selfhealing() :
 
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid0) in line:
       dev0 = line.split()[3].split('/')[5]
+      log("cid %s sid %s dev %s %s"%(cid,sid0,dev0,line))
       continue
           	  	  
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid1) in line:
       dev1 = line.split()[3].split('/')[5]
+      log("id %s sid %s dev %s %s"%(cid,sid1,dev1,line))
       continue
           	  	  
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid2) in line:
       dev2 = line.split()[3].split('/')[5]
+      log("id %s sid %s dev %s %s"%(cid,sid2,dev2,line))
       continue
       
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid3) in line:
       dev3 = line.split()[3].split('/')[5]
+      log("id %s sid %s dev %s %s"%(cid,sid3,dev3,line))
       break
 
   hid0 = get_hid(cid,sid0)
@@ -2226,6 +2244,7 @@ def selfhealing() :
     return 1 
 
   # Create 2 spare device
+  log("Create spare devices")
   os.system("./setup.py spare; ./setup.py spare; ./setup.py spare; ./setup.py spare")
   ret =       selfhealing_spare(hid0,cid,sid0,dev0)  
   ret = ret + selfhealing_spare(hid1,cid,sid1,dev1)
@@ -2240,9 +2259,10 @@ def selfhealing() :
       return 1            
   return 0
 #___________________________________________________
-def rebuild_all_dev() :
+def rebuild_sid() :
 # test re-building all devices of a sid
 #___________________________________________________
+  global sids
 
   if rebuildCheck == True: 
     gruyere()        
@@ -2258,6 +2278,7 @@ def rebuild_all_dev() :
 
     os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
     backline("rebuild cid %s sid %s"%(cid,sid))
+    time.sleep(5) 
     ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -o all_cid%s_sid%s "%(cid,sid,cid,sid))
     if ret != 0:
       return ret
@@ -2273,7 +2294,7 @@ def rebuild_all_dev() :
   return 0  
 
 #___________________________________________________
-def rebuild_1node() :
+def rebuild_node() :
 # test re-building a whole storage
 #___________________________________________________
   global hosts
@@ -2299,6 +2320,7 @@ def rebuild_1node() :
 
     clean_rebuild_dir()
     backline("rebuild node %s"%(hid))
+    time.sleep(5) 
     string="./setup.py storage %s rebuild -fg -o node_%s"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -2314,7 +2336,7 @@ def rebuild_1node() :
     return ret
   return 0 
 #___________________________________________________
-def rebuild_1node_parts() :
+def rebuild_node_parts() :
 # test re-building a whole storage
 #___________________________________________________
   global hosts
@@ -2341,6 +2363,7 @@ def rebuild_1node_parts() :
     clean_rebuild_dir()
     
     backline("rebuild node %s nominal"%(hid))    
+    time.sleep(5) 
     string="./setup.py storage %s rebuild -fg -o node_nominal_%s --nominal"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -2906,8 +2929,8 @@ TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncat
 TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread','mmap']
 # Rebuild test list
 # In case of strong rebuild checks, gruyere is processed before eand gruyere_reread aftter each test
-TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','selfhealing','gruyere_reread']
-TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','selfhealing']
+TST_REBUILD=['gruyere','rebuild_fid','rebuild_device','rebuild_sid','rebuild_node','rebuild_node_parts','selfhealing','gruyere_reread']
+TST_REBUILDCHECK=['rebuild_fid','rebuild_device','rebuild_sid','rebuild_node','rebuild_node_parts','selfhealing']
 
 # File locking
 TST_FLOCK=['flock_posix_passing','flock_posix_blocking','flock_bsd_passing','flock_bsd_blocking','flock_race','flock_threads','flock_crash','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race','flockp_threads','flockp_crash',]
