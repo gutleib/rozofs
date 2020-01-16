@@ -162,7 +162,7 @@ void * ruc_buf_poolCreate_shared(uint32_t nbBuf, uint32_t bufsize, key_t key/*,r
    {
       p->ptr = (uint8_t*)pBufCur;
       p->state = BUF_FREE;
-      p->bufCount  = (uint16_t)bufsize;
+      p->bufCount  = bufsize;
       p->type = BUF_ELEM;
       p->callBackFct = (ruc_pf_buf_t)NULL;
 #if 0
