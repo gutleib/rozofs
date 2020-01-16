@@ -558,7 +558,7 @@ void rozofs_storcli_read_standalone_req_processing_cbk(void *this,void *param)
        /*
        ** the reference from the transaction context
        */
-       rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
+       rozofs_tx_clear_rdma_bufref(this);
        
      return rozofs_storcli_read_req_processing_cbk(this,param);
    }
@@ -572,7 +572,7 @@ void rozofs_storcli_read_standalone_req_processing_cbk(void *this,void *param)
        ** something wrong happened
        */
        ruc_buf_freeBuffer(rdma_buf_ref);
-       rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
+       rozofs_tx_clear_rdma_bufref(this);
        return rozofs_storcli_read_req_processing_cbk(this,param);
     }
     /*
@@ -602,7 +602,7 @@ void rozofs_storcli_read_standalone_req_processing_cbk(void *this,void *param)
     /*
     ** remove the reference of the rdma_buffer: standalone & RDMA uses the same flag within the transaction module
     */
-    rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
+    rozofs_tx_clear_rdma_bufref(this);
     /*
     ** processing now will take place on the legacy data path
     */
@@ -875,14 +875,14 @@ void rozofs_storcli_write_standalone_req_processing_cbk(void *this,void *param)
        /*
        ** the reference from the transaction context
        */
-       rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
+       rozofs_tx_clear_rdma_bufref(this);
        
      return rozofs_storcli_write_req_processing_cbk(this,param);
    }
     /*
     ** normal case : just remove the reference of the rdma_buffer
     */
-    rozofs_tx_clear_rdma_bufref(rdma_buf_ref);
+    rozofs_tx_clear_rdma_bufref(this);
     /*
     ** processing now will take place on the legacy data path
     */
