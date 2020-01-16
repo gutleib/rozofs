@@ -793,6 +793,13 @@ void rozofs_storcli_repair_req_init(rozofs_storcli_ctx_t *working_ctx_p)
      working_ctx_p->prj_ctx[i].prj_state = repair_prj_ctx[i].prj_state;
      working_ctx_p->prj_ctx[i].prj_buf   = repair_prj_ctx[i].prj_buf;
      working_ctx_p->prj_ctx[i].bins      = repair_prj_ctx[i].bins;
+     if (working_ctx_p->prj_ctx[i].prj_buf != NULL) {
+       /*
+       ** increment inuse counter since we reference it in the working context
+       */
+       working_ctx_p->prj_ctx[i].inuse_valid = 1;
+       ruc_buf_inuse_increment(working_ctx_p->prj_ctx[i].prj_buf);       
+     }
    } 
                                              			
    /*

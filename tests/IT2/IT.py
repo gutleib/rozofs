@@ -2014,7 +2014,7 @@ def trashNrebuild():
   # Put del dir to trash
   if trash_delete(trash_dir,nb) != 0:  return 1
   # Rebuild every node
-  if rebuild_1node() != 0:  return 1
+  if rebuild_node() != 0:  return 1
   # Restore files
   if trash_restore(trash_dir,nb) != 0: return 1
 
@@ -2062,7 +2062,7 @@ def gruyere():
     return ret
   return 0
 #___________________________________________________
-def rebuild_1dev() :
+def rebuild_device() :
 # test rebuilding device per device
 #___________________________________________________
   global sids
@@ -2085,8 +2085,9 @@ def rebuild_1dev() :
       dev=int(hid)%int(mapper_modulo)
     clean_rebuild_dir()    
 
+    os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev)) 
     backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
-    os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))    
+    time.sleep(5) 
     string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s"%(cid,sid,dev,cid,sid,dev)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -2096,6 +2097,7 @@ def rebuild_1dev() :
       dev=(dev+1)%int(mapper_modulo)
       backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
       os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
+      time.sleep(5) 
       string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev)
       ret = cmd_returncode(string)
       if ret != 0:
@@ -2328,7 +2330,7 @@ def selfhealing() :
       return 1            
   return 0
 #___________________________________________________
-def rebuild_all_dev() :
+def rebuild_sid() :
 # test re-building all devices of a sid
 #___________________________________________________
   global sids
@@ -2347,6 +2349,7 @@ def rebuild_all_dev() :
 
     os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
     backline("rebuild cid %s sid %s"%(cid,sid))
+    time.sleep(5) 
     ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -o all_cid%s_sid%s "%(cid,sid,cid,sid))
     if ret != 0:
       return ret
@@ -2362,7 +2365,7 @@ def rebuild_all_dev() :
   return 0  
 
 #___________________________________________________
-def rebuild_1node() :
+def rebuild_node() :
 # test re-building a whole storage
 #___________________________________________________
   global hosts
@@ -2388,6 +2391,7 @@ def rebuild_1node() :
 
     clean_rebuild_dir()
     backline("rebuild node %s"%(hid))
+    time.sleep(5) 
     string="./setup.py storage %s rebuild -fg -o node_%s"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -2403,7 +2407,7 @@ def rebuild_1node() :
     return ret
   return 0 
 #___________________________________________________
-def rebuild_1node_parts() :
+def rebuild_node_parts() :
 # test re-building a whole storage
 #___________________________________________________
   global hosts
@@ -2430,6 +2434,7 @@ def rebuild_1node_parts() :
     clean_rebuild_dir()
     
     backline("rebuild node %s nominal"%(hid))    
+    time.sleep(5) 
     string="./setup.py storage %s rebuild -fg -o node_nominal_%s --nominal"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -3010,8 +3015,8 @@ TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncat
 TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread','mmap']
 # Rebuild test list
 # In case of strong rebuild checks, gruyere is processed before eand gruyere_reread aftter each test
-TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','selfhealing','gruyere_reread']
-TST_REBUILDCHECK=['rebuild_fid','rebuild_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','selfhealing']
+TST_REBUILD=['gruyere','rebuild_fid','rebuild_device','rebuild_sid','rebuild_node','rebuild_node_parts','selfhealing','gruyere_reread']
+TST_REBUILDCHECK=['rebuild_fid','rebuild_device','rebuild_sid','rebuild_node','rebuild_node_parts','selfhealing']
 
 # File locking
 TST_FLOCK=['flock_posix_passing','flock_posix_blocking','flock_bsd_passing','flock_bsd_blocking','flock_race','flock_threads','flock_crash','flockp_posix_passing','flockp_posix_blocking','flockp_bsd_passing','flockp_bsd_blocking','flockp_race','flockp_threads','flockp_crash',]

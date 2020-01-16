@@ -371,7 +371,6 @@ uint32_t af_unix_disk_rcvReadysock(void * unused,int socketId)
 */
 void rozofs_storcli_inverse_threaded_end(rozofs_storcli_ctx_t * working_ctx_p,int send_needed)
 {
-   rozofs_storcli_projection_ctx_t  *read_prj_work_p = NULL;
    uint32_t   projection_id;
    storcli_read_arg_t *storcli_read_rq_p;
 
@@ -379,19 +378,6 @@ void rozofs_storcli_inverse_threaded_end(rozofs_storcli_ctx_t * working_ctx_p,in
    uint8_t layout         = storcli_read_rq_p->layout;
    uint8_t rozofs_safe    = rozofs_get_rozofs_safe(layout);
 
-    /*
-    ** now the inverse transform is finished, release the allocated ressources used for
-    ** rebuild
-    */
-    read_prj_work_p = working_ctx_p->prj_ctx;
-    for (projection_id = 0; projection_id < rozofs_safe; projection_id++)
-    {
-      if  (read_prj_work_p[projection_id].prj_buf != NULL) {
-        ruc_buf_freeBuffer(read_prj_work_p[projection_id].prj_buf);
-      }	
-      read_prj_work_p[projection_id].prj_buf = NULL;
-      read_prj_work_p[projection_id].prj_state = ROZOFS_PRJ_READ_IDLE;
-    }
     /*
     ** Check we just need to proceed with the context release : case when Mojette thread
     ** sent back the reponse to rozofsmount by itself
