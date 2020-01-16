@@ -620,17 +620,20 @@ while True :
       continue
 
     for column in range(nbColumn):
+
       val = common_convert_Bytes( words[column+2])
       if int(val) == int(0): continue
       
+      # Case of the latency expressed in us
+      # One can not sum up the latencies but must make an average
+      if " us" in titles[column]:
+        # Multiply latency with number of I/O to get a duration
+        val = val * common_convert_Bytes( words[column+1])              
+
       try:
       
         new_val = time_col_val[deltaTime][column] + int(val)
-        time_col_val[deltaTime][column] = new_val
-        if options.bold == True:
-          if max_col_val[column] < new_val: max_col_val[column] = new_val
-        if record[column] < new_val:  record[column] = new_val   
-                 
+        time_col_val[deltaTime][column] = new_val                 
         #
         # For average option add the value on the right array
         #              
@@ -643,7 +646,27 @@ while True :
             avg_left[column] += int(val) 
              
       except:
+
         syntax( "Error on t %s column %s val %s"%(deltaTime,column,val) ) 
+
+  # Rework values before display
+  for column in range(nbColumn):  
+    for t in range(SIZE):
+    
+      new_val = time_col_val[t][column]
+      if new_val == int(0): continue
+      
+      # Case of the latency expressed in us. We have computed a duration
+      # Divide duration by number of I/O to get a latency      
+      if " us" in titles[column]:   
+        if  time_col_val[t][column-1] != int(0):   
+          new_val = new_val / time_col_val[t][column-1] 
+          time_col_val[t][column] = new_val
+                  
+      # Check for maximum value  
+      if options.bold == True:
+        if max_col_val[column] < new_val: max_col_val[column] = new_val
+        if record[column] < new_val:  record[column] = new_val   
 
   #
   # Round 1 : display header and records
@@ -736,6 +759,7 @@ while True :
   #
   if history == " m": 
     history = " h"
+    record =  [ int(0) for j in range(50) ]    
     continue  
     
   #
@@ -749,6 +773,7 @@ while True :
   if options.verbose == True: print "Run %s/%s"%(nb_run,max_run)
   if options.delay != None:
     if int(nb_run) >= int(max_run): 
+      record =  [ int(0) for j in range(50) ]    
       history = " m"
       last_round = int(1)
       period = int(60)
