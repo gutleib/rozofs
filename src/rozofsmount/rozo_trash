@@ -124,6 +124,8 @@ do_recursive () {
   value=$1
   fid=$2
   dir=$3
+  count=0
+  
   
   #
   # Get active export address as well as eid values
@@ -139,23 +141,29 @@ do_recursive () {
     fatal "Can not run rozo_du on active export"
   fi
   
-  for path in `cat ${TMP} | awk '{print $1}'`
+  while IFS= read -r line
   do
-    if [ ${path} != "--" ]
+    begin=`echo ${line} | awk '{print $1;}'`
+    if [ "${begin}" != "--" ]
     then
       # 
       # Set recursive mode
       #
-      attr -qs rozofs -V "trash=${value}" ${mnt}/${path}
+      attr -qs rozofs -V "trash=${value}" ${mnt}/"${line}"
       if [ $? -ne 0 ]
       then
-        echo "Can not enable/disable trash on ${mnt}/${path}"
+        echo "Can not enable/disable trash on ${mnt}/${line}"
+      else
+        count=$((count+1))  
       fi 
-    fi     
-  done 
-  
-  
-   
+    fi    
+  done < ${TMP}  
+  if [ "${value}" == "0" ];
+  then
+    echo "Trash recursively disabled on ${count} sub-directories"
+  else
+    echo "Trash recursively enabled on ${count} sub-sdirectories"
+  fi  
 }  
 #______________________________________
 #
@@ -425,7 +433,7 @@ case "${cmd}" in
   enable)    trash_status enable $* ;;  
   recursive) trash_status enable recursive $* ;;  
   disable)   trash_status disable $*;;  
-  status)    trash_status_display  $1 2>/dev/null ;;  
+  status)    trash_status_display  $1 2>/dev/null;;  
   root)      trash_root  $1 $2 2>/dev/null;;  
 
 #  dir) trash_restore_directory  $1 $2 2>/dev/null;;  
