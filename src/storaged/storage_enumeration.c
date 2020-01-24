@@ -590,6 +590,58 @@ storage_device_name_t * storage_allocate_new_device_name(storage_enumerated_devi
   }  
   return pDevName;   
 } 
+/*__________________________________________________________
+** Put the lsblk file name in a given buffer
+**__________________________________________________________
+*/
+static inline char * storage_append_lsblk_filename(char * pt) {
+  pt += rozofs_string_append(pt, common_config.device_automount_path);
+  pt += rozofs_string_append(pt, "/lsblk");  
+  return pt;  
+}
+/*__________________________________________________________
+** Run a lsblk command and put result in file 
+** <common_config.device_automount_path>/lsblk
+** This function should be called periodically be a thread
+** of the storaged. The storio just read the result file 
+** without calling lsblk.
+**__________________________________________________________
+*/
+void storage_run_lsblk() {
+  char            cmd[512];
+  char         *  pt;
+    
+  /*
+  ** Create the working directory to mount the devices on
+  */
+  if (access(common_config.device_automount_path,F_OK)!=0) {
+    if (rozofs_mkpath(common_config.device_automount_path,S_IRUSR | S_IWUSR | S_IXUSR)!=0) {
+      severe("rozofs_mkpath(%s) %s", common_config.device_automount_path, strerror(errno));
+      return;
+    }
+  }        
+  
+  pt = cmd;
+  if (oldlsblk) {
+    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,UUID,TYPE  | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"# #\"$12\"#\"$14\"#\";}' > /tmp/lsblk.");
+  }
+  else {
+    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"#\"$12\"#\"$14\"#\"$16\"#\";}' > /tmp/lsblk.");
+  }  
+  pt += rozofs_u32_append(pt,getpid());
+  if (system(cmd)==0) {}
+  
+  /*
+  ** Rename the file
+  */
+  pt = cmd;
+  pt += rozofs_string_append(pt, "mv /tmp/lsblk.");
+  pt += rozofs_u32_append(pt,getpid());
+  pt += rozofs_string_append(pt, " ");
+  pt  = storage_append_lsblk_filename(pt);
+  
+  if (system(cmd)==0) {}
+}
 /*
  *_______________________________________________________________________
  *
@@ -725,17 +777,18 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   uuid_t          uuid;
   int             mpath; // Whether this is a multipath device or not
   storage_device_name_t * pDevName;
+  struct stat     buf;
+
   
   storage_enumerated_device_t * pDev = NULL;  
   storage_enumerated_device_t * pExist = NULL;  
-
-  storio_last_enumeration_date = time(NULL);
 
   /*
   ** Reset enumerated device table
   */
   storage_reset_enumerated_device_tbl();
   
+
   /*
   ** Create the working directory to mount the devices on
   */
@@ -744,29 +797,18 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       severe("rozofs_mkpath(%s) %s", workDir, strerror(errno));
       return storage_enumerated_device_nb;
     }
-  }        
-
+  }
+    
   /*
   ** Unmount the working directory, just in case
   */
   storage_umount(workDir);    
       
   /*
-  ** Build the list of block devices available on the system
+  ** Read lsblk file
   */  
   pt = fdevice;
-  pt += rozofs_string_append(pt,workDir);
-  pt += rozofs_string_append(pt,".dev");
-  
-  pt = cmd;
-  if (oldlsblk) {
-    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,UUID,TYPE  | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"# #\"$12\"#\"$14\"#\";}' > ");
-  }
-  else {
-    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"#\"$12\"#\"$14\"#\"$16\"#\";}' > ");
-  }  
-  pt += rozofs_string_append(pt,fdevice);
-  if (system(cmd)==0) {}
+  pt = storage_append_lsblk_filename(pt);
   
   /*
   ** Open result file
@@ -776,6 +818,13 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     severe("fopen(%s) %s", fdevice, strerror(errno)); 
     return storage_enumerated_device_nb;   
   }
+
+  /*
+  ** Get enumeration date
+  */
+  if (stat(fdevice,&buf) == 0) {
+    storio_last_enumeration_date = buf.st_mtime;
+  }  
   
   /*
   ** Loop on devices to check whether they are
@@ -1115,7 +1164,6 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     fclose(fp);
     fp = NULL;
   }  
-  unlink(fdevice);
 
   /*
   ** Unmount the directory
@@ -1629,8 +1677,13 @@ int storage_mount_all_enumerated_devices() {
  * @retval 1 when old lsblk, 0 else 
  */
 int rozofs_check_old_lsblk(void) {
-  if (system("lsblk -o HCTL > /dev/null 2>&1 ")==0) return 0;
-  return 1;
+  if (system("lsblk -o HCTL > /dev/null 2>&1 ")==0) {
+    oldlsblk = 0;
+  }
+  else {
+    oldlsblk = 1; 
+  }   
+  return oldlsblk;
 }   
 /*
  *_______________________________________________________________________
@@ -1657,7 +1710,6 @@ int storage_process_automount_devices(char * workDir, int storaged) {
     storage_enumerated_devices_registered = 1;
     uma_dbg_addTopicAndMan("enumeration", storage_show_enumerated_devices, storage_show_enumerated_devices_man, 0);
      
-    oldlsblk = rozofs_check_old_lsblk(); 
   }
   
   /*

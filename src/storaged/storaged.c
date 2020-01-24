@@ -222,6 +222,66 @@ void storaged_automount_devices() {
   storage_umount(rozofs_storaged_path);
         
 }
+/*
+**____________________________________________________
+** Thread to process periodic lsblk
+**
+*/
+int rozofs_check_old_lsblk(void);
+void storage_run_lsblk();
+volatile int lsblk_ready = 0;
+void *storaged_lsblk_thread(void *arg) {
+
+  uma_dbg_thread_add_self("lsblk");
+
+  /*
+  ** Check for lsblk version 
+  */
+  rozofs_check_old_lsblk(); 
+  
+  /*
+  ** 1rst lsblk run
+  */
+  storage_run_lsblk();     
+  lsblk_ready = 1;     
+
+  while (1) {
+    sleep(5);
+    storage_run_lsblk();     
+  }  
+}  
+/*
+**____________________________________________________
+** Start a thread to process periodic lsblk
+**
+*/
+void storaged_start_lsblk_thread() {
+  pthread_attr_t             attr;
+  pthread_t                  thrdId;
+  int                        err;
+  
+  lsblk_ready = 0;
+  
+  err = pthread_attr_init(&attr);
+  if (err != 0) {
+     fatal("pthread_attr_init(storaged_start_lsblk_thread) %s",strerror(errno));
+     return;
+   }  
+
+   err = pthread_create(&thrdId,&attr,storaged_lsblk_thread,NULL);
+   if (err != 0) {
+     fatal("pthread_create(storaged_start_lsblk_thread) %s", strerror(errno));
+     return;
+   }  
+   
+   sched_yield();
+   
+   while (lsblk_ready == 0) {
+     usleep(100000);
+   }
+}
+
+
 char storage_process_filename[NAME_MAX];
 
 static void on_start() {
@@ -244,6 +304,11 @@ static void on_start() {
 
     af_unix_socket_set_datagram_socket_len(common_config.storio_buf_cnt);
     storage_process_filename[0] = 0;
+
+    /*
+    ** Start thread that periodically processes a lsblk
+    */
+    storaged_start_lsblk_thread();
 
     // Initialization of the storage configuration
     if (storaged_initialize() != 0) {
