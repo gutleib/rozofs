@@ -379,8 +379,12 @@ class sid_class:
       return
       
     mnt="%s/%s"%(self.get_root_path(h.number),device)
-    os.system("rm -rf %s/bins*"%mnt)            
-    os.system("rm -rf %s/hdr*"%mnt)            
+    cmd = "rm -rf %s/bins*"%mnt
+    syslog.syslog(cmd) 
+    os.system(cmd)            
+    cmd="rm -rf %s/hdr*"%mnt
+    syslog.syslog(cmd) 
+    os.system(cmd)            
       
         
   def rebuild(self,argv):
@@ -1483,14 +1487,12 @@ class rozofs_class:
         print "Unexpected target %s !!!"%(target)
         sys.exit(-1)
       split = line.split()  
-      if split[0] == '-' and split[1] == '-':
-        prog = split[8]
+      if split[0] == "pid":
+        proc = int(split[2])
         continue
-      if prog == None: continue
-      try:
-        proc = int(split[0])
-      except:
-        proc = int(split[1])        
+      if split[0] != "command":
+        continue
+      prog = split[2]
       string = "ddd %s -p %s &"%(prog,proc)
       print string
       os.system(string)   

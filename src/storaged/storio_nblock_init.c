@@ -314,7 +314,7 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
               if (ip == INADDR_ANY) {
                 bindOnAnyAddr = 1;
               }           
-	      uma_dbg_init(10, ip, arg_p->debug_port);	                 
+	      uma_dbg_init_no_system(10, ip, arg_p->debug_port);	                 
            }
            /*
            ** When no configuration file is given, one uses the default config file.
