@@ -774,13 +774,13 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
 
   if (strcasestr("device_selfhealing_read_throughput",parameter) != NULL) {
     match++;
-    COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,20);
+    COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,40);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// self healing :  throughput limitation in MB/s per rebuild process in //\n");
     pChar += rozofs_string_append(pChar,"// for reading external projections. The writing on disk is only\n");
     pChar += rozofs_string_append(pChar,"// 1/2 of that in layout 0, 1/4 in layout 1...\n");
     pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,20,"0:10000");
+    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,40,"0:10000");
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
@@ -793,7 +793,8 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
     pChar += rozofs_string_append(pChar,"// relocate   also repair on remaining disks when no spare available\n");
     pChar += rozofs_string_append(pChar,"// resecure   repair on spare device when available, and then resecure files on\n");
     pChar += rozofs_string_append(pChar,"//            spare storages when no spare device is available\n");
-    COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,""spareOnly"","spareOnly,resecure,relocate");
+    pChar += rozofs_string_append(pChar,"// none       No self healing is processed. Only manual rebuild is allowed.\n");
+    COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,""spareOnly"","spareOnly,resecure,relocate,none");
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
@@ -847,11 +848,11 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
 
   if (strcasestr("spare_restore_read_throughput",parameter) != NULL) {
     match++;
-    COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,2);
+    COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,10);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
     pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-    COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,2);
+    COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,10);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
@@ -2010,13 +2011,13 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_delay,15,"0:10000");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,20);
+  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,40);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// self healing :  throughput limitation in MB/s per rebuild process in //\n");
   pChar += rozofs_string_append(pChar,"// for reading external projections. The writing on disk is only\n");
   pChar += rozofs_string_append(pChar,"// 1/2 of that in layout 0, 1/4 in layout 1...\n");
   pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-  COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,20,"0:10000");
+  COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,40,"0:10000");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_ENUM(device_selfhealing_mode,"spareOnly");
@@ -2026,7 +2027,8 @@ char * show_common_config_module_storage(char * pChar) {
   pChar += rozofs_string_append(pChar,"// relocate   also repair on remaining disks when no spare available\n");
   pChar += rozofs_string_append(pChar,"// resecure   repair on spare device when available, and then resecure files on\n");
   pChar += rozofs_string_append(pChar,"//            spare storages when no spare device is available\n");
-  COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,""spareOnly"","spareOnly,resecure,relocate");
+  pChar += rozofs_string_append(pChar,"// none       No self healing is processed. Only manual rebuild is allowed.\n");
+  COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,""spareOnly"","spareOnly,resecure,relocate,none");
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_STRING(export_hosts,"");
@@ -2056,11 +2058,11 @@ char * show_common_config_module_storage(char * pChar) {
   COMMON_CONFIG_SHOW_INT(default_rebuild_reloop,4);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,2);
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,10);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
   pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-  COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,2);
+  COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,10);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
   COMMON_CONFIG_IS_DEFAULT_INT(storio_fidctx_ctx,256);
@@ -2252,13 +2254,13 @@ char * show_common_config_module_storage_short(char * pChar) {
   }
 
 
-  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,20);
+  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,40);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// self healing :  throughput limitation in MB/s per rebuild process in //\n");
     pChar += rozofs_string_append(pChar,"// for reading external projections. The writing on disk is only\n");
     pChar += rozofs_string_append(pChar,"// 1/2 of that in layout 0, 1/4 in layout 1...\n");
     pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,20,"0:10000");
+    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,40,"0:10000");
   }
 
 
@@ -2269,7 +2271,8 @@ char * show_common_config_module_storage_short(char * pChar) {
     pChar += rozofs_string_append(pChar,"// relocate   also repair on remaining disks when no spare available\n");
     pChar += rozofs_string_append(pChar,"// resecure   repair on spare device when available, and then resecure files on\n");
     pChar += rozofs_string_append(pChar,"//            spare storages when no spare device is available\n");
-    COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,"spareOnly","spareOnly,resecure,relocate");
+    pChar += rozofs_string_append(pChar,"// none       No self healing is processed. Only manual rebuild is allowed.\n");
+    COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,"spareOnly","spareOnly,resecure,relocate,none");
   }
 
 
@@ -2304,11 +2307,11 @@ char * show_common_config_module_storage_short(char * pChar) {
   }
 
 
-  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,2);
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,10);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
     pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-    COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,2);
+    COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,10);
   }
 
 
@@ -2915,13 +2918,13 @@ char * save_common_config_module_storage(char * pChar) {
     COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_delay,15,"0:10000");
   }
 
-  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,20);
+  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,40);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// self healing :  throughput limitation in MB/s per rebuild process in //\n");
     pChar += rozofs_string_append(pChar,"// for reading external projections. The writing on disk is only\n");
     pChar += rozofs_string_append(pChar,"// 1/2 of that in layout 0, 1/4 in layout 1...\n");
     pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,20,"0:10000");
+    COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,40,"0:10000");
   }
 
   COMMON_CONFIG_IS_DEFAULT_ENUM(device_selfhealing_mode,"spareOnly");
@@ -2931,7 +2934,8 @@ char * save_common_config_module_storage(char * pChar) {
     pChar += rozofs_string_append(pChar,"// relocate   also repair on remaining disks when no spare available\n");
     pChar += rozofs_string_append(pChar,"// resecure   repair on spare device when available, and then resecure files on\n");
     pChar += rozofs_string_append(pChar,"//            spare storages when no spare device is available\n");
-    COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,"spareOnly","spareOnly,resecure,relocate");
+    pChar += rozofs_string_append(pChar,"// none       No self healing is processed. Only manual rebuild is allowed.\n");
+    COMMON_CONFIG_SHOW_ENUM(device_selfhealing_mode,"spareOnly","spareOnly,resecure,relocate,none");
   }
 
   COMMON_CONFIG_IS_DEFAULT_STRING(export_hosts,"");
@@ -2961,11 +2965,11 @@ char * save_common_config_module_storage(char * pChar) {
     COMMON_CONFIG_SHOW_INT(default_rebuild_reloop,4);
   }
 
-  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,2);
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,10);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
     pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
-    COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,2);
+    COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,10);
   }
 
   COMMON_CONFIG_IS_DEFAULT_INT(storio_fidctx_ctx,256);
@@ -3615,12 +3619,13 @@ static inline void common_config_generated_read(char * fname) {
   // for reading external projections. The writing on disk is only 
   // 1/2 of that in layout 0, 1/4 in layout 1... 
   // 0 means no limit 
-  COMMON_CONFIG_READ_INT_MINMAX(device_selfhealing_read_throughput,20,0,10000);
+  COMMON_CONFIG_READ_INT_MINMAX(device_selfhealing_read_throughput,40,0,10000);
   // self healing : possible modes 
   // spareOnly  only self repair on a spare disk 
   // relocate   also repair on remaining disks when no spare available 
   // resecure   repair on spare device when available, and then resecure files on 
   //            spare storages when no spare device is available 
+  // none       No self healing is processed. Only manual rebuild is allowed. 
   COMMON_CONFIG_DEVICE_SELFHEALING_MODE_READ_ENUM(&cfg);
   // Export host names or IP addresses separated with /  
   // Required for selfhealing. 
@@ -3635,7 +3640,7 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(default_rebuild_reloop,4);
   // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s 
   // 0 means no limit 
-  COMMON_CONFIG_READ_INT(spare_restore_read_throughput,2);
+  COMMON_CONFIG_READ_INT(spare_restore_read_throughput,10);
   // Storio number of FID context in 1K unit 
   COMMON_CONFIG_READ_INT(storio_fidctx_ctx,256);
   // Spare file restoring : Number of spare file context in 1K unit 

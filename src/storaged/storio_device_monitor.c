@@ -839,7 +839,12 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
     /*
     ** Check whether some device is already in rebuild
     */
-    rebuild_allowed = 1;   
+    if (common_config.device_selfhealing_mode == common_config_device_selfhealing_mode_none) {
+      rebuild_allowed = 0;
+    }
+    else {  
+      rebuild_allowed = 1;   
+    }  
     /*
     ** Export hosts must be configured for the auto repair to occur
     */

@@ -503,6 +503,15 @@ char * show_rebalance_config_module_global_short(char * pChar) {
     pChar += rozofs_string_append(pChar,"// That option gives the mximum size(in bytes) of an eligible file to rebalancing\n");
     REBALANCE_CONFIG_SHOW_LONG(maxfilesz,137438953472);
   }
+
+
+  REBALANCE_CONFIG_IS_DEFAULT_INT(unbalancedNodes,0);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// This indicator may tell that the nodes are unbalanced. So the first SIDs of the new distribution are allocated \n");
+    pChar += rozofs_string_append(pChar,"// in size balancing maner, but also respecting collocation constraints. The last unbalancedNodes SIDs are then chosen \n");
+    pChar += rozofs_string_append(pChar,"// in size balancing maner, forgetting prior collocation constraints. This enables to balance a 6 node unbalanced cluster.\n");
+    REBALANCE_CONFIG_SHOW_INT_OPT(unbalancedNodes,0,"0:2");
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________

@@ -63,6 +63,7 @@ typedef enum _common_config_device_selfhealing_mode_e {
   common_config_device_selfhealing_mode_spareOnly,
   common_config_device_selfhealing_mode_resecure,
   common_config_device_selfhealing_mode_relocate,
+  common_config_device_selfhealing_mode_none,
 } common_config_device_selfhealing_mode_e;
 // enum to string
 static inline char * common_config_device_selfhealing_mode2String(common_config_device_selfhealing_mode_e x) {
@@ -70,6 +71,7 @@ static inline char * common_config_device_selfhealing_mode2String(common_config_
     case common_config_device_selfhealing_mode_spareOnly: return "spareOnly";
     case common_config_device_selfhealing_mode_resecure: return "resecure";
     case common_config_device_selfhealing_mode_relocate: return "relocate";
+    case common_config_device_selfhealing_mode_none: return "none";
     default: return "?";
   }
   return "?";
@@ -79,6 +81,7 @@ static inline common_config_device_selfhealing_mode_e string2common_config_devic
   if (strcmp(x,"spareOnly")==0) return common_config_device_selfhealing_mode_spareOnly;
   if (strcmp(x,"resecure")==0) return common_config_device_selfhealing_mode_resecure;
   if (strcmp(x,"relocate")==0) return common_config_device_selfhealing_mode_relocate;
+  if (strcmp(x,"none")==0) return common_config_device_selfhealing_mode_none;
   return -1;
 }
 
@@ -280,6 +283,7 @@ typedef struct _common_config_t {
   // relocate   also repair on remaining disks when no spare available
   // resecure   repair on spare device when available, and then resecure files on
   //            spare storages when no spare device is available
+  // none       No self healing is processed. Only manual rebuild is allowed.
   common_config_device_selfhealing_mode_e  device_selfhealing_mode;
   // Export host names or IP addresses separated with / 
   // Required for selfhealing.
