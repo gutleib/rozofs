@@ -92,6 +92,11 @@ add_executable(stspare
 )
 target_link_libraries(stspare rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
+add_executable(storio_selfhealing
+  storio_selfhealing.c
+)
+target_link_libraries(storio_selfhealing rozofs ${PTHREAD_LIBRARY})
+
 add_executable(storage_rebuild
     sconfig.h
     sconfig.c
@@ -224,6 +229,12 @@ install(TARGETS stspare
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     COMPONENT stspare
+)
+install(TARGETS storio_selfhealing
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT storio_selfhealing
 )
 install(TARGETS storaged
     RUNTIME DESTINATION bin

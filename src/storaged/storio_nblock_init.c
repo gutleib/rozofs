@@ -58,6 +58,7 @@
 #include <rozofs/core/ruc_buffer_debug.h>
 #include <rozofs/core/rozofs_host2ip.h>
 #include <rozofs/core/rozofs_string.h>
+#include <rozofs/core/rozo_launcher.h>
 #include <rozofs/rpc/eproto.h>
 #include <rozofs/rpc/epproto.h>
 #include <rozofs/rpc/sproto.h>
@@ -85,6 +86,15 @@ DECLARE_PROFILING(spp_profiler_t);
 
 void  storio_repair_stat_man(char * pChar);
 void  storio_repair_stat_cli(char * argv[], uint32_t tcpRef, void *bufRef);
+
+
+/*
+** File to write a self healing command and read a selfhealing result
+*/
+char storio_selfhealing_result_file[128];
+char storio_selfhealing_command_file[128];
+
+
 /*
  **_________________________________________________________________________
  *      PUBLIC FUNCTIONS
@@ -398,6 +408,23 @@ int storio_start_nb_th(void *args) {
   }
 
   /*
+  ** Start self healing process
+  */
+  sprintf(storio_selfhealing_command_file,"%s/storio_%d.%s.selfhealing.args", common_config.device_automount_path, args_p->instance_id, IPString);
+  sprintf(storio_selfhealing_result_file,"%s/storio_%d.%s.selfhealing.status", common_config.device_automount_path, args_p->instance_id, IPString);
+  // Launch process throufh rozo launcher
+  {
+    char cmd[256];
+    char pidfile[128];
+    storio_selfhealing_pid_file(pidfile, IPString, args_p->instance_id);
+    sprintf(cmd,"storio_selfhealing -a %s",storio_selfhealing_command_file);
+    ret = rozo_launcher_start(pidfile, cmd);
+    if (ret !=0) {
+      severe("rozo_launcher_start(%s,%s) %s",pidfile, cmd, strerror(errno));
+    }  
+  }  
+
+  /*
   ** Create a buffer pool to decode spproto RPC requests
   */
   size = sizeof(sp_write_arg_no_bins_t);
@@ -461,7 +488,6 @@ int storio_start_nb_th(void *args) {
     fatal("Fatal error on storio_north_interface_init()\n");
     return -1;
   }
-
 
   /*
   ** Initialize lookup table : FID -> device mapping

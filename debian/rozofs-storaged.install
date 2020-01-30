@@ -3,6 +3,7 @@
 /usr/bin/storio
 /usr/bin/storage_rebuild
 /usr/bin/storage_list_rebuilder
+/usr/bin/storio_selfhealing
 /usr/bin/rozo_storage_mount
 /usr/bin/rozo_df
 /usr/bin/rozodump

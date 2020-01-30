@@ -201,6 +201,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/storio
 %{_bindir}/storage_rebuild
 %{_bindir}/storage_list_rebuilder
+%{_bindir}/storio_selfhealing
 %{_bindir}/rozo_storage_mount
 %{_bindir}/rozo_df
 %{_bindir}/rozodump

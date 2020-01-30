@@ -42,6 +42,14 @@
 #include "storage_header.h"
 #include "storage_device_kpi.h"
 
+
+/*
+** File to write a self healing command and read a selfhealing result
+*/
+extern char storio_selfhealing_result_file[];
+extern char storio_selfhealing_command_file[];
+
+
 /**
 * Structure used to store storcli buffer refence with RozoFS operates in standalone mode
 */
@@ -1484,6 +1492,18 @@ int storage_rm_chunk(storage_t * st, storio_device_mapping_t * fidCtx,
 static inline void storio_pid_file(char * pidfile, char * storaged_hostname, int instance) {
 
   pidfile += rozofs_string_append(pidfile,"/var/run/launcher_storio_");
+  if (storaged_hostname) {
+    pidfile += rozofs_string_append(pidfile,storaged_hostname);
+    *pidfile++ = '_';
+  }
+  pidfile += rozofs_u32_append(pidfile,instance);
+  pidfile += rozofs_string_append(pidfile, ".pid");
+
+}
+static inline void storio_selfhealing_pid_file(char * pidfile, char * storaged_hostname, int instance) {
+
+  pidfile += rozofs_string_append(pidfile,ROZOFS_RUNDIR_PID);
+  pidfile += rozofs_string_append(pidfile,"launcher_selfhealing_");
   if (storaged_hostname) {
     pidfile += rozofs_string_append(pidfile,storaged_hostname);
     *pidfile++ = '_';

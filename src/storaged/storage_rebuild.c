@@ -221,6 +221,7 @@ void clean_dir(char * name) {
   rmdir(name);
   return;
 }
+
 /*________________________________________________
 *
 * Parameter structure
@@ -260,9 +261,63 @@ typedef struct _rbs_parameter_t {
   int      chunk;  // Chunk to rebuild when FID is given 
   rbs_file_type_e filetype; // spare/nominal/all 
   int      throughput; // spare/nominal/all 
+  char   * result; // Result file to write execution result in
 } rbs_parameter_t;
 
 rbs_parameter_t parameter;
+
+
+/*
+**___________________________________________________________
+** Write the status in the file
+**___________________________________________________________
+**
+*/
+void write_status(char * status) {
+  int    fd;
+  int    nb;
+
+  if (parameter.result == NULL) {
+    return;
+  }  
+  
+  /*
+  ** Create the response file
+  */
+  fd = open(parameter.result, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IROTH );
+  if (fd < 0) {
+    severe("open(%s) %s", parameter.result, strerror(errno));
+    return;
+  }    
+
+  /*
+  ** Write the response file
+  */
+  nb = write(fd, status, strlen(status));
+  if (nb < 0) {
+    severe("write(%s) %s", parameter.result, strerror(errno));
+  }    
+                
+  close(fd);
+}
+/*________________________________________________
+*
+* Exit function
+*/
+void do_exit(int code) {
+
+  /*
+  ** Write result file if any is given
+  */
+  if (code == EXIT_SUCCESS) {
+    write_status("success");
+  } 
+  else { 
+    write_status("failed");
+  } 
+  exit(code);
+}
+
 /*
 **____________________________________________________
 ** Create or re-create the monitoring file for this rebuild process
@@ -534,6 +589,7 @@ void rbs_conf_init(rbs_parameter_t * par) {
   par->chunk                = -1;
   par->filetype             = rbs_file_type_all;
   par->throughput           = 0;
+  par->result               = NULL;
   
   
   par->storaged_geosite = rozofs_get_local_site();
@@ -602,6 +658,7 @@ void usage(char * fmt, ...) {
     printf("   -rawlist                  \tDisplay a raw list of FID to rebuild\n");
     printf("   -fg                       \tTo force foreground execution\n");
     printf("   -bg                       \tTo force background execution\n");
+    printf("   --result                  \tResult file to write execution result in (i.e running, success, failed).\n");
     printf("   -h, --help                \tPrint this message.\n");
     printf(" mainly for tests:\n");
 //    printf("   -H, --host=storaged-host  \tSpecify the hostname to rebuild\n");
@@ -631,8 +688,8 @@ void usage(char * fmt, ...) {
     printf("Abort definitively a running rebuild\n");
     printf("storage_rebuild -id <id> -abort\n\n");  
                      
-    if (fmt) exit(EXIT_FAILURE);
-    exit(EXIT_SUCCESS); 
+    if (fmt) do_exit(EXIT_FAILURE);
+    do_exit(EXIT_SUCCESS); 
 }
 
 /*________________________________________________
@@ -693,6 +750,12 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       GET_INT_PARAM(-t,par->throughput);
       continue;
     }  	
+    
+    if IS_ARG(--result) {
+      GET_PARAM(--result)
+      par->result = optarg;
+      continue;
+    } 
        
     if IS_ARG(-resume) {
       par->resume = 1;
@@ -3807,6 +3870,9 @@ int main(int argc, char *argv[]) {
     ** Parse command parameters
     */
     parse_command(argc, argv, &parameter);
+    
+    
+    write_status("running");
 
     /*
     ** Process listing of failed FID
@@ -3888,12 +3954,12 @@ int main(int argc, char *argv[]) {
       
       if (rbs_storio_reinit(parameter.cid, parameter.sid, parameter.rbs_device_number, 1)!=0) {
         REBUILD_MSG("Can't reset error on cid %d sid %d .",parameter.cid,parameter.sid);
-        exit(EXIT_FAILURE);  
+        do_exit(EXIT_FAILURE);  
       }
       
       REBUILD_MSG("cid %d sid %d device %d re-initialization",parameter.cid,parameter.sid,parameter.rbs_device_number);
       if (parameter.clear==2) {
-        exit(EXIT_SUCCESS);
+        do_exit(EXIT_SUCCESS);
       }
     }
        
@@ -4026,10 +4092,10 @@ int main(int argc, char *argv[]) {
     on_stop(); 
      
     if (status == 0) {
-      exit(EXIT_SUCCESS);
+      do_exit(EXIT_SUCCESS);
     }
     
-    exit(EXIT_FAILURE);
+    do_exit(EXIT_FAILURE);
     
 error:
     /*
@@ -4038,5 +4104,5 @@ error:
     rbs_remove_rebuild_marks();
 
     REBUILD_MSG("Can't start storage_rebuild. See logs for more details.");
-    exit(EXIT_FAILURE);
+    do_exit(EXIT_FAILURE);
 }
