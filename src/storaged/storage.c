@@ -396,8 +396,8 @@ void storio_device_error_log_init(void) {
 }
 
 
-#define storio_fid_error(fid,dev,chunk,bid,nb_blocks,string) storio_device_error_log_new(fid, st->sid, __LINE__, dev, chunk, bid, nb_blocks, errno,string)
-#define storio_hdr_error(fid,dev,string)                     storio_device_error_log_new(fid, st->sid, __LINE__, dev, 0, -1, -1, errno,string) 
+#define storio_fid_error(fid,dev,chunk,bid,nb_blocks,string) if (st) storio_device_error_log_new(fid, st->sid, __LINE__, dev, chunk, bid, nb_blocks, errno,string)
+#define storio_hdr_error(fid,dev,string)                     if (st) storio_device_error_log_new(fid, st->sid, __LINE__, dev, 0, -1, -1, errno,string) 
 
 /*
 =================== END OF STORIO LOG SERVICE ====================================
@@ -1307,8 +1307,10 @@ void rozofs_storage_device_one_subdir_create(char * pDir) {
   */
   pChar = pDir;
   pChar += strlen(pDir);
-  rozofs_u32_append(pChar,common_config.storio_slice_number);
+  rozofs_u32_append(pChar,common_config.storio_slice_number-1);
   if (access(pDir, F_OK) != 0) {  
+    *pChar = 0;
+    info("Create %d slices under %s",common_config.storio_slice_number, pDir);
     for (slice = 0; slice < (common_config.storio_slice_number); slice++) {
       rozofs_u32_append(pChar,slice);
       if (storage_create_dir(pDir) < 0) {

@@ -123,10 +123,11 @@ char * rbs_get_cluster2_list(rpcclt_t * clt, const char *export_host_list, int s
         	stor->mclient.rpcclt.sock = -1;
 
         	// Add this storage to the list of storages for this cluster
+                list_init(&stor->list);
         	list_push_back(&cluster->storages, &stor->list);
 	    }
-
 	    // Add this cluster to the list of clusters
+            list_init(&cluster->list);
 	    list_push_back(cluster_entries, &cluster->list);
 
             // Free resources from current loop
@@ -235,10 +236,12 @@ char * rbs_get_cluster_list(rpcclt_t * clt, const char *export_host_list, int si
         	stor->mclient.rpcclt.sock = -1;
 
         	// Add this storage to the list of storages for this cluster
+                list_init(&stor->list);
         	list_push_back(&cluster->storages, &stor->list);
 	    }
 
 	    // Add this cluster to the list of clusters
+            list_init(&cluster->list);
 	    list_push_back(cluster_entries, &cluster->list);
 
             // Free resources from current loop

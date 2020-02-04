@@ -273,7 +273,47 @@ typedef struct storage {
     storage_device_ctx_t         device_ctx[STORAGE_MAX_DEVICE_NB]; 
     storage_share_t            * share; // share memory between storaged and storio          
 } storage_t;
-
+/*
+ *_______________________________________________________________________
+ *
+ * Set/unset a rebuild mark on the device
+ *
+ * @param root    The SID root path 
+ * @param dev     The device number
+ * @param set     1 for set. 0 for unset
+ * 
+ * @retval 0 on success, -1 on failure
+ */
+static inline int storage_device_rebuild_mark(char * root, int dev, int set) {
+  char markFileName[256];
+  char * pChar = markFileName;
+  
+  pChar += rozofs_string_append(pChar, root);
+  *pChar++ = '/';
+  pChar += rozofs_u32_append(pChar, dev);
+  *pChar++ = '/';  
+  pChar += rozofs_string_append(pChar, STORAGE_DEVICE_REBUILD_REQUIRED_MARK);
+   
+  /* 
+  ** Create the rebuild required mark file
+  */
+  if (set) {
+    int fd;
+    fd = creat(markFileName,0755);
+    if (fd < 0) {
+      severe("creat(%s,0755) %s", markFileName, strerror(errno));
+      return -1;   
+    }    
+    close(fd);    
+    return 0;
+  }
+  
+  /*
+  ** Remove the mark file
+  */
+  unlink(markFileName);
+  return 0;
+}  
 /*
  *_______________________________________________________________________
  *

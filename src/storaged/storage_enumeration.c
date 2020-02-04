@@ -1437,19 +1437,6 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
       return -1;     
     }    
     close(fd);
-
-    /* 
-    ** Create the rebuild required mark file
-    */
-    pt2  = pt;
-    pt2 += rozofs_string_append(pt2,STORAGE_DEVICE_REBUILD_REQUIRED_MARK);
-    fd = creat(cmd,0755);
-    if (fd < 0) {
-      severe("creat(%s,0755) %s", cmd, strerror(errno));   
-    }    
-    else {
-      close(fd);    
-    }
     
     /*
     ** Remove spare mark
@@ -1468,6 +1455,11 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
   ** Set the disk label
   */
   rozofs_set_label(pDev);
+  
+  /*
+  ** Create sub-direcories if not yet done
+  */
+  rozofs_storage_device_subdir_create(st->root,pDev->dev);
   
   /*
   ** Device is mounted now

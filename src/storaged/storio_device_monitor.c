@@ -267,6 +267,12 @@ void * storio_device_rebuild_thread(void *arg) {
     }   
     if (pRebuild->mode == storio_selfHealing_mode_spare) {
       pChar += rozofs_string_append(pChar,".spare");
+      
+     /* 
+     ** Create the rebuild required mark file
+     */
+     storage_device_rebuild_mark(pRebuild->st->root, pRebuild->dev, 1);
+      
     }       
     rozofs_run_until_exit(cmd);	
   }
@@ -277,12 +283,17 @@ void * storio_device_rebuild_thread(void *arg) {
   /* Check for rebuild sub processes status */    
   pid = waitpid(pid ,&status,0);
   if (WEXITSTATUS(status)==0) {
-    pRebuild->status = storio_selfHealing_status_success;      
+    pRebuild->status = storio_selfHealing_status_success;  
   }
   else {
     /* Rebuild has failed. Let's retry later */
     pRebuild->status = storio_selfHealing_status_failed;      
   }
+
+  /* 
+  ** Remove the rebuild required mark file
+  */
+  storage_device_rebuild_mark(pRebuild->st->root, pRebuild->dev, 0);        
 
   /* Relocate is successfull. Let's put the device Out of service */
   if ((pRebuild->mode == storio_selfHealing_mode_relocate)
@@ -1028,8 +1039,8 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	      */
 	      if (storage_replace_with_spare(st,dev) == 0) {
 	        pDev->status = storage_device_status_rebuild;
-		if (storio_device_rebuild(st,dev,storio_selfHealing_mode_spare) == 0) {
-	          rebuild_allowed = 0; /* On rebuild at a time */
+                if (storio_device_rebuild(st,dev,storio_selfHealing_mode_spare) == 0) {
+	          rebuild_allowed = 0; /* One rebuild at a time */
 		}	
 		else {
 	          pDev->status = storage_device_status_failed;	        
