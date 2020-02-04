@@ -364,7 +364,8 @@ parser = OptionParser()
 parser.add_option("-d","--delay", action="store",type="string", dest="delay", help="Delay in hours for periodic mode (default is infinite)")
 parser.add_option("-p","--period", action="store",type="string", dest="period", help="Periodicity of the command")
 parser.add_option("-v","--verbose", action="store_true",default=False, dest="verbose", help="Verbose mode for debug.")
-parser.add_option("-H","--history", action="store_true",default=False, dest="history", help="Display a 60 minutes and 60 hours history.")
+parser.add_option("-H","--history", action="store_true",default=False, dest="history", help="Display a 60 minutes and 60 hours history of total counters.")
+parser.add_option("-P","--PHistory", action="store_true",default=False, dest="Phistory", help="Display a 60 minutes and 60 hours history of per second conuters.")
 parser.add_option("-i","--ipRange", action="append",type="string", dest="iprange", help="Allowed IP range (one IP address or a range like 192.168.1.21-192.168.1.28)")
 parser.add_option("-I","--NipRange", action="append",type="string", dest="Niprange", help="Rejected IP range (one IP address or a range like 192.168.10.30-192.168.10.50)")
 parser.add_option("-w","--what", action="append",type="string", dest="what", help="what to (not to) display \"<r|nr|w|nw|l|nl|c|nc|d|nd|a|na|x|nx|o|no>\" (default everything).")
@@ -387,15 +388,26 @@ else:
 
 
 history = ""
+persec=""
 if options.history == True:
   #
   # History display 60 minutes and then 60 hours history in 
-  # two loops  
+  # two loops. Global counters are displayed.  
   # 
   # 1rst loop will display per minute history
   history = " m"
   period = int(60)
   SIZE   = int(60) 
+elif options.Phistory == True: 
+  #
+  # History display 60 minutes and then 60 hours history in 
+  # two loops. Per second counters are displayed.
+  # 
+  # 1rst loop will display per minute history
+  history = " m"
+  period = int(60)
+  SIZE   = int(60) 
+  persec = "persec"
 else:  
   #
   # Periodic mode has a default of 30 seconds period
@@ -576,7 +588,7 @@ while True :
   #
   # Run the rozodiag command against all clients
   #
-  string="%s %s -c io col 1 %s"%(DIAG,clients,what)
+  string="%s %s -c io col 1 %s %s"%(DIAG,clients,what,persec)
   string += history  
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -673,10 +685,18 @@ while True :
   #
   if int(round) == int(1) : 
     LINE = zedate + " - %d/%d  RozoFS clients on "%(total_watched_clients,total_nb_clients)  + GREEN + "eid " + eid  + NORMAL
-    if history == " m":
-      LINE = LINE + " - Last " + REVERSE + "60 minutes" + NORMAL + " history."  
-    elif history == " h": 
-      LINE = LINE + " - Last " + REVERSE + "60 hours" + NORMAL + " history."
+    
+    if history != "":
+      LINE += " - Last " + REVERSE + "60 "
+      if history == " m":   LINE += "minutes" 
+      elif history == " h": LINE += "hours"
+      LINE += NORMAL + " history " + REVERSE
+      if persec != "": 
+        LINE += "(per second counters)"  
+      else:
+        LINE += "(cumulated counters)"  
+      LINE += NORMAL          
+                    
     print LINE
        
     LINE = "     "

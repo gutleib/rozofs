@@ -81,8 +81,6 @@ char        rebuild_directory_path[FILENAME_MAX];
 char        fid_list[FILENAME_MAX]; 
 char        statFilename[FILENAME_MAX]; 
  
-static rbs_storage_config_t storage_config;
-
 uint8_t prj_id_present[ROZOFS_SAFE_MAX];
 int         quiet=0;
 
@@ -113,6 +111,7 @@ int relocate = 0;
 int resecure = 0;
 list_t     cluster_entries;
 char     * pExport_hostname = NULL;
+char     * export_param = NULL;
 
 
 /*-----------------------------------------------------------------------------
@@ -1031,7 +1030,7 @@ int check_fid_deleted_from_export(fid_t fid) {
 
   // Resolve this FID thanks to the exportd
   errno = 0;
-  ret = rbs_get_fid_attr(storage_config.export_hostname, fid, &attr, &bsize, &layout);
+  ret = rbs_get_fid_attr(export_param, fid, &attr, &bsize, &layout);
  
   if ((ret != 0)&&(errno == ENOENT)) {
     return 1;
@@ -1283,7 +1282,7 @@ int storaged_rebuild_list(cid_t cid, sid_t sid, char * fid_list, char * statFile
 	  ** where the rebuild has failed. These part before block_start is rebuilt 
 	  ** and needs not to be redone although the glocal rebuild has failed. 
 	  */
-	  if (relocate) {
+	  if (!relocate) {
             file_entry.block_start = block_start;
 	  }
 	  break;  
@@ -1683,6 +1682,7 @@ void usage(char * fmt, ...) {
     printf("   -t, --throughput\tThroughput limitation in MB/s.\n");    
     printf("   -R  --relocate\tFor relocating files on other devices of the same SID\n");    
     printf("   -S  --reSecure\tFor a resecuring files on their spare storage\n");    
+    printf("   -e  --export\tExportd host names\n");    
 
     if (fmt) exit(EXIT_FAILURE);
     exit(EXIT_SUCCESS); 
@@ -1717,6 +1717,7 @@ int main(int argc, char *argv[]) {
         { "nolog", no_argument, 0, 'N'},	
         { "relocate", no_argument, 0, 'R'},	
         { "reSecure", no_argument, 0, 'S'},	
+        { "export", required_argument, 0, 'e'},	
         { 0, 0, 0, 0}
     };
 
@@ -1729,7 +1730,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "NhH:c:s:r:i:q:f:t:SR", long_options, &option_index);
+      c = getopt_long(argc, argv, "NhH:c:s:r:i:q:f:t:SRe:", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -1746,6 +1747,10 @@ int main(int argc, char *argv[]) {
           }
 	  break;
 
+        case 'e':
+          export_param = optarg;
+          break;
+          
         case 's':
 	  if (sscanf(optarg,"%d",&sid)!=1) {
 	    usage("Bad storage id \"%s\"",optarg);
@@ -1820,6 +1825,9 @@ int main(int argc, char *argv[]) {
     if (sid == -1){
         usage("storage_rebuilder failed. Missing --sid option");
     }  
+    if (export_param == NULL) {
+        usage("storage_rebuilder failed. Missing --export option");
+    }  
     if (rebuildRef == -1){
         usage("storage_rebuilder failed. Missing --rebuildRef option");
     }  
@@ -1837,10 +1845,7 @@ int main(int argc, char *argv[]) {
     /*
     ** Read storage configuration file
     */
-    dir = get_rebuild_sid_directory_name(rebuildRef,cid,sid,ftype);
-    if (rbs_read_storage_config_file(dir, &storage_config) == NULL) {
-      usage("No storage conf file in %s",dir);
-    }		
+    dir = get_rebuild_sid_directory_name(rebuildRef,cid,sid,ftype);	
 
     // Initialize the list of cluster(s)
     list_init(&cluster_entries);
@@ -1849,15 +1854,11 @@ int main(int argc, char *argv[]) {
     /*
     ** Try to get the list of storages for this cluster ID
     */
-    pExport_hostname = rbs_get_cluster_list(&rpcclt_export, 
-                                            storage_config.export_hostname, 
-			                    storage_config.site,
-			                    storage_config.cid, 
-			                    &cluster_entries);			   
+    pExport_hostname = rbs_get_cluster_list(&rpcclt_export, export_param, 0,cid, &cluster_entries);			   
     if (pExport_hostname == NULL) {			   
       severe("Can't get list of others cluster members from export server (%s) for storage to rebuild (cid:%u; sid:%u): %s\n",
-             storage_config.export_hostname, cid, sid, strerror(errno));
-      usage("Can not connect export %s to get cluster %d configuration", storage_config.export_hostname,storage_config.cid);
+             export_param, cid, sid, strerror(errno));
+      usage("Can not connect export %s to get cluster %d configuration", export_param, cid);
     }	
     
     

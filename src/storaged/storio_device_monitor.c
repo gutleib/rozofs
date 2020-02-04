@@ -232,8 +232,13 @@ void * storio_device_rebuild_thread(void *arg) {
   
   char * pChar = cmd;
 
-
   uma_dbg_thread_add_self("selfhealing");  
+
+  /* 
+  ** Create the rebuild required mark file
+  */
+  storage_device_rebuild_mark(pRebuild->st->root, pRebuild->dev, 1);
+
   /* 
   ** Prepare the rebuild parameters
   */
@@ -361,6 +366,10 @@ void * storio_device_rebuild_thread(void *arg) {
 
 out:
 
+  /* 
+  ** Remove the rebuild required mark file
+  */
+  storage_device_rebuild_mark(pRebuild->st->root, pRebuild->dev, 0);        
 
   /* Relocate is successfull. Let's put the device Out of service */
   if ((pRebuild->mode == storio_selfHealing_mode_relocate)
@@ -1113,8 +1122,8 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	      */
 	      if (storage_replace_with_spare(st,dev) == 0) {
 	        pDev->status = storage_device_status_rebuild;
-		if (storio_device_rebuild(st,dev,storio_selfHealing_mode_spare) == 0) {
-	          rebuild_allowed = 0; /* On rebuild at a time */
+                if (storio_device_rebuild(st,dev,storio_selfHealing_mode_spare) == 0) {
+	          rebuild_allowed = 0; /* One rebuild at a time */
 		}	
 		else {
 	          pDev->status = storage_device_status_failed;	        
