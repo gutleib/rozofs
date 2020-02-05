@@ -1019,10 +1019,24 @@ void sp_read_rdma_1_svc_disk_thread(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
                                         read_arg_p->nb_proj);
             
     /*
-    ** Use received buffer for the response
+    ** need to swap the buffer when the read request has been received over RDMA
     */
-    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
-    req_ctx_p->recv_buf = NULL;
+    if (req_ctx_p->rdma)
+    {
+      /*
+      ** allocate the buffer that might be used for reading or writing
+      */
+      req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+      req_ctx_p->recv_buf = ruc_buf_getBuffer(storage_receive_buffer_pool_p);                         
+    } 
+    else
+    {
+      /*
+      ** Use received buffer for the response
+      */
+      req_ctx_p->xmitBuf  = req_ctx_p->recv_buf;
+      req_ctx_p->recv_buf = NULL;
+    }
  
     /*
     ** Set the position where the data has to be written in the xmit buffer 

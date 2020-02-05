@@ -554,7 +554,7 @@ void show_rdma_cq_threads(char * argv[], uint32_t tcpRef, void *bufRef) {
      for (j= 0; j < ROZOFS_CQ_THREAD_NUM; j++)
      {
        th_p = ctx->rozofs_cq_th_post_recv[j];
-       pChar = rozofs_rdma_printcq_stats(pChar,i,j,1,&th_p->stats,ctx->cq_rpc[j],0,0,0);
+       pChar = rozofs_rdma_printcq_stats(pChar,i,j,1,&th_p->stats,ctx->cq_rpc[j],0,th_p->max_wc_poll_count,th_p->ack_count);
      }       
   }   
    
@@ -2047,7 +2047,10 @@ void * rozofs_poll_cq_rpc_recv_th(void *ctx)
   rozofs_rmda_ibv_cxt_t *s_ctx = (rozofs_rmda_ibv_cxt_t*)th_ctx_p->ctx_p;
   struct ibv_cq *cq;
   struct ibv_wc wc;
-//  int wc_to_ack = 0;
+  int wc_to_ack = 0;
+  th_ctx_p->max_wc_poll_count = 0;
+  th_ctx_p->ack_count = 0;
+  int max_wc_poll_count;
   
   info("CQ-R thread#%d started \n",th_ctx_p->thread_idx);
 
@@ -2076,11 +2079,33 @@ void * rozofs_poll_cq_rpc_recv_th(void *ctx)
 
   while (1) {
     TEST_NZ(ibv_get_cq_event(s_ctx->comp_channel_rpc[th_ctx_p->thread_idx], &cq, &ctx));
-    ibv_ack_cq_events(cq, 1);
-    TEST_NZ(ibv_req_notify_cq(cq, 0));
 
+    /*
+    ** Notify for next event
+    */
+    TEST_NZ(ibv_req_notify_cq(cq, 0));
+    max_wc_poll_count = 0;
+    wc_to_ack = 0;
+    
     while (ibv_poll_cq(cq, 1, &wc))
+    {
+      max_wc_poll_count++;
+      wc_to_ack++;
       rozofs_on_completion2_rcv(&wc,th_ctx_p);
+      if (wc_to_ack == 16) 
+      {
+	ibv_ack_cq_events(cq, wc_to_ack);
+	th_ctx_p->ack_count +=wc_to_ack;
+	wc_to_ack = 0;
+      }      
+    }
+    if (wc_to_ack != 0)
+    {
+	ibv_ack_cq_events(cq, wc_to_ack);
+	th_ctx_p->ack_count +=wc_to_ack;
+	wc_to_ack = 0;    
+    }
+    if (th_ctx_p->max_wc_poll_count < max_wc_poll_count) th_ctx_p->max_wc_poll_count = max_wc_poll_count;    
   }
 
 error:
