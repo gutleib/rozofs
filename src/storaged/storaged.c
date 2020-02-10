@@ -243,6 +243,8 @@ void *storaged_lsblk_thread(void *arg) {
   ** 1rst lsblk run
   */
   storage_run_lsblk();     
+  storaged_automount_devices();       
+
   lsblk_ready = 1;     
 
   while (1) {
@@ -305,11 +307,6 @@ static void on_start() {
     af_unix_socket_set_datagram_socket_len(common_config.storio_buf_cnt);
     storage_process_filename[0] = 0;
 
-    /*
-    ** Start thread that periodically processes a lsblk
-    */
-    storaged_start_lsblk_thread();
-
     // Initialization of the storage configuration
     if (storaged_initialize() != 0) {
         fatal("can't initialize storaged: %s.", strerror(errno));
@@ -321,12 +318,11 @@ static void on_start() {
     SET_PROBE_VALUE(uptime, time(0));
     strncpy((char*) gprofiler->vers, VERSION, 20);
     SET_PROBE_VALUE(nb_io_processes, common_config.nb_disk_thread);
-    
-    // Create storio process(es)
 
-    // Set monitoring values just for the master process
-    //SET_PROBE_VALUE(io_process_ports[i],(uint16_t) storaged_storage_ports[i] + 1000);
-    
+    /*
+    ** Start thread that periodically processes a lsblk
+    */
+    storaged_start_lsblk_thread();
     
     /*
     ** Create a share memory to get the device status for every SID
@@ -346,7 +342,6 @@ static void on_start() {
       }
     }
 
-    storaged_automount_devices();       
     
     conf.nb_storio = 0;
     /*

@@ -60,7 +60,6 @@ struct blkio_info {
 };
 
 uint32_t STORIO_DEVICE_PERIOD = 5;
-extern time_t   storio_last_enumeration_date;
 extern int      re_enumration_required;
 
 
@@ -804,10 +803,6 @@ void storio_monitor_automount() {
   char                       rozofs_storio_path[PATH_MAX];
   int                        count;
   storage_t                * st;
-  uint32_t                   now = time(NULL);  
-
-
-  if (storio_last_enumeration_date + 60 > now) return;
   
   st = NULL;
   st = storaged_next(st);
@@ -841,38 +836,6 @@ void storio_monitor_automount() {
 }   
 /*
 **____________________________________________________
- * API to be called periodically to monitor errors on a period
- *
- * @param st: the storage to be initialized.
- *
- * @return a bitmask of the device having encountered an error
- */
-void storio_monitor_enumerate() { 
-  char                     * p;
-  char                       rozofs_storio_path[PATH_MAX];
-  int                        count;
-  storage_t                * st;
- 
-  st = NULL;
-  st = storaged_next(st);
-  if (st == NULL) return;
-
-  /*
-  ** Attempt to find the missing devices and to mount them
-  */
-  p = rozofs_storio_path;
-  p += rozofs_string_append(p, st->root);
-  p += rozofs_string_append(p, "/mnt_test");  
-  
-  storio_do_automount_devices(rozofs_storio_path, &count); 
-
-  /*
-  ** Unmount the working directory 
-  */
-  storage_umount(rozofs_storio_path);
-}   
-/*
-**____________________________________________________
 **  Device monitoring 
 ** 
 **  @param allow_disk_spin_down  whether disk spin down 
@@ -896,7 +859,7 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
        
        
   if (re_enumration_required) {
-    storio_monitor_enumerate();
+    storio_monitor_automount();
     re_enumration_required = 0;
   }         
 
@@ -1114,9 +1077,9 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
 	    */
 	    if ((rebuild_allowed) && (rebuild_required) && (pDev->failure > max_failures)) {
               /*
-	      ** Re-enumerate devices
-	      */
-	      storio_monitor_enumerate();
+              ** Re-enumerate devices
+              */
+	      storio_monitor_automount();
 	      /*
 	      ** Let's 1rst find a spare device
 	      */

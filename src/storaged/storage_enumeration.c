@@ -52,8 +52,8 @@
 #include "storage_enumeration.h"
 
 int      re_enumration_required=0; 
-time_t   storio_last_enumeration_date;
-
+time_t   storio_last_enumeration_date = 0;
+static ino_t    storio_lsblk_file_inode = 0;
 
 #define STORAGE_MAX_DEV_PER_NODE 255
 
@@ -62,8 +62,22 @@ int                           storage_enumerated_device_nb=0;
 
 int oldlsblk = 1;
 
-#define LABELSIZE           16
-#define OFFSET_SUPERBLOCK 1024
+
+#define EXT2_SUPER_MAGIC 0xEF53
+
+struct ext2_super_block {
+	char  s_dummy0[56];
+	unsigned char  s_magic[2];
+	char  s_dummy1[62];
+	char  s_volume_name[ROZOFS_LABEL_SIZE];
+	char  s_last_mounted[64];
+	char  s_dummy2[824];
+} ;
+
+#define OFFSET_SUPERBLOCK (1024)
+#define OFFSET_LABEL	  (offsetof(struct ext2_super_block, s_volume_name)+OFFSET_SUPERBLOCK)
+#define OFFSET_MAGIC	  (offsetof(struct ext2_super_block, s_magic)+OFFSET_SUPERBLOCK)
+
 /*
  *_______________________________________________________________________
  *
@@ -72,69 +86,11 @@ int oldlsblk = 1;
  * @param pDev       Enumerated device context address
  */
 void rozofs_set_label(storage_enumerated_device_t * pDev) {
-  char label[ROZOFS_LABEL_SIZE];
+  char label[ROZOFS_LABEL_SIZE] = {0};
+  char readLabel[ROZOFS_LABEL_SIZE];
+  unsigned char  magic[2];
   int  fd = -1;
-  /*
-  ** Ext2 superblock
-  */
-  struct ext2_super_block {
-    uint32_t s_inodes_count;		/* Inodes count */
-    uint32_t s_blocks_count;		/* Blocks count */
-    uint32_t s_r_blocks_count;	/* Reserved blocks count */
-    uint32_t s_free_blocks_count;	/* Free blocks count */
-    uint32_t s_free_inodes_count;	/* Free inodes count */
-    uint32_t s_first_data_block;	/* First Data Block */
-    uint32_t s_log_block_size;	/* Block size */
-    int32_t  s_log_frag_size;	/* Fragment size */
-    uint32_t s_blocks_per_group;	/* # Blocks per group */
-    uint32_t s_frags_per_group;	/* # Fragments per group */
-    uint32_t s_inodes_per_group;	/* # Inodes per group */
-    uint32_t s_mtime;		/* Mount time */
-    uint32_t s_wtime;		/* Write time */
-    uint16_t s_mnt_count;		/* Mount count */
-    int16_t  s_max_mnt_count;	/* Maximal mount count */
-    uint8_t  s_magic[2];		/* Magic signature */
-    uint16_t s_state;		/* File system state */
-    uint16_t s_errors;		/* Behaviour when detecting errors */
-    uint16_t s_minor_rev_level; 	/* minor revision level */
-    uint32_t s_lastcheck;		/* time of last check */
-    uint32_t s_checkinterval;	/* max. time between checks */
-    uint32_t s_creator_os;		/* OS */
-    uint32_t s_rev_level;		/* Revision level */
-    uint16_t s_def_resuid;		/* Default uid for reserved blocks */
-    uint16_t s_def_resgid;		/* Default gid for reserved blocks */
-    /*
-    * These fields are for EXT2_DYNAMIC_REV superblocks only.
-    *
-    * Note: the difference between the compatible feature set and
-    * the incompatible feature set is that if there is a bit set
-    * in the incompatible feature set that the kernel doesn't
-    * know about, it should refuse to mount the filesystem.
-    * 
-    * e2fsck's requirements are more strict; if it doesn't know
-    * about a feature in either the compatible or incompatible
-    * feature set, it must abort and not try to meddle with
-    * things it doesn't understand...
-    */
-    uint32_t s_first_ino; 		/* First non-reserved inode */
-    uint16_t s_inode_size; 		/* size of inode structure */
-    uint16_t s_block_group_nr; 	/* block group # of this superblock */
-    uint32_t s_feature_compat; 	/* compatible feature set */
-    uint32_t s_feature_incompat; 	/* incompatible feature set */
-    uint32_t s_feature_ro_compat; 	/* readonly-compatible feature set */
-    unsigned char s_uuid[16];		/* 128-bit uuid for volume */
-    char     s_volume_name[LABELSIZE]; 	/* volume name */
-    char     s_last_mounted[64]; 	/* directory where last mounted */
-    uint32_t s_algorithm_usage_bitmap; /* For compression */
-    /*
-    * Performance hints.  Directory preallocation should only
-    * happen if the EXT2_COMPAT_PREALLOC flag is on.
-    */
-    unsigned char s_prealloc_blocks;	/* Nr of blocks to try to preallocate*/
-    unsigned char s_prealloc_dir_blocks;	/* Nr to preallocate for dirs */
-    uint16_t s_padding1;
-    uint32_t s_reserved[204];	/* Padding to the end of the block */
-  } sb;
+ 
   
   if (pDev->spare) {
     char * pt = label;
@@ -147,65 +103,86 @@ void rozofs_set_label(storage_enumerated_device_t * pDev) {
     sprintf(label, ROZOFS_REGULAR_LABEL ,pDev->cid, pDev->sid, pDev->dev);  
   }
 
-  if (strcmp(pDev->label,label) == 0) return;
 
   /*
   ** Open device
   */
-  fd = open(pDev->pName->name, O_RDWR);
+  fd = open(pDev->pName->name, O_RDWR | O_SYNC);
   if (fd < 0) {
     severe("open(%s) %s", pDev->pName->name, strerror(errno));
     return;
   }
   /*
-  ** Seek superblock at offset 1024
+  ** Seek magic number
   */
-  if (lseek(fd, OFFSET_SUPERBLOCK, SEEK_SET) != OFFSET_SUPERBLOCK) {
+  if (lseek(fd, OFFSET_MAGIC, SEEK_SET) != OFFSET_MAGIC) {
+    severe("lseek(%s) %s", pDev->pName->name, strerror(errno));
+    close(fd);
+    return;
+  }  
+  /*
+  ** Read magic number
+  */
+  if (read(fd, (char *) magic, 2) != 2) {
+    severe("magic read(%s) %s", pDev->pName->name, strerror(errno));
+    goto out;
+  }  
+  /*
+  ** Check magic number
+  */
+  if (magic[0] + 256*magic[1] != EXT2_SUPER_MAGIC) {
+    severe("%s no ext2 superblock 0x%x%x", pDev->pName->name,magic[0],magic[1]);
+    goto out;
+  }
+  /*
+  ** Seek label
+  */
+  if (lseek(fd, OFFSET_LABEL, SEEK_SET) != OFFSET_LABEL) {
     severe("lseek(%s) %s", pDev->pName->name, strerror(errno));
     close(fd);
     return;
   }
   /*
-  ** Read superblock
+  ** Read label
   */
-  if (read(fd, (char *) &sb, sizeof(sb)) != sizeof(sb)) {
+  if (read(fd, (char *) readLabel, ROZOFS_LABEL_SIZE) != ROZOFS_LABEL_SIZE) {
     severe("read(%s) %s", pDev->pName->name, strerror(errno));
     goto out;
   }
+
   /*
-  ** Check superblock magic number
+  ** Compare disk label and requested label
   */
-   if (sb.s_magic[0] + 256*sb.s_magic[1] != EXT2_SUPER_MAGIC) {
-    severe("%s no ext2 superblock 0x%x%x", pDev->pName->name,sb.s_magic[1],sb.s_magic[0]);
-    goto out;
+  if (strcmp(readLabel,label) == 0) {
+    strcpy(pDev->label,label);
+    goto out;    
   }
 
   /*
   ** Re-write label
   */
-  memset(sb.s_volume_name, 0, LABELSIZE);
-  strncpy(sb.s_volume_name, label, LABELSIZE);
-  if (strlen(label) > LABELSIZE) {
-    severe("%s Label \"%s\" too long \"%s\"", pDev->pName->name,label, sb.s_volume_name);
-  }  
+
   /*
   ** Seek superblock at offset 1024
   */
-  if (lseek(fd, OFFSET_SUPERBLOCK, SEEK_SET) != OFFSET_SUPERBLOCK) {
+  if (lseek(fd, OFFSET_LABEL, SEEK_SET) != OFFSET_LABEL) {
     severe("lseek(%s) %s", pDev->pName->name, strerror(errno));
     goto out;
   }
   /*
   ** Re-wite superblock
   */
-  if (write(fd, (char *) &sb, sizeof(sb)) != sizeof(sb)) {
-    severe("lseek(%s) %s", pDev->pName->name, strerror(errno));
+  if (write(fd, (char *) label, ROZOFS_LABEL_SIZE) != ROZOFS_LABEL_SIZE) {
+    severe("write(%s) %s", pDev->pName->name, strerror(errno));
     goto out;
   }
-  info("Label \"%s\" set on %s", sb.s_volume_name, pDev->pName->name);
+  close(fd);  
+  info("Label \"%s\" set on %s", label, pDev->pName->name);
+  strcpy(pDev->label,label);
+  return;
   
 out:
-  if (fd>0) close(fd); 
+  if (fd!=-1) close(fd); 
 }   
 /*
  *_______________________________________________________________________
@@ -718,17 +695,20 @@ static inline char * storage_append_lsblk_filename(char * pt) {
   return pt;  
 }
 /*__________________________________________________________
-** Run a lsblk command and put result in file 
-** <common_config.device_automount_path>/lsblk
+** Run a lsblk command and re-write result in file 
+** <common_config.device_automount_path>/lsblk if any change 
+** occurs in the result.
 ** This function should be called periodically be a thread
-** of the storaged. The storio just read the result file 
+** of the storaged.
+** The storio just read the result file if the inode changes
 ** without calling lsblk.
 **__________________________________________________________
 */
 void storage_run_lsblk() {
-  char            cmd[512];
+  char            cmd[1024];
   char         *  pt;
-    
+  char            tmpfile[128];    
+  char            fdevice[128];    
   /*
   ** Create the working directory to mount the devices on
   */
@@ -738,28 +718,39 @@ void storage_run_lsblk() {
       return;
     }
   }        
-  
+
+  pt = tmpfile;
+  pt += rozofs_string_append(pt, "/tmp/lsblk.");
+  pt += rozofs_u32_append(pt,getpid());
+
+  pt = storage_append_lsblk_filename(fdevice);
+    
   pt = cmd;
   if (oldlsblk) {
-    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,UUID,TYPE  | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"# #\"$12\"#\"$14\"#\";}' > /tmp/lsblk.");
+    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,UUID,TYPE  | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"# #\"$12\"#\"$14\"#\";}' > ");
   }
   else {
-    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"#\"$12\"#\"$14\"#\"$16\"#\";}' > /tmp/lsblk.");
+    pt += rozofs_string_append(pt,"lsblk -Pno KNAME,FSTYPE,MOUNTPOINT,LABEL,MODEL,HCTL,UUID,TYPE -x KNAME | sort -u | awk -F '\"' '{print $2\"#\"$4\"#\"$6\"#\"$8\"#\"$10\"#\"$12\"#\"$14\"#\"$16\"#\";}' > ");
   }  
-  pt += rozofs_u32_append(pt,getpid());
-  if (system(cmd)==0) {}
+  pt += rozofs_string_append(pt, tmpfile);
+
+  pt += rozofs_string_append(pt, "; diff ");
+  pt += rozofs_string_append(pt, tmpfile);
+  *pt++ = ' ';
+  pt += rozofs_string_append(pt, fdevice);
   
-  /*
-  ** Rename the file
-  */
-  pt = cmd;
-  pt += rozofs_string_append(pt, "mv /tmp/lsblk.");
-  pt += rozofs_u32_append(pt,getpid());
-  pt += rozofs_string_append(pt, " ");
-  pt  = storage_append_lsblk_filename(pt);
-  
+  pt += rozofs_string_append(pt, " >/dev/null; if [ $? -eq 0 ]; then rm -f ");
+  pt += rozofs_string_append(pt, tmpfile);
+
+  pt += rozofs_string_append(pt, "; else mv -f ");
+  pt += rozofs_string_append(pt, tmpfile);
+  *pt++ = ' ';
+  pt += rozofs_string_append(pt, fdevice);
+    
+  pt += rozofs_string_append(pt, "; fi");  
+
   if (system(cmd)==0) {}
-}
+}    
 /*
  *_______________________________________________________________________
  *
@@ -896,16 +887,12 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   int             mpath; // Whether this is a multipath device or not
   storage_device_name_t * pDevName;
   struct stat     buf;
+  time_t          now;
 
   
   storage_enumerated_device_t * pDev = NULL;  
   storage_enumerated_device_t * pExist = NULL;  
 
-  /*
-  ** Reset enumerated device table
-  */
-  storage_reset_enumerated_device_tbl();
-  
 
   /*
   ** Create the working directory to mount the devices on
@@ -927,7 +914,23 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   */  
   pt = fdevice;
   pt = storage_append_lsblk_filename(pt);
+
+  /*
+  ** Get enumeration date
+  */
+  if (stat(fdevice,&buf) != 0) {  
+    return storage_enumerated_device_nb;
+  }
   
+  now = time(NULL);
+    
+  /*
+  ** Force re-read every 3 minutes or on file change
+  */
+  if ((storio_lsblk_file_inode == buf.st_ino) && (now < (storio_last_enumeration_date+180))) {
+    return storage_enumerated_device_nb;
+  }    
+    
   /*
   ** Open result file
   */
@@ -938,12 +941,12 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   }
 
   /*
-  ** Get enumeration date
+  ** Reset enumerated device table
   */
-  if (stat(fdevice,&buf) == 0) {
-    storio_last_enumeration_date = buf.st_mtime;
-  }  
-  
+  storage_reset_enumerated_device_tbl();
+  storio_last_enumeration_date = now;
+  storio_lsblk_file_inode      = buf.st_ino;
+   
   /*
   ** Loop on devices to check whether they are
   ** dedicated to some RozoFS device usage
@@ -1506,6 +1509,7 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
   storage_t              * st;
   int                      ret;
   int                      fd;
+  int                      isSpare;
    
   /*
   ** Lookup for the storage context
@@ -1592,23 +1596,24 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
     ** Create the CID/SID/DEV mark file
     */
     pt2  = pt;
-    pt2 += sprintf(pt2,STORAGE_DEVICE_MARK_FMT, pDev->cid, pDev->sid, pDev->dev);    
+    
+    /*
+    ** Remove spare mark. Only the one that actually removes the 
+    ** spare mark can use it.
+    */
+    pt2 += rozofs_string_append(pt,STORAGE_DEVICE_SPARE_MARK);
+    if (unlink(cmd) != 0) {
+      warning("Spare device %s no more available", pName->name);
+      goto error;   
+    }
+
+    pt2 += sprintf(pt,STORAGE_DEVICE_MARK_FMT, pDev->cid, pDev->sid, pDev->dev);    
     fd = creat(cmd,0755);
     if (fd < 0) {
       severe("creat(%s,0755) %s", cmd, strerror(errno));
-      /*
-      ** Umount this directory
-      */
-      storage_umount(cmd); 
-      return -1;     
+      goto error;   
     }    
     close(fd);
-    
-    /*
-    ** Remove spare mark
-    */
-    rozofs_string_append(pt,STORAGE_DEVICE_SPARE_MARK);
-    unlink(cmd);
     
     /*
     ** This is no more a spare device
@@ -1617,8 +1622,9 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
     * pt = 0;
   }
 
+
   /*
-  ** Set the disk label
+  ** Set label on disk
   */
   rozofs_set_label(pDev);
   
@@ -1638,6 +1644,11 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
   st->device_ctx[pDev->dev].minor = 0;  
   info("%s mounted on %s",pName->name,cmd);    
   return 0;
+  
+error:
+  *pt = 0;
+  storage_umount(cmd); 
+  return -1;
 }  
 
 /*
@@ -1776,6 +1787,7 @@ int storage_mount_all_enumerated_devices() {
     if (storage_mount_one_device(pDev,pDev->pName)==0) {
       count++;
     }  
+    storio_lsblk_file_inode = 0; // force re-read
   }
   return count;
 }     
