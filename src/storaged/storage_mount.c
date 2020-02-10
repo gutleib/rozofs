@@ -63,6 +63,8 @@
 #include "sconfig.h"
 #include "storaged_nblock_init.h"
 
+int rozofs_check_old_lsblk(void);
+void storage_run_lsblk();
 
 static char storaged_config_file[PATH_MAX] = STORAGED_DEFAULT_CONFIG;
 
@@ -154,13 +156,6 @@ static void mount_devices() {
     */
     count = storage_mount_all_enumerated_devices();  
 
-
-    // Initialization of the storage configuration
-    if (storaged_initialize() != 0) {
-        severe("can't initialize storaged: %s.", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    
     /*
     ** Unmount the working directory 
     */
@@ -287,7 +282,23 @@ int main(int argc, char *argv[]) {
       info("Automount option is not set");
       exit(EXIT_SUCCESS);      
     }  
+
+    // Initialization of the storage configuration
+    if (storaged_initialize() != 0) {
+        severe("can't initialize storaged: %s.", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
     
+    /*
+    ** Check for lsblk version 
+    */
+    rozofs_check_old_lsblk(); 
+
+    /*
+    ** 1rst lsblk run
+    */
+    storage_run_lsblk(); 
+           
     mount_devices();
 
     exit(EXIT_SUCCESS);
