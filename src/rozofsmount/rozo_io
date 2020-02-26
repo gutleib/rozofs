@@ -273,21 +273,11 @@ def build_upline(titles,total_column):
     UP_LINE = UP_LINE + ' ' + titles[col][0:8].replace(' ','_')
   UP_LINE = UP_LINE + " "
   
-  if SIZE == int(60): 
-    UP_LINE = UP_LINE + "     "
-    for col in range(total_column):
-      UP_LINE = UP_LINE + ' ' + titles[col][0:8].replace(' ','_')
-
   BOTTOM_LINE = "     "
   for column in range(total_column):
     BOTTOM_LINE = BOTTOM_LINE + '|' + "________"
   BOTTOM_LINE = BOTTOM_LINE + '|'  
   
-  if SIZE == int(60):  
-    BOTTOM_LINE += "     "
-    for colum in range(nbColumn):
-      BOTTOM_LINE = BOTTOM_LINE + '|' + "________"
-    BOTTOM_LINE = BOTTOM_LINE + '|'  
 #______________________________________    
 def delta_time(minute,sec,minus):
   if int(sec) >= int(minus):
@@ -552,10 +542,8 @@ else:
 #
 # Average arrays
 #
-avg_left = []
-avg_left = [ int(0) for j in range(50) ]
-avg_rigth = []
-avg_rigth = [ int(0) for j in range(50) ]  
+average = []
+average = [ int(0) for j in range(50) ]
 
 #
 # Record per column
@@ -647,15 +635,9 @@ while True :
         new_val = time_col_val[deltaTime][column] + int(val)
         time_col_val[deltaTime][column] = new_val                 
         #
-        # For average option add the value on the right array
+        # For average option add the value on the average
         #              
-        if history == "":
-          avg_left[column] += int(val) 
-        else:  
-          if deltaTime < int(30):    
-            avg_rigth[column] += int(val) 
-          else:
-            avg_left[column] += int(val) 
+        average[column] += int(val) 
              
       except:
 
@@ -663,6 +645,7 @@ while True :
 
   # Rework values before display
   for column in range(nbColumn):  
+
     for t in range(SIZE):
     
       new_val = time_col_val[t][column]
@@ -674,7 +657,7 @@ while True :
         if  time_col_val[t][column-1] != int(0):   
           new_val = new_val / time_col_val[t][column-1] 
           time_col_val[t][column] = new_val
-                  
+                
       # Check for maximum value  
       if options.bold == True:
         if max_col_val[column] < new_val: max_col_val[column] = new_val
@@ -709,8 +692,8 @@ while True :
   #
   # Display some raws
   #    
-  for raw in range(30):
-    if raw < int(30)-period: continue
+  for raw in range(SIZE):
+    if raw < int(SIZE)-period: continue
     deltaTime = SIZE - 1 - raw
       
     if history == "": 
@@ -726,20 +709,6 @@ while True :
           if time_col_val[deltaTime][column] == max_col_val[column]: color = color + REVERSE
       LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[deltaTime][column])) + NORMAL
     LINE = LINE + "|" 
-    
-    if history != "":   
-     
-      deltaTime -= 30
-      LINE += " -%2.2d "%(1+deltaTime)  
-                
-      for column in range(nbColumn):      
-        color = get_color_code(column)
-        if options.bold == True :
-          if max_col_val[column] != int(0):
-            if time_col_val[deltaTime][column] == max_col_val[column]: color = color + REVERSE
-        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(time_col_val[deltaTime][column])) + NORMAL
-      LINE = LINE + '|' 
-       
     print LINE  
 
   if int(round) != int(last_round):
@@ -753,15 +722,17 @@ while True :
     LINE ="     "
     for column in range(nbColumn):
       color = get_color_code(column)
-      LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg_left[column]/30)) + NORMAL
+      # Case of the latency expressed in us. We have computed a duration
+      # Divide duration by number of I/O to get a latency      
+      if " us" in titles[column]:   
+        if average[column-1] != int(0):
+          LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(average[column]/average[column-1])) + NORMAL
+        else:
+          LINE = LINE + '|' + color + "%7s "%(int(0)) + NORMAL            
+      else:
+        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(average[column]/SIZE)) + NORMAL
     LINE = LINE + "|     " 
-    avg_left = [ int(0) for j in range(50) ]
-    if history != "":
-      for column in range(nbColumn):
-        color = get_color_code(column)
-        LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(avg_rigth[column]/30)) + NORMAL
-      LINE = LINE + "|     " 
-      avg_rigth = [ int(0) for j in range(50) ]  
+    average = [ int(0) for j in range(50) ]
     print LINE
     
 
