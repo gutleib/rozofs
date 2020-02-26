@@ -1060,6 +1060,14 @@ void file_lock_poll_client(uint32_t eid, uint64_t client_ref, ep_client_info_t *
     
     client->last_poll_time = now;     
 
+    /*
+    ** Update client info when different. (reloaded locks from flash
+    ** have no valid client information associated with them)
+    */
+    if (strcmp(client->info.vers, info->vers) != 0) {
+      memcpy(&client->info,info, sizeof(ep_client_info_t));
+    }
+
     /* 
     ** Find out every locks from this client
     */
