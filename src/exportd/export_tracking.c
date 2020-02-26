@@ -2964,6 +2964,18 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, struct
     // Update nlink and ctime for inode
     target->attributes.s.attrs.nlink++;
     target->attributes.s.attrs.ctime = time(NULL);
+    /* 
+    ** Store as parent FID the latest created hard link
+    */
+    memcpy(&target->attributes.s.pfid,newparent,sizeof(fid_t));
+    /*
+    ** store the name of the file in the inode: the format depends on the size of the filename
+    **  If the size of the file is less than ROZOFS_OBJ_NAME_MAX (60 bytes) then rozofs stores the 
+    **  filename in the inode otherwise it stores all the information that permits to retrieve the
+    **  filename from the dirent file associated with the created file
+    */
+    exp_store_fname_in_inode(&target->attributes.s.fname,newname,&fid_name_info);
+
 
     // Write attributes of target
     if (export_lv2_write_attributes(e->trk_tb_p,target,0/* No sync */) != 0)
