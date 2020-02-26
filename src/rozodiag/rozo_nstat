@@ -122,7 +122,14 @@ def read_string_file(path):
 def read_int_file(path):
     return int(read_string_file(path))
 
-
+#_________________________
+def exclude_intf(line):
+   if '|' in line: return True
+   if "lo" in line: return True
+   if "docker" in line: return True
+   if "veth" in line: return True
+   if "br-" in line: return True
+   return False  
 
 #______________________  
 class rozo_roce_port:
@@ -154,13 +161,14 @@ class rozo_roce_port:
 
 #______________________  
 class rozo_eth_port:
-  def __init__(self,name,recv,xmit):
+  def __init__(self,name,recv,xmit,add2total):
     self.name       = name
     self.recv       = recv
     self.xmit       = xmit
     self.recv_delta = int(0)
     self.xmit_delta = int(0)
     self.trace      = False
+    self.add2total  = add2total
     if options.itf != None:
       if name in options.itf: 
         self.trace = True
@@ -188,16 +196,18 @@ class rozo_ethernet:
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
-      if '|' in line: continue
-      if "bond" in line: continue
-      if "lo" in line: continue
-      if "docker" in line: continue
-      if "veth" in line: continue
+      add2total = True
+      if exclude_intf(line) == True: continue
+      if "bond" in line:
+        # Bonding throughput is already counted on physical interface
+        # Do not count twice
+        add2total = False
       words=line.split()
       itf = words[0].split(':')[0]
-      recv = recv + int(words[1])
-      xmit = xmit + int(words[9]) 
-      eth_port = rozo_eth_port(itf,int(words[1]),int(words[9]))
+      if add2total == True:
+        recv = recv + int(words[1])
+        xmit = xmit + int(words[9]) 
+      eth_port = rozo_eth_port(itf,int(words[1]),int(words[9]), add2total)
       self.itf.append(eth_port)
     self.recv       = recv
     self.xmit       = xmit
@@ -209,18 +219,15 @@ class rozo_ethernet:
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
-      if '|' in line: continue
-      if "bond" in line: continue
-      if "lo" in line: continue
-      if "docker" in line: continue
-      if "veth" in line: continue
+      if exclude_intf(line) == True: continue
       words=line.split()
       itf = words[0].split(':')[0]
       for port in self.itf:
         if port.name == itf:
           port.update_counters(int(words[1]),int(words[9]))
-      recv = recv + int(words[1])
-      xmit = xmit + int(words[9])  
+          if port.add2total == True:
+            recv = recv + int(words[1])
+            xmit = xmit + int(words[9])  
     self.recv_delta = recv - self.recv
     self.xmit_delta = xmit - self.xmit
     self.recv = recv
@@ -405,11 +412,7 @@ def rozo_nstat_list():
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
-    if '|' in line: continue
-    if "bond" in line: continue
-    if "lo" in line: continue
-    if "docker" in line: continue
-    if "veth" in line: continue
+    if exclude_intf(line) == True: continue
     itf = line.split()[0].split(':')[0]
     print " - %s"%(itf)
 
