@@ -1509,7 +1509,6 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
   storage_t              * st;
   int                      ret;
   int                      fd;
-  int                      isSpare;
    
   /*
   ** Lookup for the storage context
