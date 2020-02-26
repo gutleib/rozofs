@@ -33,7 +33,7 @@ static int      PERSTEP=1;
 
 typedef uint64_t     colaverage_t[15];
 
-#define              ROZOFS_MAX_DISPLAY_COUNTER 16
+#define              ROZOFS_MAX_DISPLAY_COUNTER 32
 colaverage_t         elementaverage[ROZOFS_MAX_DISPLAY_COUNTER];
 
 #define ROZOFS_THR_CNT_MAX_THRESHOLD 8
