@@ -1233,7 +1233,7 @@ void rbs_monitor_purge(void) {
 
     /* Get file date */ 
     if (stat(file_path,&statBuf) < 0) {   
-      severe("rbs_monitor_purge : stat(%s) %s",file_path,strerror(errno));
+      //severe("rbs_monitor_purge : stat(%s) %s",file_path,strerror(errno));
       unlink(file_path);
       continue;	           
     }
