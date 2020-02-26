@@ -58,7 +58,7 @@ typedef struct _uma_dbg_threads_t {
   char       * name;
 } uma_dbg_threads_t;
 
-#define UMA_DBG_MAX_THREAD  64
+#define UMA_DBG_MAX_THREAD  128
 uma_dbg_threads_t uma_dbg_thread_table[UMA_DBG_MAX_THREAD];
 int               uma_dbg_thread_table_initialized=0;
 pthread_mutex_t   uma_dbg_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
