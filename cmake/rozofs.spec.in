@@ -237,6 +237,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_multifile
 %{_bindir}/rozo_throughput
 %{_bindir}/rozo_io
+%{_bindir}/rozo_aging
 %{_bindir}/rozo_file_consistency
 %{_bindir}/rozo_private_broadcast
 %{_bindir}/rozofsmount_wrapper

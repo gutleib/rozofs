@@ -4,6 +4,7 @@
 /usr/bin/rozo_scan
 /usr/bin/rozo_throughput
 /usr/bin/rozo_io
+/usr/bin/rozo_aging
 /usr/bin/rozo_file_consistency
 /usr/bin/rozo_private_broadcast
 /usr/bin/rozo_locate_projections
