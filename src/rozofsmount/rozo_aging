@@ -32,7 +32,7 @@ usage() {
   echo "             toward the slow volume when in aging tiering mode."
   echo " "
   echo "usage: rozo_aging [--throughput <MB/s>] --age <#hours> <mountpoint>"
-  echo "  -a, --age <#hours>       Move all files that have not been mdified within the last <#hours>."  
+  echo "  -a, --age <#hours>       Move all files that have not been modified within the last <#hours>."  
   echo "  -t, --throughput <MB/s>  Optional throughput limitation."  
   echo "  <mountpoint>             This is a RozoFS mountpoint on which to move the aging files."
   exit 1
