@@ -367,6 +367,7 @@ total_nb_clients = int(0)
 
 (options, args) = parser.parse_args()
 
+which("attr")
 #
 # Test environment ?
 #
