@@ -346,6 +346,7 @@ if options.period != None:
   except:
     syntax( "Bad period value %s"%(options.period))
 
+which("attr")
 #
 # Test environment ?
 #

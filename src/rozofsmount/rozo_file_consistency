@@ -671,7 +671,12 @@ def syntax(string=None):
 def process_one_subfile(slave,rsp):
   global fidChunk, block_start, block_stop
 
-  print "  * subfile %s FID %s"%(slave,fid_list[slave]) 
+  try:
+    cid = rsp['cid']
+    print "  * subfile %s CID %s FID %s"%(slave,cid,fid_list[slave]) 
+  except:
+    print "  * subfile %s FID %s"%(slave,fid_list[slave]) 
+      
   blkPerChunk = int(16*1024*1024)
   maxLoop     = int(256)
   blkPerLoop  = int(blkPerChunk/maxLoop)
@@ -781,7 +786,7 @@ def inspect_all_write_errors():
   # Get lis of files having experienced a write error using rozo_scan
   #
   print "Scanning files under eid %s having experienced a write error."%(eid)
-  cmd = "%s e %s w"%(SCAN,eid)
+  cmd = "%s -e %s w"%(SCAN,eid)
   parsed = shlex.split(cmd)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for f in cmd.stdout:  
@@ -819,6 +824,8 @@ parser.add_option("-e","--error", action="store_false",default=True, dest="error
 parser.add_option("-d","--debug", action="store_true",default=False, dest="debug", help="Debug mode.")
 parser.add_option("-a","--all", action="store_true",default=False, dest="all", help="Inspect all files having experienced a write error.")
 (options, args) = parser.parse_args()
+
+which("attr")
 
 #
 # Test environment ?
