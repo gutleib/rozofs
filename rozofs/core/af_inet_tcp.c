@@ -38,6 +38,7 @@
 #include "af_unix_socket_generic.h"
 #include "af_unix_socket_generic_api.h"
 #include "af_inet_stream_api.h"
+#include "ruc_sockCtl_api_th.h"
 
 /*
 **__________________________________________________________________________
@@ -473,7 +474,7 @@ int af_inet_sock_stream_listen_create_internal(uint32_t ipAddr,uint16_t tcpPort)
     retval < 0 : error on socket context creation
 
 */
-int af_inet_sock_listening_create(char *nickname,
+int af_inet_sock_listening_create_th(char *nickname,
                                   uint32_t src_ipaddr_host,uint16_t src_port_host,
                                   af_unix_socket_conf_t *conf_p)
 {
@@ -563,6 +564,10 @@ int af_inet_sock_listening_create(char *nickname,
    */
    sock_p->userRef = conf_p->userRef;
    /*
+   ** install the socket controller context (might be NULL for default socket controller 
+   */
+   sock_p->socketCtrl_p = conf_p->socketCtrl_p;
+   /*
    ** Call the listen
    */
    if((listen(sock_p->socketRef,5))==-1)
@@ -574,7 +579,8 @@ int af_inet_sock_listening_create(char *nickname,
    /*
    ** OK, we are almost done, just need to connect with the socket controller
    */
-   sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
+   sock_p->connectionId = RUC_SOCKCTL_CONNECT(sock_p->socketCtrl_p,
+                                              sock_p->socketRef,  // Reference of the socket
                                               buf_nickname,   // name of the socket
                                               16,                  // Priority within the socket controller
                                               (void*)sock_p,      // user param for socketcontroller callback
@@ -608,7 +614,22 @@ int af_inet_sock_listening_create(char *nickname,
    return -1;
 }
 
+/*
+**__________________________________________________________________________
+*/
 
+/**
+  API to use to connect with the default socket controller, the one associated with the main thread
+
+*/
+int af_inet_sock_listening_create(char *nickname,
+                                  uint32_t src_ipaddr_host,uint16_t src_port_host,
+                                  af_unix_socket_conf_t *conf_p)
+{
+  conf_p->socketCtrl_p = NULL;
+  return af_inet_sock_listening_create_th(nickname,src_ipaddr_host,src_port_host,conf_p);
+
+}
 
 
 /*
@@ -645,7 +666,7 @@ int af_inet_sock_listening_create(char *nickname,
     retval < 0 : error on socket context creation
 
 */
-int af_inet_sock_client_create(char *nickname,
+int af_inet_sock_client_create_th(char *nickname,
                                 uint32_t src_ipaddr_host,uint16_t src_port_host,
                                 uint32_t remote_ipaddr_host,uint16_t remote_port_host,
                                 af_unix_socket_conf_t *conf_p)
@@ -777,6 +798,10 @@ int af_inet_sock_client_create(char *nickname,
    ** install the user reference
    */
    sock_p->userRef = conf_p->userRef;
+  /*
+   ** install the socket controller context (might be NULL for default socket controller 
+   */
+   sock_p->socketCtrl_p = conf_p->socketCtrl_p;
    /*
    ** Check if the user has provided its own buffer pools (notice that the user might not provide
    ** any pool and use the common AF_UNIX socket pool or can use its own one by providing
@@ -788,7 +813,8 @@ int af_inet_sock_client_create(char *nickname,
    /*
    ** OK, we are almost done, install the default callback before getting the connect confirrm
    */
-   sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
+   sock_p->connectionId = RUC_SOCKCTL_CONNECT(sock_p->socketCtrl_p,
+                                              sock_p->socketRef,  // Reference of the socket
                                               buf_nickname_p,   // name of the socket
                                               3,                  // Priority within the socket controller
                                               (void*)sock_p,      // user param for socketcontroller callback
@@ -866,6 +892,26 @@ int af_inet_sock_client_create(char *nickname,
       af_unix_free_from_ptr(sock_p);
    }
    return -1;
+
+}
+
+/*
+**__________________________________________________________________________
+*/
+
+/**
+  API to use to connect with the default socket controller, the one associated with the main thread
+
+*/
+int af_inet_sock_client_create(char *nickname,
+                                uint32_t src_ipaddr_host,uint16_t src_port_host,
+                                uint32_t remote_ipaddr_host,uint16_t remote_port_host,
+                                af_unix_socket_conf_t *conf_p)
+{
+   
+   conf_p->socketCtrl_p = NULL;
+   return af_inet_sock_client_create_th(nickname,src_ipaddr_host,src_port_host,
+                                             remote_ipaddr_host,remote_port_host,conf_p);
 
 }
 /*

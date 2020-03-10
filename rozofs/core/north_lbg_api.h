@@ -108,6 +108,12 @@ int north_lbg_create_af_unix(char *name,
                              af_unix_socket_conf_t *conf_p);
 
 
+int north_lbg_create_af_unix_th(char *name,
+                             char *basename_p,
+                             int family,
+                             int first_instance,
+                             int  nb_instances,
+                             af_unix_socket_conf_t *conf_p);
 
 /*__________________________________________________________________________
 */
@@ -137,6 +143,12 @@ int north_lbg_create_af_inet(char *name,
                              int family,int  nb_instances,af_unix_socket_conf_t *conf_p);
 
 
+int north_lbg_create_af_inet_th(char *name,
+                             uint32_t src_ipaddr_host,
+                             uint16_t src_port_host,
+                             north_remote_ip_list_t *remote_ip_p,
+                             int family,int  nb_instances,af_unix_socket_conf_t *conf_p);
+
 /*__________________________________________________________________________
 */ 
  /**
@@ -149,6 +161,12 @@ int north_lbg_create_af_inet(char *name,
   @retval < 0 error (out of context ??)
 */
 int north_lbg_configure_af_inet(int lbg_idx,char *name,
+                                uint32_t src_ipaddr_host,
+                                uint16_t src_port_host,
+                                north_remote_ip_list_t *remote_ip_p,
+                                int family,int  nb_instances,af_unix_socket_conf_t *conf_p,int local);
+
+int north_lbg_configure_af_inet_th(int lbg_idx,char *name,
                                 uint32_t src_ipaddr_host,
                                 uint16_t src_port_host,
                                 north_remote_ip_list_t *remote_ip_p,
@@ -435,4 +453,21 @@ int north_lbg_set_rdma_down(int  lbg_idx);
 */
 int north_lbg_is_rdma_up(int  lbg_idx,uint32_t *ref_p);
 
+void  north_lbg_userRecvCallBack(void *userRef,uint32_t  socket_ctx_idx, void *bufRef);
+void  north_lbg_userDiscCallBack(void *userRef,uint32_t socket_context_ref,void *bufRef,int err_no);
+void  north_lbg_userXmiDoneCallBack(void *userRef,uint32_t socket_context_ref,void *bufRef);
+void north_lbg_connect_cbk (void *userRef,uint32_t socket_context_ref,int retcode,int errnum);
+
+
+
+/*
+**___________________________________________________________________________________
+*/
+/**
+*   Case of the multithreaded socket controller
+
+    That service MUST be called after north_lbg_module_init
+    
+*/    
+int north_lbg_module_init_th();
 #endif

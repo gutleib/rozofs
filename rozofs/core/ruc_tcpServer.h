@@ -28,6 +28,7 @@
 
 #include "ruc_common.h"
 #include "ruc_sockCtl_api.h"
+#include "ruc_sockCtl_api_th.h"
 #include "ruc_tcpServer_api.h"
 /*
 **  backlog for listen : 5 connection awaiting

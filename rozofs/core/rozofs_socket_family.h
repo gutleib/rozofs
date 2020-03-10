@@ -53,6 +53,7 @@ typedef enum _rozofs_socket_family_e
 
 #define ROZOFS_SOCK_FAMILY_STDALONE_EXP_SOUTH "/tmp/fake_export_south"
 #define ROZOFS_SOCK_FAMILY_STDALONE_EXP_NORTH "/tmp/fake_export_north"
+#define ROZOFS_SOCK_FAMILY_BATCH_NORTH "/tmp/rozofs_bt_north_"
 /**
 * socket type
 */

@@ -425,8 +425,27 @@ void ruc_sockCtrl_debug_show(uint32_t tcpRef, void * bufRef) {
   - 
   RETURN: none
   ==========================================================================*/
+
+void ruc_sockCtrl_debug_show_th(int ctx_index,uint32_t tcpRef, void * bufRef);
+
+
 void ruc_sockCtrl_debug(char * argv[], uint32_t tcpRef, void * bufRef) {
-  ruc_sockCtrl_debug_show(tcpRef,bufRef);
+
+  int val;
+  char *pChar=myBuf;
+  
+  if (argv[1] == NULL) return ruc_sockCtrl_debug_show(tcpRef,bufRef);
+  
+  errno = 0;       
+  val = (int) strtol(argv[1], (char **) NULL, 10);   
+  if (errno != 0) {
+   pChar += sprintf(pChar,"bad value %s\n",argv[1]);    
+   uma_dbg_send(tcpRef, bufRef, TRUE, myBuf);
+   return;     
+  }
+  ruc_sockCtrl_debug_show_th(val,tcpRef, bufRef);    
+  return;      
+
 }
 /*__________________________________________________________________________
 */
@@ -556,49 +575,6 @@ void ruc_sockCtrl_debug_init() {
 /*
 **  END OF DEBUG
 */
-
-
-#if 0
-/*__________________________________________________________________________
-  Trace level debug function
-  ==========================================================================
-  PARAMETERS: 
-  - 
-  RETURN: none
-  ==========================================================================*/
-void ruc_sockCtrl_debug_show(char *myBuf) {
-  ruc_sockObj_t     *p;
-  int                i;
-  char           *pChar=myBuf;
-  uint32_t          average;
-
-  p = ruc_sockCtrl_pFirstCtx;
-  pChar += sprintf(pChar,"select max cpu time : %u us\n",ruc_sockCtrl_looptimeMax);
-  ruc_sockCtrl_looptimeMax = 0;   
-  pChar += sprintf(pChar,"%-18s %4s %5s %10s %10s %10s\n","application","sock", "last","cumulated", "activation", "average");
-  pChar += sprintf(pChar,"%-18s %4s %5s %10s %10s %10s\n\n","name","nb", "cpu","cpu","times","cpu");
-  
-  for (i = 0; i < ruc_sockCtrl_maxConnection; i++)
-  {
-    if (p->socketId !=(uint32_t)-1)
-    {
-      if (p->nbTimes == 0) average = 0;
-      else                 average = p->cumulatedTime/p->nbTimes;
-      pChar += sprintf(pChar, "%-20s %2d %5u %10u %10u %10u\n", &p->name[0],p->socketId, p->lastTime, p->cumulatedTime,p->nbTimes, average);
-#if 0
-      if (p->nbTimesXmit == 0) average = 0;
-      else                 average = p->cumulatedTimeXmit/p->nbTimesXmit;
-      pChar += sprintf(pChar, "%-20s    %5u %10u %10u %10u\n", "  ",p->lastTimeXmit, p->cumulatedTimeXmit,p->nbTimesXmit, average);
-#endif	  
-      p->cumulatedTime = 0;
-      p->nbTimes = 0;
-    }
-    p++;
-  }
-
-}
-
-#endif
 
 
 
@@ -1288,6 +1264,7 @@ static inline void ruc_sockCtl_checkRcvAndXmitBits_opt(int nbrSelect)
     (*(pcallBack->xmitEvtFunc))(p->objRef,p->socketId);
 
 #ifdef ROZO_MES
+    gettimeofday(&timeDay,(struct timezone *)0);  
     timeAfter = MICROLONG(timeDay);
     p->lastTime = (uint32_t)(timeAfter - timeBefore);
     p->cumulatedTime += p->lastTime;
@@ -1614,12 +1591,8 @@ void ruc_sockCtrl_selectWait()
       /*
       **  compute rucRdFdSet and rucWrFdSet
       */
-      ruc_sockCtl_prepareRcvAndXmitBits();
-//      cycles_before = rdtsc();     
+      ruc_sockCtl_prepareRcvAndXmitBits();   
       gettimeofday(&timeDay,(struct timezone *)0);  
-//      cycles_after = rdtsc();  
-//      gettimeofday_cycles+=  cycles_after -  cycles_before;
-//      gettimeofday_count +=1;
       looptimeEnd = MICROLONG(timeDay);  
       ruc_sockCtrl_looptime= (uint32_t)(looptimeEnd - looptimeStart); 
       if (ruc_sockCtrl_looptime > ruc_sockCtrl_looptimeMax)

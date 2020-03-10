@@ -31,6 +31,8 @@
 #include "af_unix_socket_generic.h"
 #include "af_unix_socket_generic_api.h"
 #include "af_inet_stream_api.h"
+#include "ruc_sockCtl_api_th.h"
+
 /**
 * Callbacks prototypes
 */
@@ -641,6 +643,10 @@ int af_unix_sock_accept_create(int socketRef,int af_family, char *nickname,af_un
    ** install the user reference
    */
    sock_p->userRef = conf_p->userRef;
+  /*
+   ** install the socket controller context (might be NULL for default socket controller 
+   */
+   sock_p->socketCtrl_p = conf_p->socketCtrl_p;
    /*
    ** Check if the user has provided its own buffer pools (notice that the user might not provide
    ** any pool and use the common AF_UNIX socket pool or can use its own one by providing
@@ -653,7 +659,8 @@ int af_unix_sock_accept_create(int socketRef,int af_family, char *nickname,af_un
    /*
    ** OK, we are almost done, just need to connect with the socket controller
    */
-   sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
+   sock_p->connectionId = RUC_SOCKCTL_CONNECT(sock_p->socketCtrl_p,
+                                              sock_p->socketRef,  // Reference of the socket
                                               sock_p->nickname,   // name of the socket
                                               priority,                  // Priority within the socket controller
                                               (void*)sock_p,      // user param for socketcontroller callback
@@ -717,7 +724,7 @@ int af_unix_sock_accept_create(int socketRef,int af_family, char *nickname,af_un
     retval < 0 : error on socket context creation
 
 */
-int af_unix_sock_listening_create(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p)
+int af_unix_sock_listening_create_th(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p)
 {
    af_unix_ctx_generic_t *sock_p;
   com_xmit_template_t    *xmit_p;
@@ -820,7 +827,8 @@ int af_unix_sock_listening_create(char *nickname,char *remote_sun_path,af_unix_s
    /*
    ** OK, we are almost done, just need to connect with the socket controller
    */
-   sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
+   sock_p->connectionId = RUC_SOCKCTL_CONNECT(sock_p->socketCtrl_p,
+                                              sock_p->socketRef,  // Reference of the socket
                                               buf_nickname,       // name of the socket
                                               3,                  // Priority within the socket controller
                                               (void*)sock_p,      // user param for socketcontroller callback
@@ -854,8 +862,21 @@ int af_unix_sock_listening_create(char *nickname,char *remote_sun_path,af_unix_s
    return -1;
 }
 
+/*
+**__________________________________________________________________________
+*/
 
+/**
+  API to use to connect with the default socket controller, the one associated with the main thread
 
+*/
+
+int af_unix_sock_listening_create(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p)
+{
+
+   conf_p->socketCtrl_p = NULL;
+   return af_unix_sock_listening_create_th(nickname,remote_sun_path,conf_p);
+}
 
 /**
 *  Create a bunch of AF_UNIX socket associated with a Family

@@ -108,7 +108,9 @@ int af_inet_sock_listening_create(char *nickname,
                                   uint32_t src_ipaddr_host,uint16_t src_port_host,
                                   af_unix_socket_conf_t *conf_p);
 
-
+int af_inet_sock_listening_create_th(char *nickname,
+                                  uint32_t src_ipaddr_host,uint16_t src_port_host,
+                                  af_unix_socket_conf_t *conf_p);
 
 /*
 **__________________________________________________________________________
@@ -149,6 +151,10 @@ int af_inet_sock_client_create(char *nickname,
                                 uint32_t remote_ipaddr_host,uint16_t remote_port_host,
                                 af_unix_socket_conf_t *conf_p);
 
+int af_inet_sock_client_create_th(char *nickname,
+                                uint32_t src_ipaddr_host,uint16_t src_port_host,
+                                uint32_t remote_ipaddr_host,uint16_t remote_port_host,
+                                af_unix_socket_conf_t *conf_p);
 /*
 **__________________________________________________________________________
 */

@@ -31,7 +31,7 @@
 #include "ruc_list.h"
 #include "af_unix_socket_generic.h"
 #include "af_unix_socket_generic_api.h"
-
+#include "ruc_sockCtl_api_th.h"
 
 /*
 **  Call back function for socket controller
@@ -481,7 +481,7 @@ int af_unix_sock_create_internal(char *nameOfSocket,int size)
     retval < 0 : error on socket context creation
 
 */
-int af_unix_sock_create(char *src_sun_path,af_unix_socket_conf_t *conf_p)
+int af_unix_sock_create_th(char *src_sun_path,af_unix_socket_conf_t *conf_p)
 {
    af_unix_ctx_generic_t *sock_p;
   com_xmit_template_t    *xmit_p;
@@ -562,6 +562,10 @@ int af_unix_sock_create(char *src_sun_path,af_unix_socket_conf_t *conf_p)
    ** install the user reference
    */
    sock_p->userRef = conf_p->userRef;
+  /*
+   ** install the socket controller context (might be NULL for default socket controller 
+   */
+   sock_p->socketCtrl_p = conf_p->socketCtrl_p;
    /*
    ** Check if the user has provided its own buffer pools (notice that the user might not provide
    ** any pool and use the common AF_UNIX socket pool or can use its own one by providing
@@ -573,11 +577,15 @@ int af_unix_sock_create(char *src_sun_path,af_unix_socket_conf_t *conf_p)
    /*
    ** OK, we are almost done, just need to connect with the socket controller
    */
-   sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
-                                              sock_p->nickname,   // name of the socket
-                                              16,                  // Priority within the socket controller
-                                              (void*)sock_p,      // user param for socketcontroller callback
-                                              &af_unix_generic_callBack_sock);  // Default callbacks
+   if (sock_p->socketCtrl_p == NULL)
+   {
+     sock_p->connectionId = RUC_SOCKCTL_CONNECT(sock_p->socketCtrl_p,
+                                                sock_p->socketRef,  // Reference of the socket
+                                        	sock_p->nickname,   // name of the socket
+                                        	16,                  // Priority within the socket controller
+                                        	(void*)sock_p,      // user param for socketcontroller callback
+                                        	&af_unix_generic_callBack_sock);  // Default callbacks
+    }
     if (sock_p->connectionId == NULL)
     {
        /*
@@ -607,8 +615,20 @@ int af_unix_sock_create(char *src_sun_path,af_unix_socket_conf_t *conf_p)
    return -1;
 }
 
+/*
+**__________________________________________________________________________
+*/
 
+/**
+  API to use to connect with the default socket controller, the one associated with the main thread
 
+*/
+int af_unix_sock_create(char *src_sun_path,af_unix_socket_conf_t *conf_p)
+{
+   conf_p->socketCtrl_p = NULL;
+   return af_unix_sock_create_th(src_sun_path,conf_p);
+   
+}
 /*
 **__________________________________________________________________________
 */
@@ -641,7 +661,7 @@ int af_unix_sock_create(char *src_sun_path,af_unix_socket_conf_t *conf_p)
    */
    if (sock_p->connectionId != NULL)
    {
-      ruc_sockctl_disconnect(sock_p->connectionId);
+      RUC_SOCKCTL_DISCONNECT(sock_p->socketCtrl_p,sock_p->connectionId);
       sock_p->connectionId = NULL;
    }
    /*
@@ -724,7 +744,7 @@ int af_unix_sock_create(char *src_sun_path,af_unix_socket_conf_t *conf_p)
    */
    if (sock_p->connectionId != NULL)
    {
-      ruc_sockctl_disconnect(sock_p->connectionId);
+      RUC_SOCKCTL_DISCONNECT(sock_p->socketCtrl_p,sock_p->connectionId);
       sock_p->connectionId = NULL;
    }
    return 0;

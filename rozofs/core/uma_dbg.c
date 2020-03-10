@@ -403,7 +403,6 @@ void show_uma_dbg_core_files_man(char * pChar) {
 
 }
 void show_uma_dbg_core_files(char * argv[], uint32_t tcpRef, void *bufRef) {
-  int    len;
   char          * p;
   DIR           * coredir;
   struct dirent * pep;  
@@ -669,10 +668,7 @@ static inline char * read_cmd_line() {
   return cmdLine;
 }  
 void uma_dbg_system_ps(char * argv[], uint32_t tcpRef, void *bufRef) {
-  int    len;
-  pid_t  pid;
   char  *p;
-  int   tid;
   char *cmd;
   int   i;
   struct sched_param my_priority;

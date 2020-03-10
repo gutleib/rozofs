@@ -32,6 +32,7 @@
 #include "af_unix_socket_generic.h"
 #include "af_unix_socket_generic_api.h"
 #include "af_inet_stream_api.h"
+#include "ruc_sockCtl_api_th.h"
 
 /**
 * Callbacks prototypes : not yet connected
@@ -182,7 +183,7 @@ uint32_t af_unix_generic_cli_connectReply_CBK(void * socket_ctx_p,int socketId)
       severe( " ruc_tcp_client_connectReply_CBK: getsockopt error for context %d errno:%d ",(int)sock_p->index,errno );
       if (sock_p->connectionId !=  NULL)
       {
-	    ruc_sockctl_disconnect(sock_p->connectionId);
+	    RUC_SOCKCTL_DISCONNECT(sock_p->socketCtrl_p,sock_p->connectionId);
 	    sock_p->connectionId = NULL;
       }
       close(socketId);
@@ -197,13 +198,14 @@ uint32_t af_unix_generic_cli_connectReply_CBK(void * socket_ctx_p,int socketId)
       ** all is fine, perform the connection with the socket
       ** controller
       */
-      ruc_sockctl_disconnect(sock_p->connectionId);
+      RUC_SOCKCTL_DISCONNECT(sock_p->socketCtrl_p,sock_p->connectionId);
       sock_p->connectionId = NULL;
 
       /*
       ** reconnect with the application callback
       */
-      sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
+      sock_p->connectionId = RUC_SOCKCTL_CONNECT(sock_p->socketCtrl_p,
+                                                sock_p->socketRef,  // Reference of the socket
                                                 sock_p->nickname,   // name of the socket
                                                 16,                  // Priority within the socket controller
                                                 (void*)sock_p,      // user param for socketcontroller callback
@@ -275,7 +277,7 @@ uint32_t af_unix_generic_cli_connectReply_CBK(void * socket_ctx_p,int socketId)
      **  disconnect from the socket controller
      **  and close the socket
      */
-     ruc_sockctl_disconnect(sock_p->connectionId);
+     RUC_SOCKCTL_DISCONNECT(sock_p->socketCtrl_p,sock_p->connectionId);
      sock_p->connectionId =  NULL;
      close(socketId);
      sock_p->socketRef = -1;
@@ -866,7 +868,7 @@ int af_unix_sock_client_reconnect(uint32_t af_unix_ctx_id)
    */
    if (sock_p->connectionId != NULL)
    {
-     ruc_sockctl_disconnect(sock_p->connectionId);
+     RUC_SOCKCTL_DISCONNECT(sock_p->socketCtrl_p,sock_p->connectionId);
      sock_p->connectionId = NULL;
    }
    if (sock_p->socketRef != -1)
@@ -904,7 +906,8 @@ int af_unix_sock_client_reconnect(uint32_t af_unix_ctx_id)
    /*
    ** OK, we are almost done, install the default callback before getting the connect confirrm
    */
-   sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
+   sock_p->connectionId = RUC_SOCKCTL_CONNECT( sock_p->socketCtrl_p,
+                                               sock_p->socketRef,  // Reference of the socket
                                               sock_p->nickname,   // name of the socket
                                               3,                  // Priority within the socket controller
                                               (void*)sock_p,      // user param for socketcontroller callback
@@ -951,7 +954,7 @@ int af_unix_sock_client_reconnect(uint32_t af_unix_ctx_id)
       ** burning CPU for the case of the AF_UNIX since for that case EINPROGRESS
       ** does not exist
       */
-      ruc_sockctl_disconnect(sock_p->connectionId);
+     RUC_SOCKCTL_DISCONNECT(sock_p->socketCtrl_p,sock_p->connectionId);
       sock_p->connectionId = NULL;
       break;
 
@@ -1003,7 +1006,7 @@ int af_unix_sock_client_reconnect(uint32_t af_unix_ctx_id)
     retval < 0 : error on socket context creation
 
 */
-int af_unix_sock_client_create(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p)
+int af_unix_sock_client_create_th(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p)
 {
    af_unix_ctx_generic_t *sock_p;
   com_xmit_template_t    *xmit_p;
@@ -1125,6 +1128,10 @@ int af_unix_sock_client_create(char *nickname,char *remote_sun_path,af_unix_sock
    ** install the user reference
    */
    sock_p->userRef = conf_p->userRef;
+  /*
+   ** install the socket controller context (might be NULL for default socket controller 
+   */
+   sock_p->socketCtrl_p = conf_p->socketCtrl_p;
    /*
    ** Check if the user has provided its own buffer pools (notice that the user might not provide
    ** any pool and use the common AF_UNIX socket pool or can use its own one by providing
@@ -1136,7 +1143,8 @@ int af_unix_sock_client_create(char *nickname,char *remote_sun_path,af_unix_sock
    /*
    ** OK, we are almost done, install the default callback before getting the connect confirrm
    */
-   sock_p->connectionId = ruc_sockctl_connect(sock_p->socketRef,  // Reference of the socket
+   sock_p->connectionId = RUC_SOCKCTL_CONNECT(sock_p->socketCtrl_p,
+                                              sock_p->socketRef,  // Reference of the socket
                                               sock_p->nickname,   // name of the socket
                                               3,                  // Priority within the socket controller
                                               (void*)sock_p,      // user param for socketcontroller callback
@@ -1196,10 +1204,21 @@ int af_unix_sock_client_create(char *nickname,char *remote_sun_path,af_unix_sock
 
 }
 
+/*
+**__________________________________________________________________________
+*/
 
+/**
+  API to use to connect with the default socket controller, the one associated with the main thread
 
+*/
 
+int af_unix_sock_client_create(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p)
+{
 
+   conf_p->socketCtrl_p = NULL;
+   return af_unix_sock_client_create_th(nickname,remote_sun_path,conf_p);
+}
 
 /**
 *  Create a bunch of AF_UNIX socket associated with a Family

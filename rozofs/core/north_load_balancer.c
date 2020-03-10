@@ -7,7 +7,7 @@
   by the Free Software Foundation, version 2.
 
   Rozofs is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
+
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
   General Public License for more details.
 
@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>             
 #include <sys/ioctl.h>
+#include <pthread.h>
 #include <linux/sockios.h>
 #include <rozofs/common/types.h>
 #include <rozofs/common/log.h>
@@ -36,6 +37,7 @@
 #include "rozofs_socket_family.h"
 #include "uma_dbg_api.h"
 #include "north_lbg.h"
+#include <rozofs/core/ruc_sockCtl_api_th.h>
 
 north_lbg_ctx_t *north_lbg_context_freeListHead; /**< head of list of the free context  */
 north_lbg_ctx_t north_lbg_context_activeListHead; /**< list of the active context     */
@@ -46,6 +48,7 @@ uint32_t north_lbg_context_count; /**< Max number of contexts    */
 uint32_t north_lbg_context_allocated; /**< current number of allocated context        */
 north_lbg_ctx_t *north_lbg_context_pfirst; /**< pointer to the first context of the pool */
 
+pthread_mutex_t   rozofs_lbg_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
 #define NORTH_LBG_DEBUG_TOPIC      "lbg"
@@ -138,6 +141,7 @@ void north_lbg_entries_debug_show(uint32_t tcpRef, void *bufRef) {
     char *pChar = uma_dbg_get_buffer();
     int siocinq_value;
     int siocoutq_value;
+    char name[128];
 
     {
         north_lbg_ctx_t *lbg_p;
@@ -146,6 +150,9 @@ void north_lbg_entries_debug_show(uint32_t tcpRef, void *bufRef) {
         pChar += sprintf(pChar, "  LBG Name                | lbg_id | idx  | sock |    state   | rdy |    Queue  | Cnx Attpts | Xmit Attpts | Recv count  |   Recv-Q  |   Send-Q  | RDMA |\n");
         pChar += sprintf(pChar, "--------------------------+--------+------+------+------------+-----+-----------+------------+-------------+-------------+-----------+-----------+------+\n");
         pnext = (ruc_obj_desc_t*) NULL;
+
+       pthread_mutex_lock(&rozofs_lbg_thread_mutex);
+        
         while ((lbg_p = (north_lbg_ctx_t*) ruc_objGetNext((ruc_obj_desc_t*) & north_lbg_context_activeListHead,
                 &pnext))
                 != (north_lbg_ctx_t*) NULL) {
@@ -156,7 +163,15 @@ void north_lbg_entries_debug_show(uint32_t tcpRef, void *bufRef) {
 
             for (i = 0; i < lbg_p->nb_entries_conf; i++, entry_p++) {
                 sock_p = af_unix_getObjCtx_p(entry_p->sock_ctx_ref);
-                pChar += sprintf(pChar, " %-24s |", lbg_p->name); 
+		if (lbg_p->lbg_conf.socketCtrl_p != NULL)
+		{
+		   sprintf(name,"%s/%s",ruc_sockctl_get_module_name_th(lbg_p->lbg_conf.socketCtrl_p),lbg_p->name);
+		   pChar += sprintf(pChar, " %-24s |", name);  
+		}
+		else
+		{
+                  pChar += sprintf(pChar, " %-24s |", lbg_p->name); 
+		}
                 pChar += sprintf(pChar, "  %4d  |", lbg_p->index);
 		if (lbg_p->active_lbg_entry == i) {
                   pChar += sprintf(pChar, "  %2d *|", i);
@@ -213,7 +228,11 @@ void north_lbg_entries_debug_show(uint32_t tcpRef, void *bufRef) {
 		}
             }
         }
+        pthread_mutex_unlock(&rozofs_lbg_thread_mutex);
+
     }
+    
+
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 
 }
@@ -447,11 +466,13 @@ void north_lbg_ctxInit(north_lbg_ctx_t *p, uint8_t creation) {
 @retval    NULL if out of context.
  */
 north_lbg_ctx_t *north_lbg_alloc() {
-    north_lbg_ctx_t *p;
+    north_lbg_ctx_t *p=NULL;
 
     /*
      **  Get the first free context
      */
+    pthread_mutex_lock(&rozofs_lbg_thread_mutex);
+
     if ((p = (north_lbg_ctx_t*) ruc_objGetFirst((ruc_obj_desc_t*) north_lbg_context_freeListHead))
             == (north_lbg_ctx_t*) NULL) {
         /*
@@ -459,7 +480,8 @@ north_lbg_ctx_t *north_lbg_alloc() {
          ** context that are out of date 
          */
         severe( "NOT ABLE TO GET an AF_UNIX CONTEXT" );
-        return NULL;
+	
+        goto out;
     }
     /*
      **  reinitilisation of the context
@@ -477,7 +499,12 @@ north_lbg_ctx_t *north_lbg_alloc() {
      ** insert in the active list the new element created
      */
     ruc_objInsertTail((ruc_obj_desc_t*) & north_lbg_context_activeListHead, (ruc_obj_desc_t*) p);
+out:
+    pthread_mutex_unlock(&rozofs_lbg_thread_mutex);
+
     return p;
+
+
 }
 /*
  **____________________________________________________
@@ -574,6 +601,7 @@ uint32_t north_lbg_free_from_idx(uint32_t north_lbg_ctx_id) {
     ruc_objRemove((ruc_obj_desc_t*) p);
     p->state = NORTH_LBG_DEPENDENCY;
 
+    pthread_mutex_lock(&rozofs_lbg_thread_mutex);
     /*
      **  insert it in the free list
      */
@@ -584,6 +612,7 @@ uint32_t north_lbg_free_from_idx(uint32_t north_lbg_ctx_id) {
     ruc_objInsertTail((ruc_obj_desc_t*) north_lbg_context_freeListHead,
             (ruc_obj_desc_t*) p);
 
+    pthread_mutex_unlock(&rozofs_lbg_thread_mutex);
     return RUC_OK;
 
 }
@@ -691,4 +720,25 @@ uint32_t north_lbg_module_init(uint32_t north_lbg_ctx_count) {
 
 
     return ret;
+}
+
+/*
+**___________________________________________________________________________________
+*/
+/**
+*   Case of the multithreaded socket controller
+
+    That service MUST be called after north_lbg_module_init
+    
+*/    
+int north_lbg_module_init_th()
+{
+    int ret;
+    /*
+     ** timer mode init
+     */
+    ret = north_lbg_tmr_init_th(200, 15);
+    return ret;
+    
+
 }

@@ -76,6 +76,13 @@ extern uint32_t com_tx_tmr_start (uint8_t tmr_slot,
                                com_tx_tmr_callBack_t p_callBack,
                                void *cBParam);
 
+
+extern uint32_t  com_tx_tmr_start_th (uint8_t   tmr_slot,
+                        com_tx_tmr_cell_t *p_refTim, 
+                        uint32_t  date_s,
+                        com_tx_tmr_callBack_t p_callBack,
+                        void *cBParam
+			);
 /*
 **  IN : reference of the timer cell to stop
 **
@@ -94,4 +101,6 @@ extern uint32_t com_tx_tmr_stop (com_tx_tmr_cell_t *p_refTim);
 extern int com_tx_tmr_init (uint32_t period_ms,
                              uint32_t credit) ;
 
+extern int com_tx_tmr_init_th(uint32_t period_ms,
+                    uint32_t credit);
 #endif

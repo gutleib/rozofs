@@ -36,6 +36,7 @@
 
 typedef struct _com_tx_tmr_var_t {
  /* configuration variables */
+    int              module_idx;
     uint32_t         trace;
     uint32_t         period_ms;                      /* period between two lookup */
                                                    /* to the to queue           */
@@ -53,7 +54,9 @@ typedef struct _com_tx_tmr_var_t {
 */
 
 extern void com_tx_tmr_periodic(void *ns);
+extern void com_tx_tmr_periodic_th(void *ns);
 
 extern com_tx_tmr_var_t com_tx_tmr;
+
 
 #endif

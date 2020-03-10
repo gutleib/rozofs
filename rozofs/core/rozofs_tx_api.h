@@ -45,6 +45,8 @@ extern uint64_t rozofs_tx_stats[];
 
 #define TX_STATS(counter) rozofs_tx_stats[counter]++;
 
+void rozofs_tx_stats_th(int counter);
+#define TX_STATS_TH(counter) rozofs_tx_stats_th((int)counter);
 /**
 * Buffers information
 */
@@ -78,6 +80,12 @@ extern void *rozofs_tx_pool[];
 #define ROZOFS_TX_LARGE_TX_POOL rozofs_tx_pool[_ROZOFS_TX_LARGE_TX_POOL]
 #define ROZOFS_TX_SMALL_RX_POOL rozofs_tx_pool[_ROZOFS_TX_SMALL_RX_POOL]
 #define ROZOFS_TX_LARGE_RX_POOL rozofs_tx_pool[_ROZOFS_TX_LARGE_RX_POOL]
+
+
+#define ROZOFS_TX_SMALL_TX_POOL_TH(p) p->rozofs_tx_pool[_ROZOFS_TX_SMALL_TX_POOL]
+#define ROZOFS_TX_LARGE_TX_POOL_TH(p) p->rozofs_tx_pool[_ROZOFS_TX_LARGE_TX_POOL]
+#define ROZOFS_TX_SMALL_RX_POOL_TH(p) p->rozofs_tx_pool[_ROZOFS_TX_SMALL_RX_POOL]
+#define ROZOFS_TX_LARGE_RX_POOL_TH(p) p->rozofs_tx_pool[_ROZOFS_TX_LARGE_RX_POOL]
 /**
 **____________________________________________________
 *  Get the number of free context in the transaction context distributor
@@ -87,7 +95,7 @@ extern void *rozofs_tx_pool[];
   @retval NULL, error ->out of context
 */
 int rozofs_tx_get_free_ctx_number(void);
-
+int rozofs_tx_get_free_ctx_number_th(void);
 /*
 **____________________________________________________
 */
@@ -98,6 +106,7 @@ int rozofs_tx_get_free_ctx_number(void);
    
    @retval spointer to the receive buffer or null
 */   
+
 static inline void *rozofs_tx_get_recvBuf(rozofs_tx_ctx_t *this)
 {
   void *buf;
@@ -107,6 +116,7 @@ static inline void *rozofs_tx_get_recvBuf(rozofs_tx_ctx_t *this)
 
 }
 
+#define rozofs_tx_get_recvBuf_th rozofs_tx_get_recvBuf
 /*
 **____________________________________________________
 */
@@ -126,7 +136,7 @@ static inline void *rozofs_tx_put_recvBuf(rozofs_tx_ctx_t *this,void *bufnew)
   return buf;
 
 }
-
+#define rozofs_tx_put_recvBuf_th rozofs_tx_put_recvBuf
 /*
 **____________________________________________________
 */
@@ -141,7 +151,7 @@ static inline void *rozofs_tx_clear_recvBuf_ref(rozofs_tx_ctx_t *this)
 {
   return this->recv_buf = NULL;
 }
-
+#define rozofs_tx_clear_recvBuf_ref_th rozofs_tx_clear_recvBuf_ref
 /*-----------------------------------------------
 **   rozofs_tx_alloc
 
@@ -156,7 +166,7 @@ static inline void *rozofs_tx_clear_recvBuf_ref(rozofs_tx_ctx_t *this)
 @retval    NULL if out of context.
 */
 rozofs_tx_ctx_t *rozofs_tx_alloc();
-
+rozofs_tx_ctx_t *rozofs_tx_alloc_th();
 /*
 **____________________________________________________
 */
@@ -177,7 +187,7 @@ rozofs_tx_ctx_t *rozofs_tx_alloc();
 @retval     RUC_NOK : out of limit index.
 */
 uint32_t rozofs_tx_free_from_idx(uint32_t transaction_id);
-
+uint32_t rozofs_tx_free_from_idx_th(uint32_t transaction_id);
 /*
 **____________________________________________________
 */
@@ -200,6 +210,7 @@ uint32_t rozofs_tx_free_from_idx(uint32_t transaction_id);
 
 */
 uint32_t rozofs_tx_free_from_ptr(rozofs_tx_ctx_t *p);
+uint32_t rozofs_tx_free_from_ptr_th(rozofs_tx_ctx_t *p);
 
 /*
 **____________________________________________________
@@ -216,6 +227,8 @@ static inline int rozofs_tx_get_status(rozofs_tx_ctx_t *this)
   return this->status;
 
 }
+#define rozofs_tx_get_status_th rozofs_tx_get_status
+
 /*
 **____________________________________________________
 */
@@ -231,7 +244,7 @@ static inline int rozofs_tx_get_errno(rozofs_tx_ctx_t *this)
   return this->tx_errno;
 
 }
-
+#define rozofs_tx_get_errno_th rozofs_tx_get_errno
 /*
 **____________________________________________________
 */
@@ -249,7 +262,7 @@ static inline void rozofs_tx_set_errno(rozofs_tx_ctx_t *this,int error)
   if (error != 0) this->status = -1;
   else this->status = 0;
 }
-
+#define rozofs_tx_set_errno_th rozofs_tx_set_errno
 /*
 **____________________________________________________
 */
@@ -261,7 +274,7 @@ static inline void rozofs_tx_set_errno(rozofs_tx_ctx_t *this,int error)
 */
 
 void rozofs_tx_stop_timer(rozofs_tx_ctx_t *pObj);
-
+void rozofs_tx_stop_timer_th(rozofs_tx_ctx_t *pObj);
 /*
 **____________________________________________________
 */
@@ -273,6 +286,7 @@ void rozofs_tx_stop_timer(rozofs_tx_ctx_t *pObj);
 @retval   : none
 */
 void rozofs_tx_start_timer(rozofs_tx_ctx_t *tx_p,uint32_t time_ms) ;
+void rozofs_tx_start_timer_th(rozofs_tx_ctx_t *tx_p,uint32_t time_ms) ;
 
 /*
    rozofs_tx_module_init
@@ -290,6 +304,12 @@ uint32_t rozofs_tx_module_init(uint32_t transaction_count,
                              int max_large_tx_recv_count,int max_large_recv_xmit_size
                              );
 
+uint32_t rozofs_tx_module_init_th(uint32_t transaction_count,
+                             int max_small_tx_xmit_count,int max_small_tx_xmit_size,
+                             int max_large_tx_xmit_count,int max_large_tx_xmit_size,
+                             int max_small_tx_recv_count,int max_small_recv_xmit_size,
+                             int max_large_tx_recv_count,int max_large_recv_xmit_size
+                             );
 
 /*
 *________________________________________________________
@@ -316,6 +336,7 @@ static inline uint32_t rozofs_tx_alloc_xid(rozofs_tx_ctx_t *tx_p)
   return  tx_p->xid;
 
 }
+#define rozofs_tx_alloc_xid_th rozofs_tx_alloc_xid
 
 /*
 *________________________________________________________
@@ -331,7 +352,7 @@ static inline uint32_t rozofs_tx_read_xid(rozofs_tx_ctx_t *tx_p)
   return  tx_p->xid;
 
 }
-
+#define rozofs_tx_read_xid_th rozofs_tx_read_xid
 /*
 *________________________________________________________
 */
@@ -346,7 +367,7 @@ static inline uint32_t rozofs_tx_get_tx_idx_from_xid(uint32_t xid )
   return ( xid >> 16)& 0xffff;
 
 }
-
+#define rozofs_tx_get_tx_idx_from_xid_th rozofs_tx_get_tx_idx_from_xid
 /**
 *  API to get the size of the small xmit buffer
  @param none
@@ -358,6 +379,8 @@ static inline int rozofs_tx_get_small_buffer_size()
   return rozofs_small_tx_xmit_size;
 }
 
+
+int rozofs_tx_get_small_buffer_size_th();
 
 /**
 *  API to write an opaque user data
@@ -375,7 +398,7 @@ static inline int rozofs_tx_write_opaque_data(rozofs_tx_ctx_t *p,uint8_t idx,uin
   p->opaque_usr[idx] = data;
   return 0;
 }
-
+#define rozofs_tx_write_opaque_data_th rozofs_tx_write_opaque_data
 
 /**
 *  API to read an opaque user data
@@ -394,6 +417,7 @@ static inline int rozofs_tx_read_opaque_data(rozofs_tx_ctx_t *p,uint8_t idx,uint
   return 0;
 
 }
+#define rozofs_tx_read_opaque_data_th rozofs_tx_read_opaque_data
 
 /**
 *  API to store the reference of the xmit buffer
@@ -412,7 +436,7 @@ static inline void rozofs_tx_save_xmitBuf(rozofs_tx_ctx_t *p,void *xmit_buf)
     p->xmit_buf = xmit_buf;
 
 }
-
+#define rozofs_tx_save_xmitBuf_th rozofs_tx_save_xmitBuf
 /**
 *  API to get the reference of the xmit buffer
   Application are intended to use that service if they want to attempt
@@ -427,7 +451,7 @@ static inline void *rozofs_tx_get_xmitBuf(rozofs_tx_ctx_t *p)
 {
     return p->xmit_buf;
 }
-
+#define rozofs_tx_get_xmitBuf_th rozofs_tx_get_xmitBuf
 
 /*
 **____________________________________________________
@@ -446,7 +470,7 @@ static inline void *rozofs_tx_get_xmitBuf(rozofs_tx_ctx_t *p)
   @param errcode: error encountered (errno value)
 */
 void rozofs_tx_xmit_abort_rpc_cbk(void *userRef,uint32_t  lbg_id, void *xmit_buf,int errcode);
-
+void rozofs_tx_xmit_abort_rpc_cbk_th(void *userRef,uint32_t  lbg_id, void *xmit_buf,int errcode);
 /*
 **____________________________________________________
 */
@@ -463,7 +487,7 @@ void rozofs_tx_xmit_abort_rpc_cbk(void *userRef,uint32_t  lbg_id, void *xmit_buf
   @param recv_buf: pointer to the receive buffer
 */
 void rozofs_tx_recv_rpc_cbk(void *userRef,uint32_t  lbg_id, void *recv_buf);
-
+void rozofs_tx_recv_rpc_cbk_th(void *userRef,uint32_t  lbg_id, void *recv_buf);
 /*
 **____________________________________________________
 */
@@ -478,7 +502,7 @@ void rozofs_tx_recv_rpc_cbk(void *userRef,uint32_t  lbg_id, void *recv_buf);
   @retval length of the rpc payload
 */
 uint32_t rozofs_tx_get_rpc_msg_len_cbk(char *hdr_p);
-
+#define rozofs_tx_get_rpc_msg_len_cbk_th rozofs_tx_get_rpc_msg_len_cbk
 
 /*
 **____________________________________________________
@@ -500,7 +524,7 @@ uint32_t rozofs_tx_get_rpc_msg_len_cbk(char *hdr_p);
  @retval == NULL no buffer 
 */
 void * rozofs_tx_userRcvAllocBufCallBack(void *userRef,uint32_t socket_context_ref,uint32_t len);
-
+void * rozofs_tx_userRcvAllocBufCallBack_th(void *userRef,uint32_t socket_context_ref,uint32_t len);
 /*
 **____________________________________________________
 */
@@ -537,6 +561,7 @@ static inline void rozofs_tx_set_rdma_bufref(void *tx_p,void *rdma_bufref)
    rozofs_tx_ctx_t *p = (rozofs_tx_ctx_t*)tx_p;
    p->rdma_bufref = rdma_bufref;
 }
+#define rozofs_tx_set_rdma_bufref_th rozofs_tx_set_rdma_bufref
 /*
 **____________________________________________________
 */
@@ -551,7 +576,7 @@ static inline void *rozofs_tx_read_rdma_bufref(void *tx_p)
    rozofs_tx_ctx_t *p = (rozofs_tx_ctx_t*)tx_p;
    return(p->rdma_bufref );
 }
-
+#define rozofs_tx_read_rdma_bufref_th rozofs_tx_read_rdma_bufref
 /*
 **____________________________________________________
 */
@@ -568,7 +593,7 @@ static inline void rozofs_tx_clear_rdma_bufref(void *tx_p)
    rozofs_tx_ctx_t *p = (rozofs_tx_ctx_t*)tx_p;
    p->rdma_bufref =NULL;
 }
-
+#define rozofs_tx_clear_rdma_bufref_th rozofs_tx_clear_rdma_bufref
 
 /*
 **____________________________________________________
@@ -585,6 +610,7 @@ static inline void rozofs_tx_set_rdma_buf_free_cbk(ruc_pf_void_t cbk)
    rozofs_tx_rdma_recv_freeBuffer_cbk = cbk;
 
 }
+#define rozofs_tx_set_rdma_buf_free_cbk_th rozofs_tx_clear_rdma_bufref
 
 /*
 **____________________________________________________
@@ -601,6 +627,7 @@ static inline void rozofs_tx_set_rdma_out_of_sequence_cbk(ruc_pf_2uint32_t cbk)
    rozofs_tx_rdma_out_of_sequence_cbk = cbk;
 
 }
+#define rozofs_tx_set_rdma_out_of_sequence_cbk_th rozofs_tx_set_rdma_out_of_sequence_cbk
 
 /*
  **____________________________________________________
@@ -617,5 +644,31 @@ static inline void rozofs_tx_set_rdma_out_of_sequence_cbk(ruc_pf_2uint32_t cbk)
   @param recv_buf: pointer to the receive buffer
  */
 void rozofs_tx_recv_rdma_rpc_cbk(void *recv_buf);
-#endif
+void rozofs_tx_recv_rdma_rpc_cbk_th(void *recv_buf);
+
+void *_rozofs_tx_get_ctx_for_thread(char *file,int line);
+#define rozofs_tx_get_ctx_for_thread() _rozofs_tx_get_ctx_for_thread(__FILE__,__LINE__)
+
+
+/**
+**____________________________________________________
+* 
+   Allocation of a small xmit buffer
+  
+   @param none
+   @retval <> NULL pointer to the ruc buffer
+   @retval NULL no buffer
+*/   
+void *rozofs_tx_get_small_xmit_buf_th();
+/**
+**____________________________________________________
+* 
+   Allocation of a large xmit buffer
+  
+   @param none
+   @retval <> NULL pointer to the ruc buffer
+   @retval NULL no buffer
+*/ 
+void *rozofs_tx_get_large_xmit_buf_th();
+ #endif
 

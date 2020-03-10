@@ -168,5 +168,7 @@ typedef struct _rozofs_tx_ctx_p_t
 } rozofs_tx_ctx_t;
 
 
+void rozofs_tx_ctxInit(rozofs_tx_ctx_t *p, uint8_t creation);
+
 #endif
 

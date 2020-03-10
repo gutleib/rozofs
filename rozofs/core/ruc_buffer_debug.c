@@ -252,7 +252,7 @@ void ruc_buffer_debug_register_pool(char * name , void * poolRef) {
   /*
   ** Save information in table
   */
-  tbl2[idx2].name    = name;
+  tbl2[idx2].name    = strdup(name);
   tbl2[idx2].poolRef = (ruc_buf_t *) poolRef;
   ruc_registered_buffer_pool_entries++;
   return;

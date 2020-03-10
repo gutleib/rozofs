@@ -29,7 +29,9 @@
 #include "com_tx_timer_api.h"
 #include "com_tx_timer.h"
 #include <rozofs/common/log.h>
-#include <rozofs/core/ruc_sockCtl_api_th.h>
+#include "socketCtrl_th.h"
+#include "ruc_sockCtl_api_th.h"
+#include "ruc_timer_api_th.h"
 
 #define COM_TX_TIMER_MAX_DATE 0xFFFFFFFF
 
@@ -42,7 +44,7 @@
 **  chartim variables (trace=false)
 */
 
-com_tx_tmr_var_t com_tx_tmr={FALSE}; 
+com_tx_tmr_var_t *com_tx_tmr_ctx_tb[ROZOFS_MAX_SOCKCTL_DESCRIPTOR]={NULL};
 
 #define MILLISECLONG(time) (((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)/1000)
 
@@ -51,25 +53,11 @@ com_tx_tmr_var_t com_tx_tmr={FALSE};
 /* internal functions   */
 /************************/
 
-uint32_t  com_tx_time()
-{
-  struct timeval       timeDay;
-  unsigned long long mylonglong;  
-  uint32_t  mylong;
+uint32_t  com_tx_time();
 
-  gettimeofday(&timeDay,(struct timezone *)0);  
-  mylonglong = MILLISECLONG(timeDay);
-  /*
-  ** put the limit to 2 minutes
-  */
-  mylong = (uint32_t) mylonglong;
-  mylong &= COM_TX_TIMER_MAX_DATE;
-
-  return (uint32_t) mylong;
-}
 
 /*----------------------------------------------
-**  com_tx_tmr_periodic
+**  com_tx_tmr_periodic_th
 **----------------------------------------------
 **
 **  It perform the processing of a limited number 
@@ -83,124 +71,18 @@ uint32_t  com_tx_time()
 */
 void com_tx_tmr_processSlot(ruc_obj_desc_t* pTmrQueue) ;
 
-void com_tx_tmr_periodic(void *ns) 
+void com_tx_tmr_periodic_th(void *ctx_p) 
 {
-  
+ 
+  com_tx_tmr_var_t *com_tx_tmr_p = (com_tx_tmr_var_t*)ctx_p; 
   int i;
   
   for ( i = 0; i < COM_TX_TMR_SLOT_MAX; i++)
   {
-     com_tx_tmr_processSlot(&com_tx_tmr.queue[i]);
+     com_tx_tmr_processSlot(&com_tx_tmr_p->queue[i]);
   }
 
 }
-
-/*----------------------------------------------
-**  com_tx_tmr_processSlot
-**----------------------------------------------
-**
-**  It performs  
-**  
-**    
-**  IN : 
-**
-**  OUT : none
-**
-**-----------------------------------------------
-*/
-void com_tx_tmr_processSlot(ruc_obj_desc_t* pTmrQueue) 
-{
-   int32_t credit;
-   com_tx_tmr_cell_t * p_refTim;
-   uint32_t  cur_date_s;
-   uint8_t  expired = FALSE;
-
-    /*
-    ** processing credit and date initialization
-    */
-    credit     = com_tx_tmr.credit;
-    cur_date_s = com_tx_time();
-
-    /*
-    ** process elements while there is still credit,
-    ** and while time-out date is passed,
-    ** and while there are still some elements
-    */
-
-    while ( 
-           ((p_refTim=(com_tx_tmr_cell_t *)ruc_objGetFirst(pTmrQueue)) !=
-                    (com_tx_tmr_cell_t *)NULL)
-            && (credit > 0) 
-          ) {
-        /*
-        ** evaluate delay up to time out.
-        ** if time out not yet passed, stop read queue
-        */
-	expired = FALSE;
-	while (1)
-	{	
-	  if (cur_date_s > p_refTim->date_s)
-	  {
-	    /*
-	    ** it is possible that the counter has wrapped
-	    */
-	    if ((COM_TX_TIMER_MAX_DATE - cur_date_s + p_refTim->date_s) < p_refTim->delay)
-	    {
-	      /*
-	      ** nothing to do
-	      */
-
-	      break;
-	    }
-	    expired = TRUE;
-	    break;
-	  }
-	  if (cur_date_s == p_refTim->date_s)
-	  {
-	    expired = TRUE;
-	    break;
-	  }
-	  if (cur_date_s < p_refTim->date_s)
-	  {
-	    /*
-	    ** no expiration but look at the delay request since
-	    ** if somebody has changed the data we can be out of
-	    ** sync
-	    */
-	    if ((p_refTim->date_s - cur_date_s) > p_refTim->delay)
-	    {
-	       /*
-	       ** readjust the expiration date
-	       */
-	       p_refTim->date_s = cur_date_s + p_refTim->delay;
-	    }
-	  }
-	  break; 
-	}
-	if (!expired)
-	{
-	  /*
-	  ** not expiration leaves the loop
-	  */
-	  return;
-	}
-
-        /*
-        ** timer cell dequeing from its current queue
-        */
-        ruc_objRemove((ruc_obj_desc_t *)p_refTim);
-	/*
-	** call the time-out function
-	*/
-        (*(p_refTim->p_callBack))(p_refTim->cBParam);
-
-        credit--;
-
-    }
- 
-    return;
-}
-
 
 
 /************************/
@@ -223,7 +105,7 @@ void com_tx_tmr_processSlot(ruc_obj_desc_t* pTmrQueue)
 **
 **-----------------------------------------------
 */
-uint32_t  com_tx_tmr_start (uint8_t   tmr_slot,
+uint32_t  com_tx_tmr_start_th (uint8_t   tmr_slot,
                         com_tx_tmr_cell_t *p_refTim, 
                         uint32_t  date_s,
                         com_tx_tmr_callBack_t p_callBack,
@@ -231,13 +113,21 @@ uint32_t  com_tx_tmr_start (uint8_t   tmr_slot,
 			)
 {
      uint32_t ret;       
+     com_tx_tmr_var_t * com_tx_tmr_p;
      int module_idx = ruc_sockctl_get_thread_module_idx_th();
      
-     if (module_idx >= 0)
+     if (module_idx < 0)
      {
-       return com_tx_tmr_start_th(tmr_slot,p_refTim,date_s,p_callBack,cBParam);
+        fatal("Not module index for thread %lu",pthread_self());
      }
-          
+    /*
+    ** get the Realtime clock context of this thread
+    */
+    com_tx_tmr_p =  com_tx_tmr_ctx_tb[module_idx];
+    if (com_tx_tmr_p == NULL)
+    {
+       fatal("something rotten for thread %lu",pthread_self());
+    }     
      if (tmr_slot >= COM_TX_TMR_SLOT_MAX)
      {
         severe( "com_tx_tmr_start : slot out of range : %d ",tmr_slot );
@@ -262,7 +152,7 @@ uint32_t  com_tx_tmr_start (uint8_t   tmr_slot,
     p_refTim->cBParam = cBParam;
 
 
-    ret=ruc_objInsertTail(&com_tx_tmr.queue[tmr_slot],(ruc_obj_desc_t*)p_refTim);
+    ret=ruc_objInsertTail(&com_tx_tmr_p->queue[tmr_slot],(ruc_obj_desc_t*)p_refTim);
     if(ret!=RUC_OK){
         severe( "Pb while inserting cell in queue, ret=%u", ret );
         return(RUC_NOK);
@@ -270,30 +160,6 @@ uint32_t  com_tx_tmr_start (uint8_t   tmr_slot,
     return(RUC_OK);
 }
 
-
-/*
-**----------------------------------------------
-**  com_tx_tmr_stop
-**----------------------------------------------
-**
-**  charging timer service stoping request
-**    
-**  IN : reference of the timer cell to stop
-**
-**  OUT : OK/NOK
-**
-**-----------------------------------------------
-*/
-uint32_t com_tx_tmr_stop (com_tx_tmr_cell_t *p_refTim){
-
-
-    /* 
-    ** dequeue the timer cell
-    */
-    ruc_objRemove((ruc_obj_desc_t *)p_refTim);
-
-    return(RUC_OK);
-}
 
 /*
 **----------------------------------------------
@@ -309,7 +175,7 @@ uint32_t com_tx_tmr_stop (com_tx_tmr_cell_t *p_refTim){
 **
 **-----------------------------------------------
 */
-int com_tx_tmr_init(uint32_t period_ms,
+int com_tx_tmr_init_th(uint32_t period_ms,
                     uint32_t credit)
 {
 
@@ -319,26 +185,39 @@ int com_tx_tmr_init(uint32_t period_ms,
     /* configuration variable */
     /* initialization         */
     /**************************/
-
+     int module_idx = ruc_sockctl_get_thread_module_idx_th();
+     
+     if (module_idx < 0)
+     {
+        fatal("Not module index for thread %lu",pthread_self());
+     }
+     com_tx_tmr_var_t * com_tx_tmr_p = malloc(sizeof(com_tx_tmr_var_t));
+     if (com_tx_tmr_p == NULL)
+     {
+	fatal("Out of memory");
+     }
+    
+    com_tx_tmr_ctx_tb[module_idx] = com_tx_tmr_p;
+    com_tx_tmr_p->module_idx = module_idx;
 
     /*
     ** time between to look up to the charging timer queue
     */
     if (period_ms!=0){
-        com_tx_tmr.period_ms=period_ms;
+        com_tx_tmr_p->period_ms=period_ms;
     } else {
         severe( "bad provided timer period (0 ms), I continue with 100 ms" );
-        com_tx_tmr.period_ms=100;
+        com_tx_tmr_p->period_ms=100;
     }
 
     /*
     ** Number of pdp context processed at each look up;
     */
     if (credit!=0){
-        com_tx_tmr.credit=credit;
+        com_tx_tmr_p->credit=credit;
     } else {
         severe( "bad provided  credit (0), I continue with 1" );
-        com_tx_tmr.credit=1;
+        com_tx_tmr_p->credit=1;
     }
 
     /**************************/
@@ -352,21 +231,22 @@ int com_tx_tmr_init(uint32_t period_ms,
     */
     for (i = 0; i < COM_TX_TMR_SLOT_MAX; i++)
     {
-      ruc_listHdrInit(&com_tx_tmr.queue[i]);
+      ruc_listHdrInit(&com_tx_tmr_p->queue[i]);
     }
 
     /*
     ** charging timer periodic launching
     */
-    com_tx_tmr.p_periodic_timCell=ruc_timer_alloc(0,0);
-    if (com_tx_tmr.p_periodic_timCell == (struct timer_cell *)NULL){
+    com_tx_tmr_p->p_periodic_timCell=ruc_timer_alloc(0,0);
+    if (com_tx_tmr_p->p_periodic_timCell == (struct timer_cell *)NULL){
         severe( "No timer available for MS timer periodic" );
         return(RUC_NOK);
     }
-    ruc_periodic_timer_start(com_tx_tmr.p_periodic_timCell,
-	      (com_tx_tmr.period_ms*TIMER_TICK_VALUE_100MS/100),
-	      &com_tx_tmr_periodic,
-	      0);
+    info("FDLBT start periodic tmr module %d context %p",com_tx_tmr_p->module_idx,com_tx_tmr_p->p_periodic_timCell);
+    ruc_periodic_timer_start_th(com_tx_tmr_p->p_periodic_timCell,
+	      (com_tx_tmr_p->period_ms*TIMER_TICK_VALUE_100MS/100),
+	      &com_tx_tmr_periodic_th,
+	      com_tx_tmr_p);
 	      
     return(RUC_OK);
 }

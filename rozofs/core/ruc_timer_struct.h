@@ -49,7 +49,6 @@ typedef struct ruc_timer_t
 */
   pthread_t           thrdId; /* of timer thread */
   int       internalSocket[2];  /* -1 if N.S */
-  // 64BITS   uint32_t    intSockconnectionId[2];  /* -1: connection id returned by the sock Ctrl */
   void *    intSockconnectionId[2];  /* -1: connection id returned by the sock Ctrl */
 } ruc_timer_t;
 

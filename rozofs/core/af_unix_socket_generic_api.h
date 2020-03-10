@@ -159,6 +159,7 @@ uint32_t af_unix_module_init(uint32_t af_unix_ctx_count,
 
 */
 int af_unix_sock_create(char *nameOfSocket,af_unix_socket_conf_t *conf_p);
+int af_unix_sock_create_th(char *nameOfSocket,af_unix_socket_conf_t *conf_p);
 
 
 
@@ -232,6 +233,8 @@ int af_unix_generic_send_stream_with_idx(int  socket_ctx_id,void *buf_p);
 
 */
 int af_unix_sock_client_create(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p);
+
+int af_unix_sock_client_create_th(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p);
 /**
 *  Create a bunch of AF_UNIX socket associated with a Family
 
@@ -306,6 +309,7 @@ int af_unix_sock_client_reconnect(uint32_t af_unix_ctx_id);
 
 */
 int af_unix_sock_listening_create(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p);
+int af_unix_sock_listening_create_th(char *nickname,char *remote_sun_path,af_unix_socket_conf_t *conf_p);
 
 int af_unix_socket_listening_family_create (char *nicknamebase_p,char *basename_p, int base_instance,int nb_instances,
                                              int *socket_ctx_tb_p,af_unix_socket_conf_t *conf_p);

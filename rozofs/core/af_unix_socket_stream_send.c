@@ -32,7 +32,7 @@
 #include "ruc_common.h"
 #include "af_unix_socket_generic.h"
 #include "socketCtrl.h"
-
+#include "ruc_sockCtl_api_th.h"
 
 
  /*
@@ -244,7 +244,7 @@ void af_unix_send_stream_fsm(af_unix_ctx_generic_t *socket_p,com_xmit_template_t
           xmit_p->eoc_flag       = 0;
           xmit_p->eoc_threshold  = AF_UNIX_CONGESTION_DEFAULT_THRESHOLD;
           xmit_p->state = XMIT_CONGESTED;
-	  FD_SET(socket_p->socketRef,&rucWrFdSetCongested);
+	  RUC_SOCKCTL_CONGESTED(socket_p->socketCtrl_p,socket_p->socketRef);
 
           return ;
 
@@ -327,11 +327,11 @@ void af_unix_send_stream_fsm(af_unix_ctx_generic_t *socket_p,com_xmit_template_t
           ** controller
           */
           xmit_p->xmit_req_flag = 1;
-	  FD_SET(socket_p->socketRef,&rucWrFdSetCongested);
+	  RUC_SOCKCTL_CONGESTED(socket_p->socketCtrl_p,socket_p->socketRef);
           return;
         }
 #endif
-	FD_CLR(socket_p->socketRef,&rucWrFdSetCongested);
+	RUC_SOCKCTL_EOC(socket_p->socketCtrl_p,socket_p->socketRef);
 
         /*
         ** check if there is a pending buffer (case found if there was a previous congestion
@@ -375,13 +375,13 @@ void af_unix_send_stream_fsm(af_unix_ctx_generic_t *socket_p,com_xmit_template_t
            xmit_p->eoc_flag  = 1;
            xmit_p->congested_flag = 0;
            xmit_p->state = XMIT_IN_PRG;
-	   FD_CLR(socket_p->socketRef,&rucWrFdSetCongested);
+	   RUC_SOCKCTL_EOC(socket_p->socketCtrl_p,socket_p->socketRef);
            break;
         }
 #if 0
 	else
 	{
-	  FD_SET(socket_p->socketRef,&rucWrFdSetCongested);
+	  RUC_SOCKCTL_CONGESTED(socket_p->socketCtrl_p,socket_p->socketRef);
 	}
 #endif
         return;

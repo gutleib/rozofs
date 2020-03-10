@@ -28,10 +28,13 @@
 #include <linux/sockios.h>
 #include <rozofs/rozofs.h>
 #include <rozofs/common/log.h>
-
+#include <pthread.h>
 #include "uma_dbg_api.h"
 #include "af_unix_socket_generic.h"
 #include "af_unix_socket_generic_api.h"
+
+
+pthread_mutex_t   rozofs_sock_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 af_unix_ctx_generic_t *af_unix_context_freeListHead; /**< head of list of the free context  */
 af_unix_ctx_generic_t af_unix_context_activeListHead; /**< list of the active context     */
@@ -764,8 +767,10 @@ void af_unix_ctxInit(af_unix_ctx_generic_t *p, uint8_t creation) {
 @retval    NULL if out of context.
  */
 af_unix_ctx_generic_t *af_unix_alloc() {
-    af_unix_ctx_generic_t *p;
+    af_unix_ctx_generic_t *p=NULL;
 
+
+    pthread_mutex_lock(&rozofs_sock_thread_mutex);
     /*
      **  Get the first free context
      */
@@ -776,7 +781,7 @@ af_unix_ctx_generic_t *af_unix_alloc() {
          ** context that are out of date
          */
         severe( "NOT ABLE TO GET an AF_UNIX CONTEXT" );
-        return NULL;
+        goto out;
     }
     /*
      **  reinitilisation of the context
@@ -794,6 +799,8 @@ af_unix_ctx_generic_t *af_unix_alloc() {
      ** insert in the active list the new element created
      */
     ruc_objInsertTail((ruc_obj_desc_t*) & af_unix_context_activeListHead, (ruc_obj_desc_t*) p);
+out:    
+    pthread_mutex_unlock(&rozofs_sock_thread_mutex);
     return p;
 }
 /*
@@ -815,12 +822,15 @@ retval     -1 if out of context.
 uint32_t af_unix_createIndex(uint32_t af_unix_ctx_id) {
     af_unix_ctx_generic_t *p;
 
+    pthread_mutex_lock(&rozofs_sock_thread_mutex);
+
     /*
      **  Get the first free context
      */
     p = af_unix_getObjCtx_p(af_unix_ctx_id);
     if (p == NULL) {
         severe( "MS ref out of range: %u", af_unix_ctx_id );
+        pthread_mutex_unlock(&rozofs_sock_thread_mutex);
         return RUC_NOK;
     }
     /*
@@ -828,6 +838,7 @@ uint32_t af_unix_createIndex(uint32_t af_unix_ctx_id) {
      */
     if (p->free == FALSE) {
         severe( "the context is not free : %u", af_unix_ctx_id );
+        pthread_mutex_unlock(&rozofs_sock_thread_mutex);
         return RUC_NOK;
     }
     /*
@@ -842,6 +853,8 @@ uint32_t af_unix_createIndex(uint32_t af_unix_ctx_id) {
 
     p->free = FALSE;
     ruc_objRemove((ruc_obj_desc_t*) p);
+
+    pthread_mutex_unlock(&rozofs_sock_thread_mutex);
 
     return RUC_OK;
 }
@@ -870,10 +883,13 @@ uint32_t af_unix_createIndex(uint32_t af_unix_ctx_id) {
 uint32_t af_unix_free_from_idx(uint32_t af_unix_ctx_id) {
     af_unix_ctx_generic_t *p;
 
+    pthread_mutex_lock(&rozofs_sock_thread_mutex);
+
     if (af_unix_ctx_id >= af_unix_context_count) {
         /*
          ** index is out of limits
          */
+        pthread_mutex_unlock(&rozofs_sock_thread_mutex);
         return RUC_NOK;
     }
     /*
@@ -907,6 +923,8 @@ uint32_t af_unix_free_from_idx(uint32_t af_unix_ctx_id) {
     p->free = TRUE;
     ruc_objInsertTail((ruc_obj_desc_t*) af_unix_context_freeListHead,
             (ruc_obj_desc_t*) p);
+
+    pthread_mutex_unlock(&rozofs_sock_thread_mutex);
 
     return RUC_OK;
 

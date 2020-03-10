@@ -72,6 +72,13 @@ extern uint32_t north_lbg_tmr_start (uint8_t tmr_slot,
                                north_lbg_tmr_callBack_t p_callBack,
                                void *cBParam);
 
+
+uint32_t north_lbg_tmr_start_th (uint8_t   tmr_slot,
+                        north_lbg_tmr_cell_t *p_refTim,
+                        uint32_t date_s,
+                        north_lbg_tmr_callBack_t p_callBack,
+                        void *cBParam
+			);
 /*
 **  IN : reference of the timer cell to stop
 **
@@ -89,5 +96,9 @@ extern uint32_t north_lbg_tmr_stop (north_lbg_tmr_cell_t *p_refTim);
 
 extern int north_lbg_tmr_init (uint32_t period_ms,
                              uint32_t credit) ;
+
+int north_lbg_tmr_init_th(uint32_t period_ms,
+                    uint32_t credit);			     
+			     
 
 #endif

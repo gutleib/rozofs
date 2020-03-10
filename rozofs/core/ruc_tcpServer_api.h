@@ -30,6 +30,7 @@
 
 #include "ruc_common.h"
 #include "ruc_sockCtl_api.h"
+#include "ruc_sockCtl_api_th.h"
 
 
 /*

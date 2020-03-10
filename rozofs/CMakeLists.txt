@@ -176,7 +176,20 @@ set (librozofs_sources
     core/rozofs_throughput.h
     core/rozofs_throughput.c   
     core/rozofs_queue.c
-    core/rozofs_queue.h         
+    core/rozofs_queue.h  
+# Multithreaded services
+    core/ruc_sockCtl_api_th.h
+    core/socketCtrl_th.c
+    core/socketCtrl_th.h  
+    core/ruc_timer_api_th.h   
+    core/ruc_timer_main_th.c
+    core/ruc_timer_th.c 
+    core/north_load_balancer_api_th.c
+    core/norh_lbg_timer_th.c
+    core/rozofs_tx_engine_th.c
+    core/com_tx_timer_th.c
+    core/rozofs_queue_pri.c
+    core/rozofs_queue_pri.h
 )
 
 add_library(rozofs STATIC ${librozofs_sources})

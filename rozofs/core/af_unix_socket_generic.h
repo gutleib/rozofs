@@ -138,6 +138,7 @@ typedef struct _af_unix_socket_conf_t
   void        *recvPool; /* user pool reference or -1 */
   uint8_t      dscp;     /**< QOS for the TCP connection */
   uint8_t      priority; /**< Socket controller prioroty when different from 16 */
+  void         *socketCtrl_p; /**< pointer to the socket controller context or NULL (by default) */
 } af_unix_socket_conf_t;
 
 
@@ -341,6 +342,7 @@ typedef struct _af_unix_ctx_generic_t
   af_stream_poll_CBK_t       userPollingCallBack;    /**< call that permits polling at application level */
   af_stream_avail_CBK_t      userAvailabilityCallBack;
   uint32_t                   availability_param;
+  void         *socketCtrl_p; /**< pointer to the socket controller context or NULL (by default) */
   void          *userRef;           /**< user reference that must be recalled in the callbacks */
   af_unix_socket_conf_t *conf_p;  /**< for listening socket only */
   com_xmit_template_t   xmit;
