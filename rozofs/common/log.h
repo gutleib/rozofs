@@ -69,11 +69,10 @@ static const int priorities[] = {
 #define DEBUG(fmt, ...)
 #endif
 
-
-#ifndef NDEBUGFUNCTION
-#define DEBUG_FUNCTION DEBUG("%s", __FUNCTION__)
-#else
+/* 
+** Never trace  functions
+*/
 #define DEBUG_FUNCTION
-#endif
+
 
 #endif
