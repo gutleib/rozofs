@@ -407,14 +407,18 @@ static inline void man_io (char * pChar) {
   PCHAR_STRING_BLD(" io [with|exclude] [col <#col>] [avg] [s|m|h|a] [persec]\n");
   PCHAR_STRING_BLD("    with    = [r|w|l|c|d|a|x|o]\n");
   PCHAR_STRING_BLD("    exclude = [nr|nw|nl|nc|nd|na|nx|no]\n");
-  PCHAR_STRING    ("      . r(nr) to (not to) display read counts\n");
-  PCHAR_STRING    ("      . w(nw) to (not to) display write counts\n");
+  PCHAR_STRING    ("      . r(nr) to (not to) display read bytes/IO/latency\n");
+  PCHAR_STRING    ("      . w(nw) to (not to) display write bytes/IO/latency\n");
   PCHAR_STRING    ("      . l(nl) to (not to) display lookup count\n");
-  PCHAR_STRING    ("      . c(nc) to (not to) display creation count\n");
-  PCHAR_STRING    ("      . d(nd) to (not to) display deletion count\n");
+  PCHAR_STRING    ("      . c(nc) to (not to) display file/directory creation count\n");
+  PCHAR_STRING    ("      . d(nd) to (not to) display file/directory deletion count\n");
   PCHAR_STRING    ("      . a(na) to (not to) display get attribute count\n");
   PCHAR_STRING    ("      . x(nx) to (not to) display extended attribute operation count\n");
-  PCHAR_STRING    ("      . o(no) to (not to) display other metadate IO count\n"); 
+  PCHAR_STRING    ("      . f(nf) to (not to) display file lock operation count\n"); 
+  PCHAR_STRING    ("      . D(nD) to (not to) display open/read/release directory count\n"); 
+  PCHAR_STRING    ("      . L(nL) to (not to) display link, slink, getlink count\n"); 
+  PCHAR_STRING    ("      . o(no) to (not to) display other metadate count :\n");
+  PCHAR_STRING    ("          setattr, forget, open, rename and flush. \n"); 
   PCHAR_STRING    ("    Default is to display all available counters\n");
   PCHAR_STRING_BLD("    [col <#col>] ");
   PCHAR_STRING    (" request the display history on ");
@@ -503,6 +507,36 @@ void display_io (char * argv[], uint32_t tcpRef, void *bufRef) {
       i++;
       continue;
     }          
+    if (strcasecmp(argv[i],"f")==0) {
+      requested |= (1<<ROZOFSMOUNT_COUNTER_FLOCK);
+      i++;
+      continue;
+    }      
+    if (strcasecmp(argv[i],"nf")==0) {
+      excluded |= (1<<ROZOFSMOUNT_COUNTER_FLOCK);
+      i++;
+      continue;
+    }   
+    if (strcasecmp(argv[i],"D")==0) {
+      requested |= (1<<ROZOFSMOUNT_COUNTER_LS);
+      i++;
+      continue;
+    }      
+    if (strcasecmp(argv[i],"nD")==0) {
+      excluded |= (1<<ROZOFSMOUNT_COUNTER_LS);
+      i++;
+      continue;
+    }   
+    if (strcasecmp(argv[i],"L")==0) {
+      requested |= (1<<ROZOFSMOUNT_COUNTER_LINK);
+      i++;
+      continue;
+    }      
+    if (strcasecmp(argv[i],"nL")==0) {
+      excluded |= (1<<ROZOFSMOUNT_COUNTER_LINK);
+      i++;
+      continue;
+    }   
     if (strcasecmp(argv[i],"o")==0) {
       requested |= (1<<ROZOFSMOUNT_COUNTER_OTHER);
       i++;
@@ -633,9 +667,12 @@ void rozofs_throughput_counter_init(void) {
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FDEL]= rozofs_thr_cnts_allocate(NULL, "F.DEL");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DCR8]= rozofs_thr_cnts_allocate(NULL, "D.CR8");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_DDEL]= rozofs_thr_cnts_allocate(NULL, "D.DEL");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_LS]= rozofs_thr_cnts_allocate(NULL, "LS");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_LOOKUP]= rozofs_thr_cnts_allocate(NULL, "LOOKUP");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_GETATTR]= rozofs_thr_cnts_allocate(NULL, "GETATTR");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_XATTR]= rozofs_thr_cnts_allocate(NULL, "XATTR");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FLOCK]= rozofs_thr_cnts_allocate(NULL, "FLOCK");
+  rozofs_thr_counter[ROZOFSMOUNT_COUNTER_LINK]= rozofs_thr_cnts_allocate(NULL, "LINK");
   rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER]= rozofs_thr_cnts_allocate(NULL, "OTHER");
 
   

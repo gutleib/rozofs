@@ -801,7 +801,7 @@ void rozofs_ll_readdir_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_LS], 1);
      
      if (old_rozofs_readdir_flag!=0)
      {

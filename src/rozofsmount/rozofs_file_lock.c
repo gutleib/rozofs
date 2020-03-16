@@ -1199,7 +1199,7 @@ void rozofs_ll_getlk_nb(fuse_req_t req,
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FLOCK], 1);
 
     int trc_idx = 0;
     
@@ -1570,7 +1570,7 @@ void rozofs_ll_setlk_nb(fuse_req_t req,
     /*
     ** Update the IO statistics
     */
-    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_OTHER], 1);
+    rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_FLOCK], 1);
     
 //    severe("FDL lock : type %s whence %s start %llu len %llu",print_lock_type(flock->l_type),print_whence(flock->l_whence),
 //           (unsigned long long int)flock->l_start,flock->l_len);
