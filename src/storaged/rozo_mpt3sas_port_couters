@@ -24,7 +24,7 @@ import shlex
 from optparse import OptionParser
 import datetime
 
-REDBOLD = "033[1m\033[91m\033[40m" 
+REDBOLD = "\033[1m\033[91m\033[40m" 
 NORMAL  = "\033[0m"
 host_list = []
 
@@ -64,10 +64,14 @@ class port_class:
     self.host = host
     self.port = port
     self.speed = do_read_file("%s/negotiated_linkrate"%(self.getpath())) 
-    self.invalid_dword_count = 0
-    self.loss_of_dword_sync_count = 0
-    self.phy_reset_problem_count = 0
-    self.running_disparity_error_count = 0  
+    self.invalid_dword_count = int(0)
+    self.invalid_dword_delta = int(0)
+    self.loss_of_dword_sync_count = int(0)
+    self.loss_of_dword_sync_delta = int(0)
+    self.phy_reset_problem_count = int(0)
+    self.phy_reset_problem_delta = int(0)
+    self.running_disparity_error_count = int(0)  
+    self.running_disparity_error_delta = int(0)  
     self.alarm = True  
     self.checked = False
     host.port_list.append(self)
@@ -88,20 +92,32 @@ class port_class:
     running_disparity_error_count  = do_read_file("%s/running_disparity_error_count"%(path))
     
     if int(invalid_dword_count) != int(self.invalid_dword_count):
+      self.invalid_dword_delta = int(invalid_dword_count) - int(self.invalid_dword_count)
       self.invalid_dword_count = int(invalid_dword_count)
       self.alarm = True
+    else:
+      self.invalid_dword_delta = int(0)
     
     if int(loss_of_dword_sync_count) != int(self.loss_of_dword_sync_count):
+      self.loss_of_dword_sync_delta = int(loss_of_dword_sync_count) - int(self.loss_of_dword_sync_count)
       self.loss_of_dword_sync_count = int(loss_of_dword_sync_count)
       self.alarm = True
+    else:
+      self.loss_of_dword_sync_delta = int(0)
     
     if int(phy_reset_problem_count) != int(self.phy_reset_problem_count):
+      self.phy_reset_problem_delta = int(phy_reset_problem_count) - int(self.phy_reset_problem_count)
       self.phy_reset_problem_count = int(phy_reset_problem_count)
       self.alarm = True
+    else:
+      self.phy_reset_problem_delta = int(0)
 
     if int(running_disparity_error_count) != int(self.running_disparity_error_count):
+      self.running_disparity_error_delta = int(running_disparity_error_count) - int(self.running_disparity_error_count)
       self.running_disparity_error_count = int(running_disparity_error_count)
       self.alarm = True
+    else:
+      self.running_disparity_error_delta = int(0)  
 
 #____________________________________      
 def do_find_host(host):  
@@ -112,36 +128,52 @@ def do_find_host(host):
   return host_class(host) 
         
 #____________________________________      
-def do_display(now):  
+def do_display(now,run):  
   global host_list
   
   print "{"
   print "  \"date\" : \"%s\","%(now.strftime("%Y-%m-%d %H:%M:%S"))
   print "  \"HBA\" : ["
 
-  for h in host_list:
+  for h in host_list:        
     print "      { \"name\" : \"%s\", \"host\" :  \"%s\", \"ports\" : ["%(h.board_name, h.host)
     for p in h.port_list:
-      #
-      # Set color in case of problems
-      #
-      if p.alarm == True:
-        beg = REDBOLD
-        end = NORMAL
+
+      if run == int(0) and p.alarm == True:
+        LINE = REDBOLD
       else:
-        beg = ""
-        end = ""
+        LINE =""
+       
+      LINE += "           { \"port\" : \"%s\",  \"speed\" : \"%s\""%(p.port,p.speed)
+      
+      LINE += ",\n                \"invalid_dword_count\" : %d"%(p.invalid_dword_count)
+      if run != int(0) and p.invalid_dword_delta != int(0):
+        LINE += REDBOLD + ", \"invalid_dword_delta\" : %d"%(p.invalid_dword_delta) + NORMAL
+
+      LINE += ", \"loss_of_dword_sync_count\" : %d"%(p.loss_of_dword_sync_count)
+      if run != int(0) and p.loss_of_dword_sync_delta != int(0):
+        LINE += REDBOLD + ", \"loss_of_dword_sync_delta\" : %d"%(p.loss_of_dword_sync_delta) + NORMAL
         
+      LINE += ", \"phy_reset_problem_count\" : %d"%(p.phy_reset_problem_count)
+      if run != int(0) and p.phy_reset_problem_delta != int(0):
+        LINE += REDBOLD + ", \"phy_reset_problem_delta\" : %d"%(p.phy_reset_problem_delta) + NORMAL
+        
+      LINE += ", \"running_disparity_error_count\" : %d"%(p.running_disparity_error_count) 
+      if run != int(0) and p.running_disparity_error_delta != int(0):
+        LINE += REDBOLD + ", \"running_disparity_error_delta\" : %d"%(p.running_disparity_error_delta) + NORMAL
+        
+      LINE += " }"
+                
+      last = len(h.port_list) - int(1)
+      if p != h.port_list[last] : LINE += ","
+      if run == int(0) and p.alarm == True: LINE += NORMAL
+        
+      print LINE  
       #
       # Raise alarm until next check
       #  
       p.alarm = True
                 
-      last = len(h.port_list) - int(1)
-      if p == h.port_list[last] :
-        print beg + "           { \"port\" : \"%s\",  \"speed\" : \"%s\", \"invalid_dword_count\" : %d, \"loss_of_dword_sync_count\" : %d, \"phy_reset_problem_count\" : %d, \"running_disparity_error_count\" : %d}"%(p.port,p.speed,p.invalid_dword_count, p.loss_of_dword_sync_count, p.phy_reset_problem_count, p.running_disparity_error_count) +end                   
-      else:
-        print beg + "           { \"port\" : \"%s\",  \"speed\" : \"%s\", \"invalid_dword_count\" : %d, \"loss_of_dword_sync_count\" : %d, \"phy_reset_problem_count\" : %d, \"running_disparity_error_count\" : %d},"%(p.port,p.speed,p.invalid_dword_count, p.loss_of_dword_sync_count, p.phy_reset_problem_count, p.running_disparity_error_count) +end                   
     print "        ]"  
     last  = len(host_list) - int(1) 
     if h == host_list[last] :
@@ -150,6 +182,7 @@ def do_display(now):
       print "      },"                
   print "   ]"  
   print "}"        
+      
 
 #____________________________________      
 def decode_lsi_loginfo_numbers(val):
@@ -541,7 +574,8 @@ if options.loginfo != None:
     sys.exit(1)
   decode_lsi_loginfo(val)
   sys.exit(0)
-    
+        
+run = int(0)
 while True:
 
   now = datetime.datetime.now()
@@ -583,7 +617,8 @@ while True:
   #
   # Display SAS port error counters
   #
-  do_display(now)
+  do_display(now,run)
+  run = run + int(1)
   
   #
   # Sleep and reloop
