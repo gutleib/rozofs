@@ -843,6 +843,7 @@ static inline void rebalance_config_generated_read(char * fname) {
   }
 
   if (access(rebalance_config_file_name,R_OK)!=0) {
+    printf("cant access %s: %s.", rebalance_config_file_name, strerror(errno));
     fatal("cant access %s: %s.", rebalance_config_file_name, strerror(errno));
   }
 

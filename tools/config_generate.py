@@ -1087,6 +1087,7 @@ def go_build_read(file_name,struct_name,command):
   print "  }"
   print ""
   print "  if (access(%s_file_name,R_OK)!=0) {"%(struct_name)
+  print "    printf(\"cant access %%s: %%s.\", %s_file_name, strerror(errno));"%(struct_name)  
   print "    fatal(\"cant access %%s: %%s.\", %s_file_name, strerror(errno));"%(struct_name)
   print "  }"
   print ""     

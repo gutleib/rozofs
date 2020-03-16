@@ -3424,6 +3424,7 @@ static inline void common_config_generated_read(char * fname) {
   }
 
   if (access(common_config_file_name,R_OK)!=0) {
+    printf("cant access %s: %s.", common_config_file_name, strerror(errno));
     fatal("cant access %s: %s.", common_config_file_name, strerror(errno));
   }
 
