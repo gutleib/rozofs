@@ -3628,10 +3628,10 @@ static inline int rbs_rebuild_resume() {
   /*
   ** Start one rebuild process par rebuild file
   */
-  dirName = get_rebuild_directory_name(parameter.rebuildRef);
-   
+  dirName = get_rebuild_directory_name(parameter.rebuildRef);   
   
-  for (ftype=rbs_file_type_nominal; ftype <= rbs_file_type_spare; ftype++) {
+  for (ftype=rbs_file_type_nominal; ftype <= rbs_file_type_all; ftype++) {
+
     /*
     ** Open this directory
     */
@@ -3645,6 +3645,7 @@ static inline int rbs_rebuild_resume() {
       }  
       return status;
     } 	  
+    
     /*
     ** Loop on distibution sub directories
     */

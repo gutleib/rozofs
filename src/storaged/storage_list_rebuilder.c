@@ -173,7 +173,8 @@ typedef enum _rbs_exe_code_e {
   RBS_EXE_SUCCESS,
   RBS_EXE_FAILED,
   RBS_EXE_ENOENT,
-  RBS_EXE_BROKEN
+  RBS_EXE_BROKEN,
+  RBS_EXE_PAUSED
 } RBS_EXE_CODE_E;
 /*
 **____________________________________________________
@@ -520,6 +521,14 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(cid_t             cid,
 	      *error = rozofs_rbs_error_read_error;		      
               goto out;
           }
+
+
+          if (sigusr_received) {
+            remove_file = 0;// Better keep the file	
+	    *error = rozofs_rbs_error_paused;	
+            status = RBS_EXE_PAUSED;
+	    goto out;
+	  }
 
 	  if (nb_blocks_read_distant == 0) break; // End of chunk
 	  
@@ -913,6 +922,13 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(cid_t             cid,
 	  *error = rozofs_rbs_error_read_error;	
 	  goto out;
 	}
+
+        if (sigusr_received) {
+          status = RBS_EXE_PAUSED;
+	  *error = rozofs_rbs_error_paused;	
+	  goto out;
+	}
+    
         
         if (nb_blocks_read_distant == 0) break; // End of file
         
@@ -1170,6 +1186,9 @@ int storaged_rebuild_list(cid_t cid, sid_t sid, char * fid_list, char * statFile
     
   while (1) {
 
+    if (sigusr_received) {
+      goto error;
+    }    
     
     offset = next_offset;
     if (pread(fdlist,&file_entry,sizeof(file_entry),offset) <= 0) {
@@ -1212,11 +1231,6 @@ int storaged_rebuild_list(cid_t cid, sid_t sid, char * fid_list, char * statFile
     re.bsize  = file_entry.bsize;
     re.layout = file_entry.layout;
   
-
-    if (sigusr_received) {
-      goto error;
-    }    
-
     local_index = rbs_get_rb_entry_cnts(&re, &cluster_entries, cid, sid, rozofs_inverse);  
     if (local_index == -1) {
       if      (errno==EINVAL) file_entry.error = rozofs_rbs_error_no_such_cluster;
@@ -1336,6 +1350,7 @@ int storaged_rebuild_list(cid_t cid, sid_t sid, char * fid_list, char * statFile
 	  severe("Unexpected return code %d.",ret);	  
 	case RBS_EXE_FAILED:
 	case RBS_EXE_BROKEN:
+	case RBS_EXE_PAUSED:
 	  /*
 	  ** In case of file relocation, the new data chunk file has been removed 
 	  ** and the previous data chunk file location has been restored
@@ -1475,6 +1490,9 @@ int storaged_resecure_list(cid_t cid, sid_t sid, char * fid_list, char * statFil
     
   while (1) {
 
+    if (sigusr_received) {
+      goto error;
+    }   
     
     offset = next_offset;
     if (pread(fdlist,&file_entry,sizeof(file_entry),offset) <= 0) {
@@ -1516,12 +1534,7 @@ int storaged_resecure_list(cid_t cid, sid_t sid, char * fid_list, char * statFil
     memcpy(re.dist_set_current,file_entry.dist_set_current, sizeof(re.dist_set_current));
     re.bsize  = file_entry.bsize;
     re.layout = file_entry.layout;
-  
-
-    if (sigusr_received) {
-      goto error;
-    }   
-     
+       
     /*
     ** Find out the spare sids that have to be used for resecuring
     */ 
@@ -1596,6 +1609,10 @@ int storaged_resecure_list(cid_t cid, sid_t sid, char * fid_list, char * statFil
 					&file_entry.error,
                                         &more_prj2rebuild);                                             
 
+
+      if (sigusr_received) {
+        goto error;
+      }       
 
       /*
       ** In case the rebuild failed, check with the export whether 

@@ -429,6 +429,7 @@ typedef enum rozofs_rbs_error_e {
   rozofs_rbs_error_write_failed,
   rozofs_rbs_error_not_enough_projection_read,
   rozofs_rbs_error_no_spare_target_available,
+  rozofs_rbs_error_paused,
    
   rozofs_rbs_error_unknown,
 } ROZOFS_RBS_ERROR_E;
