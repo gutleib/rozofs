@@ -461,15 +461,15 @@ static inline char * format_status_file(char * pJSON) {
     JSON_close_array;
 
     JSON_open_array("tips");
-       sprintf(mystring,"storage_rebuild -id %d -speed <MB/s>",parameter.rebuildRef);
+       sprintf(mystring,"storage_rebuild --id %d --speed <MB/s>",parameter.rebuildRef);
        JSON_string_element(mystring);
-       sprintf(mystring,"storage_rebuild -id %d -pause",parameter.rebuildRef);
+       sprintf(mystring,"storage_rebuild --id %d --pause",parameter.rebuildRef);
        JSON_string_element(mystring);
-       sprintf(mystring,"storage_rebuild -id %d -resume",parameter.rebuildRef);
+       sprintf(mystring,"storage_rebuild --id %d --resume",parameter.rebuildRef);
        JSON_string_element(mystring);
-       sprintf(mystring,"storage_rebuild -id %d -abort",parameter.rebuildRef);    
+       sprintf(mystring,"storage_rebuild --id %d --abort",parameter.rebuildRef);    
        JSON_string_element(mystring);       
-       sprintf(mystring,"storage_rebuild -id %d -list",parameter.rebuildRef);
+       sprintf(mystring,"storage_rebuild --id %d --list",parameter.rebuildRef);
        JSON_string_element(mystring);       
     JSON_close_array;
 
@@ -638,15 +638,15 @@ void usage(char * fmt, ...) {
     printf("   -K, --clearOnly           \tJust clear the status of the device, but do not rebuild it\n");
     printf("   -o, --output=<file>       \tTo give the name of the rebuild status file (under %s)\n",ROZOFS_RUNDIR_RBS_REBUILD);
     printf("   -O, --OUTPUT=<filePath>   \tTo give the absolute file name of the rebuild status file\n");
-    printf("   -id <id>                  \tIdentifier of a non completed rebuild.\n");
-    printf("   -speed <MB/s>             \tChange rebuild throughput\n");
-    printf("   -abort                    \tAbort a rebuild\n");
-    printf("   -pause                    \tPause a rebuild\n");
-    printf("   -resume                   \tResume a rebuild\n");
-    printf("   -list                     \tDisplay a list of FID to rebuild\n");
-    printf("   -rawlist                  \tDisplay a raw list of FID to rebuild\n");
-    printf("   -fg                       \tTo force foreground execution\n");
-    printf("   -bg                       \tTo force background execution\n");
+    printf("   --id <id>                 \tIdentifier of a non completed rebuild.\n");
+    printf("   --speed <MB/s>            \tChange rebuild throughput\n");
+    printf("   --abort                   \tAbort a rebuild\n");
+    printf("   --pause                   \tPause a rebuild\n");
+    printf("   --resume                  \tResume a rebuild\n");
+    printf("   --list                    \tDisplay a list of FID to rebuild\n");
+    printf("   --rawlist                 \tDisplay a raw list of FID to rebuild\n");
+    printf("   --fg                      \tTo force foreground execution\n");
+    printf("   --bg                      \tTo force background execution\n");
     printf("   --result                  \tResult file to write execution result in (i.e running, success, failed).\n");
     printf("   -h, --help                \tPrint this message.\n");
     printf(" mainly for tests:\n");
@@ -669,13 +669,13 @@ void usage(char * fmt, ...) {
     printf("an automatic relocation (self healing)\n");
     printf("storage_rebuild -s 1/2 -d 3 --clear\n\n");    
     printf("Pause a running rebuild in order to resume it later\n");
-    printf("storage_rebuild -id <id> -pause\n\n"); 
+    printf("storage_rebuild --id <id> --pause\n\n"); 
     printf("Resume a paused or failed rebuild\n");
-    printf("storage_rebuild -id <id> -resume\n\n"); 
+    printf("storage_rebuild --id <id> --resume\n\n"); 
     printf("Check the list of remaining FID to rebuild\n");
-    printf("storage_rebuild -id <id> -list\n\n");     
+    printf("storage_rebuild --id <id> --list\n\n");     
     printf("Abort definitively a running rebuild\n");
-    printf("storage_rebuild -id <id> -abort\n\n");  
+    printf("storage_rebuild --id <id> --abort\n\n");  
                      
     if (fmt) do_exit(EXIT_FAILURE);
     do_exit(EXIT_SUCCESS); 
@@ -744,8 +744,8 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       continue;
     }  
 
-    if IS_ARG(-id) {
-      GET_INT_PARAM(-id,par->rebuildRef);
+    if (IS_ARG(-id) || IS_ARG(--id)) {
+      GET_INT_PARAM(--id,par->rebuildRef);
       continue;
     }  	
         	
@@ -760,32 +760,32 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       continue;
     } 
        
-    if IS_ARG(-resume) {
+    if (IS_ARG(-resume) || IS_ARG(--resume)) {
       par->resume = 1;
       continue;
     } 
     
-    if IS_ARG(-pause) {
+    if (IS_ARG(-pause) || IS_ARG(--pause)) {
       par->pause = 1;
       continue;
     }
     
-    if IS_ARG(-speed) {
-      GET_INT_PARAM(-speed,par->speed)
+    if (IS_ARG(-speed)|| IS_ARG(--speed)) {
+      GET_INT_PARAM(--speed,par->speed)
       continue;
     } 
     
-    if IS_ARG(-abort) {
+    if (IS_ARG(-abort) || IS_ARG(--abort))  {
       par->abort = 1;
       continue;
     }
              
-    if IS_ARG(-list) {
+    if (IS_ARG(-list) || IS_ARG(--list)) {
       par->list = 1;     
       continue;
     } 
     
-    if IS_ARG(-rawlist) {
+    if (IS_ARG(-rawlist) || IS_ARG(--rawlist)) {
       par->list = 2;     
       continue;
     }   
@@ -843,12 +843,12 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       continue;
     }  
 
-    if IS_ARG(-bg) { 
+    if (IS_ARG(-bg) || IS_ARG(--bg))  { 
       par->background = 1;     
       continue;
     }  
 
-    if IS_ARG(-fg) { 
+    if (IS_ARG(-fg)||IS_ARG(--fg)) { 
       par->background = 0;     
       continue;
     }  
@@ -963,7 +963,7 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
   */
   if ((par->resume)||(par->list)||(par->pause)||(par->abort)||(par->speed!=-1)) {
     if (par->rebuildRef==0) {
-      usage("-resume -speed -pause -abort and -list/-rawlist options require a rebuild identifier.");
+      usage("--resume --speed --pause --abort and --list/--rawlist options require a rebuild identifier.");
     }
   }
   else {
@@ -1063,22 +1063,22 @@ int is_command_resume(int argc, char *argv[]) {
   if (localPar.resume == 0) return 0;
   
   if (strcmp(localPar.storaged_config_file,STORAGED_DEFAULT_CONFIG)!=0) {
-    usage("-resume and --config options are incompatibles.");
+    usage("--resume and --config options are incompatibles.");
   }
   if ((localPar.cid!=-1)||(localPar.sid!=-1)) {
-    usage("-resume and --sid options are incompatibles.");
+    usage("--resume and --sid options are incompatibles.");
   } 
   if (localPar.type == rbs_rebuild_type_device) {
-    usage("-resume and --device options are incompatibles.");
+    usage("--resume and --device options are incompatibles.");
   } 
   if (localPar.type == rbs_rebuild_type_fid) {
-    usage("-resume and --fid options are incompatibles.");
+    usage("--resume and --fid options are incompatibles.");
   } 
   if (localPar.cid!=-1) {
-    usage("-resume and --fid options are incompatibles.");
+    usage("--esume and --fid options are incompatibles.");
   }        
   if (localPar.relocate) {
-    usage("-resume and --relocate options are incompatibles.");
+    usage("--resume and --relocate options are incompatibles.");
   } 
   return localPar.rebuildRef;
 }
@@ -2305,7 +2305,7 @@ int rbs_do_list_rebuild(int cid, int sid, rbs_file_type_e ftype) {
   while (parameter.parallel > (failure+success)) {
     int                   ret;
 
-    timeout.tv_sec  = 20;
+    timeout.tv_sec  = 10;
     timeout.tv_nsec = 0;
     
     ret = sigtimedwait(&mask, NULL, &timeout);
@@ -2330,6 +2330,7 @@ int rbs_do_list_rebuild(int cid, int sid, rbs_file_type_e ftype) {
     
     // Rebuild is paused. Forward signal to every child
     if (sigusr_received) {
+       info("pause forwarded to list rebuilders");
        kill(0,SIGUSR1);
     }
   }
@@ -2908,7 +2909,7 @@ void rbs_rebuild_pause() {
   kill(pid,SIGUSR1);
 
   REBUILD_MSG("Rebuild %d will be paused within few minutes",parameter.rebuildRef); 
-  printf("Resume this rebuild   : storage_rebuild -id %d -resume\n", parameter.rebuildRef); 
+  printf("Resume this rebuild   : storage_rebuild --id %d --resume\n", parameter.rebuildRef); 
 
   return;
 }
@@ -3988,9 +3989,9 @@ int main(int argc, char *argv[]) {
     if (!quiet) {
       printf("Check rebuild status : \n");
       printf("      watch -d -n 60 cat %s\n", rbs_monitor_file_path); 
-      printf("Change this rebuild throughput : storage_rebuild -id %d -speed <MB/s>\n", parameter.rebuildRef); 
-      printf("Abort this rebuild             : storage_rebuild -id %d -abort\n", parameter.rebuildRef); 
-      printf("Pause this rebuild             : storage_rebuild -id %d -pause\n", parameter.rebuildRef); 
+      printf("Change this rebuild throughput : storage_rebuild --id %d --speed <MB/s>\n", parameter.rebuildRef); 
+      printf("Abort this rebuild             : storage_rebuild --id %d --abort\n", parameter.rebuildRef); 
+      printf("Pause this rebuild             : storage_rebuild --id %d --pause\n", parameter.rebuildRef); 
     }
 
     /*
