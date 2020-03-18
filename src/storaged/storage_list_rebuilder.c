@@ -112,7 +112,8 @@ int resecure = 0;
 list_t     cluster_entries;
 char     * pExport_hostname = NULL;
 char     * export_param = NULL;
-
+char       throughputFile[FILENAME_MAX] = {0};
+time_t     throughputLastModificationTime = 0;
 
 /*-----------------------------------------------------------------------------
 **
@@ -204,6 +205,66 @@ static inline uint64_t get_us(uint64_t from) {
 }
 /*-----------------------------------------------------------------------------
 **
+** Check for new throughput value 
+**
+**----------------------------------------------------------------------------
+*/
+static inline void check_for_new_throughput() {
+  struct stat buf;
+  char   throughputString[64];
+  int    fd;
+  int    throughputValue;
+  int    ret;
+  
+  /*
+  ** Initializae the thoughput file name if not yet done
+  */
+  if (throughputFile[0] == 0) {
+    char * pDirectory = get_rebuild_directory_name(rebuildRef); 
+    sprintf(throughputFile, "%s/throughput",pDirectory);
+  }
+  
+  /*
+  ** Open the file if it exists
+  */
+  fd = open(throughputFile,O_RDONLY);
+  if (fd < 0) return;
+
+  /*
+  ** Get its last modification time
+  */
+  if (fstat(fd, &buf) != 0) {
+    close(fd);
+    return;
+  }
+  
+  /*
+  ** No modification
+  */
+  if (buf.st_mtime == throughputLastModificationTime) {
+    close(fd);
+    return;
+  }
+  
+  ret = pread(fd,&throughputString,sizeof(throughputString),0);  
+  close(fd);
+  if (ret <= 0) return;
+  
+  if (sscanf(throughputString,"%d",&throughputValue)!=1) return;
+  if (throughputValue<0) return;
+  
+  throughput = throughputValue;
+  throughputLastModificationTime = buf.st_mtime;
+    
+  /*
+  ** Reset read size as well as start time to enforce the new throughput from now
+  */ 
+  totalReadSize = 0;
+  startTime     = get_us(0); 
+  
+}
+/*-----------------------------------------------------------------------------
+**
 ** Enforce the requested throughput
 **
 **----------------------------------------------------------------------------
@@ -211,6 +272,8 @@ static inline uint64_t get_us(uint64_t from) {
 static inline void enforce_throughput() {
   uint64_t   delay;
   uint64_t   enforcement_delay;
+
+  check_for_new_throughput();
   
   /*
   ** No throughput limitation

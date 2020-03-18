@@ -147,6 +147,7 @@ int quiet=0;
 int sigusr_received=0;
 int nolog = 0;
 int verbose=0;
+char       throughputFile[FILENAME_MAX] = {0};
 
 /* Empty and remove a directory
 *
@@ -234,6 +235,7 @@ typedef struct _rbs_parameter_t {
   int      clearOnly;
   int      resume;
   int      pause;
+  int      speed;
   int      abort;
   int      list;
   int      rebuildRef;
@@ -459,6 +461,8 @@ static inline char * format_status_file(char * pJSON) {
     JSON_close_array;
 
     JSON_open_array("tips");
+       sprintf(mystring,"storage_rebuild -id %d -speed <MB/s>",parameter.rebuildRef);
+       JSON_string_element(mystring);
        sprintf(mystring,"storage_rebuild -id %d -pause",parameter.rebuildRef);
        JSON_string_element(mystring);
        sprintf(mystring,"storage_rebuild -id %d -resume",parameter.rebuildRef);
@@ -563,6 +567,7 @@ void rbs_conf_init(rbs_parameter_t * par) {
   par->rebuildRef           = 0;
   par->resume               = 0;
   par->pause                = 0;  
+  par->speed                = -1;  
   par->list                 = 0;
   par->background           = 1;
   par->simu                 = NULL;
@@ -634,6 +639,7 @@ void usage(char * fmt, ...) {
     printf("   -o, --output=<file>       \tTo give the name of the rebuild status file (under %s)\n",ROZOFS_RUNDIR_RBS_REBUILD);
     printf("   -O, --OUTPUT=<filePath>   \tTo give the absolute file name of the rebuild status file\n");
     printf("   -id <id>                  \tIdentifier of a non completed rebuild.\n");
+    printf("   -speed <MB/s>             \tChange rebuild throughput\n");
     printf("   -abort                    \tAbort a rebuild\n");
     printf("   -pause                    \tPause a rebuild\n");
     printf("   -resume                   \tResume a rebuild\n");
@@ -763,6 +769,11 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
       par->pause = 1;
       continue;
     }
+    
+    if IS_ARG(-speed) {
+      GET_INT_PARAM(-speed,par->speed)
+      continue;
+    } 
     
     if IS_ARG(-abort) {
       par->abort = 1;
@@ -950,9 +961,9 @@ void parse_command(int argc, char *argv[], rbs_parameter_t * par) {
   /*
   ** On rebuild resume the rebuild identifier must be provided
   */
-  if ((par->resume)||(par->list)||(par->pause)||(par->abort)) {
+  if ((par->resume)||(par->list)||(par->pause)||(par->abort)||(par->speed!=-1)) {
     if (par->rebuildRef==0) {
-      usage("-resume -pause -abort and -list/-rawlist options require a rebuild identifier.");
+      usage("-resume -speed -pause -abort and -list/-rawlist options require a rebuild identifier.");
     }
   }
   else {
@@ -2725,7 +2736,47 @@ void storaged_rebuild_list_read(char * fid_list) {
 error: 
   if (fd != -1) close(fd);   
 }
+/*-----------------------------------------------------------------------------
+**
+** Write throughput value in throughput file
+**
+**----------------------------------------------------------------------------
+*/
+static inline void write_throughput(int value) {
+  char   throughputString[64];
+  int    fd;
+  int    ret;
+  int    count;
 
+  count = sprintf(throughputString, "%d", value);
+  
+  /*
+  ** Initializae the thoughput file name if not yet done
+  */
+  if (throughputFile[0] == 0) {
+    char * pDirectory = get_rebuild_directory_name(parameter.rebuildRef); 
+    sprintf(throughputFile, "%s/throughput",pDirectory);
+  }
+  
+  /*
+  ** Open the file if it exists
+  */
+  fd = open(throughputFile,O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IROTH);
+  if (fd < 0) {
+    severe("open(%s) %s", throughputFile, strerror(errno));
+    printf("open(%s) %s", throughputFile, strerror(errno));
+    return;
+  }
+  
+  ret = pwrite(fd,throughputString,count,0);  
+  if (ret != count) {
+    severe("pwrite(%s) %s", throughputFile, strerror(errno));
+    printf("pwrite(%s) %s", throughputFile, strerror(errno));
+  }
+  
+  close(fd);
+  return;  
+}
 /** Display the list of remaining FIDs
  *
  */
@@ -3501,6 +3552,11 @@ static inline int rbs_rebuild_process() {
     ** Save command in file "command" of the temporary directory
     */
     save_command();
+    
+    /*
+    ** Write throughput file
+    */
+    write_throughput(parameter.throughput);
 
     /*
     ** Save rebuild status file name for later pause/resume
@@ -3765,7 +3821,18 @@ int main(int argc, char *argv[]) {
       rbs_list_remaining_fid();
       exit(EXIT_SUCCESS);
     }
-
+    /*
+    ** Change rebuild throughput
+    */
+     if (parameter.speed != -1) {
+      /*
+      ** Write throughput file
+      */
+      write_throughput(parameter.speed);
+      printf("Throughput changed to %d MB/s\n", parameter.speed);
+      exit(EXIT_SUCCESS);
+    } 
+       
     /*
     ** Process listing of failed FID
     */
@@ -3919,10 +3986,11 @@ int main(int argc, char *argv[]) {
     }
     
     if (!quiet) {
-
-      printf("Check rebuild status : watch -d -n 20 cat %s\n", rbs_monitor_file_path); 
-      printf("Abort this rebuild   : storage_rebuild -id %d -abort\n", parameter.rebuildRef); 
-      printf("Pause this rebuild   : storage_rebuild -id %d -pause\n", parameter.rebuildRef); 
+      printf("Check rebuild status : \n");
+      printf("      watch -d -n 60 cat %s\n", rbs_monitor_file_path); 
+      printf("Change this rebuild throughput : storage_rebuild -id %d -speed <MB/s>\n", parameter.rebuildRef); 
+      printf("Abort this rebuild             : storage_rebuild -id %d -abort\n", parameter.rebuildRef); 
+      printf("Pause this rebuild             : storage_rebuild -id %d -pause\n", parameter.rebuildRef); 
     }
 
     /*
