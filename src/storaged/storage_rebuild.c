@@ -2908,7 +2908,7 @@ void rbs_rebuild_pause() {
 
   kill(pid,SIGUSR1);
 
-  REBUILD_MSG("Rebuild %d will be paused within few minutes",parameter.rebuildRef); 
+  REBUILD_MSG("Rebuild %d will be paused within few seconds",parameter.rebuildRef); 
   printf("Resume this rebuild   : storage_rebuild --id %d --resume\n", parameter.rebuildRef); 
 
   return;
@@ -2926,7 +2926,7 @@ void rbs_rebuild_abort() {
   }
   clean_dir(get_rebuild_directory_name(parameter.rebuildRef));
 
-  REBUILD_MSG("Rebuild %d will be aborted within few minutes",parameter.rebuildRef); 
+  REBUILD_MSG("Rebuild %d will be aborted within few seconds",parameter.rebuildRef); 
   return;
 }
 /** Starts a thread for rebuild given storage(s)

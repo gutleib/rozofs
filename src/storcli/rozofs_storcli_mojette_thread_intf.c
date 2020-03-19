@@ -371,7 +371,6 @@ uint32_t af_unix_disk_rcvReadysock(void * unused,int socketId)
 */
 void rozofs_storcli_inverse_threaded_end(rozofs_storcli_ctx_t * working_ctx_p,int send_needed)
 {
-   uint32_t   projection_id;
    storcli_read_arg_t *storcli_read_rq_p;
 
    storcli_read_rq_p = (storcli_read_arg_t*)&working_ctx_p->storcli_read_arg;

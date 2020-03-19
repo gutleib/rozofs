@@ -52,8 +52,6 @@ int main(int argc, char *argv[]) {
   char     * pChar;
   int        fd = -1;
   int        nb;
-  pid_t      pid;
-  int        status;
 
   /*
   ** Change local directory to "/"
@@ -130,7 +128,7 @@ int main(int argc, char *argv[]) {
     pChar[nb] = 0;
 
     info("self healing start");     
-    status = system(rebuild_command);
+    system(rebuild_command);
     info("self healing stop");     
   }  
 }    

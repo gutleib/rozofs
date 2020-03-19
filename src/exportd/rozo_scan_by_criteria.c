@@ -1304,6 +1304,8 @@ void get_directory_striping_info(ext_mattr_t  * inode_p,
       *ishybrid   = 1;
       *hybridSize = *slaveSize;
       break;
+    default:
+      break;  
   }
   return;
 }  
@@ -4101,9 +4103,6 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   rozofs_fid_append(fidString,inode_p->s.attrs.fid);
   VVERBOSE("\nVISIT: %s\n",fidString);
   if (just_this_fid) {
-    rozofs_inode_t * inode1 = (rozofs_inode_t *) this_fid;
-    rozofs_inode_t * inode2 = (rozofs_inode_t *) inode_p->s.attrs.fid;
-
     result = 1;
   }
   else {

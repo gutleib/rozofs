@@ -224,8 +224,6 @@ void * storio_device_rebuild_thread(void *arg) {
   storio_selfHealing_cxt_t    * pRebuild = arg;
   storage_device_ctx_t    * pDev = &pRebuild->st->device_ctx[pRebuild->dev];
   char            cmd[512];
-  int             status;
-  pid_t           pid;
   int    fd;
   int    nb;
   
