@@ -503,6 +503,29 @@ char  * moduleName = NULL;
 }
 /*____________________________________________________________________________________________
 **
+** Check the presence of the configuration file
+** 
+** @param fname   Configuration file of NULL (use default)
+**
+** @retval  0 if it exist, -1 else
+*/
+int trash_process_config_does_file_exist(char * fname) {
+
+  if (fname == NULL) {
+    strcpy(trash_process_config_file_name,ROZOFS_CONFIG_DIR"/trash.conf");
+  }
+  else {
+    strcpy(trash_process_config_file_name,fname); 
+  } 
+
+  if (access(trash_process_config_file_name,R_OK)!=0) {
+    return -1;
+  }
+  return 0;
+}
+
+/*____________________________________________________________________________________________
+**
 ** Read the configuration file
 */
 static inline void trash_process_config_generated_read(char * fname) {
@@ -510,15 +533,9 @@ static inline void trash_process_config_generated_read(char * fname) {
 
   if (trash_process_config_file_is_read == 0) {
     uma_dbg_addTopicAndMan("trash_process_config",show_trash_process_config, man_trash_process_config, 0);
-    if (fname == NULL) {
-      strcpy(trash_process_config_file_name,ROZOFS_CONFIG_DIR"/trash.conf");
-    }
-    else {
-      strcpy(trash_process_config_file_name,fname); 
-    } 
   }
 
-  if (access(trash_process_config_file_name,R_OK)!=0) {
+  if (trash_process_config_does_file_exist(fname) != 0) {
     printf("cant access %s: %s.", trash_process_config_file_name, strerror(errno));
     fatal("cant access %s: %s.", trash_process_config_file_name, strerror(errno));
   }

@@ -89,6 +89,8 @@ Depends: ${shlibs:Depends}
 		,${misc:Depends}
 		, libreadline6 | libreadline7
 		, ${python:Depends}
+		,libconfig8 | libconfig9
+                ,rozofs-rozolauncher
 Description: RozoFS filesystem (diagnostic tools)
  rozodiag allows deep audit of RozoFS filesystems.
  .

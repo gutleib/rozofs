@@ -685,33 +685,6 @@ uint32_t af_unix_generic_rcvMsgsock(void * socket_ctx_p,int socketId);
 */
 int af_unix_sock_set_non_blocking(int fd,int size);
 
-/**
-   Creation of a AF_UNIX socket Datagram  in non blocking mode
-
-   see /proc/sys/net/core for socket parameters:
-     - wmem_default: default xmit buffer size
-     - wmem_max : max allocatable
-     Changing the max is still possible with root privilege:
-     either edit /etc/sysctl.conf (permanent) :
-     (write):
-     net.core.wmem_default = xxxx
-     net.core.wmem_max = xxxx
-     (read):
-     net.core.rmem_default = xxxx
-     net.core.rmem_max = xxxx
-
-     or temporary with:
-     echo <new_value> > /proc/sys/net/core/<your_param>
-
-   @param name0fSocket : name of the AF_UNIX socket
-   @param size: size in byte of the xmit buffer (the service double that value
-
-    retval: >0 reference of the created AF_UNIX socket
-    retval < 0 : error on socket creation
-
-*/
-int af_unix_sock_create_internal(char *nameOfSocket,int size);
-
 
 /*
 **__________________________________________________________________________
@@ -977,8 +950,21 @@ static inline void af_inet_attach_application_availability_callback(af_unix_ctx_
 */
 int af_unix_socket_set_datagram_socket_len(int len);
 
-/**
+/*
+**__________________________________________________________________________
+**
+** Get remote IP of an AF_INET connection
+**   
+** @param af_unix_ctx_id: reference of the connection
+** @param ip : where to store returned IP address
+** @param port : where to store returned port
+**
+** @retval 0 Success
+** @retval 1 No such connection context
+** @retval 2 Not an AF_INET connection
+**__________________________________________________________________________
 */
+
 static inline uint32_t af_unix_get_remote_ip(uint32_t af_unix_ctx_id) {
     af_unix_ctx_generic_t *p;
 
@@ -986,6 +972,31 @@ static inline uint32_t af_unix_get_remote_ip(uint32_t af_unix_ctx_id) {
     if (p == NULL)               return 1;
     if (p->af_family != AF_INET) return 2;    
     return p->remote_ipaddr_host;
+    
+}
+/*
+**__________________________________________________________________________
+**
+** Get remote IP and port of an AF_INET connection
+**   
+** @param af_unix_ctx_id: reference of the connection
+** @param ip : where to store returned IP address
+** @param port : where to store returned port
+**
+** @retval 0 Success
+** @retval 1 No such connection context
+** @retval 2 Not an AF_INET connection
+**__________________________________________________________________________
+*/
+static inline uint32_t af_unix_get_remote_ip_and_port(uint32_t af_unix_ctx_id, uint32_t * ip, uint16_t * port) {
+    af_unix_ctx_generic_t *p;
+
+    p = af_unix_getObjCtx_p(af_unix_ctx_id);
+    if (p == NULL)               return 1;
+    if (p->af_family != AF_INET) return 2;   
+    *ip   = p->remote_ipaddr_host;
+    *port = p->remote_port_host;
+    return 0;
     
 }
 /*__________________________________________________________________________

@@ -1434,9 +1434,8 @@ uint32_t ruc_init() {
        **--------------------------------------
        */       
       dbgPort = rozofs_get_service_port_export_rcmd_diag();
-      uma_dbg_init(10, INADDR_ANY, dbgPort);
+      uma_dbg_init(10, INADDR_ANY, dbgPort, RCMD_NAME);
       uma_dbg_set_name(RCMD_NAME);
-
       /*
       ** RPC SERVER MODULE INIT
       */

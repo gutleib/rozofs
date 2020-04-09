@@ -101,7 +101,7 @@ target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UU
 add_executable(rozo_locate_projections
        rozo_locate_projections.c    
 )
-target_link_libraries(rozo_locate_projections rozofs ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_locate_projections rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 add_executable(rozo_mount_send_stats 
     rozo_mount_send_stats.c

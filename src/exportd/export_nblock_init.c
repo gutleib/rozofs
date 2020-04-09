@@ -1099,20 +1099,27 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t exportd_instance) {
      **   D E B U G   M O D U L E
      **--------------------------------------
      */
-
-     uma_dbg_init(10,INADDR_ANY,dbg_port);
-
-    {
+     {
         char name[32];
 	if (exportd_is_master())
 	{
-          sprintf(name, "exportd-M");
+          sprintf(name, "export");
+	}
+	else
+	{
+          sprintf(name, "export:%d",  exportd_instance);	
+	}
+        uma_dbg_init(10,INADDR_ANY,dbg_port, name);
+
+	if (exportd_is_master())
+	{
+          sprintf(name, "exportd");
 	}
 	else
 	{
           sprintf(name, "exportd-S%d ",  exportd_instance);	
 	}
-        uma_dbg_set_name(name);
+        uma_dbg_set_name(name);       
     }
 
 //#warning Start of specific application initialization code

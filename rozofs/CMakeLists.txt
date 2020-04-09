@@ -82,8 +82,6 @@ set (librozofs_sources
     core/af_unix_socket_stream_send.c
     core/af_unix_test.h
     core/dbgScript_api.h
-    core/monitoring.h
-    core/monitoring.c
     core/norh_lbg_timer.c
     core/north_lbg_api.h
     core/north_lbg.h

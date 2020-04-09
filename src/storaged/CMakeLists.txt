@@ -208,7 +208,7 @@ add_executable(rozo_storage_send_stats
     ${CMAKE_SOURCE_DIR}/src/storaged/sconfig.c
     rozo_storage_send_stats.c
 )
-target_link_libraries(rozo_storage_send_stats rozofs ${CONFIG_LIBRARY})
+target_link_libraries(rozo_storage_send_stats rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
 
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT storage)

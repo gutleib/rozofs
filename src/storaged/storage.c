@@ -1307,14 +1307,12 @@ void rozofs_storage_device_one_subdir_create(char * pDir) {
   */
   pChar = pDir;
   pChar += strlen(pDir);
-  rozofs_u32_append(pChar,common_config.storio_slice_number-1);
-  if (access(pDir, F_OK) != 0) {  
-    *pChar = 0;
-    info("Create %d slices under %s",common_config.storio_slice_number, pDir);
-    for (slice = 0; slice < (common_config.storio_slice_number); slice++) {
-      rozofs_u32_append(pChar,slice);
+
+  for (slice=0; slice<common_config.storio_slice_number; slice++) {
+    rozofs_u32_append(pChar,slice);
+    if (access(pDir, F_OK) != 0) {  
       if (storage_create_dir(pDir) < 0) {
-	severe("%s creation %s",pDir, strerror(errno));
+        severe("%s creation %s",pDir, strerror(errno));
       }	    
     }
   }

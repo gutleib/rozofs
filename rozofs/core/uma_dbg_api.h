@@ -19,16 +19,20 @@
 #define UMA_DBG_API_H
 
 #include <stdio.h>
+#include <arpa/inet.h>
 
 #include <rozofs/common/types.h>
 #include <rozofs/common/log.h>
 #include <rozofs/core/rozofs_string.h>
+#include <rozofs/core/uma_tcp_main_api.h>
+#include <rozofs/core/af_unix_socket_generic_api.h>
+#include <rozofs/core/af_inet_stream_api.h>
 
 #include "uma_dbg_msgHeader.h"
 #include "ruc_common.h"
 #include "rozofs_string.h"
 #include "ruc_buffer_api.h"
-#include "uma_tcp_main_api.h"
+
 #include "ruc_buffer_debug.h"
 
 #define   UMA_DBG_OPTION_HIDE           (1<<0)
@@ -42,6 +46,7 @@ extern char uma_dbg_temporary_buffer[];
 extern uint32_t uma_dbg_do_not_send;
 extern char   * uma_gdb_system_name;
 extern char     rcvCmdBuffer[];
+extern UMA_MSGHEADER_S uma_dbg_lastSendHeader;
 
 
 static inline void uma_dbg_send(uint32_t tcpCnxRef, void  *bufRef, uint8_t end, char *string);
@@ -248,13 +253,20 @@ static inline void uma_dbg_send_buffer(uint32_t tcpCnxRef, void  *bufRef, int le
   }
   
   /*
+  ** Save this header, to initialize further header of the same response
+  */
+  if (!end) {
+    memcpy(&uma_dbg_lastSendHeader,pHead,sizeof(UMA_MSGHEADER_S));
+  }
+  
+  /*
   ** Set the length in the message header
   */
   pHead->len = htonl(len-sizeof(UMA_MSGHEADER_S));
   pHead->end = end;
     
   ruc_buf_setPayloadLen(bufRef,len);
-  uma_tcp_sendSocket(tcpCnxRef,bufRef,0);
+  af_unix_generic_send_stream_with_idx(tcpCnxRef,bufRef);
 }
 /*-----------------------------------------------------------------------------
 **
@@ -327,7 +339,7 @@ static inline void uma_dbg_disconnect(uint32_t tcpCnxRef, void  *bufRef, char *s
   /*
   ** Disconnect the client
   */
-  uma_tcp_disconnectReq(tcpCnxRef); 
+  af_unix_delete_socket(tcpCnxRef); 
 }
 /*-----------------------------------------------------------------------------
 **
@@ -443,8 +455,8 @@ void uma_dbg_addTopicAndMan(char * topic, uma_dbg_topic_function_t funct, uma_db
 
 
 void uma_dbg_hide_topic(char * topic);
-void uma_dbg_init(uint32_t nbElements, uint32_t ipAddr, uint16_t serverPort) ;
-void uma_dbg_init_no_system(uint32_t nbElements, uint32_t ipAddr, uint16_t serverPort) ;
+void uma_dbg_init(uint32_t nbElements, uint32_t ipAddr, uint16_t serverPort, char * target) ;
+void uma_dbg_init_no_system(uint32_t nbElements, uint32_t ipAddr, uint16_t serverPort, char * target) ;
 //64BITS void uma_dbg_send(uint32_t tcpCnxRef, uint32 bufRef, uint8_t end, char *fmt, ... );
 void uma_dbg_send_format(uint32_t tcpCnxRef, void *bufRef, uint8_t end, char *fmt, ... ); 
 void uma_dbg_set_name( char * system_name) ;

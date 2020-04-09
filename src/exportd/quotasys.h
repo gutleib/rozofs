@@ -97,11 +97,11 @@ char *str_hasmntopt(const char *optstring, const char *opt);
 
 /* create an af_unix socket
 */
-int af_unix_sock_create(char *nameOfSocket,int size);
+int quota_af_unix_sock_create(char *nameOfSocket,int size);
 /**
 *   delete an af_unix socket
 */
-int af_unix_sock_delete(char *nameOfSocket,int fd);
+int quota_af_unix_sock_delete(char *nameOfSocket,int fd);
 
 /*
 **__________________________________________________________________

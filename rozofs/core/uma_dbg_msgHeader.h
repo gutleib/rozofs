@@ -22,11 +22,17 @@
 
 #include "ruc_common.h"
 
+typedef enum _rozo_diag_srv_req_e {
+  ROZOFS_DIAG_DIRECT,
+  ROZOFS_DIAG_SRV_REGISTER,
+  ROZOFS_DIAG_FWD,
+} rozo_diag_srv_req_e;
+
 typedef struct uma_msgHeader_s {
   uint32_t       len;
   uint8_t        end;
-  uint8_t        lupsId;
-  uint8_t        precedence;
+  uint8_t        action;
+  uint8_t        fwd;
   uint8_t        filler;
 } UMA_MSGHEADER_S;
 

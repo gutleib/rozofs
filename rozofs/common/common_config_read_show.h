@@ -292,6 +292,9 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"storcli_read_parallel")==0) {
     COMMON_CONFIG_SET_BOOL(storcli_read_parallel,value);
   }
+  if (strcmp(parameter,"diagnostic_mode")==0) {
+    COMMON_CONFIG_DIAGNOSTIC_MODE_SET_ENUM(value);
+  }
   pChar += rozofs_string_append_error(pChar,"No such parameter ");
   pChar += rozofs_string_append_error(pChar,parameter);
   pChar += rozofs_eol(pChar);\
@@ -1104,6 +1107,19 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
     COMMON_CONFIG_SHOW_BOOL(storcli_read_parallel,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
+
+  if (strcasestr("diagnostic_mode",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_ENUM(diagnostic_mode,"both");
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// rozodiag mode\n");
+    pChar += rozofs_string_append(pChar,"// server     Each RozoFS module listen for rozodiag command on its dedicated server port\n");
+    pChar += rozofs_string_append(pChar,"// client     Each RozoFS module is client of a local rozodiag server that relays rozodiag commands\n");
+    pChar += rozofs_string_append(pChar,"// both       Each RozoFS module is client as well as server\n");
+    pChar += rozofs_string_append(pChar,"//    \n");
+    COMMON_CONFIG_SHOW_ENUM(diagnostic_mode,""both"","both,server,client");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
   if (match == 0) {
     pChar += rozofs_string_append_error(pChar,"No such parameter like ");
     pChar += rozofs_string_append_error(pChar,parameter);
@@ -1215,6 +1231,16 @@ char * show_common_config_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// When that flag is asserted, RozoFS operates in standalone mode only.\n");
   COMMON_CONFIG_SHOW_BOOL(standalone,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_ENUM(diagnostic_mode,"both");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// rozodiag mode\n");
+  pChar += rozofs_string_append(pChar,"// server     Each RozoFS module listen for rozodiag command on its dedicated server port\n");
+  pChar += rozofs_string_append(pChar,"// client     Each RozoFS module is client of a local rozodiag server that relays rozodiag commands\n");
+  pChar += rozofs_string_append(pChar,"// both       Each RozoFS module is client as well as server\n");
+  pChar += rozofs_string_append(pChar,"//    \n");
+  COMMON_CONFIG_SHOW_ENUM(diagnostic_mode,""both"","both,server,client");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -1308,6 +1334,17 @@ char * show_common_config_module_global_short(char * pChar) {
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// When that flag is asserted, RozoFS operates in standalone mode only.\n");
     COMMON_CONFIG_SHOW_BOOL(standalone,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_ENUM(diagnostic_mode,"both");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// rozodiag mode\n");
+    pChar += rozofs_string_append(pChar,"// server     Each RozoFS module listen for rozodiag command on its dedicated server port\n");
+    pChar += rozofs_string_append(pChar,"// client     Each RozoFS module is client of a local rozodiag server that relays rozodiag commands\n");
+    pChar += rozofs_string_append(pChar,"// both       Each RozoFS module is client as well as server\n");
+    pChar += rozofs_string_append(pChar,"//    \n");
+    COMMON_CONFIG_SHOW_ENUM(diagnostic_mode,"both","both,server,client");
   }
   return pChar;
 }
@@ -2511,6 +2548,16 @@ char * save_common_config_module_global(char * pChar) {
     pChar += rozofs_string_append(pChar,"// When that flag is asserted, RozoFS operates in standalone mode only.\n");
     COMMON_CONFIG_SHOW_BOOL(standalone,False);
   }
+
+  COMMON_CONFIG_IS_DEFAULT_ENUM(diagnostic_mode,"both");
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// rozodiag mode\n");
+    pChar += rozofs_string_append(pChar,"// server     Each RozoFS module listen for rozodiag command on its dedicated server port\n");
+    pChar += rozofs_string_append(pChar,"// client     Each RozoFS module is client of a local rozodiag server that relays rozodiag commands\n");
+    pChar += rozofs_string_append(pChar,"// both       Each RozoFS module is client as well as server\n");
+    pChar += rozofs_string_append(pChar,"//    \n");
+    COMMON_CONFIG_SHOW_ENUM(diagnostic_mode,"both","both,server,client");
+  }
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -3408,6 +3455,29 @@ char  * moduleName = NULL;
 }
 /*____________________________________________________________________________________________
 **
+** Check the presence of the configuration file
+** 
+** @param fname   Configuration file of NULL (use default)
+**
+** @retval  0 if it exist, -1 else
+*/
+int common_config_does_file_exist(char * fname) {
+
+  if (fname == NULL) {
+    strcpy(common_config_file_name,ROZOFS_CONFIG_DIR"/rozofs.conf");
+  }
+  else {
+    strcpy(common_config_file_name,fname); 
+  } 
+
+  if (access(common_config_file_name,R_OK)!=0) {
+    return -1;
+  }
+  return 0;
+}
+
+/*____________________________________________________________________________________________
+**
 ** Read the configuration file
 */
 static inline void common_config_generated_read(char * fname) {
@@ -3415,15 +3485,9 @@ static inline void common_config_generated_read(char * fname) {
 
   if (common_config_file_is_read == 0) {
     uma_dbg_addTopicAndMan("cconf",show_common_config, man_common_config, 0);
-    if (fname == NULL) {
-      strcpy(common_config_file_name,ROZOFS_CONFIG_DIR"/rozofs.conf");
-    }
-    else {
-      strcpy(common_config_file_name,fname); 
-    } 
   }
 
-  if (access(common_config_file_name,R_OK)!=0) {
+  if (common_config_does_file_exist(fname) != 0) {
     printf("cant access %s: %s.", common_config_file_name, strerror(errno));
     fatal("cant access %s: %s.", common_config_file_name, strerror(errno));
   }
@@ -3475,6 +3539,12 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(export_dscp,34,0,34);
   // When that flag is asserted, RozoFS operates in standalone mode only. 
   COMMON_CONFIG_READ_BOOL(standalone,False);
+  // rozodiag mode 
+  // server     Each RozoFS module listen for rozodiag command on its dedicated server port 
+  // client     Each RozoFS module is client of a local rozodiag server that relays rozodiag commands 
+  // both       Each RozoFS module is client as well as server 
+  //     
+  COMMON_CONFIG_DIAGNOSTIC_MODE_READ_ENUM(&cfg);
   /*
   ** export scope configuration parameters
   */

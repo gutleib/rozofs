@@ -827,6 +827,29 @@ char  * moduleName = NULL;
 }
 /*____________________________________________________________________________________________
 **
+** Check the presence of the configuration file
+** 
+** @param fname   Configuration file of NULL (use default)
+**
+** @retval  0 if it exist, -1 else
+*/
+int rebalance_config_does_file_exist(char * fname) {
+
+  if (fname == NULL) {
+    strcpy(rebalance_config_file_name,ROZOFS_CONFIG_DIR"/rebalance.conf");
+  }
+  else {
+    strcpy(rebalance_config_file_name,fname); 
+  } 
+
+  if (access(rebalance_config_file_name,R_OK)!=0) {
+    return -1;
+  }
+  return 0;
+}
+
+/*____________________________________________________________________________________________
+**
 ** Read the configuration file
 */
 static inline void rebalance_config_generated_read(char * fname) {
@@ -834,15 +857,9 @@ static inline void rebalance_config_generated_read(char * fname) {
 
   if (rebalance_config_file_is_read == 0) {
     uma_dbg_addTopicAndMan("rebalanceconf",show_rebalance_config, man_rebalance_config, 0);
-    if (fname == NULL) {
-      strcpy(rebalance_config_file_name,ROZOFS_CONFIG_DIR"/rebalance.conf");
-    }
-    else {
-      strcpy(rebalance_config_file_name,fname); 
-    } 
   }
 
-  if (access(rebalance_config_file_name,R_OK)!=0) {
+  if (rebalance_config_does_file_exist(fname) != 0) {
     printf("cant access %s: %s.", rebalance_config_file_name, strerror(errno));
     fatal("cant access %s: %s.", rebalance_config_file_name, strerror(errno));
   }

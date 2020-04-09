@@ -1577,7 +1577,7 @@ uint32_t ruc_init(uint16_t debug_port) {
           if (ip == INADDR_ANY) {
             bindOnAnyAddr = 1;
           }
-          uma_dbg_init(10, sconfig_get_this_IP(&storaged_config,idx), debug_port);	                 
+          uma_dbg_init(10, sconfig_get_this_IP(&storaged_config,idx), debug_port, "stspare");	                 
        }
        /*
        ** When no configuration file is given, one uses the default config file.
@@ -1586,7 +1586,7 @@ uint32_t ruc_init(uint16_t debug_port) {
        */
        if ((strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0)            
        &&  (bindOnAnyAddr == 0)) {
-	  uma_dbg_init(10, 0x7F000001, debug_port);	                              
+	  uma_dbg_init(10, 0x7F000001, debug_port, "stspare");	                              
        }       
     }   
 
@@ -1597,7 +1597,6 @@ uint32_t ruc_init(uint16_t debug_port) {
 
         pChar += sprintf(pChar, "stspare ");
         pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
-
         uma_dbg_set_name(name);
     }
 
@@ -1835,7 +1834,7 @@ int main(int argc, char *argv[]) {
   pChar += rozofs_string_append(pChar,".pid");	
 
   /*
-  ** Start without deamonizing
+  ** Start without daemonizing
   */
   no_daemon_start("stspare", common_config.nb_core_file, 
                    pid_name, on_start, on_stop, NULL);

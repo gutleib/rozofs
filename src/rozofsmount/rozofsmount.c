@@ -2188,8 +2188,21 @@ int fuseloop(struct fuse_args *args, int fg) {
    
     rozofs_fuse_conf.instance = (uint16_t) conf.instance;
     rozofs_fuse_conf.debug_port = conf.dbg_port;
-    rozofsmount_diag_port = conf.dbg_port;
-
+    
+    /*
+    ** This field is the diagostic port registered by the export to reach this client through rozodiag.
+    ** If RozoFS modules use server mode, use diagnostic port (over 50003) 
+    */
+    if (common_config.diagnostic_mode == common_config_diagnostic_mode_client) {
+      rozofsmount_diag_port = conf.instance;
+    }
+    /*
+    ** When RozoFS modules are only in client mode, use rozofsmout instance (unde 64)
+    */
+    else {
+      rozofsmount_diag_port = conf.dbg_port;
+    }
+    
     rozofs_fuse_conf.se = se;
     rozofs_fuse_conf.ch = ch;
     rozofs_fuse_conf.exportclt = (void*) &exportclt;

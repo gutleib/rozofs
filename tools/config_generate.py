@@ -622,7 +622,6 @@ def go_build_cfile(struct_name):
   print ""
   print "void %s_read(char * fname) {"%(struct_name)
   print "  %s_generated_read(fname);"%(struct_name)
-  
   # Look for extra checks added when reading the conf
   if os.path.exists("%s_extra_checks.c"%(struct_name)):
     print ""
@@ -640,6 +639,7 @@ def go_build_cfile(struct_name):
 def go_build_struct(struct_name):
   print "void %s_read(char * fname);"%(struct_name)
   print ""
+  print "int %s_does_file_exist(char * fname);"%(struct_name) 
 
   print ""  
   print "/*_______________________________"
@@ -1071,6 +1071,29 @@ def go_build_save(file_name,struct_name):
 def go_build_read(file_name,struct_name,command):   
   print "/*____________________________________________________________________________________________"
   print "**"
+  print "** Check the presence of the configuration file"
+  print "** "
+  print "** @param fname   Configuration file of NULL (use default)"
+  print "**"
+  print "** @retval  0 if it exist, -1 else"
+  print "*/"
+  print "int %s_does_file_exist(char * fname) {"%(struct_name)
+  print ""
+  print "  if (fname == NULL) {"
+  print "    strcpy(%s_file_name,ROZOFS_CONFIG_DIR\"/%s\");"%(struct_name,file_name)
+  print "  }"
+  print "  else {"
+  print "    strcpy(%s_file_name,fname); "%(struct_name)
+  print "  } "
+  print ""
+  print "  if (access(%s_file_name,R_OK)!=0) {"%(struct_name)
+  print "    return -1;"  
+  print "  }"
+  print "  return 0;"       	    
+  print "}"
+  print ""
+  print "/*____________________________________________________________________________________________"
+  print "**"
   print "** Read the configuration file"
   print "*/"
   print "static inline void %s_generated_read(char * fname) {"%(struct_name)
@@ -1078,15 +1101,9 @@ def go_build_read(file_name,struct_name,command):
   print ""
   print "  if (%s_file_is_read == 0) {"%(struct_name)
   print "    uma_dbg_addTopicAndMan(\"%s\",show_%s, man_%s, 0);"%(command,struct_name,struct_name)
-  print "    if (fname == NULL) {"
-  print "      strcpy(%s_file_name,ROZOFS_CONFIG_DIR\"/%s\");"%(struct_name,file_name)
-  print "    }"
-  print "    else {"
-  print "      strcpy(%s_file_name,fname); "%(struct_name)
-  print "    } "
   print "  }"
   print ""
-  print "  if (access(%s_file_name,R_OK)!=0) {"%(struct_name)
+  print "  if (%s_does_file_exist(fname) != 0) {"%(struct_name)
   print "    printf(\"cant access %%s: %%s.\", %s_file_name, strerror(errno));"%(struct_name)  
   print "    fatal(\"cant access %%s: %%s.\", %s_file_name, strerror(errno));"%(struct_name)
   print "  }"

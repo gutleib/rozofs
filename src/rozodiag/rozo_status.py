@@ -1306,6 +1306,11 @@ class exportd(rozofs_module):
 	if len(words) != 10: continue
 	ip   = words[7].split(':')[0]
 	port = words[7].split(':')[1]
+        if int(port) >= int(50003):
+          instance = (int(port) - int(50003))/3
+        else:
+          instance = int(port)  
+        port="mount:%s"%(instance)
 	c = client(ip,port,words[3])
 	e = self.get_eid(c.eid)
 	if e != None:

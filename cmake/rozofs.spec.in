@@ -57,7 +57,7 @@ rozofsmount mounts RozoFS filesystems using FUSE.
 Summary: RozoFS filesystem (debugging package).
 License: GPLv2
 Group: System Environment/File
-Requires: readline
+Requires: readline libconfig rozofs-rozolauncher
 %description rozodiag
 rozodiag allows deep audit of RozoFS filesystems.
 
@@ -130,6 +130,7 @@ ln -sf %{_sbindir}/mount.fuse %{buildroot}/sbin/mount.rozofs
 mkdir -p %{buildroot}%{_unitdir}
 %{__cp} redhat/rozofs-exportd.service %{buildroot}%{_unitdir}/rozofs-exportd.service
 %{__cp} redhat/rozofs-storaged.service %{buildroot}%{_unitdir}/rozofs-storaged.service
+%{__cp} redhat/rozofs-rozodiag.service %{buildroot}%{_unitdir}/rozofs-rozodiag.service
 %{__cp} redhat/rozofs-manager-agent.service %{buildroot}%{_unitdir}/rozofs-manager-agent.service
 %{__cp} redhat/rozofs-rozofsmount.service %{buildroot}%{_unitdir}/rozofs-rozofsmount.service
 %{__cp} redhat/rozofs-metadata-backup.service %{buildroot}%{_unitdir}/rozofs-metadata-backup.service
@@ -139,6 +140,7 @@ mkdir -p %{buildroot}%{_unitdir}
 mkdir -p %{buildroot}%{_initrddir}
 %{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-exportd %{buildroot}%{_initrddir}/rozofs-exportd
 %{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-storaged %{buildroot}%{_initrddir}/rozofs-storaged
+%{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-rozodiag %{buildroot}%{_initrddir}/rozofs-rozodiag
 #%{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-rozofsmount %{buildroot}%{_initrddir}/rozofs-rozofsmount
 %{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-manager-agent %{buildroot}%{_initrddir}/rozofs-manager-agent
 %{__cp} @CMAKE_CURRENT_SOURCE_DIR@/redhat/rozofs-manager-agent.default %{buildroot}%{_sysconfdir}/sysconfig/rozofs-manager-agent
@@ -255,6 +257,8 @@ mkdir -p %{buildroot}%{_initrddir}
 %files rozodiag
 %defattr(-,root,root)
 %{_bindir}/rozodiag
+%{_bindir}/rozodiag_legacy
+%{_bindir}/rozo_diag_srv
 %{_bindir}/rozo_status.py
 %{_bindir}/rozo_node_status.py
 %{_bindir}/rozo_dumpcnf
@@ -262,6 +266,11 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_roce
 %{_bindir}/rozo_nstat
 %{_bindir}/rozo_core
+%if 0%{?rhel} >= 7
+%{_unitdir}/rozofs-rozodiag.service
+%else
+%{_initrddir}/rozofs-rozodiag
+%endif
 %{_mandir}/man8/rozodiag.8.gz
 %{_mandir}/man8/rozo_status.py.8.gz
 
@@ -329,6 +338,26 @@ elif [ -x /sbin/chkconfig ]; then
 fi
 %endif
 
+
+%if 0%{?rhel} >= 7
+%post rozodiag
+%systemd_post rozofs-rozodiag.service
+
+%preun rozodiag
+%systemd_preun rozofs-rozodiag.service
+
+%postun rozodiag
+%systemd_postun_with_restart rozofs-rozodiag.service
+
+%else
+%post rozodiag
+if [ -x /usr/lib/lsb/install_initd ]; then
+  /usr/lib/lsb/install_initd /etc/init.d/rozofs-rozodiag
+elif [ -x /sbin/chkconfig ]; then
+  /sbin/chkconfig --add rozofs-rozodiag
+fi
+%endif
+
 %if 0%{?rhel} >= 7
 %post rozofsmount
 %systemd_post rozofs-rozofsmount.service
@@ -359,6 +388,9 @@ fi
 %endif
 
 %changelog
+
+* Fri Mar 27 2020 RozoFS <devel@rozofs.org> 4.0.alpha85
+- Packaging rozodiag server
 
 * Thu May 09 2019 RozoFS <devel@rozofs.org> 4.0.alpha30
 - Fix RPM packaging changelog

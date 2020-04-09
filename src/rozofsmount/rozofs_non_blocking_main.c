@@ -247,7 +247,14 @@ uint32_t ruc_init(uint32_t test, uint16_t debug_port,uint16_t export_listening_p
      **   D E B U G   M O D U L E
      **--------------------------------------
      */
-    uma_dbg_init(10, INADDR_ANY, debug_port);
+    {
+        char name[32];
+        sprintf(name, "rozofsmount %d", args_p->instance);
+        uma_dbg_set_name(name);
+
+        sprintf(name, "mount:%d", args_p->instance);
+        uma_dbg_init(10, INADDR_ANY, debug_port, name);
+    }    
 
     /*
      ** init of the stats module
@@ -732,11 +739,6 @@ int rozofs_stat_start(void *args) {
         return -1;
     }
 
-    {
-        char name[32];
-        sprintf(name, "rozofsmount %d", args_p->instance);
-        uma_dbg_set_name(name);
-    }
     
     /*
     ** Send the file lock reset request to remove old locks

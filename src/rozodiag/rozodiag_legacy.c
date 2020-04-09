@@ -46,6 +46,9 @@
 #define SILENT 1
 #define NOT_SILENT 0
 
+#define FIRST_PORT  9000
+#define LAST_PORT  10000
+
 #define DEFAULT_TIMEOUT 4
 
 #define         MX_BUF (384*1024)
@@ -55,94 +58,20 @@ typedef struct  msg_s {
 } MSG_S;
 MSG_S msg;
 
-#define ROZOFS_DIAG_SRV_MAX_CNX     256
-
-/*
-** Information for one software building block retrieved from cnx command on a rozodiag server
-*/
-typedef struct _rozofs_dbg_cnx_entry_t {
-  int        idx;
-  uint32_t   ipAddr;
-  char       target[16];  
-} rozofs_dbg_cnx_entry_t;
-/*
-** Information for all software building blocks retrieved from cnx command on a rozodiag server
-*/
-typedef struct _rozofs_dbg_cnx_tb_t {
-  int                    nbEntries;
-  rozofs_dbg_cnx_entry_t entry[ROZOFS_DIAG_SRV_MAX_CNX];
-} rozofs_dbg_cnx_tb_t ;
-
-/*
-** Information of one diagnostic target
-*/ 
-typedef struct _rozofs_dbg_target_t {
-  char               * name;     // target name
-  uint32_t             ipAddr;   // target IP address 
-  uint16_t             port;     // target diagnostic (-p) 
-  int                  socket;   // TCP connection toward the diadnostic server
-  uint32_t             srvIdx;   // index of the diagnostic server 
-} rozofs_dbg_target_t;
-/*
-** Information for one diagnostic server
-*/
-typedef struct _rozofs_dbg_srv_t {
-  uint32_t             ipAddr;   // Server IP address 
-  int                  socket;   // TCP connection toward the diadnostic server
-  rozofs_dbg_cnx_tb_t  cnx;      // reachable software building blocks on this server
-} rozofs_dbg_srv_t;
-
-
 #define MAX_CMD 1024
-#define MAX_TARGET  260
+#define MAX_TARGET  128
+int                 nbCmd=0;
+const char      *   cmd[MAX_CMD];
+uint32_t            nbTarget=0;
+uint32_t            ipAddr[MAX_TARGET];
+uint16_t            serverPort[MAX_TARGET];
+int                 socketArray[MAX_TARGET];
+uint32_t            period;
+int                 allCmd;
+int                 timeout=DEFAULT_TIMEOUT;
+char prompt[64];
+char                localPath[PATH_MAX+1];
 
-int                   nbCmd=0;
-const char          * cmd[MAX_CMD];
-uint32_t              nbTarget=0;
-rozofs_dbg_target_t   target[MAX_TARGET];
-uint32_t              nbServer=0;
-rozofs_dbg_srv_t    * server[MAX_TARGET];
-uint32_t              period;
-int                   allCmd;
-int                   timeout=DEFAULT_TIMEOUT;
-char                  prompt[64];
-char                  localPath[PATH_MAX+1];
-/*
-**_________________________________________________________________________________
-**
-** Create a new rozodiag server context
-**
-** @param ipAddr IP address of the server
-**
-** @retval index of the server in the server table
-**_________________________________________________________________________________
-*/
-int rozofs_dbg_allocate_srv(uint32_t ipAddr) {
-  int idx = nbServer++;
-  server[idx] = malloc(sizeof(rozofs_dbg_srv_t));
-  server[idx]->ipAddr        = ipAddr;
-  server[idx]->socket        = -1;
-  server[idx]->cnx.nbEntries = 0;  
-  return idx;
-}
-/*
-**_________________________________________________________________________________
-**
-** Find out a rozodiag server context from its IP address, or create one if it does
-** not yet exist
-**
-** @param ipAddr IP address of the server
-**
-** @retval index of the server in the server table
-**_________________________________________________________________________________
-*/
-int rozofs_dbg_get_srv(uint32_t ipAddr) {
-  int idx;
-  for (idx=0; idx<nbServer; idx++) {
-    if (server[idx]->ipAddr == ipAddr) return idx;
-  }
-  return rozofs_dbg_allocate_srv(ipAddr);
-}
 /*
 **_________________________________________________________________________________
 **
@@ -156,33 +85,18 @@ void syntax_display() {
 }
 /*
 **_________________________________________________________________________________
-**
 ** Shutdown and close a socket
 **
-** @param pSrv   The server context to shutdown
+** @param idx The index of the socket identifier within socketArray array 
+**
 **_________________________________________________________________________________
 */
-void server_socket_shutdown(rozofs_dbg_srv_t  * pSrv) {
-  if (pSrv->socket < 0) return;
+void socket_shutdown(int idx) {
+  if (socketArray[idx] < 0) return;
   
-  shutdown(pSrv->socket,SHUT_RDWR);   
-  close(pSrv->socket);  
-  pSrv->socket = -1;   
-}
-/*
-**_________________________________________________________________________________
-**
-** Shutdown and close a socket
-**
-** @param pSrv   The server context to shutdown
-**_________________________________________________________________________________
-*/
-void target_socket_shutdown(rozofs_dbg_target_t  * pTarget) {
-  if (pTarget->socket < 0) return;
-  
-  shutdown(pTarget->socket,SHUT_RDWR);   
-  close(pTarget->socket);  
-  pTarget->socket = -1;   
+  shutdown(socketArray[idx],SHUT_RDWR);   
+  close(socketArray[idx]);  
+  socketArray[idx] = -1;   
 }
 /*
 **_________________________________________________________________________________
@@ -193,7 +107,7 @@ void target_socket_shutdown(rozofs_dbg_target_t  * pTarget) {
 */
 void stop_on_error(char *fmt, ... ) {
   va_list         vaList;
-  int             srvIdx;
+  int             socketId;
 
   /*
   ** Print out an error message
@@ -211,8 +125,8 @@ void stop_on_error(char *fmt, ... ) {
   /*
   ** Shutdown every connection
   */
-  for (srvIdx = 0; srvIdx < nbServer; srvIdx++) {
-    server_socket_shutdown(server[srvIdx]);
+  for (socketId = 0; socketId < nbTarget; socketId++) {
+    socket_shutdown(socketId);
   }  
   
   exit(1);  
@@ -220,16 +134,16 @@ void stop_on_error(char *fmt, ... ) {
 /*
 **_________________________________________________________________________________
 **
-** Wait for a response from a server after having sent a command
+** Wait for a response after having sent a command
 **
-** @param pSRv      The server from which a response is expected
-** @param silent    Wheter to print out the response
+** @param socketId      The index of the diagnostic target
+** @param silent        Wheter to print out the response
 **
 ** @retval  0 on error, 1 on success
 **
 **_________________________________________________________________________________
 */
-int debug_receive(int socket, int silent) {
+int debug_receive(int socketId, int silent) {
   int             ret;
   unsigned int    recvLen;
   int             firstMsg=1;
@@ -245,9 +159,9 @@ int debug_receive(int socket, int silent) {
     to.tv_usec = 0;
 
     FD_ZERO(&fd_read);
-    FD_SET(socket,&fd_read);
+    FD_SET(socketId,&fd_read);
     
-    ret = select(socket+1, &fd_read, NULL, NULL, &to);
+    ret = select(socketId+1, &fd_read, NULL, NULL, &to);
     if (ret != 1) {
       printf("Timeout %d sec\n",timeout);
       return 0;
@@ -261,7 +175,7 @@ int debug_receive(int socket, int silent) {
     recvLen = 0;
     char * p = (char *)&msg;
     while (recvLen < sizeof(UMA_MSGHEADER_S)) {
-      ret = recv(socket,p,sizeof(UMA_MSGHEADER_S)-recvLen,0);
+      ret = recv(socketId,p,sizeof(UMA_MSGHEADER_S)-recvLen,0);
       if (ret <= 0) {
         if (errno != 0) printf("error on recv1 %s",strerror(errno));
 	return 0;
@@ -277,7 +191,7 @@ int debug_receive(int socket, int silent) {
     }
     recvLen = 0;
     while (recvLen < msg.header.len) {
-      ret = recv(socket,&msg.buffer[recvLen],msg.header.len-recvLen,0);
+      ret = recv(socketId,&msg.buffer[recvLen],msg.header.len-recvLen,0);
       if (ret <= 0) {
 	    printf("error on recv2 %s",strerror(errno));
 	    return 0;
@@ -301,7 +215,7 @@ int debug_receive(int socket, int silent) {
         ** Add prompt to 1rst message
         */
         else {
-          printf("%s__%s", prompt,msg.header.action==ROZOFS_DIAG_FWD?"FORWARD":"DIRECT");
+          printf("%s", prompt);
         } 
       }  
       firstMsg = 0;
@@ -402,91 +316,18 @@ void read_file(const char * fileName ) {
 /*
 **_________________________________________________________________________________
 **
-** Find out the forward index of a target in a given server
-**
-** @param pSRv      The server on which the target is requested
-** @param target    The requested target
-**
-** @retval the forward index or -1 on error
-**_________________________________________________________________________________
-*/
-int get_fwd_idx(rozofs_dbg_srv_t  * pSrv, char * target) {
-  rozofs_dbg_cnx_entry_t * pEntry;
-  int                     idx;
-
-  /*
-  ** Case of direct forward via rozodiag server. target name is diag:<fwd>
-  ** Just check that the fwd index exist
-  */
-  if (strncasecmp(target,"diag:",strlen("diag:"))==0) {
-    int fwd;
-    if (sscanf(target,"diag:%d",&fwd) != 1) {
-      return -1;
-    }
-    /*
-    ** Check this forward index exists
-    */
-    pEntry = &pSrv->cnx.entry[0];
-    for (idx=0; idx<pSrv->cnx.nbEntries; idx++,pEntry++) {
-      if (pEntry->idx == fwd) return fwd;
-    } 
-    /*
-    ** No such forward index
-    */
-    return -1;   
-  }
-
-  pEntry = &pSrv->cnx.entry[0];
-  for (idx=0; idx<pSrv->cnx.nbEntries; idx++,pEntry++) {
-    if (strcmp(target,pEntry->target) != 0) continue;
-    if (pEntry->ipAddr == pSrv->ipAddr) return pEntry->idx;
-    if (pEntry->ipAddr == 0x7f000001) return pEntry->idx;
-  }
-  return -1; 
-}
-/*
-**_________________________________________________________________________________
-**
 ** Execute a single command toward a diagnostic target
 **
-** @param target        The diagnostic target
-** @param fwd           The forwarding index or -1
+** @param socketId      The index of the diagnostic target
 ** @param cmd           The command to execute
 ** @param silent        Whether execution must be silent or not (system, list all commands)
 **
 ** @retval 0 on success, -1 on error
 **_________________________________________________________________________________
 */
-int debug_run_this_cmd(rozofs_dbg_target_t * pTarget, int fwd, const char * cmd, int silent) {
-  uint32_t            len,sent; 
-  rozofs_dbg_srv_t  * pSrv = NULL;
-  int                 socket;
-  
-  /*
-  ** No direct connection up. use dignostic server
-  */
-  if (pTarget->socket < 0) {
-    /*
-    ** No associated server either
-    */ 
-    if (pTarget->srvIdx == -1) {
-      printf("%s error on connect Connection refused!!!\n",prompt);
-      return -1;
-    }
-    pSrv = server[pTarget->srvIdx];
-    if (fwd == -1) {
-      printf("%s error on connect Connection refused!!!\n",prompt);
-      return -1;
-    }
-    socket = pSrv->socket;        
-  }
-  /*
-  ** Use direct connection
-  */
-  else {
-    socket = pTarget->socket;
-  }  
-  
+int debug_run_this_cmd(int socketId, const char * cmd, int silent) {
+  uint32_t len,sent; 
+   
   /*
   ** Control the size of the command
   */ 
@@ -495,94 +336,31 @@ int debug_run_this_cmd(rozofs_dbg_target_t * pTarget, int fwd, const char * cmd,
     printf("Run command : too big %d\n", len);
     return 0;
   }    
-         
+
   /*
   ** Send the command
   */
   memcpy(msg.buffer ,cmd,len);  
   msg.header.len = htonl(len);
   msg.header.end = 1;
-  if (socket == pTarget->socket) {
-    msg.header.action = ROZOFS_DIAG_DIRECT;
-  }
-  else {
-    msg.header.action = ROZOFS_DIAG_FWD;
-  }
-  msg.header.fwd = fwd;  
-  len += sizeof(UMA_MSGHEADER_S);
-
-  sent = send(socket, &msg, len, 0);
-  if (sent != len) {
-    printf("send %s",strerror(errno));
-    printf("%d sent upon %d\n", sent,len);
-    if (socket == pTarget->socket) {
-      target_socket_shutdown(pTarget);
-    }  
-    else {
-      server_socket_shutdown(pSrv);
-    }  
-    return -1;
-  }
-    
-  /*
-  ** Wait for the response
-  */  
-  if (!debug_receive(socket,silent)) {
-    printf("Diagnostic session abort %u.%u.%u.%u\n", pTarget->ipAddr>>24, pTarget->ipAddr>>16&0xFF, pTarget->ipAddr>>8&0xFF, pTarget->ipAddr&0xFF);
-    if (socket == pTarget->socket) {
-      target_socket_shutdown(pTarget);
-    }  
-    else {
-      server_socket_shutdown(pSrv);
-    }  
-    return -1;
-  }  
-  return 0;
-  
-}
-/*
-**_________________________________________________________________________________
-**
-** Execute a cnx command toward a diagnostic server
-**
-** @param pSrv      The context of the diagnostic server
-**
-** @retval 0 on success, -1 on error
-**_________________________________________________________________________________
-*/
-int debug_run_server_command(rozofs_dbg_srv_t  * pSrv) {
-  uint32_t len,sent; 
-   
-  /*
-  ** Control the size of the command
-  */ 
-  len = 8; 
-
-  /*
-  ** Send the command
-  */
-  strcpy(msg.buffer ,"servers");  
-  msg.header.len = htonl(len);
-  msg.header.end = 1;
   msg.header.action = ROZOFS_DIAG_DIRECT;
-  msg.header.fwd    = 0;
-
+  msg.header.fwd = 0;
   len += sizeof(UMA_MSGHEADER_S);
 
-  sent = send(pSrv->socket, &msg, len, 0);
+  sent = send(socketArray[socketId], &msg, len, 0);
   if (sent != len) {
     printf("send %s",strerror(errno));
     printf("%d sent upon %d\n", sent,len);
-    server_socket_shutdown(pSrv);
+    socket_shutdown(socketId);
     return -1;
   }
     
   /*
   ** Wait for the response
   */  
-  if (!debug_receive(pSrv->socket,SILENT)) {
-    printf("Diagnostic session abort %u.%u.%u.%u\n", pSrv->ipAddr>>24, pSrv->ipAddr>>16&0xFF, pSrv->ipAddr>>8&0xFF, pSrv->ipAddr&0xFF);
-    server_socket_shutdown(pSrv);
+  if (!debug_receive(socketArray[socketId],silent)) {
+    printf("Diagnostic session abort\n");
+    socket_shutdown(socketId);
     return -1;
   }  
   return 0;
@@ -593,20 +371,18 @@ int debug_run_server_command(rozofs_dbg_srv_t  * pSrv) {
 **
 ** Read the target name in order to make a prompt from it
 **
-**
-** @param target        The diagnostic target
-** @param fwd           The forwarding index or -1
+** @param socketId      The index of the diagnostic target
 ** @param pr            Where to return the promp
 **
 **_________________________________________________________________________________
 */
 #define SYSTEM_HEADER "system : "
-int uma_dbg_read_prompt(rozofs_dbg_target_t * target, int fwd, char * pr) {
+int uma_dbg_read_prompt(int socketId, char * pr) {
   char *c = pr;
   char *pt = msg.buffer; 
-      
+    
   // Read the prompt
-  if (debug_run_this_cmd(target, fwd, "who", SILENT) < 0)  return -1;
+  if (debug_run_this_cmd(socketId, "who", SILENT) < 0)  return -1;
   
   // skip 1rst line
   while ((*pt != 0)&&(*pt != '\n')) pt++;
@@ -634,20 +410,19 @@ int uma_dbg_read_prompt(rozofs_dbg_target_t * target, int fwd, char * pr) {
 **
 ** request to a target the list of its commands
 **
-** @param target        The diagnostic target
-** @param fwd           The forwarding index or -1
+** @param socketId      The index of the diagnostic target
 **
 **_________________________________________________________________________________
 */
 #define LIST_COMMAND_HEADER "List of available topics :"
-int uma_dbg_read_all_cmd_list(rozofs_dbg_target_t * target, int fwd) {
+int uma_dbg_read_all_cmd_list(int socketId) {
   char * p, * begin;
   int len;
     
   /*
   ** request the command list
   */
-  if (debug_run_this_cmd(target, fwd, "", SILENT) < 0)  return -1;
+  if (debug_run_this_cmd(socketId, "", SILENT) < 0)  return -1;
 
   nbCmd = 0;
   p = msg.buffer;
@@ -679,22 +454,20 @@ int uma_dbg_read_all_cmd_list(rozofs_dbg_target_t * target, int fwd) {
 /*
 **_________________________________________________________________________________
 **
-** Interactive command loop
+** Interactive loop
 **
-** @param target        The diagnostic target
-** @param fwd           The forwarding index or -1
+** @param socketId      The index of the diagnostic target
 **
 **_________________________________________________________________________________
 */
-void debug_interactive_loop(rozofs_dbg_target_t * target, int fwd) {
+void debug_interactive_loop(int socketId) {
   char *mycmd = NULL; 
 
   /*
   ** Read prompt
   */
-  if (uma_dbg_read_prompt(target, fwd, prompt + strlen(prompt))<0) {
-    return; 
-  }   
+  uma_dbg_read_prompt(socketId,prompt + strlen(prompt)); 
+   
   /*
   ** Activate history
   */ 
@@ -727,7 +500,7 @@ void debug_interactive_loop(rozofs_dbg_target_t * target, int fwd) {
     if ((mycmd[0] != 0) && (strcasecmp(mycmd," ") != 0)) {
       add_history(mycmd);
     }
-    if (debug_run_this_cmd(target, fwd, mycmd, NOT_SILENT) < 0)  break;
+    if (debug_run_this_cmd(socketId, mycmd, NOT_SILENT) < 0)  break;
     free(mycmd);
   }
   if (mycmd != NULL) free(mycmd); 
@@ -737,15 +510,15 @@ void debug_interactive_loop(rozofs_dbg_target_t * target, int fwd) {
 **
 ** Execute a list of commands stored in cmd global array toward a given target
 **
-** @param target        The diagnostic target
-** @param fwd           The forwarding index or -1
+** @param socketId      The index of the diagnostic target
+**
 **_________________________________________________________________________________
 */
-void debug_run_command_list(rozofs_dbg_target_t * target, int fwd) {
+void debug_run_command_list(int socketId) {
   int idx;  
 
   for (idx=0; idx < nbCmd; idx++) {
-    if (debug_run_this_cmd(target, fwd, cmd[idx], NOT_SILENT) < 0)  break;
+    if (debug_run_this_cmd(socketId, cmd[idx], NOT_SILENT) < 0)  break;
   }
 } 
 /*
@@ -784,7 +557,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   ** Only one host 
   */
   if (*str == 0) {
-    if (rozofs_host2ip(hostStr,ip)<0) {
+    if (rozofs_host2ip_netw(hostStr,ip)<0) {
       return 0;
     }
     return 1;
@@ -794,7 +567,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   str++;
   
   if (*str == 0) {
-    if (rozofs_host2ip(hostStr,ip)<0) {
+    if (rozofs_host2ip_netw(hostStr,ip)<0) {
       return 0;
     }
     return 1;
@@ -806,7 +579,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   while ((*str != '-')&&(*str != '.')&&(*str != ',')&&(*str != 0)) str++;
   if (*str == 0) {
     sprintf(hostname,"%s%d",hostStr,val1);
-    if (rozofs_host2ip(hostname,ip)<0) {
+    if (rozofs_host2ip_netw(hostname,ip)<0) {
       return 0;
     }
     return 1;
@@ -817,7 +590,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   if (*str == ',') {
 
     sprintf(hostname,"%s%d",hostStr,val1);
-    if (rozofs_host2ip(hostname,ip)<0) {
+    if (rozofs_host2ip_netw(hostname,ip)<0) {
       return 0;
     }
     nbHost++;
@@ -832,7 +605,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
       if (ret != 1) return 0;
     
       sprintf(hostname,"%s%d",hostStr,val1);
-      if (rozofs_host2ip(hostname,ip)<0) {
+      if (rozofs_host2ip_netw(hostname,ip)<0) {
         return 0;
       }
       nbHost++;
@@ -860,7 +633,7 @@ static inline int scan_host(char * inputString, uint32_t * ip) {
   for (idx=0; idx <nbHost; idx++) {
   
     sprintf(hostname,"%s%d",hostStr,idx+val1);
-    if (rozofs_host2ip(hostname,ip)<0) {
+    if (rozofs_host2ip_netw(hostname,ip)<0) {
       return 0;
     }
     ip++;    
@@ -932,40 +705,6 @@ static inline int scan_ports(char * str, uint32_t * values) {
   }
   return nbValues;
   
-}
-/*
-**_________________________________________________________________________________
-**
-** Create a new target
-**
-** @param argc         Number of parameter
-** @param argv         Array of parameter
-**_________________________________________________________________________________
-*/
-void rozofs_dbg_new_target(char * name, uint32_t ipAddr, uint16_t port) {
-
-  /*
-  ** Target without name but with a port
-  */
-  if (name == NULL) {
-    target[nbTarget].name   = NULL;
-    target[nbTarget].srvIdx = -1;
-    target[nbTarget].ipAddr = ipAddr;
-    target[nbTarget].port   = port; 
-    target[nbTarget].socket = -1; 
-    nbTarget++;
-    return;
-  }             
-   
-  /*
-  ** Target defined by name
-  */
-  target[nbTarget].name   = strdup(name);
-  target[nbTarget].srvIdx = rozofs_dbg_get_srv(ipAddr);
-  target[nbTarget].ipAddr = ipAddr;
-  target[nbTarget].port   = port; 
-  target[nbTarget].socket = -1; 
-  nbTarget++;
 }
 /*
 **_________________________________________________________________________________
@@ -1083,11 +822,11 @@ char *argv[];
   char              * pt;
   uint32_t            ports[MAX_TARGET];
   int                 nbPorts = 0;
-  int                 portIdx;
+  int                 localPort;
   int                 hostNb;
-  int                 hostIdx;
+  int                 localIP;
   uint32_t            IPs[MAX_TARGET];
-  char                name[32];
+  
   /*
   ** Get current path
   */
@@ -1135,7 +874,21 @@ char *argv[];
       idx++;
       continue;
     }
-
+    
+    /* -reserved_ports */
+    if (strcmp(argv[idx],"-reserved_ports")==0) {
+      int ret;
+      char message[1024*4];
+      show_ip_local_reserved_ports(message);
+      printf("%s\n",message);
+      printf("grep ip_local_reserved_ports /etc/sysctl.conf\n");
+      ret = system("grep ip_local_reserved_ports /etc/sysctl.conf");
+      printf("\ncat /proc/sys/net/ipv4/ip_local_reserved_ports\n");
+      ret += system("cat /proc/sys/net/ipv4/ip_local_reserved_ports"); 
+      exit(0);
+    }
+    
+    
     /* -p <portNumber> */
     if (strcmp(argv[idx],"-p")==0) {
       idx++;
@@ -1146,9 +899,11 @@ char *argv[];
       if (nbPorts <= 0) {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
       }	
-      for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-        for (portIdx=0; portIdx < nbPorts; portIdx++) {
-          rozofs_dbg_new_target(NULL, IPs[hostIdx], ports[portIdx]);
+      for (localIP=0;localIP<hostNb; localIP++) {
+        for (localPort=0; localPort < nbPorts; localPort++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t) ports[localPort];
+          nbTarget++;
         }
       }  
       idx++;
@@ -1173,10 +928,11 @@ char *argv[];
       ** No storcli list
       */
       if (*pt == 0) {
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          sprintf(name,"mount:%d",mount_instance);       
-          rozofs_dbg_new_target(name, IPs[hostIdx], rozofs_get_service_port_fsmount_diag(mount_instance));
-        }       
+        for (localIP=0;localIP<hostNb; localIP++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_fsmount_diag(mount_instance);
+          nbTarget++;
+        }         
         continue;      
       }
       
@@ -1184,15 +940,16 @@ char *argv[];
       if (nbPorts <= 0) {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-2],argv[idx-1]);
       }
-      for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-        for (portIdx=0; portIdx < nbPorts; portIdx++) {
-          sprintf(name,"mount:%d:%d",mount_instance,ports[portIdx]);       
-          rozofs_dbg_new_target(name, IPs[hostIdx], rozofs_get_service_port_fsmount_storcli_diag(mount_instance,ports[portIdx]));
+      for (localIP=0;localIP<hostNb; localIP++) {
+        for (localPort=0; localPort < nbPorts; localPort++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_fsmount_storcli_diag(mount_instance,ports[localPort]);
+          nbTarget++;
         }
-      }         
+      }   
       continue;                       
     }    
-    
+          
     /* 
     ** storaged               : -f storaged
     ** storio                 : -f storio[:<instance>]
@@ -1206,41 +963,25 @@ char *argv[];
 	stop_on_error ("%s option but missing value !!!\n",argv[idx-1]);
       }
       pt = argv[idx];
-      
+
       /*
-      ** diag server
+      ** diag
       */
-      if (strncasecmp(pt,"diag:",strlen("diag:"))==0) {
-        /*
-        ** Direct forwarding. Targte is diag:<fwd> where fwd is the forwarding index
-        */
-	pt += strlen("diag:");
-        nbPorts = scan_ports(pt,ports);
-        if (nbPorts <= 0) {
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-        }	
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          for (portIdx=0; portIdx < nbPorts; portIdx++) {
-            sprintf(name,"diag:%d",ports[portIdx]);       
-            rozofs_dbg_new_target(name, IPs[hostIdx], 0);
-          }
-        }       
-        idx++;
-        continue;   
-      }  
-      
-      if (strncmp(argv[idx],"diag",strlen("diag"))==0) {
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          rozofs_dbg_new_target("diag", IPs[hostIdx], rozofs_get_service_port(ROZOFS_SERVICE_PORT_ROZODIAG_SRV));
+      if (strcasecmp(pt,"diag")==0) {
+        for (localIP=0;localIP<hostNb; localIP++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t) rozofs_get_service_port(ROZOFS_SERVICE_PORT_ROZODIAG_SRV);
+          nbTarget++;
         }       
         idx++;
         continue;   
       }
-             
+      
       /*
       ** storio:<idx>
       */
       if (strncasecmp(pt,"storio",strlen("storio"))==0) {
+        port32 = 0;
 	pt += strlen("storio");
 	if (*pt == ':') {
           pt++;
@@ -1248,11 +989,11 @@ char *argv[];
           if (nbPorts <= 0) {
 	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
           }	
-          for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-            for (portIdx=0; portIdx < nbPorts; portIdx++) {
-              if (ports[portIdx] == 0) sprintf(name,"storaged");
-              else                       sprintf(name,"storio:%d",ports[portIdx]);       
-              rozofs_dbg_new_target(name, IPs[hostIdx], rozofs_get_service_port_storio_diag(ports[portIdx]));
+          for (localIP=0;localIP<hostNb; localIP++) {
+            for (localPort=0; localPort < nbPorts; localPort++) {
+              ipAddr[nbTarget]     = IPs[localIP];        
+              serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_storio_diag(ports[localPort]);;
+              nbTarget++;
             }
           }       
           idx++;
@@ -1276,10 +1017,11 @@ char *argv[];
         }
         while ((*pt!=0) && (*pt!=':')) pt++;
         if (*pt == 0) {
-          for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-            for (portIdx=0; portIdx < nbPorts; portIdx++) {
-              sprintf(name,"mount:%d",ports[portIdx]);         
-              rozofs_dbg_new_target(name, IPs[hostIdx], rozofs_get_service_port_fsmount_diag(ports[portIdx]));
+          for (localIP=0;localIP<hostNb; localIP++) {
+            for (localPort=0; localPort < nbPorts; localPort++) {
+              ipAddr[nbTarget]     = IPs[localIP];        
+              serverPort[nbTarget] = (uint16_t) rozofs_get_service_port_fsmount_diag(ports[localPort]);
+              nbTarget++;
             }
           }   
           idx++;
@@ -1295,11 +1037,11 @@ char *argv[];
         if (nbPorts <= 0) {
 	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
         }	
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          for (portIdx=0; portIdx < nbPorts; portIdx++) {
-            if (ports[portIdx] == 0) sprintf(name,"mount:%d",port32);                         
-            else                       sprintf(name,"mount:%d:%d",port32,ports[portIdx]);              
-            rozofs_dbg_new_target(name, IPs[hostIdx], rozofs_get_service_port_fsmount_storcli_diag(port32,ports[portIdx]));
+        for (localIP=0;localIP<hostNb; localIP++) {
+          for (localPort=0; localPort < nbPorts; localPort++) {
+            ipAddr[nbTarget]     = IPs[localIP];        
+            serverPort[nbTarget] = (uint16_t)rozofs_get_service_port_fsmount_storcli_diag(port32,ports[localPort]);
+            nbTarget++;
           }
         }             
         idx++;
@@ -1309,29 +1051,22 @@ char *argv[];
       /*
       ** storaged 
       */
-      if (strcasecmp(pt,"storaged")==0) {
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          rozofs_dbg_new_target("storaged", IPs[hostIdx], rozofs_get_service_port_storio_diag(0));
-        }   
-        idx++;
-        continue;                       
+      if (strncasecmp(pt,"storaged",strlen("storaged"))==0) {
+        port32 = rozofs_get_service_port_storaged_diag();  
+        nbPorts = 1;             
       }
       
       /*
       ** stspare
       */
-      if (strcasecmp(pt,"stspare")==0) {
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          rozofs_dbg_new_target("stspare", IPs[hostIdx], rozofs_get_service_port_stspare_diag());
-        }   
-        idx++;
-        continue;                       
-      }
-    
+      else if (strncasecmp(pt,"stspare",strlen("stspare"))==0) {
+        port32 = rozofs_get_service_port_stspare_diag();
+        nbPorts = 1;                     
+      }     
       /*
       ** export
       */ 
-      if (strncasecmp(pt,"export",strlen("export"))==0) {
+      else if (strncasecmp(pt,"export",strlen("export"))==0) {
         pt += strlen("export");
 	if (*pt == ':') {
           pt++;
@@ -1339,107 +1074,63 @@ char *argv[];
           if (nbPorts <= 0) {
 	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
           }
-          for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-            for (portIdx=0; portIdx < nbPorts; portIdx++) {
-              if (ports[portIdx] == 0) sprintf(name,"export");
-              else                       sprintf(name,"export:%d",ports[portIdx]);       
-              rozofs_dbg_new_target(name, IPs[hostIdx], rozofs_get_service_port_export_slave_diag(ports[portIdx]));
+          for (localIP=0;localIP<hostNb; localIP++) {
+            for (localPort=0; localPort < nbPorts; localPort++) {
+              ipAddr[nbTarget]     = IPs[localIP];        
+              serverPort[nbTarget] = (uint16_t)rozofs_get_service_port_export_slave_diag(ports[localPort]);
+              nbTarget++;
             }
           }           	        
           idx++;
           continue;   
 	}
-        
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          rozofs_dbg_new_target("export", IPs[hostIdx], rozofs_get_service_port_export_slave_diag(0));
-        }  
-        idx++;	
-        continue;   
+	else {
+          port32 = rozofs_get_service_port_export_master_diag();
+          nbPorts = 1;             
+        }	  	
       }      
 
-      if (strncasecmp(pt,"rebalancer",strlen("rebalancer"))==0) {
+      else if (strncasecmp(pt,"rebalancer",strlen("rebalancer"))==0) {
       
 	pt += strlen("rebalancer");
         
         if (*pt == 0) { 
-          for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-            rozofs_dbg_new_target("rebalancer:0", IPs[hostIdx], rozofs_get_service_port_rebalancing_diag(0));
-          } 
-          idx++;
-          continue; 	
-	}
-          
-
-        if (*pt != ':') { 
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+	  port32 = rozofs_get_service_port_rebalancing_diag(0);
 	}  
-	pt++;
-        nbPorts = scan_ports(pt,ports);
-        if (nbPorts <= 0) {
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-        }
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          for (portIdx=0; portIdx < nbPorts; portIdx++) {
-            sprintf(name,"rebalancer:%d",ports[portIdx]);       
-            rozofs_dbg_new_target(name, IPs[hostIdx], rozofs_get_service_port_rebalancing_diag(ports[portIdx]));
+        else {
+          if (*pt != ':') { 
+	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+	  }  
+	  pt++;
+	  ret = sscanf(pt,"%u",&port32);
+	  if (ret != 1) {
+	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
           }
-        }           	        
-        idx++;
-        continue;   
-      }  
-                    
-      if (strcasecmp(pt,"rcmd")==0) {
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          rozofs_dbg_new_target("rcmd", IPs[hostIdx], rozofs_get_service_port_export_rcmd_diag());
-        } 
-        idx++;
-        continue; 	
+          port32 = rozofs_get_service_port_rebalancing_diag(port32);
+          nbPorts = 1;                       	
+	}
+      }                
+      else if (strncasecmp(pt,"rcmd",strlen("rcmd"))==0) {
+        port32 = rozofs_get_service_port_export_rcmd_diag();
+        nbPorts = 1;                       	
+      }    
+      else {
+	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);       
       }
-               
-      /*
-      ** Other new target without pre-defined diagnostic server port.
-      */              
-      {
-        char * pChar;
-        /*
-        ** Check whether the name encompasses a port range :x-y or port list :x,..,y
-        */              
-        pChar = pt + strlen(pt) - 1; // last character
-        while ((pChar > pt) && (*pChar!= ':')) pChar--;
 
-        /*
-        ** No port list or range
-        */        
-        if (*pChar != ':') {
-          for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-            rozofs_dbg_new_target(pt, IPs[hostIdx], 0);
-          }
-          idx++; 
-          continue;
-        }
-
-        /*
-        ** Some port list or range
-        */  
-        *pChar = 0;      
-	pChar++;
-        nbPorts = scan_ports(pChar,ports);
-        if (nbPorts <= 0) {
-          pChar--;
-          *pChar = ':';
-	  stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
-        }
-        for (hostIdx=0;hostIdx<hostNb; hostIdx++) {
-          for (portIdx=0; portIdx < nbPorts; portIdx++) {
-            sprintf(name,"%s:%d",pt, ports[portIdx]);       
-            rozofs_dbg_new_target(name, IPs[hostIdx], 0);
-          }
-        }           	        
-        idx++;
-        continue;   	
+      if ((port32<0) || (port32>0xFFFF)) {
+	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
       }
-          
-      stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);       
+
+      for (localIP=0;localIP<hostNb; localIP++) {
+        for (localPort=0; localPort < nbPorts; localPort++) {
+          ipAddr[nbTarget]     = IPs[localIP];        
+          serverPort[nbTarget] = (uint16_t)port32;;
+          nbTarget++;
+        }
+      }           
+      idx++;
+      continue;
     }    
     
     /* -period <period> */
@@ -1538,150 +1229,24 @@ char *argv[];
 /*
 **_________________________________________________________________________________
 **
-** Get the pointer to a parameter value
+** Connect a diagnostic target
 **
-** @param par       Parameter to look for
-** @param pChar     Where to start the research
-**
-** @retval          The pointer to the parameter value or NULL
-**_________________________________________________________________________________
-*/
-static inline char * get_pointer_on_param(char * par, char * pChar) {
-  char * pVal;
-  int    len = strlen(par);
-  
-  pVal = pChar;
-  
-  while ((*pVal!=0) && (strncmp(par,pVal,len)!=0)) pVal++;
-  if (*pVal == 0) return NULL;
-  
-  while ((*pVal!=0) && (*pVal!=':')) pVal++;
-  if (*pVal == 0) return NULL;
-  
-  pVal++;
-  while (*pVal==' ') pVal++;
-  if (*pVal=='\"') pVal++;
-  if (*pVal == 0) return NULL;
-  return pVal;
-}  
-/*
-**_________________________________________________________________________________
-**
-** Get the list of the sotfware building block connected on a rozodiag server
-**
-** @param pSrv      The context of the diagnostic server
-**
-**_________________________________________________________________________________
-*/
-int rozofs_dbg_get_connections(rozofs_dbg_srv_t  * pSrv) {
-  char                  * pChar;
-  char                  * pVal;
-  char                  * pTarget;
-  int                     idx;
-  uint32_t                ipTbl[4];
-  uint32_t                ipAddr;
-  rozofs_dbg_cnx_entry_t * pEntry;
-
-
-  pSrv->cnx.nbEntries = 0;
-  
-  /*
-  ** Request for connection list
-  */
-  if (debug_run_server_command(pSrv) != 0) {
-    return -1;
-  }
-      
-  /*
-  ** Find out opening '{'
-  */  
-  pChar = msg.buffer;
-  while ((*pChar!=0) && (*pChar!='{')) pChar++;
-  if (*pChar == 0) return -1;
-  pChar++;
-  if (*pChar == 0) return -1;    
-
-  /*
-  ** Find out opening '['
-  */    
-  while ((*pChar!=0) && (*pChar!='[')) pChar++;
-  if (*pChar == 0) return -1;
-
-  pEntry = &pSrv->cnx.entry[0];
-  while(1) {
-  
-    /*
-    ** Find out next opening '{'
-    */  
-    while ((*pChar!=0) && (*pChar!='{')) pChar++;
-    if (*pChar == 0) break;
-    pChar++;
-    if (*pChar == 0) break;    
-
-    /*
-    ** Check role is server
-    */  
-    if ((pVal = get_pointer_on_param("role", pChar)) == NULL) break;
-    if (strncmp(pVal, "server", strlen("server")) != 0) continue;
-    
-    /*
-    ** Get idx value
-    */  
-    if ((pVal = get_pointer_on_param("idx", pChar)) == NULL) break;
-    if (sscanf(pVal, "%d", &idx) != 1) continue;
-    
-        
-    /*
-    ** Get address
-    */  
-    if ((pVal = get_pointer_on_param("address", pChar)) == NULL) break;
-    if (sscanf(pVal, "%d.%d.%d.%d", &ipTbl[0], &ipTbl[1], &ipTbl[2], &ipTbl[3]) != 4) continue;
-    ipAddr = ipTbl[0]<<24 | ipTbl[1]<<16 | ipTbl[2]<<8 | ipTbl[3];
-            
-    /*
-    ** Get target
-    */  
-    if ((pVal = get_pointer_on_param("target", pChar)) == NULL) break;
-    pTarget = pVal;
-    while(*pVal!= '\"') pVal++;
-    if (*pVal==0) break;
-    *pVal = 0; // Set end of string on last quote
-    
-    pEntry->idx    = idx;
-    pEntry->ipAddr = ipAddr;
-    strcpy(pEntry->target, pTarget);
-
-    pSrv->cnx.nbEntries++;
-    pEntry++;
-    
-    *pVal = '\"'; // restore quote character
-  }    
-  return 0; 
-}
-/*
-**_________________________________________________________________________________
-**
-** Connect a diagnostic server
-**
-** @param pSrv      The context of the diagnostic server
+** @param ipAddr       IPv4 address of the target
+** @param serverPort   TCP listening port of the target
 **
 ** @retval the socket identifier on sucesss, -1 on failure
 **_________________________________________________________________________________
 */
-int connect_to_server(rozofs_dbg_srv_t  * pSrv) {
+int connect_to_server(uint32_t   ipAddr, uint16_t  serverPort) {
+  int                 socketId;  
   struct  sockaddr_in vSckAddr;
   int                 sockSndSize = 256;
   int                 sockRcvdSize = 2*MX_BUF;
-  uint16_t            serverPort;
-  uint32_t            ipAddrNetw;
-
-
-  if (pSrv->socket >= 0)  return pSrv->socket;
-    
+  
   /*
   ** Create the socket for TCP
   */
-  if ((pSrv->socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+  if ((socketId = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     printf("Unable to create a socket !!!\n");
     exit(2);
   }  
@@ -1689,19 +1254,19 @@ int connect_to_server(rozofs_dbg_srv_t  * pSrv) {
   /* 
   ** change size of the buffer of socket for sending
   */
-  if (setsockopt (pSrv->socket,SOL_SOCKET,
+  if (setsockopt (socketId,SOL_SOCKET,
 		  SO_SNDBUF,(char*)&sockSndSize,sizeof(int)) == -1)  {
     printf("Error on setsockopt SO_SNDBUF %d\n",sockSndSize);
-    server_socket_shutdown(pSrv);
+    close(socketId);
     exit(2);
   }
   /* 
   ** change size of the buffer of socket for receiving
   */  
-  if (setsockopt (pSrv->socket,SOL_SOCKET,
+  if (setsockopt (socketId,SOL_SOCKET,
                   SO_RCVBUF,(char*)&sockRcvdSize,sizeof(int)) == -1)  {
     printf("Error on setsockopt SO_RCVBUF %d !!!\n",sockRcvdSize);
-    server_socket_shutdown(pSrv);
+    close(socketId);
     exit(2);
   }
   
@@ -1709,92 +1274,21 @@ int connect_to_server(rozofs_dbg_srv_t  * pSrv) {
   /* 
   ** Connect to the target
   */
-  serverPort = rozofs_get_service_port(ROZOFS_SERVICE_PORT_ROZODIAG_SRV);
   vSckAddr.sin_family = AF_INET;
   vSckAddr.sin_port   = htons(serverPort);
-  ipAddrNetw = htonl(pSrv->ipAddr);
-  memcpy(&vSckAddr.sin_addr.s_addr, &ipAddrNetw, 4); 
-  if (connect(pSrv->socket,(struct sockaddr *)&vSckAddr,sizeof(struct sockaddr_in)) == -1) {
-//    printf("____[%u.%u.%u.%u:%u] error on connect %s!!!\n", 
-//            pSrv->ipAddr>>24, pSrv->ipAddr>>16&0xFF, pSrv->ipAddr>>8&0xFF, pSrv->ipAddr&0xFF, 
-//            (unsigned int)serverPort, 
-//            strerror(errno));
-    server_socket_shutdown(pSrv);       
+  memcpy(&vSckAddr.sin_addr.s_addr, &ipAddr, 4); 
+  if (connect(socketId,(struct sockaddr *)&vSckAddr,sizeof(struct sockaddr_in)) == -1) {
+    printf("____[%u.%u.%u.%u:%u] error on connect %s!!!\n", 
+            (unsigned int)ipAddr&0xFF, 
+            (unsigned int)(ipAddr>>8)&0xFF, 
+            (unsigned int) (ipAddr>>16)&0xFF, 
+            (unsigned int) (ipAddr>>24)&0xFF, 
+            (unsigned int)serverPort, 
+            strerror(errno));
+    close(socketId);            
     return-1;
   }
-  return pSrv->socket;
-}
-/*
-**_________________________________________________________________________________
-**
-** Direct connect a diagnostic target
-**
-** @param pSrv      The context of the diagnostic server
-**
-** @retval the socket identifier on sucesss, -1 on failure
-**_________________________________________________________________________________
-*/
-int direct_connect_to_target(rozofs_dbg_target_t  * pTarget) {
-  struct  sockaddr_in vSckAddr;
-  int                 sockSndSize = 256;
-  int                 sockRcvdSize = 2*MX_BUF;
-  uint16_t            serverPort;
-  uint32_t            ipAddrNetw;
-
-  if (pTarget->port == 0) {
-    printf("____[ -i %u.%u.%u.%u", pTarget->ipAddr>>24, pTarget->ipAddr>>16&0xFF, pTarget->ipAddr>>8&0xFF, pTarget->ipAddr&0xFF); 
-    printf(" -T %s (-p 0) ] error on connect Connection refused!!!\n", pTarget->name?pTarget->name:"?");
-    return -1;
-  }
-    
-  /*
-  ** Create the socket for TCP
-  */
-  if ((pTarget->socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    printf("Unable to create a socket !!!\n");
-    exit(2);
-  }  
-  
-  /* 
-  ** change size of the buffer of socket for sending
-  */
-  if (setsockopt (pTarget->socket,SOL_SOCKET,
-		  SO_SNDBUF,(char*)&sockSndSize,sizeof(int)) == -1)  {
-    printf("Error on setsockopt SO_SNDBUF %d\n",sockSndSize);
-    target_socket_shutdown(pTarget);
-    exit(2);
-  }
-  /* 
-  ** change size of the buffer of socket for receiving
-  */  
-  if (setsockopt (pTarget->socket,SOL_SOCKET,
-                  SO_RCVBUF,(char*)&sockRcvdSize,sizeof(int)) == -1)  {
-    printf("Error on setsockopt SO_RCVBUF %d !!!\n",sockRcvdSize);
-    target_socket_shutdown(pTarget);
-    exit(2);
-  }
-  
-
-  /* 
-  ** Connect to the target
-  */
-  serverPort = pTarget->port;
-  vSckAddr.sin_family = AF_INET;
-  vSckAddr.sin_port   = htons(serverPort);
-  ipAddrNetw = htonl(pTarget->ipAddr);
-  memcpy(&vSckAddr.sin_addr.s_addr, &ipAddrNetw, 4); 
-  if (connect(pTarget->socket,(struct sockaddr *)&vSckAddr,sizeof(struct sockaddr_in)) == -1) {
-    printf("____[ -i %u.%u.%u.%u", pTarget->ipAddr>>24, pTarget->ipAddr>>16&0xFF, pTarget->ipAddr>>8&0xFF, pTarget->ipAddr&0xFF); 
-    if (pTarget->name) {
-      printf(" -T %s (-p %u) ] error on connect %s!!!\n", pTarget->name, (unsigned int)serverPort, strerror(errno));
-    }
-    else { 
-      printf(" -p %u ] error on connect %s!!!\n", (unsigned int)serverPort, strerror(errno));
-    }
-    target_socket_shutdown(pTarget);       
-    return-1;
-  }
-  return pTarget->socket;
+  return socketId;
 }
 /*
 **_________________________________________________________________________________
@@ -1806,91 +1300,43 @@ int direct_connect_to_target(rozofs_dbg_target_t  * pTarget) {
 **_________________________________________________________________________________
 */
 int main(int argc, const char **argv) {
-  int                   targetIdx; 
-  rozofs_dbg_target_t * pTarget;
-  rozofs_dbg_srv_t    * pSrv;
-  int                   srvIdx;
-  int                   fwd;              
+  int                 socketId; 
+  uint32_t            ip;
    
   /* Read parameters */
+  memset(serverPort,0,sizeof(serverPort)); 
+  memset(ipAddr,0,sizeof(ipAddr));
   nbTarget = 0;
-  nbServer = 0;
-  period   = 0;
-  nbCmd    = 0;
-  allCmd   = 0;
+  period        = 0;
+  nbCmd         = 0;
+  allCmd        = 0;
   read_parameters(argc, argv);
   if (nbTarget == 0) stop_on_error("No target defined !!!\n");
 
+  memset(socketArray, -1, sizeof(socketArray)); 
 reloop:
 
   /*
-  ** Connect every server
+  ** Loop on every target
   */
-  for (srvIdx = 0; srvIdx < nbServer; srvIdx++) {
-    pSrv = server[srvIdx];
-    if (pSrv->socket  < 0) {          
-      if (connect_to_server(pSrv)  < 0) {  
-        continue;
-      }
-    }
-    /*
-    ** Get the connected software building blocks
-    */
-    rozofs_dbg_get_connections(pSrv);
-  }  
-      
-  /*
-  ** Loop on every server
-  */    
-  for (targetIdx = 0; targetIdx < nbTarget; targetIdx++) {
+  for (socketId = 0; socketId < nbTarget; socketId++) {
    
-    pTarget = &target[targetIdx];
-    fwd     = -1;
-    
     /*
-    ** Connection via rozodiag server
+    ** Connect to the target if not yet done
     */
-    srvIdx = pTarget->srvIdx;
-    while (srvIdx != -1) {
-      pSrv = server[srvIdx];    
-      if (pSrv->socket < 0) { 
-        /*
-        ** Server is not avilable. Try a direction connection
-        */
-        srvIdx = -1;
-        break;
-      }
-      /*
-      ** Fetch the forward index of the target on the rozodiag server 
-      */
-      fwd = get_fwd_idx(pSrv, pTarget->name);
-      if (fwd != -1) {
-        break;
-      }  
-      /*
-      ** No such target connected to the rozodiag server. Try a direction connection
-      */
-      srvIdx = -1;
-      break;
-    }  
-    /*
-    * Try a direction connection
-    */
-    if (srvIdx == -1) {
-      if (direct_connect_to_target(pTarget) < 0) {
-        continue;
-      }  
-    } 
+    if (socketArray[socketId]  < 0) {
+      socketArray[socketId] = connect_to_server(ipAddr[socketId],serverPort[socketId]);
+    }
+    if (socketArray[socketId]  < 0) {  
+      continue;
+    }
      
     /*
     ** Display target @
     */ 
-    if (pTarget->name) {
-      sprintf(prompt,"____[ -i %u.%u.%u.%u -T %s ]",(pTarget->ipAddr>>24)&0xFF, (pTarget->ipAddr>>16)&0xFF, (pTarget->ipAddr>>8)&0xFF,pTarget->ipAddr&0xFF, pTarget->name);
-    }
-    else {     
-      sprintf(prompt,"____[ -i %u.%u.%u.%u -p %d ]",(pTarget->ipAddr>>24)&0xFF, (pTarget->ipAddr>>16)&0xFF, (pTarget->ipAddr>>8)&0xFF,pTarget->ipAddr&0xFF, pTarget->port);
-    }
+    ip = ntohl(ipAddr[socketId]);
+    sprintf(prompt,"____[%u.%u.%u.%u:%d]",(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF,ip&0xFF, serverPort[socketId]);
+     
     /*
     ** Run every available command
     */ 
@@ -1898,12 +1344,12 @@ reloop:
       /*
       ** Read the list of commands
       */
-      uma_dbg_read_all_cmd_list(pTarget, fwd);
+      uma_dbg_read_all_cmd_list(socketId);
       /*
       ** Execute every command
       */
       if (nbCmd != 0) {
-        debug_run_command_list(pTarget, fwd);
+        debug_run_command_list(socketId);
       }
       continue;
     }   
@@ -1912,14 +1358,14 @@ reloop:
     ** Non interactive mode
     */    
     if (nbCmd != 0) {
-      debug_run_command_list(pTarget, fwd);
+      debug_run_command_list(socketId);
       continue;
     }
     
     /*
     ** Interactive mode
     */  
-    debug_interactive_loop(pTarget, fwd);
+    debug_interactive_loop(socketId);
     
   }  
   
@@ -1934,11 +1380,8 @@ reloop:
   /*
   ** Shutdown every connection
   */
-  for (srvIdx = 0; srvIdx < nbServer; srvIdx++) {
-    server_socket_shutdown(server[srvIdx]);
+  for (socketId = 0; socketId < nbTarget; socketId++) {
+    socket_shutdown(socketId);
   }  
-  for (targetIdx = 0; targetIdx < nbTarget; targetIdx++) {
-    target_socket_shutdown(&target[targetIdx]);
-  }    
   exit(0);
 }

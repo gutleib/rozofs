@@ -1,4 +1,6 @@
 /usr/bin/rozodiag
+/usr/bin/rozodiag_legacy
+/usr/bin/rozo_diag_srv
 /usr/share/man/man8/rozodiag.8
 /usr/bin/rozo_status.py
 /usr/share/man/man8/rozo_status.py.8

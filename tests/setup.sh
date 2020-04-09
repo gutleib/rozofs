@@ -986,6 +986,18 @@ undeploy_clients_local ()
     rozofsmount_kill_best_effort
     
 }
+start_diag_srv ()
+{
+    echo "------------------------------------------------------"
+    echo "Start diagnostic server"
+    rozolauncher start /var/run/rozofs/pid/launcher_rozodiag.pid rozo_diag_srv &
+}
+stop_diag_srv ()
+{
+    echo "------------------------------------------------------"
+    echo "Killing diagnostic server"
+    rozolauncher stop /var/run/rozofs/pid/launcher_rozodiag.pid
+}
 
 start_exportd ()
 {
@@ -1110,6 +1122,7 @@ remove_build ()
 }
 
 do_start_all_processes() {
+     start_diag_srv     
      start_storaged ${STORAGES_BY_CLUSTER}
      #start_expgw
      start_exportd 1
@@ -1123,6 +1136,7 @@ do_pause() {
     undeploy_clients_local
     stop_storaged
     stop_exportd
+    stop_diag_srv
     #stop_expgw
 }
 

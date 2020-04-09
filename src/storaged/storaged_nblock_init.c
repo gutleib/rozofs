@@ -559,7 +559,7 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
               if (ip == INADDR_ANY) {
                 bindOnAnyAddr = 1;
               }
-	      uma_dbg_init(10, ip, arg_p->debug_port);	                 
+	      uma_dbg_init(10, ip, arg_p->debug_port, "storaged");	                 
            }
            /*
            ** When no configuration file is given, one uses the default config file.
@@ -568,7 +568,7 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
            */
            if ((strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0) 
            &&  (bindOnAnyAddr == 0)) {
-	     uma_dbg_init(10, 0x7F000001, arg_p->debug_port);	                              
+	     uma_dbg_init(10, 0x7F000001, arg_p->debug_port, "storaged");	                              
            }
         }   
         
@@ -579,7 +579,6 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
             
             pChar += sprintf(pChar, "storaged ");
             pChar += rozofs_ipv4_append(pChar,sconfig_get_this_IP(&storaged_config,0));
-
             uma_dbg_set_name(name);
         }
 

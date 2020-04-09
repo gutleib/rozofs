@@ -32,6 +32,7 @@
 #include <dirent.h>
 void trash_process_config_read(char * fname);
 
+int trash_process_config_does_file_exist(char * fname);
 
 /*_______________________________
 ** ENUM definion

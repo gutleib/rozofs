@@ -36,17 +36,27 @@
 #include "ruc_common.h"
 #include "ruc_list.h"
 #include "ruc_sockCtl_api.h"
-#include "uma_tcp_main_api.h"
+//#include "uma_tcp_main_api.h"
 #include "ruc_tcpServer_api.h"
 #include "uma_dbg_api.h"
 #include "config.h"
 #include "../rozofs_service_ports.h"
+#include <rozofs/core/af_unix_socket_generic_api.h>
+#include <rozofs/core/af_inet_stream_api.h>
+#include <rozofs/common/common_config.h>
+
+#if 0
+#define DBG(fmt, ...) info(fmt, ##__VA_ARGS__)
+#else
+#define DBG(fmt, ...)
+#endif
 
 
 char rozofs_github_reference[256];
 
 uint32_t   uma_dbg_initialized=FALSE;
 char     * uma_gdb_system_name=NULL;
+char     * uma_gdb_target_name=NULL;
 static time_t uptime=0;
 
 /*
@@ -91,12 +101,12 @@ uma_dbg_catcher_function_t	uma_dbg_catcher = uma_dbg_catcher_DFT;
 
 typedef struct uma_dbg_session_s {
   ruc_obj_desc_t            link;
-  void 		            * ref;
   uint32_t                    ipAddr;
   uint16_t                    port;
+  uint16_t                    rozodiag_srv:1;
+  uint16_t                    connected:1;
   uint32_t                    tcpCnxRef;
   uint64_t                    nbcmd;
-  void                      * recvPool;
   char                      * argv[MAX_ARG];
   char                        argvBuffer[UMA_DBG_MAX_CMD_LEN+1];
 } UMA_DBG_SESSION_S;
@@ -112,6 +122,11 @@ void uma_dbg_listTopic(uint32_t tcpCnxRef, void *bufRef, char * topic);
 uint32_t uma_dbg_do_not_send = 0;
 int      old;
 
+static  void  * bufferPool = NULL;
+
+af_unix_socket_conf_t  rozodiag_conf;
+
+UMA_MSGHEADER_S uma_dbg_lastSendHeader;
 
 
 static inline int  uma_dbg_getLetterIdx(char letter) { 
@@ -251,6 +266,189 @@ void uma_dbg_thread_remove_self(void) {
   }  
   pthread_mutex_unlock(&uma_dbg_thread_mutex);
 }
+/*
+**____________________________________________________
+**
+** Receiver ready function: called from socket controller.
+** The module is intended to return if the receiver is ready to receive a new message
+** and FALSE otherwise
+**   
+** The application is ready to received if the buffer pool is not empty
+**
+**  @param socket_ctx_p: pointer to the af unix socket
+**  @param socketId: reference of the socket (not used)
+**
+**  @retval : TRUE-> receiver ready
+*  @retval : FALSE-> receiver not ready
+**____________________________________________________
+*/
+uint32_t uma_dbg_userHdrAnalyzerCallBack(char * payload) {
+  uint32_t len;
+  UMA_MSGHEADER_S * pHead = (UMA_MSGHEADER_S *) payload;  
+  len = ntohl(pHead->len);
+  if (len > UMA_DBG_MAX_SEND_SIZE) {
+    DBG("!!! uma_dbg_userHdrAnalyzerCallBack %d", len);
+  }  
+  return len;
+}
+/*
+**____________________________________________________
+**  
+** Callback to allocate a buffer for receiving request
+** 
+** The service might reject the buffer allocation because the pool runs
+** out of buffer or because there is no pool with a buffer that is large enough
+** for receiving the message because of a out of range size.
+**
+** @param userRef : pointer to a user reference: not used here
+** @param socket_context_ref: socket context reference
+** @param len : length of the incoming message
+** 
+** @retval <>NULL pointer to a receive buffer
+** @retval == NULL no buffer 
+**____________________________________________________
+*/
+void * uma_dbg_userRcvAllocBufCallBack(void *userRef, uint32_t socket_context_ref, uint32_t len) {
+  void *buf=NULL;
+ 
+  /*
+  ** check the requested size
+  */
+  if (len > UMA_DBG_MAX_SEND_SIZE) {
+    severe("Oversized msg %d/%d", len, UMA_DBG_MAX_SEND_SIZE);
+    return NULL;
+  }
+  
+  /*
+  ** Allocate a buffer
+  */
+  buf = ruc_buf_getBuffer(bufferPool);
+  if (buf == NULL) {
+    severe("Out of diag buffer");
+  } 
+  return buf;
+}
+/*
+**____________________________________________________
+**
+** Receiver ready function: called from socket controller.
+** The module is intended to return if the receiver is ready to receive a new message
+** and FALSE otherwise
+**   
+** The application is ready to received if the buffer pool is not empty
+**
+**  @param socket_ctx_p: pointer to the af unix socket
+**  @param socketId: reference of the socket (not used)
+**
+**  @retval : TRUE-> receiver ready
+*  @retval : FALSE-> receiver not ready
+**____________________________________________________
+*/
+uint64_t uma_dbg_last_out_of_buffer_sec = 0;
+uint32_t uma_dbg_userRcvReadyCallBack(void * socket_ctx_p,int socketId) {
+
+  uint32_t free_count = ruc_buf_getFreeBufferCount(bufferPool);
+
+  /*
+  ** Check that we are not out of buffer for more than 60 seconds.
+  ** Else better suicide...
+  */
+  if (free_count < 1) {
+    if (uma_dbg_last_out_of_buffer_sec == 0) {
+      uma_dbg_last_out_of_buffer_sec = rozofs_get_ticker_s();
+    }
+    else {
+      if ((rozofs_get_ticker_s()-uma_dbg_last_out_of_buffer_sec) > 60) {
+        fatal("All buffers are lost");
+      } 
+    }
+    return FALSE;
+  }
+
+  uma_dbg_last_out_of_buffer_sec = 0;
+  return TRUE;
+}
+/*
+**__________________________________________________________________________
+**
+** (re) Connect to the rozodiag server 
+** This function is called periodicaly ti re-connect to the rozodiag server
+** in case it is not yet connected
+**
+** @param pt   Connection context
+**
+**__________________________________________________________________________
+*/
+void uma_dbg_reconnect_to_rozodiag_srv(void * pt) {
+  UMA_DBG_SESSION_S * pObj = (UMA_DBG_SESSION_S *) pt;
+
+  if ((!pObj->rozodiag_srv) || (pObj->connected)) return;
+  
+  pObj->tcpCnxRef = af_inet_sock_client_create("diag_srv",
+                                            pObj->ipAddr, 0,
+                                            pObj->ipAddr, pObj->port,
+                                            &rozodiag_conf); 
+
+  if (pObj->tcpCnxRef != -1) {
+    pObj->connected = 1;
+  }  
+  return;
+}
+/*
+**__________________________________________________________________________
+**
+** Initialize periodic timer for connection to the rozodiag server 
+**
+** @param ipAddr   Destination IP address of the rozodiag server
+**__________________________________________________________________________
+*/
+void uma_dbg_init_cnx_to_rozodiag_srv(uint32_t ipAddr) {
+  uint16_t            port;
+  UMA_DBG_SESSION_S * pObj;
+  struct timer_cell * periodic_timer;
+
+  /*
+  ** Destination port is fixed
+  */
+  port   = rozofs_get_service_port(ROZOFS_SERVICE_PORT_ROZODIAG_SRV);
+  if (ipAddr == INADDR_ANY) ipAddr = 0x7f000001;
+
+  /* 
+  ** Find a free debug session context 
+  */
+  pObj = (UMA_DBG_SESSION_S*)ruc_objGetFirst((ruc_obj_desc_t*)uma_dbg_freeList);
+  if (pObj == (UMA_DBG_SESSION_S*)NULL) {
+    fatal("Out of context");
+  }
+  ruc_objRemove((ruc_obj_desc_t*)pObj);
+  
+  /* 
+  ** Initialize the session context 
+  */
+  pObj->ipAddr       = ipAddr;
+  pObj->port         = port;
+  pObj->rozodiag_srv = 1;
+  pObj->connected    = 0;
+  pObj->nbcmd        = 0;
+
+  
+  /* 
+  ** Set the context in the active list 
+  */
+  ruc_objInsertTail((ruc_obj_desc_t*)uma_dbg_activeList,(ruc_obj_desc_t*)pObj);
+
+  /*
+  ** Start a periodic timer 
+  */
+  periodic_timer = ruc_timer_alloc(0,0);
+  if (periodic_timer == NULL) {
+    fatal("no timer");
+    return;
+  }
+  ruc_periodic_timer_start (periodic_timer, 3000,uma_dbg_reconnect_to_rozodiag_srv,pObj);
+  return;
+}
+
 /*__________________________________________________________________________
 **
 **  Display whether some syslog exists
@@ -522,13 +720,14 @@ void show_uma_dbg_diag(char * argv[], uint32_t tcpRef, void *bufRef) {
      else {
        pChar += sprintf(pChar,",\n");
      }  
-     pChar += sprintf(pChar, "    { \"ref\" : %p, \"ip\" : \"%u:%u.%u.%u\", \"port\" : %u, \"cmd#\" : %llu }", 
-                      p->ref, 
+     pChar += sprintf(pChar, "    { \"ref\" : %u, \"ip\" : \"%u:%u.%u.%u\", \"port\" : %u, \"srv\" : %d,\"cmd#\" : %llu }", 
+                      p->tcpCnxRef, 
                       p->ipAddr>>24  & 0xFF, 
                       p->ipAddr>>16 & 0xFF, 
                       p->ipAddr>>8  & 0xFF, 
                       p->ipAddr     & 0xFF,
                       p->port,
+                      p->rozodiag_srv,
                       (long long unsigned int) p->nbcmd);
   }
   pChar += sprintf(pChar, "\n] }\n"); 
@@ -888,13 +1087,15 @@ void uma_dbg_manual(char * argv[], uint32_t tcpRef, void *bufRef) {
   uma_dbg_topic[letterIdx][idx].man(pt);
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
-/*__________________________________________________________________________
- */
-/**
-*  Display the system name if any has been set thanks to uma_dbg_set_name()
+/*
+**__________________________________________________________________________
+**
+**  Display the system name if any has been set thanks to uma_dbg_set_name()
+**
+**__________________________________________________________________________
 */
 void uma_dbg_show_name_man(char * pChar) {  
-  pChar += rozofs_string_append           (pChar,"Display the target system identifier.\n");    
+  pChar += rozofs_string_append           (pChar,"Display the RozoFS system name.\n");    
 }
 void uma_dbg_show_name(char * argv[], uint32_t tcpRef, void *bufRef) {  
   char * pt = uma_dbg_get_buffer();
@@ -909,6 +1110,25 @@ void uma_dbg_show_name(char * argv[], uint32_t tcpRef, void *bufRef) {
     
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
   }
+}
+/*
+**__________________________________________________________________________
+**
+**  Display the target name if any has been set thanks to uma_dbg_set_taregt()
+**
+**__________________________________________________________________________
+*/
+void uma_dbg_show_target_man(char * pChar) {  
+  pChar += rozofs_string_append           (pChar,"Display the target name.\n");    
+}
+void uma_dbg_show_target(char * argv[], uint32_t tcpRef, void *bufRef) {  
+  char * pt = uma_dbg_get_buffer();
+
+  pt += rozofs_string_append(pt,"target : ");
+  pt += rozofs_string_append(pt,uma_gdb_target_name);
+  pt += rozofs_eol(pt);
+
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
 /*__________________________________________________________________________
  */
@@ -1042,14 +1262,18 @@ void uma_dbg_setCatcher(uma_dbg_catcher_function_t funct)
 */
 void uma_dbg_free(UMA_DBG_SESSION_S * pObj) {
   /* Free the TCP connection context */
-  if (pObj->tcpCnxRef != -1) uma_tcp_deleteReq(pObj->tcpCnxRef);
+  if (pObj->tcpCnxRef != -1) af_unix_delete_socket(pObj->tcpCnxRef);
+  pObj->tcpCnxRef = -1;
+  pObj->connected = 0;
+  if (pObj->rozodiag_srv) return;
+  
   /* remove the context from the active list */
   ruc_objRemove((ruc_obj_desc_t*)pObj);
   /* Set the context in the free list */
   ruc_objInsertTail((ruc_obj_desc_t*)uma_dbg_freeList,(ruc_obj_desc_t*)pObj);
 }
 /*-----------------------------------------------------------------------------
-**
+**fdi
 **  #SYNOPSIS
 **   Find a debug session context from its IP address and TCP port
 **
@@ -1092,7 +1316,7 @@ UMA_DBG_SESSION_S *uma_dbg_findFromAddrAndPort(uint32_t ipAddr, uint16_t port) {
 **----------------------------------------------------------------------------
 */
 
-UMA_DBG_SESSION_S *uma_dbg_findFromRef(void * ref) {
+UMA_DBG_SESSION_S *uma_dbg_findFromRef(uint32_t tcpCnxRef) {
   ruc_obj_desc_t    * pnext;
   UMA_DBG_SESSION_S * p;
 
@@ -1100,7 +1324,7 @@ UMA_DBG_SESSION_S *uma_dbg_findFromRef(void * ref) {
   while ((p = (UMA_DBG_SESSION_S*)ruc_objGetNext(&uma_dbg_activeList->link, &pnext))
 	 !=(UMA_DBG_SESSION_S*)NULL) {
 
-    if (p->ref == ref) return p;
+    if (p->tcpCnxRef == tcpCnxRef) return p;
 
   }
   /* not found */
@@ -1371,7 +1595,7 @@ void uma_dbg_listTopic(uint32_t tcpCnxRef, void *bufRef, char * topic) {
   pHead->end = TRUE;
 
   ruc_buf_setPayloadLen(bufRef,idx + sizeof(UMA_MSGHEADER_S));
-  uma_tcp_sendSocket(tcpCnxRef,bufRef,0);
+  af_unix_generic_send_stream_with_idx(tcpCnxRef,bufRef);
 }
 /*
 **--------------------------------------------------------------------------
@@ -1393,8 +1617,7 @@ void uma_dbg_listTopic(uint32_t tcpCnxRef, void *bufRef, char * topic) {
 **
 **--------------------------------------------------------------------------
 */
-//64BITS void uma_dbg_receive_CBK(uint32_t userRef,uint32 tcpCnxRef,uint32 bufRef)
-void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
+void uma_dbg_userRcvCallBack(void *userRef,uint32_t  tcpCnxRef, void *bufRef) {
   int              topicNum;
   char           * pBuf, * pArg;
   uint32_t           argc;
@@ -1403,9 +1626,11 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
   uint32_t            cmdLen = 0;
   int                 letterIdx;
 
+  DBG("uma_dbg_userRcvCallBack socket %d buff %p", tcpCnxRef, bufRef);   
+
   /* Retrieve the session context from the referecne */
 
-  if ((p = uma_dbg_findFromRef(opaque)) == NULL) {
+  if ((p = uma_dbg_findFromRef(tcpCnxRef)) == NULL) {
     uma_dbg_send(tcpCnxRef,bufRef,TRUE,"Internal error");
     return;
   }
@@ -1543,7 +1768,7 @@ void uma_dbg_receive_CBK(void *opaque,uint32_t tcpCnxRef,void *bufRef) {
 /*
 **--------------------------------------------------------------------------
 **  #SYNOPSIS
-**   Read and execute a rozodiag command file if it exist
+**   Read and execute a rozog command file if it exist
 **
 **
 **   IN:
@@ -1594,7 +1819,7 @@ void uma_dbg_process_command_file(char * command_file_name) {
   /*
   ** Get a buffer
   */
-  bufRef = ruc_buf_getBuffer(p->recvPool);
+  bufRef = ruc_buf_getBuffer(bufferPool);
   if (bufRef == NULL) {
     severe("can not allocate buffer");
     goto out;
@@ -1705,164 +1930,220 @@ out:
   }
 }
 /*
-**-------------------------------------------------------
-  void upc_nse_ip_disc_uph_ctl_CBK(uint32_t nsei,uint32 tcpCnxRef)
-**-------------------------------------------------------
-**  #SYNOPSIS
-**   That function allocates all the necessary
-**   resources for UPPS TCP connections management
+**____________________________________________________
 **
-**   IN:
-**       refObj : reference of the NSE context
-**       tcpCnxRef : reference of the tcpConnection
-**
-**
-**   OUT :
-**        none
-**
-**-------------------------------------------------------
+** Disconnect callback
+** 
+** @param userRef : pointer to a user reference: not used here
+** @param tcpCnxRef: socket context reference
+** @param bufRef : pointer to the packet buffer on which the error has been encountered
+** @param err_no : errno has reported by the sendto().
+** 
+**____________________________________________________
 */
-//64BITS void uma_dbg_disc_CBK(uint32_t refObj,uint32 tcpCnxRef) {
-void uma_dbg_disc_CBK(void *opaque,uint32_t tcpCnxRef) {
+void uma_dbg_userDiscCallBack(void *userRef,uint32_t tcpCnxRef,void *bufRef,int err_no) {
   UMA_DBG_SESSION_S * pObj;
 
-  if ((pObj = uma_dbg_findFromRef(opaque)) == NULL) {
+  DBG("uma_dbg_userDiscCallBack socket %d buff %p", tcpCnxRef, bufRef);   
+
+  /*
+  ** release the current buffer if significant
+  */
+  if (bufRef != NULL) ruc_buf_freeBuffer(bufRef);
+
+  if ((pObj = uma_dbg_findFromRef(tcpCnxRef)) != NULL) {
+    uma_dbg_free(pObj);
     return;
   }
+  
+  af_unix_delete_socket(tcpCnxRef);   
+}
+/*
+**____________________________________________________
+**
+** register target toward rozodiag server
+** 
+** @param pObj : connection context
+** 
+**____________________________________________________
+*/
+void uma_dbg_register(UMA_DBG_SESSION_S * pObj) {
+  void              * bufRef;
+  UMA_MSGHEADER_S   * pHead;  
+  char              * pChar; 
+  char              * pt; 
 
-  uma_dbg_catcher(tcpCnxRef, NULL);
-  uma_dbg_free(pObj);
+  /*
+  ** Allocate a buffer
+  */
+  bufRef = ruc_buf_getBuffer(bufferPool);
+  if (bufRef == NULL) {
+    severe("Out of diag buffer");
+    af_unix_delete_socket(pObj->tcpCnxRef);  
+    return; 
+  } 
+
+  /* Retrieve the buffer payload */
+  if ((pHead = (UMA_MSGHEADER_S *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    ruc_buf_freeBuffer(bufRef);
+    af_unix_delete_socket(pObj->tcpCnxRef);  
+    return; 
+  }
+  
+  memset(pHead,0,sizeof(UMA_MSGHEADER_S));
+  pHead->action  = ROZOFS_DIAG_SRV_REGISTER;
+  
+  pChar = (char*) (pHead+1);
+  if (uma_gdb_target_name == NULL) pt = uma_gdb_system_name;
+  else                             pt = uma_gdb_target_name; 
+  pChar += rozofs_string_append(pChar, pt);
+  DBG("send register %s for socket %d",pt,pObj->tcpCnxRef) ;
+  
+  uma_dbg_send_buffer(pObj->tcpCnxRef, bufRef, pChar-(char*)pHead, 1);
 }
 /*
 **-------------------------------------------------------
-**  #SYNOPSIS
-**   called when a debug session open is requested
+** Incoming connection
 **
-**   IN:
-**
-**   OUT :
-**
+** @param userRef : pointer to a user reference: not used here
+** @param tcpCnxRef: socket context reference
+** @param retcode : RUC_OK/RUC_NOK
+** @param errnum : errno when RUC_NOK
 **
 **-------------------------------------------------------
 */
-uint32_t uma_dbg_accept_CBK(uint32_t userRef,int socketId,struct sockaddr * sockAddr) {
-  uint32_t              ipAddr;
-  uint16_t              port;
+void uma_dbg_userConnectCallBack(void *userRef,uint32_t  tcpCnxRef,int retcode,int errnum) {
   UMA_DBG_SESSION_S * pObj;
-  uma_tcp_create_t    conf;
-  struct  sockaddr_in vSckAddr;
-  int                 vSckAddrLen=14;
   char                name[32];
   char              * pChar;
+  uint32_t            ipAddr;
+  uint16_t            port;
 
-  uma_tcp_create_t *pconf = &conf;
 
   /* Get the source IP address and port */
-  if((getpeername(socketId, (struct sockaddr *)&vSckAddr,(socklen_t*) &vSckAddrLen)) == -1){
-    return RUC_NOK;
+  if (af_unix_get_remote_ip_and_port(tcpCnxRef, &ipAddr, &port) != 0) {
+    severe("af_unix_get_remote_ip_and_port(%d)", tcpCnxRef);
+    af_unix_delete_socket(tcpCnxRef);
+    return;
   }
-  ipAddr = (uint32_t) ntohl((uint32_t)(/*(struct sockaddr *)*/vSckAddr.sin_addr.s_addr));
-  port   = ntohs((uint16_t)(vSckAddr.sin_port));
   
-  pChar = name;
-  pChar += rozofs_string_append(pChar,"A:DIAG/");
-  pChar += rozofs_ipv4_port_append(pChar,ipAddr,port);  
+  DBG("uma_dbg_userConnectCallBack socket %d from %u:%u.%u.%u:%u %d", tcpCnxRef,
+       ipAddr>>24, (ipAddr>>16)&0xFF, (ipAddr>>8)&0xFF, ipAddr&0xFF, port, retcode);   
 
-  /* Search for a debug session with this IP address and port */
-  if ((pObj = uma_dbg_findFromAddrAndPort(ipAddr,port)) != NULL) {
-    /* Session already exist. Just update it */
-    if (uma_tcp_updateTcpConnection(pObj->tcpCnxRef,socketId,name) != RUC_OK) {
-      uma_dbg_free(pObj);
-      return RUC_NOK;
+  if ((pObj = uma_dbg_findFromRef(tcpCnxRef)) != NULL) {
+  
+    if ((pObj->rozodiag_srv)&&(retcode == 0)) {
+      pObj->connected = 1;
+      uma_dbg_register(pObj);
     }
-    return RUC_OK;
+    else {    
+      uma_dbg_free(pObj);
+    }  
+    return;
   }
 
   /* Find a free debug session context */
   pObj = (UMA_DBG_SESSION_S*)ruc_objGetFirst((ruc_obj_desc_t*)uma_dbg_freeList);
   if (pObj == (UMA_DBG_SESSION_S*)NULL) {
-//    INFO8 "No more free debug session" EINFO;
-    return RUC_NOK;
+    af_unix_delete_socket(tcpCnxRef);
+    return;
   }
+
+  /* Get the source IP address and port */
+  if (af_unix_get_remote_ip_and_port(tcpCnxRef, &pObj->ipAddr, &pObj->port) != 0) {
+    severe("af_unix_get_remote_ip_and_port(%d)", tcpCnxRef);
+    af_unix_delete_socket(tcpCnxRef);
+    return;
+  }
+    
+  pObj->ipAddr = ipAddr;
+  pObj->port   = port;
+  pObj->connected = 1;
+      
+  pChar = name;
+  pChar += rozofs_string_append(pChar,"A:DIAG/");
+  pChar += rozofs_ipv4_port_append(pChar,pObj->ipAddr,pObj->port);  
 
   /* Initialize the session context */
-  pObj->ipAddr    = ipAddr;
-  pObj->port      = port;
-  pObj->tcpCnxRef = (uint32_t) -1;
+  pObj->tcpCnxRef = tcpCnxRef;
   pObj->nbcmd     = 0;
-  
-  /* Allocate a TCP connection descriptor */
-  pconf->headerSize       = sizeof(UMA_MSGHEADER_S);
-  pconf->msgLenOffset     = 0;
-  pconf->msgLenSize       = sizeof(uint32_t);
-  pconf->bufSize          = 2048*4;
-  pconf->userRcvCallBack  = uma_dbg_receive_CBK;
-  pconf->userDiscCallBack = uma_dbg_disc_CBK;
-  pconf->userRef          =  pObj->ref;
-  pconf->socketRef        = socketId;
-  pconf->xmitPool         = NULL; /* use the default XMIT pool ref */
-  pconf->recvPool         = pObj->recvPool; /* Use a big buffer pool */
-  pconf->userRcvReadyCallBack = (ruc_pf_sock_t)NULL ;
-
-  if ((pObj->tcpCnxRef = uma_tcp_create_rcvRdy_bufPool(pconf)) == (uint32_t)-1) {
-    severe( "uma_tcp_create" );
-    return RUC_NOK;
-  }
-
-  /* Tune the socket and connect with the socket controller */
-  if (uma_tcp_createTcpConnection(pObj->tcpCnxRef,name) != RUC_OK) {
-    severe( "uma_tcp_createTcpConnection" );
-    uma_dbg_free(pObj);
-    return RUC_NOK;
-  }
 
   /* Remove the debud session context from the free list */
   ruc_objRemove((ruc_obj_desc_t*)pObj);
   /* Set the context in the active list */
   ruc_objInsertTail((ruc_obj_desc_t*)uma_dbg_activeList,(ruc_obj_desc_t*)pObj);
-
-  return RUC_OK;
 }
 /*
 **-------------------------------------------------------
 **  #SYNOPSIS
-**   creation of the TCP server connection for debug sessions
-**   IN:    void
+**   Give the system name to be display 
+**   IN:    system_name
 **   OUT :  void
 **-------------------------------------------------------
+*/  
+void uma_dbg_set_target( char * target) {
+
+  if (uma_gdb_target_name != NULL) {
+    severe( "uma_dbg_set_target(%s) although name %s already set", target, uma_gdb_target_name );
+    return;
+  }  
+  
+  uma_gdb_target_name = malloc(strlen(target)+1);
+  if (uma_gdb_target_name == NULL) {
+    severe( "uma_dbg_set_target out of memory" );
+    return;
+  }
+  
+  strcpy(uma_gdb_target_name,target);
+  
+  uma_dbg_addTopicAndMan("target", uma_dbg_show_target, uma_dbg_show_target_man, 0);
+}
+/*
+**-------------------------------------------------------
+** Initialiaze debug service in a RozoFS software building block
+** 1) If server mode is allowed and if a listening port is given
+** it creates a listening socket to receive incoming debug 
+** connections.
+** 2) If client mode is allowed and if a target name is given
+** it connects to the local diagnostic server that forwards
+** diagnostic requests to it.
+**
+** @param nbElements   Number of // debug sessions
+** @param ipAddr       IP Address to use
+** @param serverPort   Port to listen to in server mode
+** @param target       Target to respond to in client mode
+** @param withSystem   Whether system command is allowed
+**-------------------------------------------------------
 */
-void uma_dbg_init_internal(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort, int withSystem) {
-  ruc_tcp_server_connect_t  inputArgs;
-  UMA_DBG_SESSION_S         *p;
-  ruc_obj_desc_t            *pnext ;
-  void                      *idx;
-  uint32_t                    tcpCnxServer;
-  char                     * pChar;
-  void                     * bufferPool;
+void uma_dbg_init_internal(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort, char * target, int withSystem) {
+  UMA_DBG_SESSION_S        * p;
+  ruc_obj_desc_t           * pnext ;
   
   /*
   ** Save version reference in global variable
   */
   sprintf(rozofs_github_reference,"%s %s", VERSION, ROZO_GIT_REF);
 
-  /* Create a TCP connection server */
-  inputArgs.userRef    = 0;
-  inputArgs.tcpPort    = serverPort /* UMA_DBG_SERVER_PORT */ ;
-  inputArgs.priority   = 1;
-  inputArgs.ipAddr     = ipAddr;
-  inputArgs.accept_CBK = uma_dbg_accept_CBK;
+  /*
+  ** set the export dscp code
+  */
+  rozodiag_conf.dscp = (uint8_t) common_config.export_dscp; 
+  rozodiag_conf.dscp = rozodiag_conf.dscp<<2;
   
-  pChar = (char *) &inputArgs.cnxName[0];
-  pChar += rozofs_string_append(pChar,"L:DIAG/");
-  pChar += rozofs_ipv4_port_append (pChar,ipAddr,serverPort);  
-
-  if ((tcpCnxServer = ruc_tcp_server_connect(&inputArgs)) == (uint32_t)-1) {
-    severe("ruc_tcp_server_connect" );
+  /*
+  ** Create the listening socket if port is given and module is in mode server or client&server
+  */
+  if ((serverPort != 0) && (common_config.diagnostic_mode != common_config_diagnostic_mode_client)) {
+    
+    if (af_inet_sock_listening_create("DIAG", ipAddr, serverPort, &rozodiag_conf) < 0) {
+      fatal("af_inet_sock_listening_create(DIAG) %s",strerror(errno));
+      return;
+    }  
   }
   
   /* Service already initialized */
   if (uma_dbg_initialized) return;
-
   uma_dbg_initialized = TRUE;
   
   uptime = time(0);
@@ -1872,8 +2153,7 @@ void uma_dbg_init_internal(uint32_t nbElements,uint32_t ipAddr, uint16_t serverP
   if (uma_dbg_freeList == (UMA_DBG_SESSION_S*)NULL) {
     severe( "ruc_listCreate(%d,%d)", nbElements,(int)sizeof(UMA_DBG_SESSION_S) );
     return;
-  }
-  
+  }  
   
   /*
   ** Create a common buffer pool for all debug sessions
@@ -1883,13 +2163,10 @@ void uma_dbg_init_internal(uint32_t nbElements,uint32_t ipAddr, uint16_t serverP
 
   /* Loop on initializing the distributor entries */
   pnext = NULL;
-  idx = 0;
   while (( p = (UMA_DBG_SESSION_S*) ruc_objGetNext(&uma_dbg_freeList->link, &pnext)) != NULL) {
-    p->ref       = (void *) idx++;
     p->ipAddr    = (uint32_t)-1;
     p->port      = (uint16_t)-1;
     p->tcpCnxRef = (uint32_t)-1;
-    p->recvPool  = bufferPool;
   }
 
   /* Initialize the active list */
@@ -1918,12 +2195,20 @@ void uma_dbg_init_internal(uint32_t nbElements,uint32_t ipAddr, uint16_t serverP
   else {
     uma_dbg_addTopicAndMan("syslog",show_uma_dbg_no_syslog, show_uma_dbg_syslog_man, 0);   
   }
+  
+  /*
+  ** Launch connection toward rozodiag server if this module is in mode client or client&server
+  */
+  if ((target) && (common_config.diagnostic_mode != common_config_diagnostic_mode_server)) {
+    uma_dbg_set_target(target);
+    uma_dbg_init_cnx_to_rozodiag_srv(ipAddr);
+  }  
 }
-void uma_dbg_init_no_system(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort) {
-  uma_dbg_init_internal(nbElements,ipAddr, serverPort, 0);
+void uma_dbg_init_no_system(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort, char * target) {
+  uma_dbg_init_internal(nbElements,ipAddr, serverPort, target, 0);
 }
-void uma_dbg_init(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort) {
-  uma_dbg_init_internal(nbElements,ipAddr, serverPort, 1);
+void uma_dbg_init(uint32_t nbElements,uint32_t ipAddr, uint16_t serverPort, char * target) {
+  uma_dbg_init_internal(nbElements,ipAddr, serverPort, target, 1);
 }
 
 /*
@@ -1949,15 +2234,66 @@ void uma_dbg_set_name( char * system_name) {
   
   strcpy(uma_gdb_system_name,system_name);
 }
-/*__________________________________________________________________________
- */
-/**
-**  @param tcpCnxRef   TCP connection reference
+/*
+**__________________________________________________________________________
+** 
+** Allocate an extra buffer to complete a response in several buffers
 **
-*  Return an xmit buffer to be used for TCP sending
+** @param tcpCnxRef   TCP connection reference
+**
+** @retval an xmit buffer to be used for TCP sending
+**__________________________________________________________________________
 */
 void * uma_dbg_get_new_buffer(uint32_t tcpCnxRef) {
-  UMA_DBG_SESSION_S * p;  
-  p = uma_dbg_findFromCnxRef(tcpCnxRef);
-  return ruc_buf_getBuffer(p->recvPool);
+  void               * bufRef;
+  UMA_MSGHEADER_S    * pHead;
+  
+  /*
+  ** Allocate a buffer
+  */
+  bufRef = ruc_buf_getBuffer(bufferPool);
+  if (!bufRef) {
+    return NULL;
+  }
+
+  /*
+  ** Pre-initialize the header with the previous header of the response
+  */
+  if ((pHead = (UMA_MSGHEADER_S *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return NULL;
+  }
+  memcpy(pHead,&uma_dbg_lastSendHeader, sizeof(UMA_MSGHEADER_S));
+  return bufRef;
 }
+/*
+**____________________________________________________
+**  socket configuration
+**____________________________________________________
+*/
+af_unix_socket_conf_t  rozodiag_conf =
+{
+  1,  //           family: identifier of the socket family    */
+  0,         /**< instance number within the family   */
+  sizeof(UMA_MSGHEADER_S),  /* headerSize  -> size of the header to read                 */
+  0,                         /* msgLenOffset->  offset where the message length fits      */
+  sizeof(uint32_t),          /* msgLenSize  -> size of the message length field in bytes  */
+  UMA_DBG_MAX_SEND_SIZE, //        bufSize;         /* length of buffer (xmit and received)        */
+  UMA_DBG_MAX_SEND_SIZE, //        so_sendbufsize;  /* length of buffer (xmit and received)        */
+  uma_dbg_userRcvAllocBufCallBack,  //    userRcvAllocBufCallBack; /* user callback for buffer allocation */
+  uma_dbg_userRcvCallBack,           //    userRcvCallBack;   /* callback provided by the connection owner block */
+  uma_dbg_userDiscCallBack,   //    userDiscCallBack; /* callBack for TCP disconnection detection         */
+  uma_dbg_userConnectCallBack,   //userConnectCallBack;     /**< callback for client connection only         */
+  NULL,  //    userXmitDoneCallBack; /**< optional call that must be set when the application when to be warned when packet has been sent */
+  uma_dbg_userRcvReadyCallBack,  //    userRcvReadyCallBack; /* NULL for default callback                     */
+  NULL,  //    userXmitReadyCallBack; /* NULL for default callback                    */
+  NULL,  //    userXmitEventCallBack; /* NULL for default callback                    */
+  uma_dbg_userHdrAnalyzerCallBack,        /* userHdrAnalyzerCallBack ->NULL by default, function that analyse the received header that returns the payload  length  */
+  ROZOFS_GENERIC_SRV,       /* recv_srv_type ---> service type for reception : ROZOFS_RPC_SRV or ROZOFS_GENERIC_SRV  */
+  0,       /*   rpc_recv_max_sz ----> max rpc reception buffer size : required for ROZOFS_RPC_SRV only */
+
+  NULL,  //    *userRef;             /* user reference that must be recalled in the callbacks */
+  NULL,  //    *xmitPool; /* user pool reference or -1 */
+  NULL,   //    *recvPool; /* user pool reference or -1 */
+  .priority = 3,  /** set the af_unix socket priority */
+};

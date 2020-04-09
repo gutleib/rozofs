@@ -1,0 +1,126 @@
+#!/bin/sh
+#
+# rozofs-rozodiag      This shell script takes care of starting and stopping
+#                      the rozodiag services.
+#
+#chkconfig: 35 20 80
+#description: rozofs rozodiag server
+#processname: rozo_diag_srv
+
+### BEGIN INIT INFO
+# Provides:          rozofs-rozodiag
+# Required-Start:    $network $local_fs 
+# Required-Stop:     
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: RozoFS rozodiag server
+# Description:       RozoFS is a scale-out NAS file system. This service
+#                    provides the rozofs-rozodiag server functionality.
+### END INIT INFO
+
+
+exec=/usr/bin/rozo_diag_srv
+prog=rozofs-rozodiag
+pidfile=/var/run/rozofs/pid/launcher_rozodiag.pid
+launcher=/usr/bin/rozolauncher
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+rh_status()
+{
+  # run checks to determine if the service is running or use generic status
+  status -p "$pidfile" "$exec"
+}
+
+rh_status_q()
+{
+  rh_status >/dev/null 2>&1
+}
+
+start()
+{
+  # user had insufficient privilege
+  if [ $UID -ne 0 ] ; then
+      echo "User has insufficient privilege."
+      exit 4
+  fi
+
+  # program is not installed
+  [ -x $exec ] || exit 5
+  [ -x $launcher ] || exit 5
+
+  echo -n $"Starting $prog: "
+  # Let's run through rozolauncher.
+  $launcher start $pidfile $exec & 
+  success
+  echo
+  return 0
+}
+
+stop()
+{
+  # user had insufficient privilege
+  if [ $UID -ne 0 ] ; then
+      echo "User has insufficient privilege."
+      exit 4
+  fi
+
+  echo -n $"Stopping $prog: "
+
+  $launcher stop $pidfile
+
+  success
+  echo
+
+  return 0
+}
+
+restart()
+{
+  rh_status_q && stop
+  start
+}
+
+force_reload()
+{
+  # new configuration takes effect after restart
+  restart
+}
+
+case "$1" in
+
+  start)
+    rh_status_q && exit 0
+    start
+    ;;
+
+  restart)
+    restart
+    ;;
+
+  status)
+    rh_status
+    ;;
+
+  force-reload)
+    force_reload
+    ;;
+
+  stop)
+    rh_status_q || exit 0
+    stop
+    ;;
+
+  condrestart|try-restart)
+    rh_status_q || exit 0
+    restart
+    ;;
+
+  *)
+    echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|force-reload}"
+    exit 2
+    ;;
+esac
+
+exit $?

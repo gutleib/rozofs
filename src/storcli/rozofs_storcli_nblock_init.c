@@ -271,8 +271,21 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t rozofsmount_instance)
      **--------------------------------------
      */
 
-     
-     uma_dbg_init(10,INADDR_ANY,dbg_port);
+    {
+        char name[64];
+	if (conf.owner == NULL)
+	{
+          sprintf(name, "storcli %d of rozofsmount %d", conf.module_index, conf.rozofsmount_instance);
+	}
+	else
+	{
+          sprintf(name, "storcli %d of %s %d", conf.module_index,conf.owner, conf.rozofsmount_instance);	
+	}
+        uma_dbg_set_name(name);
+
+        sprintf(name, "mount:%d:%d", conf.rozofsmount_instance, conf.module_index);
+        uma_dbg_init(10,INADDR_ANY,dbg_port, name);        
+    }     
 
 
 //#warning Start of specific application initialization code

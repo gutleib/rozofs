@@ -97,4 +97,9 @@ ROZOFS_SERVICE_PORT_RANGE_DESC_T rozofs_service_port_range[ROZOFS_SERVICE_PORT_M
     .name         = "rozofs_stspare_diag",
     .service      = "Storaged spare restorer diagnostic port",
   }, 
-};
+  [ROZOFS_SERVICE_PORT_ROZODIAG_SRV] = {
+    .defaultValue = 50000,
+    .rangeSize    = 2,
+    .name         = "rozofs_diag_srv",
+    .service      = "rozodiag server port",
+  }, };

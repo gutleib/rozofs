@@ -2102,18 +2102,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Fatal error while initializing non blocking entity\n");
         goto error;
     }
-    {
-        char name[64];
-	if (conf.owner == NULL)
-	{
-          sprintf(name, "storcli %d of rozofsmount %d", conf.module_index, conf.rozofsmount_instance);
-	}
-	else
-	{
-          sprintf(name, "storcli %d of %s %d", conf.module_index,conf.owner, conf.rozofsmount_instance);	
-	}
-        uma_dbg_set_name(name);
-    }
+
     /**
     * init of the scheduler ring
     */

@@ -158,6 +158,7 @@ uint32_t af_unix_module_init(uint32_t af_unix_ctx_count,
     retval < 0 : error on socket creation
 
 */
+int af_unix_sock_create_internal(char *nameOfSocket,int size);
 int af_unix_sock_create(char *nameOfSocket,af_unix_socket_conf_t *conf_p);
 int af_unix_sock_create_th(char *nameOfSocket,af_unix_socket_conf_t *conf_p);
 

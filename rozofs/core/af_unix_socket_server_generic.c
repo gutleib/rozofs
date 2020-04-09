@@ -125,6 +125,7 @@ uint32_t af_unix_generic_srv_acceptIn_Cbk(void * socket_ctx_p,int socketId)
    struct sockaddr   sockAddr;
    int sockAddrLen= sizeof(sockAddr);
    int fdWork;
+   int sockIdx;
 
 
    if((fdWork=accept(socketId,(struct sockaddr *)&sockAddr,(socklen_t *)&sockAddrLen)) == -1)
@@ -140,7 +141,10 @@ uint32_t af_unix_generic_srv_acceptIn_Cbk(void * socket_ctx_p,int socketId)
    ** Create the socket and bind it with the socket controller
    */
 
-   af_unix_sock_accept_create(fdWork,sock_p->af_family,sock_p->nickname,sock_p->conf_p);
+   sockIdx = af_unix_sock_accept_create(fdWork,sock_p->af_family,sock_p->nickname,sock_p->conf_p);
+   if (sock_p->conf_p->userConnectCallBack) {     
+     (*sock_p->conf_p->userConnectCallBack)(sock_p->userRef,sockIdx,RUC_OK,0);
+   }
    return TRUE;
 }
 

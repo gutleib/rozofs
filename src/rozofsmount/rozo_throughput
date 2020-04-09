@@ -55,7 +55,7 @@ def append_target(eid,exports):
   for client in clients.split("-i"):
     words = client.split()
     if len(words) >= 3:
-      print "  - %s:%s"%(words[0],words[2])
+      print "  - %s %s"%(words[0],words[2])
   print
   
   max_read_list.append(0)
@@ -237,13 +237,19 @@ def get_client_list(active_export,eid):
     ip = words[4].split(':')[0]
     if check_netmwork_filters(ip) == False: continue
     port = words[4].split(':')[1]
-    string="%s -i %s -p %s -c mount"%(DIAG,ip,port)
+    # Old versions gives the rozodiag port (starting at 50003
+    # New version gives the rozofsmount instance (under 64)
+    if int(port) >= int(50003):
+      instance = (int(port) - int(50003))/3
+    else:
+      instance = int(port)  
+    string="%s -i %s -T mount:%s -c mount"%(DIAG,ip,instance)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
       if line.split()[0] != "eid": continue
       if line.split()[2] != eid: continue
-      clients = clients + " -i %s -p %s"%(ip,port)  
+      clients = clients + " -i %s -T mount:%s"%(ip,instance)     
       count = count + int(1)   
   return clients,count      
 #______________________________

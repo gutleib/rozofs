@@ -853,20 +853,20 @@ def reread():
     
     ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
     if ret != 0:
-      report("START ALL UP: reread error with storage %s failed"%(hid))
+      report("START ALL UP: reread error with storage %s stopped"%(hid))
       return 1
 
-    backline("START ALL UP: Unmount with storage %s failed"%(hid))
+    backline("START ALL UP: Unmount with storage %s stopped"%(hid))
     os.system("./setup.py mount %s stop"%(instance))
     time.sleep(2)
     
-    backline("START ALL UP: Mount with storage %s failed"%(hid))
+    backline("START ALL UP: Mount with storage %s stopped"%(hid))
     os.system("./setup.py mount %s start"%(instance))
     time.sleep(3)
     
     ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
     if ret != 0:
-      report("START ALL UP: reread error with storage %s failed after remount"%hid)
+      report("START ALL UP: reread error with storage %s stopped after remount"%hid)
       return 1    
           
     # Restart every storages  
@@ -879,30 +879,30 @@ def reread():
     # Reset a bunch of storages	    
     storageStopAndWait(hid,1)
   
-    backline("STORAGE %s FAILED: Re-write files"%(hid))
+    backline("STORAGE %s STOPPED: Re-write files"%(hid))
     ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action create"%(exepath,NBFILE,SIZE))
     if ret != 0:
-      report("STORAGE %s FAILED: write error"%(hid))    
+      report("STORAGE %s STOPPED: write error"%(hid))    
       return 1
     
-    backline("STORAGE %s FAILED: Reread files"%(hid))
+    backline("STORAGE %s STOPPED: Reread files"%(hid))
   
     ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
     if ret != 0:
-      report("STORAGE %s FAILED: reread files"%(hid))
+      report("STORAGE %s STOPPED: reread files"%(hid))
       return 1
  
-    backline("STORAGE %s FAILED: Unmount"%(hid))
+    backline("STORAGE %s STOPPED: Unmount"%(hid))
     os.system("./setup.py mount %s stop"%(instance))
     time.sleep(2)
     
-    backline("STORAGE %s FAILED: Mount"%(hid))
+    backline("STORAGE %s STOPPED: Mount"%(hid))
     os.system("./setup.py mount %s start"%(instance))
     time.sleep(3)
     
     ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
     if ret != 0:
-      report("STORAGE %s FAILED: reread error after remount"%(hid))
+      report("STORAGE %s STOPPED: reread error after remount"%(hid))
       return 1      
           
     # Restart every storages  
@@ -910,7 +910,7 @@ def reread():
 
     ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
     if ret != 0:
-      report("STORAGE %s FAILED: reread error after remount and restart"%(hid))
+      report("STORAGE %s STOPPED: reread error after remount and restart"%(hid))
       return 1  
       
   os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action delete"%(exepath,NBFILE,SIZE))        
@@ -1988,7 +1988,7 @@ def trashNrestore():
 #___________________________________________________ 
 
   nb=int(nbGruyere)
-  trash_dir="%s/trash.%s"%(exepath,nb)
+  trash_dir="%s/trashNrestore"%(exepath)
   
   # Create trash test directory when it does not exist
   if not os.path.exists(trash_dir): trash_allocate(trash_dir,nb)
@@ -2006,7 +2006,7 @@ def trashNrebuild():
 # their content
 #___________________________________________________ 
   nb=int(nbGruyere)
-  trash_dir="%s/trash.%s"%(exepath,nb)
+  trash_dir="%s/trashNrebuild"%(exepath)
   
   # Create trash test directory when it does not exist
   if not os.path.exists(trash_dir): trash_allocate(trash_dir,nb)
@@ -2086,8 +2086,8 @@ def rebuild_device() :
     clean_rebuild_dir()    
 
     os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev)) 
+    time.sleep(6)
     backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
-    time.sleep(5) 
     string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s"%(cid,sid,dev,cid,sid,dev)
     ret = cmd_returncode(string)
     if ret != 0:
@@ -2097,7 +2097,7 @@ def rebuild_device() :
       dev=(dev+1)%int(mapper_modulo)
       backline("rebuild cid %s sid %s device %s"%(cid,sid,dev))
       os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
-      time.sleep(5) 
+      time.sleep(6)
       string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev)
       ret = cmd_returncode(string)
       if ret != 0:
@@ -2263,17 +2263,17 @@ def selfhealing() :
           	  	  
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid1) in line:
       dev1 = line.split()[3].split('/')[5]
-      log("id %s sid %s dev %s %s"%(cid,sid1,dev1,line))
+      log("cid %s sid %s dev %s %s"%(cid,sid1,dev1,line))
       continue
           	  	  
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid2) in line:
       dev2 = line.split()[3].split('/')[5]
-      log("id %s sid %s dev %s %s"%(cid,sid2,dev2,line))
+      log("cid %s sid %s dev %s %s"%(cid,sid2,dev2,line))
       continue
       
     if "/srv/rozofs/storages/storage_%s_%s/"%(cid,sid3) in line:
       dev3 = line.split()[3].split('/')[5]
-      log("id %s sid %s dev %s %s"%(cid,sid3,dev3,line))
+      log("cid %s sid %s dev %s %s"%(cid,sid3,dev3,line))
       break
 
   hid0 = get_hid(cid,sid0)
@@ -2309,10 +2309,16 @@ def selfhealing() :
     selfhealing_spare(hid2,cid,sid2,dev2)
     selfhealing_spare(hid3,cid,sid3,dev3)
     return 1
-     
-  if filecmp.cmp(reffile,"./ref") == False: 
-    report("%s and %s differ"%(reffile,"./ref"))
-    return 1 
+
+    
+  result = 0
+    
+  # Re-read files  
+  for i in range(60):
+    zefile="%s/ref%s"%(dir,i)
+    if filecmp.cmp(zefile,"./ref") == False: 
+      report("%s and %s differ"%(zefile,"./ref"))
+      result = 1       
 
   # Create 2 spare device
   log("Create spare devices")
@@ -2322,13 +2328,8 @@ def selfhealing() :
   ret = ret + selfhealing_spare(hid2,cid,sid2,dev2)
   ret = ret + selfhealing_spare(hid3,cid,sid3,dev3)
   if ret != 0: return 1
-
-  for i in range(60):
-    zefile="%s/ref%s"%(dir,i)
-    if filecmp.cmp(reffile,"./ref") == False: 
-      report("%s and %s differ"%(reffile,"./ref"))
-      return 1            
-  return 0
+     
+  return result
 #___________________________________________________
 def rebuild_sid() :
 # test re-building all devices of a sid
@@ -2348,8 +2349,8 @@ def rebuild_sid() :
     clean_rebuild_dir()
 
     os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
+    time.sleep(6)
     backline("rebuild cid %s sid %s"%(cid,sid))
-    time.sleep(5) 
     ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -o all_cid%s_sid%s "%(cid,sid,cid,sid))
     if ret != 0:
       return ret
@@ -2377,6 +2378,7 @@ def rebuild_node() :
   ret=1 
   # Loop on every host
   for hid in hosts:
+    backline("delete node %s devices"%(hid))
  
     # Delete every device of every CID/SID on this host
     for s in sids:
@@ -2390,21 +2392,25 @@ def rebuild_node() :
       os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
 
     clean_rebuild_dir()
+    time.sleep(6)
     backline("rebuild node %s"%(hid))
-    time.sleep(5) 
     string="./setup.py storage %s rebuild -fg -o node_%s"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:
+      report("rebuild node %s failed %s"%(hid,ret))
       return ret
 
     if rebuildCheck == True:	
       ret = gruyere_one_reread()  
       if ret != 0:
+        report("gruyere_one_reread failed %s"%(ret))
 	return ret    
 
   if rebuildCheck == True:      
     ret = gruyere_reread()          
-    return ret
+    if ret != 0:
+      report("gruyere_reread failed %s"%(ret))
+      return ret    
   return 0 
 #___________________________________________________
 def rebuild_node_parts() :
@@ -2432,9 +2438,8 @@ def rebuild_node_parts() :
       os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
 
     clean_rebuild_dir()
-    
+    time.sleep(6)
     backline("rebuild node %s nominal"%(hid))    
-    time.sleep(5) 
     string="./setup.py storage %s rebuild -fg -o node_nominal_%s --nominal"%(hid,hid)
     ret = cmd_returncode(string)
     if ret != 0:

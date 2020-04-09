@@ -243,4 +243,10 @@ INT   	export minimum_free_size_percent	4  0:100
 BOOL 	storage mandatory_device_label	        False
 // When that flag is asserted any storcli can be selected for reading.
 BOOL    client storcli_read_parallel 		False     
+// rozodiag mode
+// server     Each RozoFS module listen for rozodiag command on its dedicated server port
+// client     Each RozoFS module is client of a local rozodiag server that relays rozodiag commands
+// both       Each RozoFS module is client as well as server
+//    
+ENUM  global diagnostic_mode        "both"   "both,server,client"
 

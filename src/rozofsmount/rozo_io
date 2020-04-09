@@ -158,7 +158,7 @@ def get_eid_and_exports_from_path(path):
     exports=line.split()[0]
     eid=line.split()[1]
     instance = int(line.split()[3])
-    onlyClient = "-i 127.0.0.1 -p %d "%(instance*3+50003)
+    onlyClient = "-i 127.0.0.1 -T mount:%s "%(instance)
     return eid,exports,onlyClient
   syntax( "%s is not a RozoFS mountpoint"%(path))
             
@@ -229,13 +229,19 @@ def get_client_list(exports,eid):
     ip = words[4].split(':')[0]
     if check_netmwork_filters(ip) == False: continue
     port = words[4].split(':')[1]
-    string="%s -i %s -p %s -c mount"%(DIAG,ip,port)
+    # Old versions gives the rozodiag port (starting at 50003
+    # New version gives the rozofsmount instance (under 64)
+    if int(port) >= int(50003):
+      instance = (int(port) - int(50003))/3
+    else:
+      instance = int(port)  
+    string="%s -i %s -T mount:%s -c mount"%(DIAG,ip,instance)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for line in cmd.stdout:
       if line.split()[0] != "eid": continue
       if line.split()[2] != eid: continue
-      clients = clients + " -i %s -p %s"%(ip,port)     
+      clients = clients + " -i %s -T mount:%s"%(ip,instance)     
       total_watched_clients += int(1)  
   return clients      
 #______________________________
@@ -519,7 +525,7 @@ print "  Clients of eid %s : "%(eid)
 for client in clients.split("-i"):
   words = client.split()
   if len(words) >= 3:
-    print "  - %s:%s"%(words[0],words[2])
+    print "  - %s %s"%(words[0],words[2])
 print  
 
 #

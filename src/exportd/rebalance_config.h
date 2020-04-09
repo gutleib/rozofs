@@ -32,6 +32,7 @@
 #include <dirent.h>
 void rebalance_config_read(char * fname);
 
+int rebalance_config_does_file_exist(char * fname);
 
 /*_______________________________
 ** ENUM definion

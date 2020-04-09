@@ -32,6 +32,7 @@
 #include <dirent.h>
 void common_config_read(char * fname);
 
+int common_config_does_file_exist(char * fname);
 
 /*_______________________________
 ** ENUM definion
@@ -85,6 +86,30 @@ static inline common_config_device_selfhealing_mode_e string2common_config_devic
   return -1;
 }
 
+// diagnostic_mode 
+typedef enum _common_config_diagnostic_mode_e {
+  common_config_diagnostic_mode_both,
+  common_config_diagnostic_mode_server,
+  common_config_diagnostic_mode_client,
+} common_config_diagnostic_mode_e;
+// enum to string
+static inline char * common_config_diagnostic_mode2String(common_config_diagnostic_mode_e x) {
+  switch(x) {
+    case common_config_diagnostic_mode_both: return "both";
+    case common_config_diagnostic_mode_server: return "server";
+    case common_config_diagnostic_mode_client: return "client";
+    default: return "?";
+  }
+  return "?";
+}
+// string to enum
+static inline common_config_diagnostic_mode_e string2common_config_diagnostic_mode(const char * x) {
+  if (strcmp(x,"both")==0) return common_config_diagnostic_mode_both;
+  if (strcmp(x,"server")==0) return common_config_diagnostic_mode_server;
+  if (strcmp(x,"client")==0) return common_config_diagnostic_mode_client;
+  return -1;
+}
+
 /*_______________________________
 ** common_config structure
 */
@@ -126,6 +151,12 @@ typedef struct _common_config_t {
   int32_t     export_dscp;
   // When that flag is asserted, RozoFS operates in standalone mode only.
   int32_t     standalone;
+  // rozodiag mode
+  // server     Each RozoFS module listen for rozodiag command on its dedicated server port
+  // client     Each RozoFS module is client of a local rozodiag server that relays rozodiag commands
+  // both       Each RozoFS module is client as well as server
+  //    
+  common_config_diagnostic_mode_e  diagnostic_mode;
 
   /*
   ** export scope configuration parameters
@@ -379,6 +410,34 @@ static inline void COMMON_CONFIG_DEVICE_SELFHEALING_MODE_READ_ENUM(config_t * cf
   else {\
     common_config.device_selfhealing_mode = myval;\
     pChar += rozofs_string_append(pChar,"device_selfhealing_mode");\
+    pChar += rozofs_string_append(pChar," set to value ");\
+    pChar += rozofs_string_append(pChar,VAL);\
+  }\
+  pChar += rozofs_eol(pChar);\
+  return 0;\
+}
+
+// Read enum from configuration file
+static inline void COMMON_CONFIG_DIAGNOSTIC_MODE_READ_ENUM(config_t * cfg) {
+  const char * charval;
+  common_config.diagnostic_mode = -1;
+  if (config_lookup_string(cfg, "diagnostic_mode", &charval) == CONFIG_TRUE) {
+    common_config.diagnostic_mode = string2common_config_diagnostic_mode(charval);
+  }
+  if (common_config.diagnostic_mode == -1) {
+    common_config.diagnostic_mode =  string2common_config_diagnostic_mode("both");
+  }
+}
+// Set enum value thanks to rozodiag
+#define COMMON_CONFIG_DIAGNOSTIC_MODE_SET_ENUM(VAL)  {\
+  int myval = string2common_config_diagnostic_mode(VAL);\
+  if (myval == -1) {\
+    pChar += rozofs_string_append_error(pChar," Unexpected enum value for diagnostic_mode : ");\
+    pChar += rozofs_string_append_error(pChar,VAL);\
+  }\
+  else {\
+    common_config.diagnostic_mode = myval;\
+    pChar += rozofs_string_append(pChar,"diagnostic_mode");\
     pChar += rozofs_string_append(pChar," set to value ");\
     pChar += rozofs_string_append(pChar,VAL);\
   }\

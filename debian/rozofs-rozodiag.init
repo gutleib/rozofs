@@ -1,0 +1,140 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          rozofs-rozodiag
+# Required-Start:    $network $local_fs 
+# Required-Stop:     
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: RozoFS diagnostic server
+# Description:       RozoFS is a scale-out NAS file system. This service
+#                    provides the rozofs-rozodiag server functionality.
+### END INIT INFO
+
+# Author: Rozo Systems S.A.S. <devel@rozofs.com>
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="rozofs-rozodiag"                # Introduce a short description here
+NAME=rozo_diag_srv                    # Introduce the short server's name here
+DAEMON=/usr/bin/${NAME}               # Introduce the server's location here
+DAEMON_ARGS=""                        # Arguments to run the daemon with
+PIDFILE=/var/run/rozofs/pid/launcher_rozodiag.pid
+SCRIPTNAME=$0
+LAUNCHER=/usr/bin/rozolauncher
+
+# Exit if the package is not installed
+[ -x $DAEMON ] || exit 0
+[ -x $LAUNCHER ] || exit 0
+
+# Read configuration variable file if it is present
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+. /lib/lsb/init-functions
+
+# Enable core files
+ulimit -c unlimited
+
+if [ -t 0 ] ; then
+  # Be verbose when called from a terminal
+  VERBOSE=yes
+fi
+
+# Get uid
+_uid=$(id -u)
+
+#
+# Function that check if user has sufficient privilege
+#
+do_check_uid()
+{
+  # user had insufficient privilege
+  if [ ${_uid} -ne 0 ] ; then
+    [ "$VERBOSE" != no ] && log_progress_msg "(User has insufficient privilege)"
+    [ "$VERBOSE" != no ] && log_end_msg 4
+    exit 4
+  fi
+}
+
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+  res=0
+  # Check if running
+  status_of_proc -p ${PIDFILE} "$DAEMON" $DESC >/dev/null 2>&1
+
+  case "$?" in
+      0) return 1;;
+  esac
+
+  # Let's run through rozolauncher.
+  $LAUNCHER start $PIDFILE $DAEMON $DAEMON_ARGS
+  return 0 
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+  res=0
+  # Check if running
+  status_of_proc -p ${PIDFILE} "$DAEMON" $DESC >/dev/null 2>&1
+
+  case "$?" in
+      3) res=1;;
+  esac
+
+  # Always try to stop
+  $LAUNCHER stop $PIDFILE
+
+  return $res
+}
+
+case "$1" in
+  start|reload|restart|force-reload)
+        [ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC service" "$NAME"
+        do_check_uid
+        do_start
+        res=$?
+        case "$res" in
+          0) [ "$VERBOSE" != no ] && log_end_msg 0
+             exit 0 ;;
+          1) [ "$VERBOSE" != no ] && log_progress_msg "(already started)"
+             [ "$VERBOSE" != no ] && log_end_msg 0
+             exit 0 ;;
+          *) [ "$VERBOSE" != no ] && log_end_msg 1
+             exit 1 ;;
+        esac
+        ;;
+  stop)
+        [ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC service" "$NAME"
+        do_check_uid
+        do_stop
+        res=$?
+        case "$res" in
+          0) [ "$VERBOSE" != no ] && log_end_msg 0
+             exit 0 ;;
+          1) [ "$VERBOSE" != no ] && log_progress_msg "(already stopped)"
+             [ "$VERBOSE" != no ] && log_end_msg 0
+             exit 0 ;;
+          *) [ "$VERBOSE" != no ] && log_end_msg 1
+             exit 1 ;;
+        esac
+        ;;
+  status)
+        status_of_proc -p ${PIDFILE} "$DAEMON" $DESC && exit 0 || exit $?
+        ;;
+  *)
+        echo "Usage: ${SCRIPTNAME} {start|stop|status|restart}" >&2
+        exit 3
+        ;;
+esac
+
+exit $?

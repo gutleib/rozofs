@@ -30,9 +30,9 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include <stdarg.h>
+
  
 //#define LAUNCHER_TRACE 1
-
 #ifdef LAUNCHER_TRACE
 #include <rozofs/common/log.h>
 #endif
@@ -248,6 +248,57 @@ void rozolauncher_write_pid_file(char * pid_file) {
   close(fd);  
 }
 /*
+*______________________________________________________________________
+* Create a directory, recursively creating all the directories on the path 
+* when they do not exist
+*
+* @param path2create      The directory path to create
+* @param mode             The rights
+*
+* retval 0 on success -1 else
+*/
+static inline int rozofs_launcher_mkpath(char * path2create, mode_t mode) {
+  char* p;
+  int  isZero=1;
+  int  status = -1;
+  char  directory_path[1024+1];
+  
+  strcpy(directory_path,path2create);
+    
+  p = directory_path;
+  p++; 
+  while (*p!=0) {
+  
+    while((*p!='/')&&(*p!=0)) p++;
+    
+    if (*p==0) {
+      isZero = 1;
+    }  
+    else {
+      isZero = 0;      
+      *p = 0;
+    }
+    
+    if (access(directory_path, F_OK) != 0) {
+      if (mkdir(directory_path, mode) != 0) {
+        if (errno != EEXIST) {
+          goto out;
+        }  
+      }      
+    }
+    
+    if (isZero==0) {
+      *p ='/';
+      p++;
+    }       
+  }
+  status = 0;
+  
+out:
+  if (isZero==0) *p ='/';
+  return status;
+}
+/*
  *_______________________________________________________________________
  */
 void usage(char * fmt, ...) {
@@ -273,7 +324,7 @@ void usage(char * fmt, ...) {
   fprintf(stderr, "     This command launches a process that runs the command defined\n");
   fprintf(stderr, "     in <command line> and relaunches it when it fails. The process\n");  
   fprintf(stderr, "     saves its pid in <pid file>.\n");
-  fprintf(stderr, "  rozolauncher deamon <pid file> <command line>\n");
+  fprintf(stderr, "  rozolauncher daemon <pid file> <command line>\n");
   fprintf(stderr, "     Identical to start but daemonize.\n");
   fprintf(stderr, "  rozolauncher stop <pid file>\n");
   fprintf(stderr, "     This command kill the process whose pid is in <pid file>\n");
@@ -291,7 +342,7 @@ void usage(char * fmt, ...) {
  */
 int main(int argc, char *argv[]) {
   time_t   last_start = 0;
-  int      deamonize;
+  int      daemonize;
   pid_t    pid;
 
 #ifdef LAUNCHER_TRACE
@@ -309,6 +360,7 @@ int main(int argc, char *argv[]) {
   */
   if (argc < 3) usage("rozolauncher requires at least 3 arguments but only %d are provided",argc);
 
+  rozofs_launcher_mkpath("/var/run/rozofs/pid/",0755);
 
   /*
   ** Stop
@@ -324,13 +376,13 @@ int main(int argc, char *argv[]) {
   }
 
   /*
-  ** Start/deamon
+  ** Start/daemon
   */
-  deamonize = 0;
+  daemonize = 0;
   if (strcmp(argv[1],"start")!=0){
   
-    if (strcmp(argv[1],"deamon")==0){
-      deamonize = 1;
+    if (strcmp(argv[1],"daemon")==0){
+      daemonize = 1;
     }  
     else {
       usage("rozolauncher 1rst argument \"%s\" should be within <start|stop|reload|daemon>",argv[1]); 
@@ -359,13 +411,13 @@ int main(int argc, char *argv[]) {
   ** daemonize storaged
   */
   if ( strcmp(daemon_name, "storaged") == 0) {
-    deamonize = 1;
+    daemonize = 1;
   }
   
   /*
   ** Let's daemonize 
   */
-  if (deamonize) {
+  if (daemonize) {
     #ifdef LAUNCHER_TRACE
         info("daemonize launcher");
     #endif

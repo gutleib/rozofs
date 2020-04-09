@@ -1,0 +1,13 @@
+[Unit]
+Description=RozoFS filesystem (rozodiag daemon)
+Documentation=man:rozofs(8) man:rozodiag(8)
+Documentation=http://rozofs.github.io/rozofs/
+After=syslog.target network.target 
+
+[Service]
+Type=forking
+ExecStart=/bin/sh -c '/usr/bin/rozolauncher start /var/run/rozofs/pid/launcher_rozodiag.pid rozo_diag_srv & '
+PIDFile=/var/run/rozofs/pid/launcher_rozodiag.pid
+
+[Install]
+WantedBy=multi-user.target

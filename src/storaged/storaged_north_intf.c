@@ -414,7 +414,7 @@ void * storaged_north_RcvAllocBufCallBack(void *userRef,uint32_t socket_context_
   @retval : TRUE-> receiver ready
   @retval : FALSE-> receiver not ready
 */
-uint64_t last_out_of_buffer_sec = 0;
+static uint64_t last_out_of_buffer_sec = 0;
 uint32_t storaged_north_userRcvReadyCallBack(void * socket_ctx_p,int socketId)
 {
 

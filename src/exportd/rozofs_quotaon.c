@@ -308,7 +308,7 @@ int main(int argc, char **argv)
 	*/
 	pid_t my_pid = getpid();
 	rozofs_qt_set_socket_name_with_pid_of_requester(&sock_path,(int)my_pid);
-	fd = af_unix_sock_create(sock_path.sun_path, (300*1024));
+	fd = quota_af_unix_sock_create(sock_path.sun_path, (300*1024));
 	if (fd < 0)
 	{
 	   errstr(_("Cannot create AF_UNIX socket.\n"));
@@ -405,14 +405,14 @@ int main(int argc, char **argv)
 	** close the af_unix socket
 	*/
 out:
-	af_unix_sock_delete(sock_path.sun_path,fd);
+	quota_af_unix_sock_delete(sock_path.sun_path,fd);
 	return errs;
 
 error:
       /*
       ** close the af_unix socket
       */
-      af_unix_sock_delete(sock_path.sun_path,fd);
+      quota_af_unix_sock_delete(sock_path.sun_path,fd);
       exit(-1);
 
 }

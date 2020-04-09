@@ -603,12 +603,14 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t exportd_instance) {
      **--------------------------------------
      */
 
-     uma_dbg_init(10,INADDR_ANY,dbg_port);
 
     {
         char name[32];
         sprintf(name, "rebalance-%d ",  exportd_instance);	
         uma_dbg_set_name(name);
+
+        sprintf(name, "rebalancer:%d ",  exportd_instance);	
+        uma_dbg_init(10,INADDR_ANY,dbg_port,name);
     }
 
 //#warning Start of specific application initialization code

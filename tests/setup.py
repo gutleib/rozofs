@@ -124,11 +124,11 @@ class host_class:
   def start(self):
     if self.admin == False: return
     self.add_if() 
-    os.system("./build/src/launcher/rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s&"%(self.number,self.get_config_name()))
+    os.system("./build/src/launcher/rozolauncher daemon /var/run/rozofs/pid/launcher_storaged_%s.pid storaged -c %s"%(self.number,self.get_config_name()))
 #    os.system("valgrind storaged -c %s&"%(self.get_config_name()))
 
   def stop(self):
-    os.system("./build/src/launcher/rozolauncher stop /var/run/launcher_storaged_%s.pid storaged"%(self.number))
+    os.system("./build/src/launcher/rozolauncher stop /var/run/rozofs/pid/launcher_storaged_%s.pid storaged"%(self.number))
 
   def del_if(self,nb=None):
     # Delete one interface
@@ -480,6 +480,7 @@ class mount_point_class:
     self.site= site    
     self.layout = layout
     self.nfs_path="/mnt/nfs-%s"%(self.instance) 
+    self.trc_count = int(4000)
     # Timers
     if rozofs.client_fast_reconnect != 0:
       self.set_spare_tmr_ms(rozofs.client_fast_reconnect*1000/2)
@@ -496,6 +497,9 @@ class mount_point_class:
 
   def set_fast_reconnect(self):  
     rozofs.set_client_fast_reconnect()
+    
+  def set_trc_count(count):
+    self.trc_count = int(count)
     
   def set_spare_tmr_ms(self,tmr): self.spare_tmr_ms=tmr
 
@@ -591,6 +595,9 @@ class mount_point_class:
     
     os.system("rozofsmount -H %s -E %s %s %s"%(exportd.export_host,self.eid.get_name(),self.get_mount_path(),options))
     os.system("chmod 0777 %s"%(self.get_mount_path()))
+ 
+    # Activate the trace  
+    os.system("rozodiag -T mount:%s -c trc enable -c trc count %s > /dev/null 2>&1"%(self.instance,self.trc_count))
           
   def stop(self):
     try: self.nfs(False)
@@ -1361,7 +1368,7 @@ class rozofs_class:
     display_config_bool("device_automount",self.device_automount)
     #display_config_int("device_self_healing_process",2)
     display_config_int("device_selfhealing_delay",rozofs.device_selfhealing_delay)
-    display_config_int("default_rebuild_reloop",3)
+    display_config_int("default_rebuild_reloop",2)
     display_config_string("device_selfhealing_mode",rozofs.device_selfhealing_mode)
     display_config_string("export_hosts",exportd.export_host)
     display_config_bool("client_xattr_cache",True)
@@ -1383,6 +1390,7 @@ class rozofs_class:
     display_config_int("nb_trash_thread",8)
     display_config_bool("standalone",rozofs.standalone)
     display_config_bool("rdma_enable",False)
+    display_config_string("diagnostic_mode","client")
     
   def create_common_config(self):
     if not os.path.exists("/usr/local/etc/rozofs"): os.system("mkdir -p /usr/local/etc/rozofs")  
@@ -1442,6 +1450,7 @@ class rozofs_class:
     self.pause();
     check_build()  
     os.system("rm -rf /root/tmp/export; mkdir -p /root/tmp/export; rm -rf /root/tmp/storage; mkdir -p /root/tmp/storage; swapoff -a;")
+    os.system("./build/src/launcher/rozolauncher daemon /var/run/rozofs/pid/launcher_rozodiag.pid rozo_diag_srv")
     for h in hosts: h.start()
     exportd.start()
     for m in mount_points: m.start() 
@@ -1466,10 +1475,7 @@ class rozofs_class:
     for m in mount_points: m.stop()
     for h in hosts: h.stop()
     exportd.stop() 
-    
-#    time.sleep(1)
-#    os.system("killall ./build/src/launcher/rozolauncher 2>/dev/null")
-#    self.delete_config()
+    os.system("./build/src/launcher/rozolauncher stop /var/run/rozofs/pid/launcher_rozodiag.pid rozo_diag_srv")
 
   def stop(self):
     self.pause()
@@ -1574,6 +1580,7 @@ class rozofs_class:
     if dir == "storage_list_rebuilder" : return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)    
     if dir == "export_slave": return "%s/build/src/%s/%s"%(os.getcwd(),"exportd","exportd")
     if dir == "rozo_rebalance" : return "%s/build/src/%s/%s"%(os.getcwd(),"exportd",dir)    
+    if dir == "diag" : return "%s/build/src/rozodiag/rozo_diag_srv"%(os.getcwd())    
     return "%s/build/src/%s/%s"%(os.getcwd(),dir,dir)
 
   def do_monitor_cfg (self): 
@@ -1603,7 +1610,9 @@ class rozofs_class:
             if nocore == True:
               nocore = False
               console("Some core files exist:")
-            if os.path.getmtime(name) < os.path.getmtime(exe):
+            if not os.path.exists(exe):
+	      console("  (???) %s/%s"%(d,f)) 
+            elif os.path.getmtime(name) < os.path.getmtime(exe):
 	      console("  (OLD) %s/%s"%(d,f))
 	    else:
 	      console("  (NEW) %s/%s"%(d,f)) 
@@ -2047,8 +2056,7 @@ def test_parse(command, argv):
 	     s.clear_device(argv[5],h)
 	   except:
 	     console("unexpected site number %s"%(argv[6]))
-	     sys.exit(-1) 
-	     	 
+	     sys.exit(-1)  	 
        if argv[4] == "rebuild":
          s.rebuild(argv)         
        if argv[4] == "info"          : s.info()

@@ -23,6 +23,8 @@
 #include <netdb.h>
 #include <stdio.h>
 
+#define ROZOFS_DIAGNOSTIC_SRV_PORT   50000
+
 /*
 ** List of RozoFS service ports
 **
@@ -47,7 +49,8 @@ typedef enum rozofs_service_port_range_e {
   ROZOFS_SERVICE_PORT_STSPARE_DIAG,
   ROZOFS_SERVICE_PORT_EXPORT_RCMD,
   ROZOFS_SERVICE_PORT_EXPORT_RCMD_DIAG,
-
+  ROZOFS_SERVICE_PORT_ROZODIAG_SRV,
+  
   ROZOFS_SERVICE_PORT_MAX
   
 } ROZOFS_SERVICE_PORT_RANGE_E;
