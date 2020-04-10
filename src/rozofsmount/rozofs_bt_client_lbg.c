@@ -40,6 +40,9 @@
 #include <rozofs/core/rozofs_host_list.h>
 #include <rozofs/core/rozofs_ip_utilities.h>
 #include <rozofs/rpc/expbt_protocol.h>
+#include "rozofs_bt_inode.h"
+#include "rozofs_bt_trk_reader.h"
+
 /*
 **____________________________________________________
 */
@@ -107,7 +110,6 @@ int rozofs_bt_export_poll_tx(af_unix_ctx_generic_t  *sock_p,
       ** start_idx is the index within the load balancing
       */
       sock_idx_in_lbg = start_idx;
-      //info("JPM poll lbg %d %s entry %d",lbg_id,lbg_p->name,sock_idx_in_lbg);
       
     }
     
@@ -205,7 +207,7 @@ void rozofs_bt_export_lbg_cnx_polling(af_unix_ctx_generic_t  *sock_p)
    {
       return ; 
    }
-   info("FDL xmit buffer %p",xmit_buf);
+   FDL_INFO("FDL xmit buffer %p",xmit_buf);
    ret =  rozofs_bt_export_poll_tx(sock_p,
                                         xmit_buf,
                                         timeout,   /** TMO in secs */
@@ -252,8 +254,6 @@ void rozofs_bt_export_poll_cbk(void *this,void *param)
    rozofs_tx_read_opaque_data(this,1,&lock);  
    rozofs_tx_read_opaque_data(this,2,&lbg_id);  
    rozofs_tx_read_opaque_data(this,3,&sock_idx_in_lbg);
-
-   //info("JPM poll_cbk lbg %d entry %d",lbg_id,sock_idx_in_lbg);
    
    /*
    ** Read active entry of this LBG
@@ -407,9 +407,21 @@ static af_unix_socket_conf_t  af_inet_export_bt_conf =
   NULL,  //    *xmitPool; /* user pool reference or -1 */
   NULL   //    *recvPool; /* user pool reference or -1 */
 };
-
-
-
+/*
+**________________________________________________________________________________________________________
+*/
+/**
+   Init of a load balancing group
+   
+   For the addressing only the port is provided. The IP@ are retrieved thanks rozofs_host_list_get_host()
+   
+   @param module_p: pointer to the socket controller context
+   @param port_num: TCP port of the service
+   @param supervision_callback: supervision callback
+   
+   @retval <> 0: reference of the load balancing group
+   @retval < 0 error, see errno for details
+*/
 int rozofs_bt_lbg_initialize(void *module_p,uint32_t port_num,af_stream_poll_CBK_t supervision_callback) {
     int status = -1;
     struct sockaddr_in server;
@@ -430,6 +442,10 @@ int rozofs_bt_lbg_initialize(void *module_p,uint32_t port_num,af_stream_poll_CBK
     }
     memcpy(conf_p,&af_inet_export_bt_conf,sizeof(af_inet_export_bt_conf));
     conf_p->socketCtrl_p = module_p;
+    /*
+    ** set the max receive buffer size
+    */
+    conf_p->bufSize = ROZOFS_BT_TRK_CLI_LARGE_RECV_SIZE;
 
     lbg_size = 0;
     for (export_index=0; export_index < ROZOFS_HOST_LIST_MAX_HOST; export_index++) { 
@@ -509,7 +525,7 @@ int rozofs_bt_lbg_initialize(void *module_p,uint32_t port_num,af_stream_poll_CBK
       ** the timer is started only to address the case of a dynamic port
       */
       status = 0;
-      return status;    
+      return export_lbg_id;    
     }
     severe("Cannot create Load Balancing Group for Exportd");
 
@@ -543,9 +559,5 @@ int rozofs_bt_create_client_lbg(void *module_p)
   /*
   ** create the load balancing group
   */
-  if (rozofs_bt_lbg_initialize(module_p,io_port, (af_stream_poll_CBK_t) rozofs_bt_export_lbg_cnx_polling) != 0)
-  {
-    return -1;
-  }
-  return 0;
+ return rozofs_bt_lbg_initialize(module_p,io_port, (af_stream_poll_CBK_t) rozofs_bt_export_lbg_cnx_polling);
 }                

@@ -42,7 +42,7 @@
 DECLARE_PROFILING(mpp_profiler_t);
 
 int rozofs_bt_endio_cbk(rozofs_bt_ioctx_t *p,int cmd_idx,void *buffer,int size,int errcode);
-int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p);
+int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p,int *wait_for_trk_file);
 
 #define ROZOFS_MAX_QUEUE_DEPTH 8
 
@@ -401,7 +401,6 @@ out:
     */
     if (bt_io_cmd_p->multiple_errno != 0)
     {
-//       info("FDL !!!!! ERRNO ASSERTED!!!! ");
        rozofs_tx_set_errno(rozofs_tx_ctx_p,bt_io_cmd_p->multiple_errno);
        if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf); 
        (bt_io_cmd_p->saved_cbk_of_tx_multiple)(this,param);    
@@ -422,7 +421,6 @@ out:
 	int data_len = 0;
 	uint32_t alignment= 0x53535353;;
 	
-//        info("FDL !!!!! ENOENT ");
 	header_len_p = (uint32_t*)ruc_buf_getPayload(recv_buf); 
 	pbuf = (uint8_t*) (header_len_p+1);            
 	len = (int)ruc_buf_getMaxPayloadLen(recv_buf);
@@ -448,7 +446,6 @@ out:
 	ruc_buf_setPayloadLen(recv_buf,total_len);    
     }
     rozofs_tx_put_recvBuf(this,recv_buf);
-//    info("FDL RECEIVED LENGTH %u",share_rd_p->cmd[0].received_len);
     return (bt_io_cmd_p->saved_cbk_of_tx_multiple)(this,param);    
 
 error:
@@ -469,7 +466,6 @@ error:
       /*
       ** put pbuf at the beginning of the array to reset
       */
-//      info("FDL cmd %d buf_off %u len %u",cmd_idx,share_rd_p->cmd[cmd_idx].offset_in_buffer,requested_length);
       pbuf += share_rd_p->cmd[cmd_idx].offset_in_buffer;  
       memset(pbuf,0,requested_length);
       share_rd_p->cmd[0].received_len += requested_length;
@@ -507,7 +503,7 @@ void rozofs_bt_read_cbk(void *this,void *param)
    uint64_t off;
    void *shared_buf_ref;   
    int status;
-   uint8_t  *payload;
+   uint8_t  *payload = NULL;
    void     *recv_buf = NULL;   
    XDR       xdrs;    
    int      bufsize;
@@ -520,6 +516,7 @@ void rozofs_bt_read_cbk(void *this,void *param)
    int update_pending_buffer_todo = 1;  
    rozofs_bt_io_working_ctx_t *bt_io_cmd_p;
    uint64_t next_read_from;
+   int received_len = 0;
        
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    
@@ -605,7 +602,7 @@ void rozofs_bt_read_cbk(void *this,void *param)
     ** is not in the rpc buffer. It is detected by th epresence of the 0x53535353
     ** pattern in the alignment field of the rpc buffer
     */
-    int received_len = ret.storcli_read_ret_no_data_t_u.len.len;
+    received_len = ret.storcli_read_ret_no_data_t_u.len.len;
     uint32_t alignment = (uint32_t) ret.storcli_read_ret_no_data_t_u.len.alignment;
     xdr_free((xdrproc_t) decode_proc, (char *) &ret); 
 
@@ -1832,9 +1829,8 @@ int rozofs_bt_send_read(rozofs_bt_ioctx_t *p,int idx,void *io_buf_p)
       entry_p->inode_p = rozofs_bt_lookup_inode_internal(cmd_p->inode);
       if (entry_p->inode_p == NULL)
       {
-        errno = ENOENT;
 	return -1;
-     }   
+      }   
    }
    if (entry_p->next_off >= cmd_p->offset+cmd_p->length) return size;
    size = entry_p->next_off - cmd_p->offset;
@@ -1948,7 +1944,7 @@ int rozofs_bt_endio_cbk(rozofs_bt_ioctx_t *p,int cmd_idx,void *buffer,int size,i
    /*
    ** Attempt to submit new requests
    */
-   rozofs_bt_iosubmit_internal(p);
+   rozofs_bt_iosubmit_internal(p,NULL);
 //   info("--> nb_cmd %d\n",nb_cmd);
    return 0;
 
@@ -1991,7 +1987,7 @@ done:
    The number of buffer submitted depends on a configured queue depth for one IO batch and the number of available buffer
    
 */
-int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p)
+int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p,int *wait_for_trk_file)
 {
    void *io_buf_p= NULL;
    int cur_cmd_idx;
@@ -2000,12 +1996,15 @@ int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p)
    int size;
    int global_pending_request = 0;
    int done = 0;
-   int alldone;
+   int alldone=1;
    int i;
+   int ret;
    
    cur_cmd_idx = p->cur_cmd_idx;
    hdr_p = p->io_batch_p;
    cmd_p = (rozo_io_cmd_t*)(hdr_p+1);
+   
+   if (wait_for_trk_file != NULL) *wait_for_trk_file =0;
    
    while (!done)
    {
@@ -2034,6 +2033,16 @@ int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p)
 
        if (size < 0)
        {
+          if (errno == EAGAIN)
+	  {
+	     ret = rozofs_bt_trigger_read_trk_file_for_io_from_main_thread(cmd_p[cur_cmd_idx].inode,p);
+	     if (ret == 0)
+	     {
+	        if (wait_for_trk_file != NULL) *wait_for_trk_file =1;
+	        done = 1;
+	        break;
+	     }
+	  }
 	  p->io_entry[cur_cmd_idx].status = -1;
 	  p->io_entry[cur_cmd_idx].errcode = errno;
        }
@@ -2070,8 +2079,6 @@ int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p)
 
 }
 
-
-
 /**
 **_______________________________________________________________________________________
 */
@@ -2081,10 +2088,11 @@ int rozofs_bt_iosubmit_internal(rozofs_bt_ioctx_t *p)
   
   @param recv_buf: pointer to the buffer that contains the command
   @param socket_id: file descriptor used for sending back the response
+  @param ctx_p: io context. It might be NULL, so we have to allocated one (when it is not NULL it comes from the file tracking read callback)
   
   @retval none
 */
-void rozofs_bt_process_io_read(void *recv_buf,int socket_id)
+void rozofs_bt_process_io_read(void *recv_buf,int socket_id,void *ctx_p)
 {
    rozo_batch_hdr_t *hdr_p;
    rozo_io_cmd_t *cmd_p;
@@ -2093,18 +2101,30 @@ void rozofs_bt_process_io_read(void *recv_buf,int socket_id)
    rozofs_bt_rsp_buf response;
    rozofs_bt_ioctx_t *bt_ioctx_p = NULL;
    int pending_requests;
+   int wait_for_trk_file;
 
-   
-   bt_ioctx_p = rozofs_bt_ioctx_alloc(recv_buf,socket_id);
-   if (bt_ioctx_p == NULL)
+   if (ctx_p == NULL)
+   {   
+     bt_ioctx_p = rozofs_bt_ioctx_alloc(recv_buf,socket_id);
+     if (bt_ioctx_p == NULL)
+     {
+	errno = ENOMEM;
+	goto error;
+     }
+   }
+   else
    {
-      errno = ENOMEM;
-      goto error;
+     bt_ioctx_p = (rozofs_bt_ioctx_t*)ctx_p;
    }
    /*
    ** submit the IO
    */
-  pending_requests = rozofs_bt_iosubmit_internal(bt_ioctx_p);
+  pending_requests = rozofs_bt_iosubmit_internal(bt_ioctx_p,&wait_for_trk_file);
+  /*
+  ** Check if we need to wait for tracking file read
+  */
+  if (wait_for_trk_file) return;
+  
   if (pending_requests == 0)
   {
    hdr_p = (rozo_batch_hdr_t*) ruc_buf_getPayload(recv_buf); 
@@ -2127,6 +2147,10 @@ void rozofs_bt_process_io_read(void *recv_buf,int socket_id)
    response.hdr.msg_sz = sizeof(rozo_batch_hdr_t)-sizeof(uint32_t)+hdr_p->nb_commands*sizeof(rozo_io_res_t);
    errno = 0;
    ret = send(socket_id,&response,response.hdr.msg_sz+sizeof(uint32_t),0);
+   if (ret < 0)
+   {
+     severe("error on socket send (%d) : %s",socket_id,strerror(errno));
+   }
    rozofs_bt_free_receive_buf(bt_ioctx_p->io_ruc_buffer);
    /*
    ** release the global io context
@@ -2139,7 +2163,6 @@ error:
    hdr_p = (rozo_batch_hdr_t*) ruc_buf_getPayload(recv_buf); 
    cmd_p = (rozo_io_cmd_t*)(hdr_p+1);
    memcpy(&response.hdr,hdr_p,sizeof(rozo_batch_hdr_t));
-   info("Nb command %d\n",hdr_p->nb_commands);
    for (i = 0; i <hdr_p->nb_commands; i++,cmd_p++)
    {
         response.res[i].data = cmd_p->data;
@@ -2149,13 +2172,26 @@ error:
    response.hdr.msg_sz = sizeof(rozo_batch_hdr_t)-sizeof(uint32_t)+hdr_p->nb_commands*sizeof(rozo_io_res_t);
    errno = 0;
    ret = send(socket_id,&response,response.hdr.msg_sz+sizeof(uint32_t),0);
-   info("message send socket : %d %d: %s\n",socket_id,ret,strerror(errno));
+   if (ret < 0)
+   {
+     severe("error on socket send (%d) : %s",socket_id,strerror(errno));
+   }
    rozofs_bt_free_receive_buf(recv_buf);
    return;
-   
-
- 
 }   
 
+
+/**
+**_______________________________________________________________________________________
+*/
+
+void rozofs_bt_iosubmit_tracking_file_read_cbk(rozofs_bt_thread_msg_t *msg_p)
+{
+  rozofs_bt_ioctx_t *bt_ioctx_p;
+  
+  bt_ioctx_p = (rozofs_bt_ioctx_t*) msg_p->work_p;
+  
+  return rozofs_bt_process_io_read(bt_ioctx_p->io_ruc_buffer,(int)bt_ioctx_p->socket,bt_ioctx_p);
+}
 
 

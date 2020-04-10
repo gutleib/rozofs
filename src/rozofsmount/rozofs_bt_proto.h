@@ -26,6 +26,7 @@
 #include <sys/un.h>             
 #include <errno.h>  
 #include "rozofs_bt_api.h"
+#include "rozofs_bt_proto.h"
 #include <rozofs/core/rozofs_queue.h>
 #include <rozofs/rozofs.h>
 #include <rozofs/common/mattr.h>
@@ -135,6 +136,7 @@ typedef struct _rozofs_bt_msg_th_t
 {
    uint32_t opcode; /**< opcode */
    int  status;    /**< status of the operation */
+   int  errcode;   /**< error code when status is negative */
    void *work_p;  /**< pointer to a working context */
    void *cmd;     /**< pointer to the ruc buffer that contains the command */
 } rozofs_bt_thread_msg_t;
@@ -176,7 +178,9 @@ typedef struct _rozofs_bt_thread_ctx_t
   int                          thread_idx;
   int                          sendSocket;
   void                         *queue_req;
-  void                         *queue_rsp;  
+  void                         *queue_rsp; 
+  void                         *private;   /**< private data of a thread */ 
+  void                         *thread_private; /**< private data of a thread */
 //  rozofs_disk_thread_stat_t    stat;
 } rozofs_bt_thread_ctx_t;
 
@@ -336,4 +340,6 @@ static inline uint8_t *rozofs_bt_map_to_local(rozofs_memreg_t  *mem_p,void *clie
    return (local_addr+offset);      
 
 }
+
+void rozofs_bt_iosubmit_tracking_file_read_cbk(rozofs_bt_thread_msg_t *msg_p);
 #endif

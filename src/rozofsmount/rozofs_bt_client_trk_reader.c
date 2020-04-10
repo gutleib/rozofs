@@ -51,15 +51,8 @@
 #include "rozofs_bt_api.h"
 #include "rozofs_bt_proto.h"
 #include "rozofs_bt_inode.h"
+#include "rozofs_bt_trk_reader.h"
 
-#define ROZOFS_BT_TRK_CLI_READER__MAX_SOCK 8
-#define ROZOFS_BT_MAX_CLI_READER_THREADS 2
-#define ROZOFS_BT_TRK_CLI_READER_MAX_TRX 32
-#define ROZOFS_BT_TRK_CLI_SMALL_XMIT_SIZE 1024
-#define ROZOFS_BT_TRK_CLI_LARGE_XMIT_SIZE 1024
-
-#define ROZOFS_BT_TRK_CLI_LARGE_RECV_SIZE ((1024*1024)+8192)
-#define ROZOFS_BT_TRK_CLI_SMALL_RECV_SIZE ((1024)
 
 
 #ifndef P_COUNT
@@ -70,26 +63,26 @@
 #define P_TIC 3
 
 #define START_PROFILING_TH(stats,the_probe)\
-    struct timeval tv;\
     {\
+        struct timeval tv;\
         stats->the_probe[P_COUNT]++;\
         gettimeofday(&tv,(struct timezone *)0);\
         stats->the_probe[P_TIC] = MICROLONG(tv);\
     }
 
 #define STOP_PROFILING_TH(stats,the_probe)\
+    {\
     struct timeval tv;\
     uint64_t toc;\
-    {\
         gettimeofday(&tv,(struct timezone *)0);\
         toc = MICROLONG(tv);\
         stats->the_probe[P_ELAPSE] += (toc - stats->the_probe[P_TIC]);\
     }
 
 #define STOP_PROFILING_IO_TH(stats,the_probe,the_bytes)\
+    {\
     struct timeval tv;\
     uint64_t toc;\
-    {\
         gettimeofday(&tv,(struct timezone *)0);\
         toc = MICROLONG(tv);\
         stats->the_probe[P_ELAPSE] += (toc - stats->the_probe[P_TIC]);\
@@ -98,8 +91,9 @@
 
 typedef struct  _rozofs_bt_thread_cli_reader_stats_t {
 	uint64_t file_read[4];
-	uint64_t file_check[3];
-	uint64_t poll[3];
+	uint64_t file_check[4];
+	uint64_t load_dentry[4];
+	uint64_t poll[4];
 
 } rozofs_bt_thread_cli_reader_stats_t;
 
@@ -116,6 +110,7 @@ typedef struct _rozofs_bt_thread_cli_reader_ctx_t
   int             af_unix_buffer_count;     /**< number of buffers for receiving requests  */
   int             af_unix_buffer_size;     /**< number of buffers for receiving requests  */
   int             af_unix_fd;
+  int             lbg_id;                 /**< reference of the load balancing to connect with export */
   rozofs_bt_thread_cli_reader_stats_t stats;
   
 } rozofs_bt_thread_cli_reader_ctx_t;
@@ -203,13 +198,15 @@ void show_trkrd_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
       pChar += sprintf(pChar, "   procedure  |     count       |  time(us) | cumulated time(us) |     bytes       |\n");
       pChar += sprintf(pChar, "--------------+-----------------+-----------+--------------------+-----------------+\n");
       SHOW_PROFILER_RD_PROBE(file_check);
+      SHOW_PROFILER_RD_PROBE(load_dentry);
       SHOW_PROFILER_RD_PROBE_BYTE(file_read);
 
       if (argv[1] != NULL)
       {
 	if (strcmp(argv[1],"reset")==0) {
-	 RESET_PROFILER_PROBE(file_check);
-	 RESET_PROFILER_PROBE(file_read);
+	 RESET_PROFILER_PROBE_BYTE(file_check);
+	 RESET_PROFILER_PROBE_BYTE(file_read);
+	 RESET_PROFILER_PROBE(load_dentry);
 
 	  pChar += sprintf(pChar,"Reset Done\n");  
 	  rozofs_cli_rd_uptime = this_time;   
@@ -309,6 +306,721 @@ uint32_t af_unix_bt_reader_rcvReadysock(void * thread_p,int socketId)
 }
 
 
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Call back function call upon a success rpc, timeout or any other rpc failure
+*
+ @param this : pointer to the transaction context
+ @param param: pointer to the initial message receivde on the AF_UNIX socket
+ 
+ @return none
+ */
+
+void rozofs_bt_check_tracking_file_remote_cbk(void *this,void *param) 
+{
+   expbt_msgint_full_t *msg_th_p;
+   int status;
+   void     *recv_buf = NULL;   
+   int      bufsize;
+   uint32_t thread_idx;
+   rozofs_bt_thread_cli_reader_ctx_t* thread_p;
+   expbt_msg_t *rsp_check_p;
+   int i;
+    
+   /*
+   ** set the pointer to the initial message
+   */
+   msg_th_p = (expbt_msgint_full_t*)param;  
+   /*
+   ** Restore opaque data
+   */ 
+   rozofs_tx_read_opaque_data(this,2,&thread_idx);  
+   /*
+   ** get the pointer to the thread context
+   */
+   if (ROZOFS_BT_MAX_CLI_READER_THREADS <= thread_idx)
+   {
+      fatal("Thread index is out of range:%d max is %u",thread_idx,ROZOFS_BT_MAX_CLI_READER_THREADS);
+   } 
+   thread_p= &rozofs_bt_trk_cli_reader_thread_th[thread_idx];    
+   /*   
+   ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
+   */
+   status = rozofs_tx_get_status_th(this);
+   if (status < 0)
+   {
+      /*
+      ** something wrong happened
+      */
+      errno = rozofs_tx_get_errno_th(this);  
+      goto error; 
+   }
+   /*
+   ** get the pointer to the receive buffer payload
+   */
+   recv_buf = rozofs_tx_get_recvBuf_th(this);
+   if (recv_buf == NULL)
+   {
+      /*
+      ** something wrong happened
+      */
+      errno = EFAULT;  
+      goto error;         
+   }
+
+
+   rsp_check_p  = (expbt_msg_t*) ruc_buf_getPayload(recv_buf);
+   /*
+   ** Get the length of the payload
+   */
+   bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+   bufsize -= sizeof(uint32_t); /* skip length*/
+   if (bufsize != rsp_check_p->hdr.len)
+   {
+    TX_STATS_TH(ROZOFS_TX_DECODING_ERROR);
+    errno = EPROTO;
+    goto error;
+   }
+   /*
+   ** Get the global status 
+   */
+   if (rsp_check_p->check_rsp.global_rsp.status < 0)
+   {
+      errno = rsp_check_p->check_rsp.global_rsp.errcode;
+      goto error;
+   }
+   msg_th_p->rsp.check_rsp.global_rsp.status = 0;
+   msg_th_p->rsp.check_rsp.global_rsp.errcode = 0;
+   /*
+   ** ok now goto to each command and copy the status
+   */
+   msg_th_p->rsp.check_rsp.rsp.nb_responses = rsp_check_p->check_rsp.rsp.nb_responses;
+   for (i = 0; i < msg_th_p->req.check_rq.cmd.nb_commands;i++)
+   {
+     msg_th_p->rsp.check_rsp.entry[i].file_id = rsp_check_p->check_rsp.entry[i].file_id;
+     msg_th_p->rsp.check_rsp.entry[i].usr_id  = rsp_check_p->check_rsp.entry[i].usr_id;
+     msg_th_p->rsp.check_rsp.entry[i].type    = rsp_check_p->check_rsp.entry[i].type;
+     msg_th_p->rsp.check_rsp.entry[i].status  = rsp_check_p->check_rsp.entry[i].status;
+     msg_th_p->rsp.check_rsp.entry[i].errcode = rsp_check_p->check_rsp.entry[i].errcode;
+ 
+   }
+   STOP_PROFILING_IO_TH((&thread_p->stats),file_check,rsp_check_p->check_rsp.rsp.nb_responses); 
+   
+   goto out;
+error:
+   STOP_PROFILING_TH((&thread_p->stats),file_check);
+   msg_th_p->rsp.check_rsp.global_rsp.status = -1;
+   msg_th_p->rsp.check_rsp.global_rsp.errcode = errno;
+   for (i = 0; i < msg_th_p->req.check_rq.cmd.nb_commands;i++)
+   {
+     msg_th_p->rsp.check_rsp.entry[i].file_id  = msg_th_p->req.check_rq.entry[i].file_id;
+     msg_th_p->rsp.check_rsp.entry[i].usr_id   = msg_th_p->req.check_rq.entry[i].usr_id;
+     msg_th_p->rsp.check_rsp.entry[i].type     = msg_th_p->req.check_rq.entry[i].type;
+     msg_th_p->rsp.check_rsp.entry[i].status   = -1;
+     msg_th_p->rsp.check_rsp.entry[i].errcode  = errno; 
+   }
+
+out:
+  /*
+  ** send back the response
+  */
+   rozofs_queue_put_prio((rozofs_queue_prio_t*)msg_th_p->hdr.rozofs_queue,msg_th_p,msg_th_p->hdr.queue_prio);	
+   /*
+   ** release the transaction context and the fuse context
+   */
+   if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);    
+   rozofs_tx_free_from_ptr_th(this);
+   return;
+}
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Call back function call upon a success rpc, timeout or any other rpc failure
+*
+ @param this : pointer to the transaction context
+ @param param: pointer to the initial message receivde on the AF_UNIX socket
+ 
+ @return none
+ */
+
+void rozofs_bt_load_dirent_cbk(void *this,void *param) 
+{
+   expbt_msgint_full_t *msg_th_p;
+   int status;
+   void     *recv_buf = NULL;   
+   int      bufsize;
+   uint32_t thread_idx;
+   rozofs_bt_thread_cli_reader_ctx_t* thread_p;
+   expbt_dirent_load_rsp_t *rsp_rd_p;
+   expbt_msg_hdr_t *rsp_hdr_p;
+    
+   /*
+   ** set the pointer to the initial message
+   */
+   msg_th_p = (expbt_msgint_full_t*)param;  
+   /*
+   ** Restore opaque data
+   */ 
+   rozofs_tx_read_opaque_data(this,2,&thread_idx);  
+   /*
+   ** get the pointer to the thread context
+   */
+   if (ROZOFS_BT_MAX_CLI_READER_THREADS <= thread_idx)
+   {
+      fatal("Thread index is out of range:%d max is %u",thread_idx,ROZOFS_BT_MAX_CLI_READER_THREADS);
+   } 
+   thread_p= &rozofs_bt_trk_cli_reader_thread_th[thread_idx];    
+   /*   
+   ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
+   */
+   status = rozofs_tx_get_status_th(this);
+   if (status < 0)
+   {
+      /*
+      ** something wrong happened
+      */
+      errno = rozofs_tx_get_errno_th(this);  
+      goto error; 
+   }
+   /*
+   ** get the pointer to the receive buffer payload
+   */
+   recv_buf = rozofs_tx_get_recvBuf_th(this);
+   if (recv_buf == NULL)
+   {
+      /*
+      ** something wrong happened
+      */
+      errno = EFAULT;  
+      goto error;         
+   }
+
+
+   rsp_hdr_p  = (expbt_msg_hdr_t*) ruc_buf_getPayload(recv_buf);
+   /*
+   ** Get the length of the payload
+   */
+   bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+   bufsize -= sizeof(uint32_t); /* skip length*/
+   if (bufsize != rsp_hdr_p->len)
+   {
+    TX_STATS_TH(ROZOFS_TX_DECODING_ERROR);
+    errno = EPROTO;
+    goto error;
+   }
+   /*
+   ** go to the status of the read
+   */
+   rsp_rd_p = (expbt_dirent_load_rsp_t*)(rsp_hdr_p+1);
+   if (rsp_rd_p->status < 0)
+   {
+      errno = rsp_rd_p->errcode;
+      goto error;
+   }
+   /*
+   ** set the timestamp and the cache_time
+   */
+   msg_th_p->rsp.dirent_rsp.rsp.status = 0;
+   msg_th_p->rsp.dirent_rsp.rsp.errcode = 0; 
+   STOP_PROFILING_TH((&thread_p->stats),load_dentry); 
+   
+   goto out;
+error:
+   STOP_PROFILING_TH((&thread_p->stats),load_dentry);
+   msg_th_p->rsp.dirent_rsp.rsp.status = -1;
+   msg_th_p->rsp.dirent_rsp.rsp.errcode = errno;   
+
+out:
+  /*
+  ** send back the response
+  */
+   rozofs_queue_put_prio((rozofs_queue_prio_t*)msg_th_p->hdr.rozofs_queue,msg_th_p,msg_th_p->hdr.queue_prio);	
+   /*
+   ** release the transaction context and the fuse context
+   */
+   if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);    
+   rozofs_tx_free_from_ptr_th(this);
+   return;
+}
+
+/*
+**_________________________________________________________________________________________________
+*/
+/**
+   send a request to load the dirent file on the local client.
+   The export uses rsync to do so.
+   
+   @param thread_p: pointer to the thread context
+   @param msg_th_p: pointer to the message receive on the internal AF_UNIX socket
+   
+   @retval none
+*/
+void rozofs_bt_load_dirent(rozofs_bt_thread_cli_reader_ctx_t* thread_p, expbt_msgint_full_t *msg_th_p)
+{
+  void *xmit_buf = NULL;
+  int ret;
+  expbt_msg_t *msg_p;
+  rozofs_tx_ctx_t   *rozofs_tx_ctx_p = NULL;  
+  uint32_t xid;
+
+  START_PROFILING_TH((&thread_p->stats),load_dentry);
+  
+   xmit_buf = rozofs_tx_get_small_xmit_buf_th();
+   if (xmit_buf == NULL)
+   {
+      errno = ENOMEM;
+      goto error ; 
+   }
+   /*
+   ** allocate a transaction context
+   */
+   rozofs_tx_ctx_p = rozofs_tx_alloc_th();  
+   if (rozofs_tx_ctx_p == NULL) 
+   {
+      /*
+      ** out of context
+      ** --> put a pending list for the future to avoid repluing ENOMEM
+      */
+      TX_STATS_TH(ROZOFS_TX_NO_CTX_ERROR);
+      errno = ENOMEM;
+      goto error;
+   } 
+    /*
+    ** get the pointer to the payload of the buffer
+    */
+    msg_p  = (expbt_msg_t*) ruc_buf_getPayload(xmit_buf);
+    xid = rozofs_tx_alloc_xid_th(rozofs_tx_ctx_p);
+    msg_p->hdr.xid = htonl(xid);
+    msg_p->hdr.opcode = EXP_BT_DIRENT_LOAD;
+    msg_p->hdr.dir = 0;
+    msg_p->hdr.len = sizeof(expbt_msg_hdr_t)-sizeof(uint32_t);
+
+    msg_p->dirent_rq.req.eid       = msg_th_p->req.dirent_rq.req.eid;
+    msg_p->dirent_rq.req.inode     = msg_th_p->req.dirent_rq.req.inode;
+    msg_p->dirent_rq.req.ipaddr    = msg_th_p->req.dirent_rq.req.ipaddr;
+    strcpy(msg_p->dirent_rq.req.client_export_root_path,msg_th_p->req.dirent_rq.req.client_export_root_path);
+
+    msg_p->hdr.len = sizeof(expbt_msg_hdr_t)+ sizeof(expbt_dirent_load_req_t) -sizeof(uint32_t);    
+    /*
+    ** set the payload length in the xmit buffer
+    */
+    int total_len = msg_p->hdr.len+sizeof(uint32_t);
+    ruc_buf_setPayloadLen(xmit_buf,total_len);
+    /*
+    ** store the receive call back and its associated parameter
+    */
+    rozofs_tx_ctx_p->recv_cbk   = rozofs_bt_load_dirent_cbk;
+    rozofs_tx_ctx_p->user_param = msg_th_p;    
+    rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,1,1);  /* lock */
+    rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,2,thread_p->thread_idx);  /* index of the thread context */  
+    
+    ret = north_lbg_send(thread_p->lbg_id,xmit_buf);
+    if (ret < 0)
+    {
+       TX_STATS_TH(ROZOFS_TX_SEND_ERROR);
+       /*
+       ** attempt to get the next available load balancing group
+       */
+       errno = EFAULT;
+      goto error;  
+    }
+    TX_STATS(ROZOFS_TX_SEND);
+
+    /*
+    ** OK, so now finish by starting the guard timer
+    */
+    rozofs_tx_start_timer_th(rozofs_tx_ctx_p, ROZOFS_TMR_GET(TMR_EXPORT_PROGRAM));
+    return;
+    
+  error:
+
+    msg_th_p->rsp.dirent_rsp.rsp.status = -1;
+    msg_th_p->rsp.dirent_rsp.rsp.errcode = errno;       
+    /*
+    ** send back the response
+    */
+     rozofs_queue_put_prio((rozofs_queue_prio_t*)msg_th_p->hdr.rozofs_queue,msg_th_p,msg_th_p->hdr.queue_prio);	
+     STOP_PROFILING_TH((&thread_p->stats),load_dentry);
+
+    if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);   
+}     
+
+
+
+/*
+**_________________________________________________________________________________________________
+*/
+/**
+   send a read request of a tracking towards the exportd
+   
+   @param thread_p: pointer to the thread context
+   @param msg_th_p: pointer to the message receive on the internal AF_UNIX socket
+   
+   @retval none
+*/
+void rozofs_bt_check_tracking_file_remote(rozofs_bt_thread_cli_reader_ctx_t* thread_p, expbt_msgint_full_t *msg_th_p)
+{
+  void *xmit_buf = NULL;
+  int ret;
+  expbt_msg_t *msg_p;
+  rozofs_tx_ctx_t   *rozofs_tx_ctx_p = NULL;  
+  uint32_t xid;
+  int i;
+
+  START_PROFILING_TH((&thread_p->stats),file_check);
+  
+   xmit_buf = rozofs_tx_get_small_xmit_buf_th();
+   if (xmit_buf == NULL)
+   {
+      errno = ENOMEM;
+      goto error ; 
+   }
+   /*
+   ** allocate a transaction context
+   */
+   rozofs_tx_ctx_p = rozofs_tx_alloc_th();  
+   if (rozofs_tx_ctx_p == NULL) 
+   {
+      /*
+      ** out of context
+      ** --> put a pending list for the future to avoid repluing ENOMEM
+      */
+      TX_STATS_TH(ROZOFS_TX_NO_CTX_ERROR);
+      errno = ENOMEM;
+      goto error;
+   } 
+    /*
+    ** get the pointer to the payload of the buffer
+    */
+    msg_p  = (expbt_msg_t*) ruc_buf_getPayload(xmit_buf);
+    xid = rozofs_tx_alloc_xid_th(rozofs_tx_ctx_p);
+    msg_p->hdr.xid = htonl(xid);
+    msg_p->hdr.opcode = EXP_BT_TRK_CHECK;
+    msg_p->hdr.dir = 0;
+    msg_p->hdr.len = sizeof(expbt_msg_hdr_t)-sizeof(uint32_t);
+
+    msg_p->check_rq.cmd.nb_commands     = msg_th_p->req.check_rq.cmd.nb_commands;
+    for (i = 0; i < msg_p->check_rq.cmd.nb_commands;i++)
+    {
+      msg_p->check_rq.entry[i].eid     = msg_th_p->req.check_rq.entry[i].eid;
+      msg_p->check_rq.entry[i].type    = msg_th_p->req.check_rq.entry[i].type;
+      msg_p->check_rq.entry[i].usr_id  = msg_th_p->req.check_rq.entry[i].usr_id;
+      msg_p->check_rq.entry[i].file_id = msg_th_p->req.check_rq.entry[i].file_id;
+      msg_p->check_rq.entry[i].mtime = msg_th_p->req.check_rq.entry[i].mtime;
+      msg_p->check_rq.entry[i].change_count = msg_th_p->req.check_rq.entry[i].change_count;
+
+        FDL_INFO("FDL -----> type %d  mtime in message: %llu change_count %d",(int)  msg_p->check_rq.entry[i].type,(long long unsigned int)msg_p->check_rq.entry[i].mtime,(int)msg_p->check_rq.entry[i].change_count);
+    }
+
+    msg_p->hdr.len = sizeof(expbt_msg_hdr_t)+ +sizeof(expbt_trk_check_req_t)+ msg_p->check_rq.cmd.nb_commands*sizeof(expbt_trk_check_req_entry_t) -sizeof(uint32_t);    
+    /*
+    ** set the payload length in the xmit buffer
+    */
+    int total_len = msg_p->hdr.len+sizeof(uint32_t);
+    
+        FDL_INFO("FDL -----> tmessage len = %d",total_len);
+    ruc_buf_setPayloadLen(xmit_buf,total_len);
+    /*
+    ** store the receive call back and its associated parameter
+    */
+    rozofs_tx_ctx_p->recv_cbk   = rozofs_bt_check_tracking_file_remote_cbk;
+    rozofs_tx_ctx_p->user_param = msg_th_p;    
+    rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,1,msg_th_p->req.check_rq.cmd.nb_commands);  /* number of commands */
+    rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,2,thread_p->thread_idx);  /* index of the thread context */  
+    
+    ret = north_lbg_send(thread_p->lbg_id,xmit_buf);
+    if (ret < 0)
+    {
+       TX_STATS_TH(ROZOFS_TX_SEND_ERROR);
+       /*
+       ** attempt to get the next available load balancing group
+       */
+       errno = EFAULT;
+      goto error;  
+    }
+    TX_STATS(ROZOFS_TX_SEND);
+
+    /*
+    ** OK, so now finish by starting the guard timer
+    */
+    rozofs_tx_start_timer_th(rozofs_tx_ctx_p, ROZOFS_TMR_GET(TMR_EXPORT_PROGRAM));
+    return;
+    
+  error:
+    msg_th_p->rsp.check_rsp.global_rsp.status = -1;
+    msg_th_p->rsp.check_rsp.global_rsp.errcode = errno;
+    for (i = 0; i < msg_th_p->req.check_rq.cmd.nb_commands;i++)
+    {
+      msg_th_p->rsp.check_rsp.entry[i].file_id  = msg_th_p->req.check_rq.entry[i].file_id;
+      msg_th_p->rsp.check_rsp.entry[i].usr_id   = msg_th_p->req.check_rq.entry[i].usr_id;
+      msg_th_p->rsp.check_rsp.entry[i].type     = msg_th_p->req.check_rq.entry[i].type;
+      msg_th_p->rsp.check_rsp.entry[i].status   = -1;
+      msg_th_p->rsp.check_rsp.entry[i].errcode  = errno; 
+    }
+    /*
+    ** send back the response
+    */
+     rozofs_queue_put_prio((rozofs_queue_prio_t*)msg_th_p->hdr.rozofs_queue,msg_th_p,msg_th_p->hdr.queue_prio);	
+     STOP_PROFILING_TH((&thread_p->stats),file_check);
+
+    if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);   
+}     
+
+
+
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Call back function call upon a success rpc, timeout or any other rpc failure
+*
+ @param this : pointer to the transaction context
+ @param param: pointer to the initial message receivde on the AF_UNIX socket
+ 
+ @return none
+ */
+
+void rozofs_bt_reading_tracking_file_remote_cbk(void *this,void *param) 
+{
+   expbt_msgint_full_t *msg_th_p;
+   int status;
+   void     *recv_buf = NULL;   
+   int      bufsize;
+   uint32_t thread_idx;
+   rozofs_bt_thread_cli_reader_ctx_t* thread_p;
+   expbt_trk_read_rsp_t *rsp_rd_p;
+   expbt_msg_hdr_t *rsp_hdr_p;
+   uint8_t  *data_trk_src_p;
+   uint8_t  *data_trk_dst_p;
+   rozofs_bt_tracking_cache_t *image_p;   
+   int datalen;
+    
+   /*
+   ** set the pointer to the initial message
+   */
+   msg_th_p = (expbt_msgint_full_t*)param;  
+   image_p = msg_th_p->req.read_trk_rq.image_p;
+   data_trk_dst_p = (uint8_t *) (image_p+1);
+   /*
+   ** Restore opaque data
+   */ 
+   rozofs_tx_read_opaque_data(this,2,&thread_idx);  
+   /*
+   ** get the pointer to the thread context
+   */
+   if (ROZOFS_BT_MAX_CLI_READER_THREADS <= thread_idx)
+   {
+      fatal("Thread index is out of range:%d max is %u",thread_idx,ROZOFS_BT_MAX_CLI_READER_THREADS);
+   } 
+   thread_p= &rozofs_bt_trk_cli_reader_thread_th[thread_idx];    
+   /*   
+   ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
+   */
+   status = rozofs_tx_get_status_th(this);
+   if (status < 0)
+   {
+      /*
+      ** something wrong happened
+      */
+      errno = rozofs_tx_get_errno_th(this);  
+      goto error; 
+   }
+   /*
+   ** get the pointer to the receive buffer payload
+   */
+   recv_buf = rozofs_tx_get_recvBuf_th(this);
+   if (recv_buf == NULL)
+   {
+      /*
+      ** something wrong happened
+      */
+      errno = EFAULT;  
+      goto error;         
+   }
+
+
+   rsp_hdr_p  = (expbt_msg_hdr_t*) ruc_buf_getPayload(recv_buf);
+   /*
+   ** Get the length of the payload
+   */
+   bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+   bufsize -= sizeof(uint32_t); /* skip length*/
+   if (bufsize != rsp_hdr_p->len)
+   {
+    TX_STATS_TH(ROZOFS_TX_DECODING_ERROR);
+    errno = EPROTO;
+    goto error;
+   }
+   /*
+   ** go to the status of the read
+   */
+   rsp_rd_p = (expbt_trk_read_rsp_t*)(rsp_hdr_p+1);
+   if (rsp_rd_p->status < 0)
+   {
+      errno = rsp_rd_p->errcode;
+      goto error;
+   }
+   /*
+   ** Get the length of the tracking file and copy the data in the cache
+   */
+   data_trk_src_p = (uint8_t *)(rsp_rd_p+1);
+   datalen = rsp_rd_p->status;
+   memcpy(data_trk_dst_p,data_trk_src_p,datalen);
+   /*
+   ** set the mtime and the change count
+   */
+   image_p->mtime = rsp_rd_p->mtime; 
+   image_p->change_count = rsp_rd_p->change_count; 
+   FDL_INFO("FDL cache mtime %llu change_count %d",(long long unsigned int)image_p->mtime,(int)image_p->change_count);
+   /*
+   ** set the timestamp and the cache_time
+   */
+   image_p->timestamp = rozofs_get_ticker_us();
+   image_p->cache_time = (msg_th_p->req.read_trk_rq.read_trk.type == ROZOFS_REG)?rozofs_tmr_get_attr_us(0):rozofs_tmr_get_attr_us(1);
+   msg_th_p->rsp.read_trk_rsp.rsp.status = 0;
+   msg_th_p->rsp.read_trk_rsp.rsp.errcode = 0; 
+   msg_th_p->rsp.read_trk_rsp.rsp.mtime = rsp_rd_p->mtime;   
+   msg_th_p->rsp.read_trk_rsp.rsp.mtime = rsp_rd_p->change_count;   
+   STOP_PROFILING_IO_TH((&thread_p->stats),file_read,datalen); 
+   
+   goto out;
+error:
+   STOP_PROFILING_TH((&thread_p->stats),file_read);
+   msg_th_p->rsp.read_trk_rsp.rsp.status = -1;
+   msg_th_p->rsp.read_trk_rsp.rsp.errcode = errno;   
+   image_p->errcode = errno;
+   /*
+   ** do not update the timestamp and cache time in case of error
+   */
+//   image_p->timestamp = rozofs_get_ticker_us();
+//   image_p->cache_time = (msg_th_p->req.read_trk_rq.read_trk.type == ROZOFS_REG)?rozofs_tmr_get_attr_us(0):rozofs_tmr_get_attr_us(1));;      
+
+
+out:
+  /*
+  ** send back the response
+  */
+   rozofs_queue_put_prio((rozofs_queue_prio_t*)msg_th_p->hdr.rozofs_queue,msg_th_p,msg_th_p->hdr.queue_prio);	
+   /*
+   ** release the transaction context and the fuse context
+   */
+   if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);    
+   rozofs_tx_free_from_ptr_th(this);
+   return;
+}
+
+/*
+**_________________________________________________________________________________________________
+*/
+/**
+   send a read request of a tracking towards the exportd
+   
+   @param thread_p: pointer to the thread context
+   @param msg_th_p: pointer to the message receive on the internal AF_UNIX socket
+   
+   @retval none
+*/
+void rozofs_bt_reading_tracking_file_remote(rozofs_bt_thread_cli_reader_ctx_t* thread_p, expbt_msgint_full_t *msg_th_p)
+{
+  void *xmit_buf = NULL;
+  int ret;
+  expbt_msg_t *msg_p;
+  rozofs_bt_tracking_cache_t *image_p;     
+  rozofs_tx_ctx_t   *rozofs_tx_ctx_p = NULL;  
+  image_p = msg_th_p->req.read_trk_rq.image_p;
+  uint32_t xid;
+
+  START_PROFILING_TH((&thread_p->stats),file_read);
+  
+   xmit_buf = rozofs_tx_get_small_xmit_buf_th();
+   if (xmit_buf == NULL)
+   {
+      errno = ENOMEM;
+      goto error ; 
+   }
+   /*
+   ** allocate a transaction context
+   */
+   rozofs_tx_ctx_p = rozofs_tx_alloc_th();  
+   if (rozofs_tx_ctx_p == NULL) 
+   {
+      /*
+      ** out of context
+      ** --> put a pending list for the future to avoid repluing ENOMEM
+      */
+      TX_STATS_TH(ROZOFS_TX_NO_CTX_ERROR);
+      errno = ENOMEM;
+      goto error;
+   } 
+    /*
+    ** get the pointer to the payload of the buffer
+    */
+    msg_p  = (expbt_msg_t*) ruc_buf_getPayload(xmit_buf);
+    xid = rozofs_tx_alloc_xid_th(rozofs_tx_ctx_p);
+    msg_p->hdr.xid = htonl(xid);
+    msg_p->hdr.opcode = EXP_BT_TRK_READ;
+    msg_p->hdr.dir = 0;
+    msg_p->hdr.len = sizeof(expbt_msg_hdr_t)-sizeof(uint32_t);
+
+    msg_p->read_trk_rq.read_trk.eid     = msg_th_p->req.read_trk_rq.read_trk.eid;
+    msg_p->read_trk_rq.read_trk.type    = msg_th_p->req.read_trk_rq.read_trk.type;
+    msg_p->read_trk_rq.read_trk.usr_id  = msg_th_p->req.read_trk_rq.read_trk.usr_id;
+    msg_p->read_trk_rq.read_trk.file_id = msg_th_p->req.read_trk_rq.read_trk.file_id;
+
+    msg_p->hdr.len = sizeof(expbt_msg_hdr_t)+ sizeof(expbt_trk_read_req_t) -sizeof(uint32_t);    
+    /*
+    ** set the payload length in the xmit buffer
+    */
+    int total_len = msg_p->hdr.len+sizeof(uint32_t);
+    ruc_buf_setPayloadLen(xmit_buf,total_len);
+    /*
+    ** store the receive call back and its associated parameter
+    */
+    rozofs_tx_ctx_p->recv_cbk   = rozofs_bt_reading_tracking_file_remote_cbk;
+    rozofs_tx_ctx_p->user_param = msg_th_p;    
+    rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,1,1);  /* lock */
+    rozofs_tx_write_opaque_data(rozofs_tx_ctx_p,2,thread_p->thread_idx);  /* index of the thread context */  
+    
+    ret = north_lbg_send(thread_p->lbg_id,xmit_buf);
+    if (ret < 0)
+    {
+       TX_STATS_TH(ROZOFS_TX_SEND_ERROR);
+       /*
+       ** attempt to get the next available load balancing group
+       */
+       errno = EFAULT;
+      goto error;  
+    }
+    TX_STATS(ROZOFS_TX_SEND);
+
+    /*
+    ** OK, so now finish by starting the guard timer
+    */
+    rozofs_tx_start_timer_th(rozofs_tx_ctx_p, ROZOFS_TMR_GET(TMR_EXPORT_PROGRAM));
+    return;
+    
+  error:
+
+    msg_th_p->rsp.read_trk_rsp.rsp.status = -1;
+    msg_th_p->rsp.read_trk_rsp.rsp.errcode = errno;   
+    image_p->errcode = errno;
+    /*
+    ** do not update the timestamp of the tracking cache entry since there was an error
+    */
+//    image_p->timestamp = rozofs_get_ticker_us();
+//    image_p->cache_time = (msg_th_p->req.read_trk_rq.read_trk.type == ROZOFS_REG)?rozofs_tmr_get_attr_us(0):rozofs_tmr_get_attr_us(1));      
+    /*
+    ** send back the response
+    */
+     rozofs_queue_put_prio((rozofs_queue_prio_t*)msg_th_p->hdr.rozofs_queue,msg_th_p,msg_th_p->hdr.queue_prio);	
+     STOP_PROFILING_TH((&thread_p->stats),file_read);
+
+    if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);   
+}     
 
 /*
 **_________________________________________________________________
@@ -324,13 +1036,15 @@ uint32_t af_unix_bt_reader_rcvReadysock(void * thread_p,int socketId)
      @retval 0 on success
      @retval < 0 on error
 */
-int expbt_read_inode_tracking_file(uint32_t eid,uint16_t type,uint16_t usr_id,uint64_t file_id,char *buf_p,uint64_t *mtime)
+int expbt_read_inode_tracking_file(uint32_t eid,uint16_t type,uint16_t usr_id,uint64_t file_id,char *buf_p,uint64_t *mtime,uint32_t *change_count)
 {
 
    int fd;
    char filename[1024];
    struct stat statbuf;
    ssize_t ret;
+   
+   *change_count = 0;
    
    
    while (1)
@@ -391,21 +1105,29 @@ int expbt_read_inode_tracking_file(uint32_t eid,uint16_t type,uint16_t usr_id,ui
 void rozofs_bt_reading_tracking_file_local(rozofs_bt_thread_cli_reader_ctx_t* thread_p, expbt_msgint_full_t *msg_p)
 {
   uint64_t mtime;
+  uint32_t change_count;
   int ret;
+  rozofs_bt_tracking_cache_t *image_p;
+  char *data_p;
+  
+  image_p = msg_p->req.read_trk_rq.image_p;
+  data_p = (char *) (image_p+1);
   
   START_PROFILING_TH((&thread_p->stats),file_read);
   ret = expbt_read_inode_tracking_file(msg_p->req.read_trk_rq.read_trk.eid,
                                        msg_p->req.read_trk_rq.read_trk.type,
 				       msg_p->req.read_trk_rq.read_trk.usr_id,
 				       msg_p->req.read_trk_rq.read_trk.file_id,
-				       msg_p->req.read_trk_rq.image_p,
-				       &mtime);
+				       data_p,
+				       &mtime,
+				       &change_count);
 
    if (ret < 0 )
    {
      STOP_PROFILING_TH((&thread_p->stats),file_read);
      msg_p->rsp.read_trk_rsp.rsp.status = -1;
      msg_p->rsp.read_trk_rsp.rsp.errcode = errno;   
+     image_p->errcode = errno;
      warning("FDL error on tracking file reading %s\n",strerror(errno));
    
    }
@@ -414,15 +1136,19 @@ void rozofs_bt_reading_tracking_file_local(rozofs_bt_thread_cli_reader_ctx_t* th
 
      msg_p->rsp.read_trk_rsp.rsp.status = 0;
      msg_p->rsp.read_trk_rsp.rsp.errcode = 0; 
-     msg_p->rsp.read_trk_rsp.rsp.mtime = mtime;     
+     msg_p->rsp.read_trk_rsp.rsp.mtime = mtime;  
+     image_p->mtime = mtime; 
      STOP_PROFILING_IO_TH((&thread_p->stats),file_read,ret);   
    }
+   image_p->timestamp = rozofs_get_ticker_us();
+   image_p->cache_time = rozofs_tmr_get_attr_us(1);
+   
    rozofs_queue_put_prio((rozofs_queue_prio_t*)msg_p->hdr.rozofs_queue,msg_p,msg_p->hdr.queue_prio);				       
 }
 /*
 **__________________________________________________________________________
 */
-void af_unix_bt_reader_response(rozofs_bt_thread_cli_reader_ctx_t* thread_p,void *msg)
+void af_unix_bt_reader_resquest(rozofs_bt_thread_cli_reader_ctx_t* thread_p,void *msg)
 {
    expbt_msgint_full_t *msg_p;
    
@@ -431,10 +1157,17 @@ void af_unix_bt_reader_response(rozofs_bt_thread_cli_reader_ctx_t* thread_p,void
    switch (msg_p->hdr.opcode)
    {
      case EXP_BT_TRK_READ:
-       return rozofs_bt_reading_tracking_file_local(thread_p,msg_p);
+//       return rozofs_bt_reading_tracking_file_local(thread_p,msg_p);
+         FDL_INFO("FDL tracking file reader read request");
+         return rozofs_bt_reading_tracking_file_remote(thread_p,msg_p);
        break;
-
+     case EXP_BT_TRK_CHECK:
+        return rozofs_bt_check_tracking_file_remote(thread_p,msg_p);
+       break;
+     case EXP_BT_DIRENT_LOAD:
+        return  rozofs_bt_load_dirent(thread_p,msg_p);
       default:
+         info("FDL unexpected opcode %d",(int)msg_p->hdr.opcode);
 	break;
    }
 
@@ -524,7 +1257,7 @@ uint32_t af_unix_bt_reader_rcvMsgsock(void * thread_p,int socketId)
       exit(0);    
     } 
     loop++;
-    af_unix_bt_reader_response((rozofs_bt_thread_cli_reader_ctx_t*)thread_p, (void*)message); 
+    af_unix_bt_reader_resquest((rozofs_bt_thread_cli_reader_ctx_t*)thread_p, (void*)message); 
   }       
   return TRUE;
 }
@@ -652,7 +1385,6 @@ static void *rozofs_bt_trk_cli_reader_thread(void *v) {
     /*
     ** create a socket controller context
     */
-#warning FDL ruc_sockctl_init_th
     thread_ctx_p->sock_p = ruc_sockctl_init_th(thread_ctx_p->socket_controller_nb_ctx,name);
     ruc_timer_moduleInit_th(thread_ctx_p->sock_p,1);
     north_lbg_module_init_th();
@@ -669,8 +1401,11 @@ static void *rozofs_bt_trk_cli_reader_thread(void *v) {
       fatal("Bye!!");
     }
     
-    rozofs_bt_create_client_lbg(thread_ctx_p->sock_p);
-    
+    thread_ctx_p->lbg_id = rozofs_bt_create_client_lbg(thread_ctx_p->sock_p);
+    if (thread_ctx_p->lbg_id < 0)
+    {
+      fatal("Cannot create the load balancing group (%s)",strerror(errno));
+    }    
     thread_ctx_p->af_unix_fd = rozofs_bt_cli_reader_socket_create(thread_ctx_p);
     if ( thread_ctx_p->af_unix_fd < 0)
     {
@@ -712,6 +1447,9 @@ int rozofs_bt_trk_cli_reader_thread_create(int nb_threads)
      fatal("rozofs_bt_thread_create pthread_attr_init() %s",strerror(errno));
      return -1;
    } 
+   
+   rozofs_cli_rd_uptime = (uint64_t) time(0);
+   
    if ( nb_threads> ROZOFS_BT_MAX_CLI_READER_THREADS)
    {
      nb_threads =ROZOFS_BT_MAX_CLI_READER_THREADS;
@@ -731,7 +1469,7 @@ int rozofs_bt_trk_cli_reader_thread_create(int nb_threads)
       p->socket_controller_nb_ctx = ROZOFS_BT_TRK_CLI_READER__MAX_SOCK;
      err = pthread_create(&p->thrdId,&attr,rozofs_bt_trk_cli_reader_thread,p);
      if (err != 0) {
-       fatal("rozofs_bt_rcu_thread_create pthread_create() %s", strerror(errno));
+       fatal("rozofs_bt_trk_cli_reader_thread pthread_create() %s", strerror(errno));
        return -1;
      } 
    }

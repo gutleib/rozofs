@@ -44,7 +44,7 @@ uint32_t rozofs_bt_cmd_ring_idx = 0;
 rozofs_bt_thread_msg_t *rozofs_bt_req_pool_p = NULL;
 
 int fdl_debug = 1;
-
+int rozofs_bt_debug = 0;
 
 /**
 *  Thread table
@@ -161,12 +161,12 @@ int rozofs_bt_thread_create(int nb_threads) {
 int rozofs_bt_init(uint16_t instance,int eid,int nb_contexts)
 {
    int ret;
-   
+
    /*
    ** ask for the creation of the shared memory for the case of rozofsmount, just a registration for the storcli
-   */
-   ret = rozofs_shm_init((int) instance,1);
-   if (ret < 0) return RUC_NOK;
+   */   
+//   ret = rozofs_shm_init((int) instance,1);
+//   if (ret < 0) return RUC_NOK;
    warning("nbe context %d\n",nb_contexts);
    ret = rozofs_bt_north_interface_init(eid,instance,nb_contexts);
    if (ret < 0) return RUC_NOK;
@@ -189,7 +189,7 @@ int rozofs_bt_init(uint16_t instance,int eid,int nb_contexts)
   /*
   ** init of the inode section
   */
-  ret = rozofs_bt_inode_init(nb_contexts);
+  ret = rozofs_bt_inode_init(nb_contexts,eid);
   if (ret < 0) return RUC_NOK;
 
   /*
@@ -201,5 +201,24 @@ int rozofs_bt_init(uint16_t instance,int eid,int nb_contexts)
    
        uma_dbg_addTopic_option("trkrd_profiler", show_trkrd_profiler,UMA_DBG_OPTION_RESET);
 
+       uma_dbg_addTopic("trkrd_cache", show_trkrd_cache);
+
+   /*
+   ** create the dirent thread
+   */
+   ret = rozofs_bt_dirent_init(32,"localhost",eid);
+   if (ret != 0)
+   {
+     return RUC_NOK;
+   }
+   /*
+   ** Create the thread for READDIR & LOOKUP (dirent files)
+   */   
+   ret = rozofs_bt_dirent_thread_intf_create("localhost",instance,1);
+   if (ret != 0)
+   {
+     return RUC_NOK;
+   }
+   
    return RUC_OK;
 }

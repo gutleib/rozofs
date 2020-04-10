@@ -30,6 +30,7 @@
 #include "rozofs_bt_proto.h"
 //#include "rozofs_bt_thread_intf.h"
 #include <rozofs/core/rozofs_socket_family.h>
+#include "rozofs_bt_inode.h"
  
 int        af_unix_bt_south_socket_ref = -1;
 int        af_unix_bt_thread_count=0;
@@ -180,7 +181,7 @@ uint32_t af_unix_bt_xmitReadysock(void * af_unix_bt_ctx_p,int socketId);
 uint32_t af_unix_bt_xmitEvtsock(void * af_unix_bt_ctx_p,int socketId);
 
 #define DISK_SO_SENDBUF  (300*1024)
-#define FUSE_SOCKET_NICKNAME "batch_rsp_th"
+#define MAIN_BATCH_SOCKET_NICKNAME "batch_rsp_th"
 /*
 **  Call back function for socket controller
 */
@@ -275,21 +276,18 @@ uint32_t af_unix_bt_rcvReadysock(void * unused,int socketId)
  
   @retval :none
 */
+
+
 void af_unix_bt_response(rozofs_bt_thread_msg_t *msg) 
 {
   switch (msg->opcode) {
-#if 0  
-    case ROZOFS_FUSE_REPLY_BUF:
+  
+    case ROZO_BATCH_TRK_FILE_READ:
     {
-      return af_unix_bt_read_response(&msg->read);
+      FDL_INFO("FDL iosubmit_tracking_file_read_cbk received!!");
+      return rozofs_bt_iosubmit_tracking_file_read_cbk(msg);
       break;
     }  
-    case ROZOFS_FUSE_WRITE_BUF:          
-      return af_unix_bt_write_process_response(&msg->write);
-
-    case ROZOFS_FUSE_WRITE_BUF_MULTI:          
-      return af_unix_bt_write_process_response_multiple(&msg->write);
-#endif      
     default:
       severe("Unexpected opcode %d", msg->opcode);
   }
@@ -331,10 +329,10 @@ uint32_t af_unix_bt_rcvMsgsock(void * unused,int socketId)
     /*
     ** check if there are some pending requests
     */
-    if (af_unix_bt_pending_req_count == 0)
-    {
-     return TRUE;
-    }
+//    if (af_unix_bt_pending_req_count == 0)
+//    {
+//     return TRUE;
+//    }
     /*
     ** read the north disk socket
     */
@@ -378,8 +376,8 @@ uint32_t af_unix_bt_rcvMsgsock(void * unused,int socketId)
       fatal("Fuse Thread Response socket is dead %s !!\n",strerror(errno));
       exit(0);    
     } 
-    af_unix_bt_pending_req_count--;
-    if (  af_unix_bt_pending_req_count < 0) af_unix_bt_pending_req_count = 0;
+//    af_unix_bt_pending_req_count--;
+//    if (  af_unix_bt_pending_req_count < 0) af_unix_bt_pending_req_count = 0;
     af_unix_bt_response(&msg); 
   }       
   return TRUE;
@@ -494,7 +492,7 @@ int af_unix_bt_response_socket_create(char *socketname)
      ** OK, we are almost done, just need to connect with the socket controller
      */
      sockctrl_ref = ruc_sockctl_connect(fd,  // Reference of the socket
-                                                FUSE_SOCKET_NICKNAME,   // name of the socket
+                                                MAIN_BATCH_SOCKET_NICKNAME,   // name of the socket
                                                 16,                  // Priority within the socket controller
                                                 (void*)NULL,      // user param for socketcontroller callback
                                                 &af_unix_bt_callBack_sock);  // Default callbacks
@@ -516,10 +514,11 @@ int af_unix_bt_response_socket_create(char *socketname)
 
 
 /*__________________________________________________________________________
-* Initialize the disk thread interface
-*
-* @param hostname    hostname (for tests)
-* @param nb_threads  Number of threads that can process the read or write requests
+** Initialize the disk thread interface
+ 
+  @param hostname    hostname (for tests)
+  @param instance_id : expbt instance
+  @param nb_threads  Number of threads that can process the read or write requests
 *
 *  @retval 0 on success -1 in case of error
 */

@@ -36,6 +36,7 @@
 #include <rozofs/core/rozofs_tx_api.h>
 #include <rozofs/core/rozofs_socket_family.h>
 #include "rozofs_rw_load_balancing.h"
+#include "rozofs_bt_inode.h"
 
 /**
 * Buffers information
@@ -85,11 +86,12 @@ void * rozofs_bt_north_RcvAllocBufCallBack(void *userRef,uint32_t socket_context
     void *p;
 
     /*
-    ** Check that the is enough buffer on the storio side
+    ** Check that the is enough buffer on the storio side: we need to have at least 2 buffers since we might need to trigger
+    ** the reading of a tracking that have been removed from the cache when there is a cache miss during the io_read in batch mode.
     */
     free_count = ruc_buf_getFreeBufferCount(rozofs_bt_buffer_pool_p);
 
-    if (free_count == 0) {
+    if (free_count < 2) {
         return NULL;
     }
     
@@ -148,7 +150,6 @@ static void *rozofs_bt_mem_deregister_polling_thread(void *v) {
 
    volatile rozofs_memreg_t *q;
    rozofs_stc_memreg_t *p;
-   rozofs_bt_thread_ctx_t * thread_ctx_p = (rozofs_bt_thread_ctx_t*)v;
    rozofs_memreg_t *mem_unreg_p; 
    volatile uint32_t nb_storcli;
    int done;
@@ -323,7 +324,7 @@ void  rozofs_bt_north_userDiscCallBack(void *userRef,uint32_t socket_context_ref
   @retval : FALSE-> xmit  ready event not expected
 */
 void rozofs_bt_process_memreg(void *recv_buf,int socket_ctx_idx);
-void rozofs_bt_process_io_read(void *recv_buf,int socket_ctx_idx);
+void rozofs_bt_process_io_read(void *recv_buf,int socket_ctx_idx,void *p);
 
 void rozofs_bt_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 {
@@ -373,7 +374,7 @@ void rozofs_bt_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_bu
         return;  
        case ROZO_BATCH_READ:
         //info("ROZO_BATCH_READ received socket %d",this->socketRef);
-        rozofs_bt_process_io_read(recv_buf,this->socketRef);
+        rozofs_bt_process_io_read(recv_buf,this->socketRef,NULL);
 
        default:
         /*

@@ -528,7 +528,6 @@ void rozofs_bt_process_memreg(void *recv_buf,int socket_id)
    response.hdr.msg_sz = sizeof(rozo_batch_hdr_t)-sizeof(uint32_t)+hdr_p->nb_commands*sizeof(rozo_memreg_cmd_t);
    errno = 0;
    ret = send(socket_id,&response,response.hdr.msg_sz+sizeof(uint32_t),0);
-   info("message send socket : %d %d: %s\n",socket_id,ret,strerror(errno));
    ruc_buf_freeBuffer(recv_buf);
 } 
 
@@ -615,7 +614,6 @@ void rozofs_bt_process_memcreate(void *recv_buf,int socket_id)
    response.hdr.msg_sz = sizeof(rozo_batch_hdr_t)-sizeof(uint32_t)+hdr_p->nb_commands*sizeof(rozo_memreg_cmd_t);
    errno = 0;
    ret = send(socket_id,&response,response.hdr.msg_sz+sizeof(uint32_t),0);
-   info("message send socket : %d %d: %s\n",socket_id,ret,strerror(errno));
    ruc_buf_freeBuffer(recv_buf);
 }     
 
@@ -683,7 +681,6 @@ void rozofs_bt_process_mem_register_addr(void *recv_buf,int socket_id)
    response.hdr.msg_sz = sizeof(rozo_batch_hdr_t)-sizeof(uint32_t)+hdr_p->nb_commands*sizeof(rozo_memreg_cmd_t);
    errno = 0;
    ret = send(socket_id,&response,response.hdr.msg_sz+sizeof(uint32_t),0);
-   info("message send socket : %d %d: %s\n",socket_id,ret,strerror(errno));
    ruc_buf_freeBuffer(recv_buf);
 }    
 

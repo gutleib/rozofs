@@ -57,6 +57,7 @@ typedef enum {
   ROZO_BATCH_MEMUNREG,
   ROZO_BATCH_MEMADDR_REG,
   ROZO_BATCH_MEMCREATE,
+  ROZO_BATCH_TRK_FILE_READ,
       
   ROZO_BATCH_MAX
 } rozofs_batch_opcode_e;
@@ -72,7 +73,7 @@ typedef struct _rozo_batch_hdr_t
    uint64_t private;
 } rozo_batch_hdr_t;
 /*
-**  paylaod of a ROZOFS_BATCH_READ or ROZOFS_BATCH_WRITE
+**  paylaod of a ROZO_BATCH_READ or ROZO_BATCH_WRITE
 */
 typedef struct _rozo_io_cmd_t
 {
@@ -86,8 +87,21 @@ typedef struct _rozo_io_cmd_t
 } rozo_io_cmd_t;
 
 
+
 /*
-**  paylaod of a ROZOFS_BATCH_GETATTR
+**  paylaod of a ROZO_BATCH_TRK_FILE_READ
+*/
+typedef struct _rozo_trk_file_cmd_t
+{
+    void *data;    /* io callback */
+    uint64_t inode; /**< inode : might be a directory of regular inode */
+    uint16_t prio;
+    void     *queue;  /**< reply queue : when NULL it is assumed that the reply is done on a AF_UNIX socket */
+    struct  sockaddr_un sun_path; /**< sun path of the reply socket */
+} rozo_trk_file_cmd_t;
+
+/*
+**  paylaod of a ROZO_BATCH_GETATTR
 */
 typedef struct _rozo_attr_cmd_t
 {
@@ -102,7 +116,7 @@ typedef struct _rozo_attr_cmd_t
 
 //1234567890123456789012345678901234567890
 /*
-**  paylaod of a ROZOFS_BATCH_MEMREG
+**  paylaod of a ROZO_BATCH_MEMREG
 */
 #define ROZOFS_MAX_SHARED_NAME 32
 typedef struct _rozo_memreg_cmd_t
