@@ -795,7 +795,6 @@ void rozofs_bt_reading_tracking_file_remote_cbk(void *this,void *param)
    expbt_trk_read_rsp_t *rsp_rd_p;
    expbt_msg_hdr_t *rsp_hdr_p;
    uint8_t  *data_trk_src_p;
-   uint8_t  *data_trk_dst_p;
    rozofs_bt_tracking_cache_t *image_p;   
    int datalen;
     
@@ -804,7 +803,7 @@ void rozofs_bt_reading_tracking_file_remote_cbk(void *this,void *param)
    */
    msg_th_p = (expbt_msgint_full_t*)param;  
    image_p = msg_th_p->req.read_trk_rq.image_p;
-   data_trk_dst_p = (uint8_t *) (image_p+1);
+//   data_trk_dst_p = (uint8_t *) (image_p+1);
    /*
    ** Restore opaque data
    */ 
@@ -864,12 +863,45 @@ void rozofs_bt_reading_tracking_file_remote_cbk(void *this,void *param)
       errno = rsp_rd_p->errcode;
       goto error;
    }
-   /*
-   ** Get the length of the tracking file and copy the data in the cache
-   */
-   data_trk_src_p = (uint8_t *)(rsp_rd_p+1);
    datalen = rsp_rd_p->status;
-   memcpy(data_trk_dst_p,data_trk_src_p,datalen);
+   /*
+   ** check if there is already a memory allocated for caching the tracking file
+   ** When it is the case, we have to queue that memory array to the garbage collector
+   */
+   {
+      rozofs_bt_tracking_cache_payload_hdr_t  *old_payload;
+      rozofs_bt_tracking_cache_payload_hdr_t  *new_payload;   
+   
+      old_payload = image_p->trk_payload;
+      
+      new_payload = malloc(sizeof(rozofs_bt_tracking_cache_payload_hdr_t) + datalen);
+      if (new_payload == NULL)
+      {
+         errno = ENOMEM;
+	 goto error;
+      }
+
+      /*
+      ** init of the new context
+      */
+      list_init(&new_payload->list_delete);
+      new_payload->deadline_delete = 0;
+      new_payload->tracking_payload = (uint8_t*)(new_payload+1);
+      /*
+      ** copy the new data
+      */
+      data_trk_src_p = (uint8_t *)(rsp_rd_p+1);
+      memcpy(new_payload->tracking_payload,data_trk_src_p,datalen); 
+      new_payload->datalen = datalen;  
+      /*
+      ** swap the payload pointer in the tracking cache entry
+      */
+      image_p->trk_payload = new_payload;
+      /*
+      ** queue the old entry in the garbage collector if it exists
+      */
+      if (old_payload != NULL) rozofs_bt_rcu_queue_trk_file_payload_in_garbage_collector(old_payload);
+   }
    /*
    ** set the mtime and the change count
    */

@@ -43,6 +43,7 @@ extern int rozofs_bt_debug;
 
 #define FDL_INFO(fmt, ...) if (rozofs_bt_debug) info( fmt, ##__VA_ARGS__)
 #define ROZOFS_BT_DEADLINE_SEC  120 /**< duration of a file tracking cache entry validity */
+#define ROZOFS_BT_GARBAGE_DEADLINE_SEC  10 /**< duration before releasing the memory that contains the palyoad of a tracking file */
 
 #define PRIO_CMDQ 3
 #define PRIO_CMD 2
@@ -61,6 +62,15 @@ typedef union
    } s;
 } rozofs_bt_track_key_t;
 
+
+typedef struct rozofs_bt_tracking_cache_payload_hdr_t
+{
+   list_t list_delete;  /**< link list used by garbage collector of the tracking file cache to release the tracking file payload */
+   uint64_t   deadline_delete; /**< time at which the memory can be deleted */
+   uint64_t   datalen;   /**< length of the tracking file  */
+   uint8_t    *tracking_payload;  /**< pointer to the payload of the tracking file: image of the tracking file stored on NVME   */
+} rozofs_bt_tracking_cache_payload_hdr_t;
+
 typedef struct _rozofs_bt_tracking_cache_t
 {
     hash_entry_t he;
@@ -68,7 +78,7 @@ typedef struct _rozofs_bt_tracking_cache_t
     list_t   list;
     list_t   pending_list;    /**< queue of the clients that are waiting for the tracking file */
     int      pending;         /**< assert to 1 when the system is waiting for the content of the tracking file */
-    uint32_t length;  
+//    uint32_t length;  
     int      errcode;         /**< errno value: 0 when all is fine    */
     uint32_t lock_count;    /**< number of user on the tracking file  */
     uint32_t change_count;  /**< number of time that the tracking file has been updated */
@@ -78,8 +88,7 @@ typedef struct _rozofs_bt_tracking_cache_t
     uint64_t deadline_sec;  /**< dead line validity of the cache entry in seconds : updated on each lookup access  */
     uint64_t access_count;  /**< number of time that entry has been accessed    */
     uint64_t reload_count;  /**< number of time that entry has been reloaded    */
-    
-      
+    rozofs_bt_tracking_cache_payload_hdr_t *trk_payload;  /***< pointer to the memory chunk allocated to store the payload of the tracking file */          
 } rozofs_bt_tracking_cache_t;
 
 #define INODE_BT_HSIZE (1024)
@@ -109,7 +118,9 @@ typedef struct _expbt_msgint_req_t
 
       struct 
       {
-        expbt_dirent_load_req_t req;      
+        expbt_dirent_load_req_t req;   
+	uint64_t                mtime;  /**< mtime of the directory at the time of the request  */   
+	uint64_t                utime;  /**< utime of the directory at the time of the request  */   
       } dirent_rq;
       struct 
       {
@@ -372,4 +383,18 @@ void show_trkrd_cache(char * argv[], uint32_t tcpRef, void *bufRef);
     @retval NULL if not found
 */
 ext_mattr_t *rozofs_bt_get_inode_ptr_from_image(rozofs_bt_tracking_cache_t *tracking_p,uint64_t inode);
+
+
+
+/**
+**_______________________________________________________________________________________
+*/
+/**
+  Insertion of the payload of a tracking cache in the RCU garbage collector
+  
+  @param payload_p: pointer to the payload context to insert
+  
+  @retval none
+*/
+void rozofs_bt_rcu_queue_trk_file_payload_in_garbage_collector(rozofs_bt_tracking_cache_payload_hdr_t *payload_p);
 #endif

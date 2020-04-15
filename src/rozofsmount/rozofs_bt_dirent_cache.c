@@ -23,6 +23,7 @@
 #include <rozofs/common/log.h>
 #include <rozofs/common/xmalloc.h>
 #include "rozofs_bt_dirent.h"
+#include "rozofs_bt_proto.h"
 #include "../exportd/mdirent.h"
 
 mdirents_cache_entry_t *bt_dirent_cache_bucket_search_entry(fid_t fid, uint16_t index);
@@ -45,6 +46,7 @@ typedef struct _rozofs_bt_htable {
  *
  * used to keep track of open file descriptors and corresponding attributes
  */
+#define ROZOFS_BT_DIRENT_GARBAGE_DEADLINE_SEC 10
 #define ROZOFS_BT_MAX_CACHE_ENTRIES (1024*256)
 #define ROZOFS_BT_LEVEL0_HASH (64*1024)
 typedef struct rozofs_bt_dirent_cache_t {
@@ -53,6 +55,7 @@ typedef struct rozofs_bt_dirent_cache_t {
     uint64_t   hit;     /**< hit counter                */
     uint64_t   miss;    /**< miss counter               */
     uint64_t   lru_del; /**< lru deletion               */
+    uint64_t   garbage_collector_deadline_delay_sec; 
     list_t     lru;     /**< lru linked list            */ 
     list_t     del_list;  /**< list of the entries to delete */
     pthread_rwlock_t lru_lock;  /**< lock for LRU handling */
@@ -63,10 +66,133 @@ typedef struct rozofs_bt_dirent_cache_t {
     rozofs_bt_htable htable;    ///< entries hashing
 } rozofs_bt_dirent_cache_t;
 
+ #define ROZOFS_BT_DIRENT_GARBAGE_PTHREAD_FREQUENCY_SEC 3
+ 
+typedef struct _rozofs_bt_dirent_garbage_private_t {
+   uint64_t period_sec;  /**< polling period en seconds */
+   uint64_t garbage_collector_deletion;
+   uint64_t polling_count;
+   uint64_t deletion_count;
+   uint64_t polling_time;
+   int      deletion_enable;
+} rozofs_bt_dirent_garbage_private_t;
+
+/*
+**___________________________________________________________________
+     Global Data
+**___________________________________________________________________
+*/     
 /*
 ** dirent cache used by the batch client rozofsmount
 */
 rozofs_bt_dirent_cache_t rozofs_bt_dirent_cache;
+rozofs_bt_thread_ctx_t rozofs_bt_dirent_garbage_collector_thread_ctx;
+/*
+**___________________________________________________________________
+    Prototypes
+**___________________________________________________________________
+*/ 
+static void *rozofs_bt_dirent_garbage_collector_thread(void *v);
+/*
+*_______________________________________________________________________
+*/
+
+/*
+ ** Print the dirent cache bucket statistics
+ */
+char* rozofs_bt_dirent_cache_display(char *pChar) {
+
+    uint64_t malloc_size;
+    rozofs_bt_thread_ctx_t * thread_ctx_p;
+    rozofs_bt_dirent_garbage_private_t *private_p;
+    
+    thread_ctx_p = &rozofs_bt_dirent_garbage_collector_thread_ctx;  
+    private_p = thread_ctx_p->thread_private;
+    malloc_size = DIRENT_MALLOC_GET_CURRENT_SIZE();
+    
+    pChar+=sprintf(pChar,"Malloc size (MB/B)             : %llu/%llu\n",(long long unsigned int)malloc_size/(1024*1024), 
+                   (long long unsigned int)malloc_size);    
+/*    pChar+=sprintf(pChar,"Level 0 cache state            : %s\n", (dirent_bucket_cache_enable == 0) ? "Disabled" : "Enabled"); */
+    pChar+=sprintf(pChar,"Max entries                    : %u\n",rozofs_bt_dirent_cache.max);
+    pChar+=sprintf(pChar,"Cur entries                    : %u\n",rozofs_bt_dirent_cache.size);
+    pChar+=sprintf(pChar,"hit/miss                       : %llu/%llu\n", 
+            (long long unsigned int) rozofs_bt_dirent_cache.hit,
+            (long long unsigned int) rozofs_bt_dirent_cache.miss);
+ /*
+    pChar+=sprintf(pChar,"collisions cumul level0/level1 : %llu/%llu\n", 
+                  (long long unsigned int) dirent_bucket_cache_collision_level0_counter,
+                  (long long unsigned int) dirent_bucket_cache_collision_counter);
+    pChar+=sprintf(pChar,"LRU stats \n");
+    pChar+=sprintf(pChar,"global cpt (ok/err)            : %llu/%llu\n", 
+                  (long long unsigned int) dirent_bucket_cache_lru_counter_global,
+                  (long long unsigned int) dirent_bucket_cache_lru_global_error);
+    pChar+=sprintf(pChar,"coll cpt   (ok/err)            : %llu/%llu\n", 
+                  (long long unsigned int) dirent_bucket_cache_lru_counter_coll,
+                  (long long unsigned int) dirent_bucket_cache_lru_coll_error);
+    pChar+=sprintf(pChar,"collisions Max level0/level1   : %u/%u\n", 
+                   dirent_bucket_cache_max_level0_collisions, dirent_bucket_cache_max_level1_collisions);
+*/
+    pChar+=sprintf(pChar,"pending deletion               : %llu\n", 
+            (long long unsigned int) rozofs_bt_dirent_cache.lru_del);
+    pChar+=sprintf(pChar,"effective deletion             : %llu\n", 
+            (long long unsigned int) private_p->garbage_collector_deletion);
+    pChar+=sprintf(pChar,"Name chunk size                : %u\n",(unsigned int)MDIRENTS_NAME_CHUNK_SZ);
+    pChar+=sprintf(pChar,"Name chunk max                 : %u\n",(unsigned int)MDIRENTS_NAME_CHUNK_MAX);
+    pChar+=sprintf(pChar,"Sectors (nb sectors/size)      : %u/%u Bytes\n",
+                                                			 (unsigned int)DIRENT_FILE_MAX_SECTORS,
+									 (unsigned int)DIRENT_FILE_MAX_SECTORS*MDIRENT_SECTOR_SIZE);
+    pChar += sprintf(pChar,"------------------+----------------------+--------------+\n");
+    pChar += sprintf(pChar,"  field name      | start sector(offset) | sector count |\n");
+    pChar += sprintf(pChar,"------------------+----------------------+--------------+\n");
+    pChar += sprintf(pChar," %-16s |  %8u (0x%-4x)   |  %9u   |\n","header",(unsigned int)DIRENT_HEADER_BASE_SECTOR,
+                                                                            (unsigned int)DIRENT_HEADER_BASE_SECTOR*MDIRENT_SECTOR_SIZE,
+									    (unsigned int)DIRENT_HEADER_SECTOR_CNT);
+    pChar += sprintf(pChar," %-16s |  %8u (0x%-4x)   |  %9u   |\n","name bitmap",(unsigned int)DIRENT_NAME_BITMAP_BASE_SECTOR,
+                                                                                 (unsigned int)DIRENT_NAME_BITMAP_BASE_SECTOR*MDIRENT_SECTOR_SIZE,
+										 (unsigned int)DIRENT_NAME_BITMAP_SECTOR_CNT);
+    pChar += sprintf(pChar," %-16s |  %8u (0x%-4x)   |  %9u   |\n","hash buckets",(unsigned int)DIRENT_HASH_BUCKET_BASE_SECTOR,
+                                                                                  (unsigned int)DIRENT_HASH_BUCKET_BASE_SECTOR*MDIRENT_SECTOR_SIZE,
+										  (unsigned int)DIRENT_HASH_BUCKET_SECTOR_CNT);
+    pChar += sprintf(pChar," %-16s |  %8u (0x%-4x)   |  %9u   |\n","hash entries",(unsigned int)DIRENT_HASH_ENTRIES_BASE_SECTOR,
+                                                                                   (unsigned int)DIRENT_HASH_ENTRIES_BASE_SECTOR*MDIRENT_SECTOR_SIZE,
+										   (unsigned int)DIRENT_HASH_ENTRIES_SECTOR_CNT);
+    pChar += sprintf(pChar," %-16s |  %8u (0x%-4x)   |  %9u   |\n","name chunks",(unsigned int)DIRENT_HASH_NAME_BASE_SECTOR,
+                                                                                 (unsigned int)DIRENT_HASH_NAME_BASE_SECTOR*MDIRENT_SECTOR_SIZE,
+										 (unsigned int)DIRENT_HASH_NAME_SECTOR_CNT);
+    pChar += sprintf(pChar,"------------------+----------------------+--------------+\n");
+
+
+/*
+    pChar += sprintf(pChar,"\n------------+-------------+---------------------+\n");
+    pChar += sprintf(pChar," file_limit | mask        |      put count      |\n");
+    pChar += sprintf(pChar,"------------+-------------+---------------------+\n");
+    for (i = 0; i < DIRENT_MAX_RANGE; i++)
+    {
+    
+      pChar += sprintf(pChar," %10llu |  %8x   |  %16llu   |\n",
+                       (long long unsigned int)dirent_range_table[i].file_limit,
+                       dirent_range_table[i].mask,
+                       (long long unsigned int)dirent_range_table[i].count);
+		         
+    }
+    pChar += sprintf(pChar,"------------+-------------+---------------------+\n");
+*/
+    return pChar;
+}
+/*
+*_______________________________________________________________________
+*/
+/**
+* dirent cache
+*/
+char *dirent_disk_display_stats(char *pChar);
+
+void rozofs_bt_show_dirent_cache(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char *pChar = uma_dbg_get_buffer();
+    pChar = rozofs_bt_dirent_cache_display(pChar);
+    pChar = dirent_disk_display_stats(pChar);
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	  
+}
 
 
 
@@ -297,7 +423,16 @@ void *rozofs_htable_del_entry_th(rozofs_bt_htable * h, void *key,uint32_t hash) 
 int rozofs_bt_dirent_cache_initialize() {
     int ret;
     rozofs_bt_dirent_cache_t *cache = &rozofs_bt_dirent_cache;
+    rozofs_bt_thread_ctx_t * thread_ctx_p;
+    int                        err;
+    pthread_attr_t             attr;
+   rozofs_bt_dirent_garbage_private_t *private_p;
+    
+    thread_ctx_p = &rozofs_bt_dirent_garbage_collector_thread_ctx;
+    
     memset(cache,0,sizeof(rozofs_bt_dirent_cache_t));
+    cache->max = ROZOFS_BT_MAX_CACHE_ENTRIES;
+    cache->garbage_collector_deadline_delay_sec = ROZOFS_BT_DIRENT_GARBAGE_DEADLINE_SEC;
     
     ret = rozofs_bt_htable_initialize_th(&cache->htable, ROZOFS_BT_LEVEL0_HASH,ROZOFS_BT_LEVEL0_HASH, NULL, rozofs_bt_dirent_cache_cmp);
     if (ret < 0) return ret;
@@ -318,6 +453,30 @@ int rozofs_bt_dirent_cache_initialize() {
     dirent_bt_cache_cbk.get = bt_dirent_cache_bucket_search_entry;
     dirent_bt_cache_cbk.put = bt_dirent_put_root_entry_to_cache;
     dirent_bt_cache_cbk.remove = bt_dirent_remove_root_entry_from_cache;
+    /*
+    ** create the garbage collector thread
+    */
+    thread_ctx_p->thread_private = malloc(sizeof(rozofs_bt_dirent_garbage_private_t));
+    if (thread_ctx_p->thread_private == NULL) 
+    {
+       fatal("Out of memory");
+       return -1;
+    }
+    memset(thread_ctx_p->thread_private,0,sizeof(rozofs_bt_dirent_garbage_private_t));
+    private_p = thread_ctx_p->thread_private;
+    private_p->period_sec = ROZOFS_BT_DIRENT_GARBAGE_PTHREAD_FREQUENCY_SEC;   
+    private_p->deletion_enable = 1;
+    err = pthread_attr_init(&attr);
+    if (err != 0) {
+      fatal("rozofs_bt_thread_create pthread_attr_init %s",strerror(errno));
+      return -1;
+    }  
+
+    err = pthread_create(&thread_ctx_p->thrdId,&attr,rozofs_bt_dirent_garbage_collector_thread,thread_ctx_p);
+    if (err != 0) {
+      fatal("rozofs_bt_thread_create pthread_create %s", strerror(errno));
+      return -1;
+    }      
     
     return 0;
 }
@@ -427,6 +586,10 @@ int bt_dirent_put_root_entry_to_cache(fid_t fid, int root_idx, mdirents_cache_en
     ** insert the entry in to delete list
     */
     pthread_rwlock_wrlock(&cache->del_lock);  
+    /*
+    ** set the deadline time before deleting the cache 
+    */
+    lru->deadline_timestamp = time(NULL);
     list_push_back(&cache->del_list, &lru->he.list);
     cache->lru_del++;
     pthread_rwlock_unlock(&cache->del_lock);          
@@ -443,6 +606,7 @@ int bt_dirent_put_root_entry_to_cache(fid_t fid, int root_idx, mdirents_cache_en
   list_init(&root_p->cache_link);
   root_p->he.key   = &root_p->key;
   root_p->he.value = root_p;
+  cache->size++;
   /*
   ** insert in the hash table
   */
@@ -504,8 +668,125 @@ int bt_dirent_remove_root_entry_from_cache(fid_t fid, int root_idx)
   ** insert in the to delete list
   */
   pthread_rwlock_wrlock(&cache->del_lock);  
+  /*
+  ** set the deadline time before deleting the cache 
+  */
+  dentry_p->deadline_timestamp = time(NULL);
   list_push_back(&cache->del_list, &dentry_p->he.list);
   cache->lru_del++;
   pthread_rwlock_unlock(&cache->del_lock);   
   return 0;      
 }
+
+
+
+/**
+**_______________________________________________________________________________________
+*/
+/**
+  Flush any entry that has expired within the tracking file payload garbage collector
+  
+  @param thread_ctx_p: pointer to the rcu thread context
+  
+  @retval none
+*/
+#define ROZOFS_BT_DIRENT_MAX_FLUSH 32
+
+void rozofs_bt_dirent_flush_garbage_collector(rozofs_bt_thread_ctx_t *thread_ctx_p)
+{
+    list_t *p, *q;
+    time_t cur_time;
+    rozofs_bt_dirent_garbage_private_t *private_p = NULL;
+    rozofs_bt_dirent_cache_t *cache = &rozofs_bt_dirent_cache;
+    mdirents_cache_entry_t *dentry_p;
+    mdirents_cache_entry_t *dentry_tab[ROZOFS_BT_DIRENT_MAX_FLUSH];
+    int current_count = 0;
+    int i;
+
+    
+    private_p = thread_ctx_p->thread_private;
+    
+    if (cache->lru_del == 0) 
+    {
+      /*
+      ** the garbage collector is empty
+      */
+      return;
+    }
+    cur_time = time(NULL);
+    /*
+    ** go through the garbage collector remove all the entries that have reached their deadline
+    */
+    pthread_rwlock_wrlock(&cache->del_lock);  ;
+
+    list_for_each_forward_safe(p, q, &cache->del_list) {
+        dentry_p = list_entry(p, mdirents_cache_entry_t, he.list);
+        /*
+	** check if the deadline has been reached
+	*/
+	if (dentry_p->deadline_timestamp > (cur_time +cache->garbage_collector_deadline_delay_sec)) break;
+	/*
+	** the deadline is reached, remove it from the garbage collector and release the memory
+	*/
+	list_remove(p);
+	cache->lru_del--;
+	private_p->garbage_collector_deletion++;
+	dentry_tab[current_count] = dentry_p;
+	current_count++;
+	if (current_count >= ROZOFS_BT_DIRENT_MAX_FLUSH) break;
+
+    }
+
+   pthread_rwlock_unlock(&cache->del_lock);
+   /*
+   ** now release the memory
+   */
+   for (i = 0;i < current_count; i++)
+   {
+     /*
+     ** now release the memory allocated to cache the dirent files
+     */
+     dirent_cache_release_entry(dentry_tab[i]);
+   }
+}
+
+
+/*
+ *_______________________________________________________________________
+ */
+/** Share memory deletion polling thread
+ */
+
+ 
+static void *rozofs_bt_dirent_garbage_collector_thread(void *v) {
+
+   rozofs_bt_thread_ctx_t * thread_ctx_p = (rozofs_bt_thread_ctx_t*)v;
+
+   struct timespec ts = {ROZOFS_BT_DIRENT_GARBAGE_PTHREAD_FREQUENCY_SEC, 0};
+   rozofs_bt_dirent_garbage_private_t *private_p = NULL;
+   uint64_t tic,toc;
+  struct timeval tc;
+
+   
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+    
+    private_p = thread_ctx_p->thread_private;
+
+    uma_dbg_thread_add_self("dentry_garbage");
+    for (;;) {
+	ts.tv_sec = private_p->period_sec;    
+
+        nanosleep(&ts, NULL);  
+	tic = rozofs_get_ticker_us();
+	/*
+	** Garbage collector check
+	*/
+	rozofs_bt_dirent_flush_garbage_collector(thread_ctx_p);
+	gettimeofday(&tc,(struct timezone *)0);
+        toc = rozofs_get_ticker_us();
+	private_p->polling_count++;
+	private_p->polling_time +=(toc-tic);
+    }
+    return 0;
+}
+

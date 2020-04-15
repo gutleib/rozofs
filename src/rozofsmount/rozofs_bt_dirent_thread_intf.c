@@ -34,7 +34,9 @@
 #include "rozofs_bt_inode.h"
 #include "rozofs_bt_dirent.h"
 #include "rozofs_fuse_api.h"
- 
+#include <rozofs/rpc/eproto.h>
+#include <rozofs/core/rozofs_fid_string.h>
+
 
  
 int rozofs_bt_thread_create( int nb_threads) ;
@@ -51,7 +53,15 @@ static int af_unix_bt_dirent_response_socket_create(char *socketname);
 void af_unix_bt_dirent_response(void *ruc_buffer);
 int rozofs_parse_dirfile(fuse_req_t req,dirbuf_t *db,uint64_t cookie_client,int client_size);
 int rozofs_ll_readdir2_send_to_export_no_batch(fid_t fid, uint64_t cookie,void	 *buffer_p);
+/*
+** external Prototypes
+*/  
+int rozofs_bt_get_slave_inode(rozofs_bt_tracking_cache_t *tracking_ret_p,rozofs_inode_t *rozofs_inode_p,ientry_t *ie);
 
+
+/*
+** data structures & definition
+*/
 #define ROZOFS_READDIR2_BUFSIZE (64*1024)
 DECLARE_PROFILING(mpp_profiler_t);
 
@@ -83,7 +93,7 @@ ruc_sockCallBack_t af_unix_bt_dirent_callBack_sock=
      af_unix_bt_dirent_xmitReadysock,
      af_unix_bt_dirent_xmitEvtsock
   };
-  
+
   /*
 **__________________________________________________________________________
 */
@@ -366,7 +376,430 @@ static int af_unix_bt_dirent_response_socket_create(char *socketname)
 
 
 
+/*
+**____________________________________________________________________
+*/
+/**
+*  attempt to perform a local readdir if the dirent files of the directory are available
 
+   @param  eid: export identifier
+   @param  parent_fid: fid of the parent directory
+   @param  name: name for which we want the inode
+   @param  fuse_ctx_p: fuse context
+         
+   @retval 0 on success
+   @retval -1 on error (see errno for details)
+*/
+int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *name,void *fuse_ctx_p)
+{
+
+   rozofs_inode_t *rozofs_inode_p;   
+   ext_mattr_t * ext_attr_parent_p;
+   int dirent_valid;
+   uint64_t inode;
+   void *xmit_buf;
+   rozofs_bt_tracking_cache_t *tracking_ret_p = NULL;
+   bt_dirent_msg_t  *lookup_rq_p;
+
+   /*
+   ** we do not care about @rozofs_uuid@xxxx-xxxxx-xxxx : this request is always sent to the export
+   */
+  if ((strncmp(name,"@rozofs_uuid@",13) == 0) ||(strncmp(name,ROZOFS_DIR_TRASH,strlen(ROZOFS_DIR_TRASH)) == 0))
+  {
+    errno = EAGAIN;
+    return -1;
+  }   
+   rozofs_inode_p = (rozofs_inode_t*)parent_fid;
+   inode = rozofs_inode_p->fid[1];
+   ext_attr_parent_p = rozofs_bt_load_dirent_from_main_thread(inode,&tracking_ret_p,&dirent_valid);
+   /*
+   ** we stop here if either the parent attributes are not available or the dirent file are not up to date
+   */
+   if ((ext_attr_parent_p == NULL) || (dirent_valid == 0))
+   {
+     FDL_INFO ("FDL rozofs_bt_lookup_req_from_main_thread not valid ext_attr_parent_p %p dirent_valid %d\n",ext_attr_parent_p,dirent_valid);
+     return -1;
+   }
+  /*
+  ** allocate a buffer for the readdir: we allocate a large buffer since it is also used
+  ** to provide the result of the readdir
+  */
+  /*
+  ** allocate a buffer for the readdir: we allocate a large buffer since it is also used
+  ** to provide the result of the readdir
+  */
+  xmit_buf = ruc_buf_getBuffer(ROZOFS_TX_LARGE_RX_POOL);
+  if (xmit_buf == NULL)
+  {
+     TX_STATS(ROZOFS_TX_NO_BUFFER_ERROR);
+     severe("Out of large receive buffer in transaction pool");
+     errno = ENOMEM;
+     return -1;
+  }
+  lookup_rq_p  = (bt_dirent_msg_t*) ruc_buf_getPayload(xmit_buf);
+
+  lookup_rq_p->hdr.xid          = 0; /**< not used */
+  lookup_rq_p->hdr.opcode       = ROZOFS_BT_DIRENT_GET_DENTRY;
+  lookup_rq_p->hdr.user_ctx     = fuse_ctx_p;
+  lookup_rq_p->hdr.queue_prio   = 0; /* not used */
+  lookup_rq_p->hdr.rozofs_queue = NULL; /* not used */
+  /*
+  ** arguments
+  */
+  lookup_rq_p->s.lookup_rq.eid = eid;
+  memcpy(lookup_rq_p->s.lookup_rq.parent_fid,parent_fid,sizeof(fid_t));
+  lookup_rq_p->s.lookup_rq.name = name;
+  /*
+  ** send the message on the dirent thread queue
+  */
+  rozofs_queue_put(&dirent_queue_lookup,xmit_buf);
+
+  return 0;
+
+}
+
+
+/*
+ *_______________________________________________________________________
+ */
+ /**
+ *  Perform a lookup on the local dirent file
+ 
+   @param ruc_buffer: buffer that contains the lookup request, the same buffer is used for the response
+     eid: export identifier
+     parent_fid : inode of the parent directory
+     name: name to search
+     
+   @retval none
+*/ 
+ void rozofs_bt_lookup_req(rozofs_bt_thread_ctx_t * thread_ctx_p,void *ruc_buffer)
+ {
+
+
+    bt_dirent_msg_t  *lookup_rq_p;
+    int ret;
+    bt_lookup_ret_t  *lookup_rsp_p;
+    fid_t child_fid;
+    fid_t parent_fid;
+    char *name;
+    
+    lookup_rq_p  = (bt_dirent_msg_t*) ruc_buf_getPayload(ruc_buffer);
+    lookup_rsp_p  = &lookup_rq_p->s.lookup_rsp;
+    memcpy(parent_fid,lookup_rq_p->s.lookup_rq.parent_fid,sizeof(fid_t));      
+
+    /*
+    ** now attempt to get the inode for the required name
+    */
+    name = lookup_rq_p->s.lookup_rq.name;
+    memcpy(lookup_rsp_p->parent_fid,parent_fid,sizeof(fid_t));   
+    ret = rozofs_bt_get_mdirentry(parent_fid,name,child_fid);
+    if (ret < 0)
+    {
+      lookup_rsp_p->status = -1;
+      lookup_rsp_p->s.errcode = errno;
+      FDL_INFO("FDL lookup fail:%s : %s",lookup_rq_p->s.lookup_rq.name,strerror(errno));
+    }
+    else
+    {
+      lookup_rsp_p->status = 0;      
+      memcpy(lookup_rsp_p->s.child_fid,child_fid,sizeof(fid_t));   
+      {      
+	char bufall_debug[64];
+	char bufall_debug2[64];
+	rozofs_fid2string(child_fid,bufall_debug);      
+	rozofs_fid2string(lookup_rsp_p->parent_fid,bufall_debug2);      
+	FDL_INFO ("FDL rozofs_bt_lookup_req %s fid :%s pfid:%s  ret %d : %s\n",name,bufall_debug,bufall_debug2,ret,strerror(errno));
+      }
+    }
+    /*
+    ** send the response to the main thread
+    */
+    rozofs_bt_dirent_th_send_response(thread_ctx_p,ruc_buffer); 
+ }
+
+
+/*
+ *_______________________________________________________________________
+ */
+/**
+*  Call back function call upon a success rpc, timeout or any other rpc failure
+*
+ @param ruc_buffer : pointer to ruc_buffer that contains the response
+ 
+ @return none
+ */
+
+void rozofs_ll_lookup_cbk(void *this,void *param);
+
+void rozofs_bt_lookup_cbk(void *ruc_buffer)
+{
+   fuse_req_t req; 
+   int ret;
+   int trc_idx;                /**< index within the trace buffer */
+   bt_dirent_msg_t *msg_p;
+   void *param;                /**< fuse context associated with the transaction */
+   struct fuse_entry_param fep; 
+   ientry_t *child_ie = NULL;   /**< child ientry */
+   ientry_t    *pie = NULL;     /**< parent ientry */
+   fid_t child_fid;             /**< child inode  */
+   struct stat stbuf;           /**< buffer use for sending back the attributes of the inode to the kernel */
+   rozofs_bt_tracking_cache_t *tracking_ret_p = NULL;  /**< pointer to the tracking cache context that contains the inode */
+   int dirent_valid;           /**< assert to one if the dirent file is valid */
+   char *name;                 /**< name of the inode to search for */
+   errno = 0;
+   fuse_ino_t parent;
+   rozofs_inode_t *rozofs_inode_p;  
+   uint64_t inode; 
+   ext_mattr_t * ext_attr_child_p=NULL;
+   rozofs_fuse_save_ctx_t *fuse_ctx_p;
+   int errcode;
+   int status;
+   fid_t parent_fid;
+   
+    /*
+    ** get the pointer to the readdir response
+    */
+    msg_p = (bt_dirent_msg_t*) ruc_buf_getPayload(ruc_buffer);
+    /*
+    ** restore the fuse context
+    */
+    param = msg_p->hdr.user_ctx;
+    /*
+    ** the pointer to the fuse context: need if there is an aggregated lookup for the same name
+    */
+    GET_FUSE_CTX_P(fuse_ctx_p,param);  
+    /*
+    ** restore the parameter of the calling application
+    */           
+    RESTORE_FUSE_PARAM(param,req);
+    RESTORE_FUSE_PARAM(param,trc_idx);    
+    RESTORE_FUSE_PARAM(param,name);    
+    RESTORE_FUSE_PARAM(param,parent);
+    /*
+    ** check the readdir status
+    */
+    if (msg_p->s.lookup_rsp.status < 0) {
+        errno = msg_p->s.lookup_rsp.s.errcode;
+	/*
+	** need to take care of the EAGAIN case, since it indicates that the dirent file where not available
+	*/	
+	if (errno == EAGAIN) goto enoent;
+        goto resend2export;
+    } 
+    /*
+    ** We got the inode of the child
+    */
+    memcpy(child_fid,msg_p->s.lookup_rsp.s.child_fid,sizeof(fid_t));
+    /*
+    ** We have found the inode, attempt to get the attributes now
+    */
+    rozofs_inode_p = (rozofs_inode_t*)child_fid;
+    inode = rozofs_inode_p->fid[1];
+    ext_attr_child_p = rozofs_bt_load_dirent_from_main_thread(inode,&tracking_ret_p,&dirent_valid);
+    if (ext_attr_child_p == NULL)
+    {
+      {      
+	char bufall_debug[64];
+	rozofs_fid2string(child_fid,bufall_debug);      
+	FDL_INFO ("FDL rozofs_bt_lookup_cbk %s fid :%s   ext_attr_child_p %p dirent_valid %s\n",name,bufall_debug,ext_attr_child_p,(dirent_valid!=0)?"VALID":"INVALID");
+      }
+      goto resend2export;
+    }       
+    /*
+    ** we have both attributes
+    */
+    if (!(child_ie = get_ientry_by_fid(ext_attr_child_p->s.attrs.fid))) {
+	child_ie = alloc_ientry(ext_attr_child_p->s.attrs.fid);
+    } 
+    /*
+    ** among the update, the cache time is also asserted according to the mtime of the regular file, we should do the same for the directories
+    */
+    rozofs_ientry_update(child_ie,(struct inode_internal_t*)ext_attr_child_p);     
+    /*
+    ** need to take care of the slave inode here: only for the case of the regular file
+    */
+    if (S_ISREG(ext_attr_child_p->s.attrs.mode))
+    {
+       ret = rozofs_bt_get_slave_inode(tracking_ret_p,rozofs_inode_p,child_ie);
+    }   
+    memset(&fep, 0, sizeof (fep));
+    mattr_to_stat((struct inode_internal_t*)ext_attr_child_p, &stbuf,exportclt.bsize);
+    /*
+    ** use the timestamp of the tracking file as timestamp of the ientry
+    */
+    child_ie->timestamp = tracking_ret_p->timestamp;
+    stbuf.st_ino = child_ie->inode;
+    /*
+    ** check the case of the directory
+    */
+    if ((S_ISDIR(ext_attr_child_p->s.attrs.mode)) &&(strncmp(name,"@rozofs_uuid@",13) == 0))
+    {
+        rozofs_inode_t fake_id;
+		
+	fake_id.fid[1]= child_ie->inode;
+	fake_id.s.key = ROZOFS_DIR_FID;
+        fep.ino = fake_id.fid[1];  
+    }
+    else
+    {
+      fep.ino = child_ie->inode;
+    }
+    stbuf.st_size = child_ie->attrs.attrs.size;
+    rozofs_inode_p = (rozofs_inode_t *)ext_attr_child_p->s.attrs.fid;
+    if (rozofs_inode_p->s.del)
+    {
+      fep.attr_timeout  = 0;
+      fep.entry_timeout = 0;
+    }
+    else
+    {
+      fep.attr_timeout = rozofs_get_linux_caching_time_second(child_ie);
+      fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(child_ie->inode));    
+    }
+    memcpy(&fep.attr, &stbuf, sizeof (struct stat));
+    child_ie->nlookup++;
+
+    rozofs_inode_t * finode = (rozofs_inode_t *) child_ie->attrs.attrs.fid;
+    fep.generation = finode->fid[0]; 
+    pie = get_ientry_by_inode(parent);
+    if (pie != NULL)
+    {
+      /*
+      ** set the parent update time in the ientry of the child inode
+      */
+      child_ie->parent_update_time = rozofs_get_parent_update_time_from_ie(pie);
+    }
+    rz_fuse_reply_entry(req, &fep);  
+    /*
+    ** OK now let's check if there was some other lookup request for the same
+    ** object
+    */
+
+    {
+      int trc_idx,i;    
+      status = 0;  
+      for (i = 0; i < fuse_ctx_p->lkup_cpt;i++)
+      {
+	 /*
+	 ** Check if the inode and the name are the same
+	 */
+         rz_fuse_reply_entry(fuse_ctx_p->lookup_tb[i].req, &fep);
+         child_ie->nlookup++;
+	 trc_idx = fuse_ctx_p->lookup_tb[i].trc_idx;
+         rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xfacebeef,(child_ie==NULL)?NULL:child_ie->attrs.attrs.fid,status,(child_ie==NULL)?-1:child_ie->attrs.attrs.size,trc_idx);
+      } 
+    }      
+    errno = 0;
+    goto out;
+    
+    /*
+    **________________________________________________________________________________________________
+    ** the child inode information cannot be get locally need to send the request towards the export
+    **________________________________________________________________________________________________
+    */
+resend2export:
+    {
+      epgw_lookup_arg_t arg;
+      memcpy(parent_fid, msg_p->s.lookup_rsp.parent_fid,sizeof(fid_t)); 
+      /*
+      ** release the buffer that has been allocated from the transaction pool
+      */      
+      ruc_buf_freeBuffer(ruc_buffer);   
+      ruc_buffer = NULL;
+      /*
+      ** fill up the structure that will be used for creating the xdr message
+      */    
+      arg.arg_gw.eid = exportclt.eid;
+      memcpy(arg.arg_gw.parent,parent_fid, sizeof (uuid_t));
+      arg.arg_gw.name = (char*)name;    
+      ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,parent_fid,EXPORT_PROGRAM, EXPORT_VERSION,
+                        	EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,
+                        	rozofs_ll_lookup_cbk,param); 
+
+       if (ret < 0) goto error;
+       /*
+       ** no error just waiting for the answer
+       */
+       return; 
+    }
+    /*
+    **______________________________________________________________________________
+    ** there was an error while we attempt to send the request towards the exportd
+    **______________________________________________________________________________
+    */
+error:
+    errcode = errno;
+    fuse_reply_err(req, errno);
+    /*
+    ** OK now let's check if there was some other lookup request for the same
+    ** object
+    */
+    {
+      status = -1;
+      int trc_idx,i;      
+      for (i = 0; i < fuse_ctx_p->lkup_cpt;i++)
+      {
+	 /*
+	 ** Check if the inode and the name are the same
+	 */
+         fuse_reply_err(fuse_ctx_p->lookup_tb[i].req,errcode);
+	 trc_idx = fuse_ctx_p->lookup_tb[i].trc_idx;
+	 errno=errcode;
+         rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(child_ie==NULL)?NULL:child_ie->attrs.attrs.fid,status,(child_ie==NULL)?-1:child_ie->attrs.attrs.size,trc_idx);
+      }        
+    }
+    /*
+    ** remove the context from the lookup queue
+    */
+    if (param != NULL) ruc_objRemove(param);
+out:
+
+    /*
+    ** release the transaction context and the fuse context
+    */
+    rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xfacebeef,(child_ie==NULL)?NULL:child_ie->attrs.attrs.fid,0,(child_ie==NULL)?-1:child_ie->attrs.attrs.size,trc_idx);   
+    STOP_PROFILING_NB(param,rozofs_ll_lookup);
+    rozofs_fuse_release_saved_context(param);        
+    /*
+    ** release the buffer if has been allocated
+    */
+    if (ruc_buffer != NULL) ruc_buf_freeBuffer(ruc_buffer);   
+   
+    return;
+
+enoent:
+   /*
+   ** Case of non existent entry. 
+   ** Tell FUSE to keep responding ENOENT for this name for a few seconds
+   */
+   memset(&fep, 0, sizeof (fep));
+   fep.ino = 0;
+   fep.attr_timeout  = rozofs_tmr_get_enoent();
+   fep.entry_timeout = rozofs_tmr_get_enoent();
+   rz_fuse_reply_entry(req, &fep);
+   errno = ENOENT;
+   errcode = errno;
+   /*
+   ** OK now let's check if there was some other lookup request for the same
+   ** object
+   */
+   {
+     status = -1;
+     int trc_idx,i;      
+     for (i = 0; i < fuse_ctx_p->lkup_cpt;i++)
+     {
+	/*
+	** Check if the inode and the name are the same
+	*/
+        rz_fuse_reply_entry(fuse_ctx_p->lookup_tb[i].req, &fep);
+	trc_idx = fuse_ctx_p->lookup_tb[i].trc_idx;
+	errno=errcode;
+        rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xdeadbeef,(child_ie==NULL)?NULL:child_ie->attrs.attrs.fid,status,(child_ie==NULL)?-1:child_ie->attrs.attrs.size,trc_idx);
+     } 
+     errno = errcode;       
+   }
+   goto out;
+}
 
 /*
 **____________________________________________________________________
@@ -726,7 +1159,7 @@ void af_unix_bt_dirent_response(void *ruc_buffer)
     case ROZOFS_BT_DIRENT_GET_DENTRY:
     {
       FDL_INFO("FDL ROZOFS_BT_DIRENT_GET_DENTRY received!!");
-      ruc_buf_freeBuffer(ruc_buffer);
+      return rozofs_bt_lookup_cbk(ruc_buffer);
       break;
     }
     default:
@@ -760,7 +1193,7 @@ static void *rozofs_bt_dirent_lookup_thread(void *v) {
 	 rozofs_bt_readdir_req(thread_ctx_p,ruc_buffer); 
 	 break; 
        case ROZOFS_BT_DIRENT_GET_DENTRY:
-//	 rozofs_bt_getdirent_req(thread_ctx_p,ruc_buffer); 
+	 rozofs_bt_lookup_req(thread_ctx_p,ruc_buffer); 
 	 break;  
        default:
 	fatal("unexpected  opcode:%d\n",hdr_p->opcode);

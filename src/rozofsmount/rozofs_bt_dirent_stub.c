@@ -723,6 +723,8 @@ void show_btmap_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
   rozofs_inode_t  rozofs_inode;
   int delete = 0;
   char pathname[1024];
+  char date[64];
+  struct tm tm;
   int count = 0;
   
   if (argv[1] == NULL) {
@@ -825,34 +827,18 @@ void show_btmap_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
   count = export_dir_get_root_idx_count(&ie->btmap);
   pathname[0] = 0;
   export_lv2_resolve_path((unsigned char*) &rozofs_inode.fid[0],pathname);
+  tm = *localtime((time_t*)&ie->mtime);  
      
   pChar += sprintf(pChar, "%-15s : %llu\n", "inode", (long long unsigned int)ie->inode);
   pChar += sprintf(pChar, "%-15s : %s\n", "fid", fid_str);
   pChar += sprintf(pChar, "%-15s : %d\n", "count", count);
   pChar += sprintf(pChar, "%-15s : %s\n", "path", pathname);
-
+  pChar += sprintf(pChar, "%-15s : %d-%02d-%02d %02d:%02d:%02d\n\n","mtime",tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec); 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
   return;
   
 }  
 
-
-
-/*
-*_______________________________________________________________________
-*/
-/**
-* dirent cache
-*/
-char *dirent_cache_display(char *pChar);
-
-void show_dirent_cache(char * argv[], uint32_t tcpRef, void *bufRef) {
-    char *pChar = uma_dbg_get_buffer();
-    pChar = dirent_cache_display(pChar);
-    pChar = dirent_disk_display_stats(pChar);
-    pChar = dirent_wbcache_display_stats(pChar);
-    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	  
-}
 
 
 /*
@@ -985,7 +971,7 @@ int rozofs_bt_dirent_hash_init(int eid, char *export_root_path)
     /*
     ** dirent cache stats
     */
-    uma_dbg_addTopic("dirent_cache",show_dirent_cache);   
+    uma_dbg_addTopic("dirent_cache",rozofs_bt_show_dirent_cache);   
     
     export_profiler_eid = eid;
     export_profiler[export_profiler_eid] = malloc(sizeof(export_one_profiler_t));
@@ -1027,7 +1013,7 @@ int rozofs_bt_load_dirent_root_bitmap_file(uint64_t inode,uint64_t mtime)
    ** it might be possible that the cache is empty
    */
    rozofs_bt_remove_dirent_from_cache((unsigned char *)&rozofs_inode.fid[0],&remove_count);
-   info("FDL load dirent remove before loading (count %d)",remove_count);
+   // info("FDL load dirent remove before loading (count %d)",remove_count);
    /*
    ** need to allocate an entry
    */
@@ -1135,6 +1121,7 @@ int dirent_remove_root_entry_from_cache(fid_t fid, int root_idx);
   @retval < 0 on error (see errno for details)
   
 */
+#if 0
 int rozofs_bt_remove_dirent_from_cache(fid_t fid,int *remove_count_p)	
 {
 
@@ -1185,6 +1172,52 @@ int rozofs_bt_remove_dirent_from_cache(fid_t fid,int *remove_count_p)
        */
        dirent_cache_release_entry(dirent_p);
        remove_count++;
+     }
+  }
+  /*
+  ** now remove the bitmap entry from the cache
+  */
+  del_btmap_entry(btmap_entry_p);
+  if (remove_count_p!= NULL) *remove_count_p = remove_count;
+  return 0;
+}
+#endif
+
+int rozofs_bt_remove_dirent_from_cache(fid_t fid,int *remove_count_p)	
+{
+
+  dentry_btmap_t *btmap_entry_p = NULL;
+  dirent_dir_root_idx_bitmap_t *btmap_p;
+  uint8_t byte_value;  
+  int remove_count = 0;
+  int byte;
+  int bit_idx;
+  int root_idx;
+  int ret;
+  
+  if (remove_count_p!= NULL) *remove_count_p = 0;
+
+  btmap_entry_p = get_btmap_entry_by_fid(fid);
+  if (btmap_entry_p == NULL)
+  {
+    /*
+    ** nothing there
+    */
+    errno = ENOENT;
+    return -1;
+  }
+  btmap_p = &btmap_entry_p->btmap;
+  root_idx = 0;
+  for (byte = 0; byte <DIRENT_FILE_BYTE_BITMAP_SZ;byte++)
+  {
+     byte_value =  btmap_p->bitmap[byte];
+     if (byte_value == 0) continue;
+     for (bit_idx = 0; bit_idx < 8; bit_idx++)
+     {
+       if ((byte_value & 1<<bit_idx) == 0) continue;
+       root_idx = byte*8+bit_idx;
+       ret = bt_dirent_remove_root_entry_from_cache(fid,root_idx);
+       if (ret == 0) remove_count++;
      }
   }
   /*

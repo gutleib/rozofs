@@ -233,6 +233,26 @@ typedef struct _bt_readdir2_ret
    } s;
 } bt_readdir2_ret;  
 
+
+typedef struct _bt_lookup_arg_t
+{
+    uint32_t eid;         /**< export identifier            */
+    fid_t    parent_fid;  /**< fid of the parent directory  */
+    char     *name;       /**< name to search for           */
+} bt_lookup_arg_t;
+
+
+typedef struct _bt_lookup_ret_t
+{
+   fid_t parent_fid;   /**< fid of the parent */
+   int status;  /**< status of the operation 0 if OK, -1 if error */
+   union
+   {
+     int errcode;  /**< errcode when status is -1 */
+     fid_t child_fid;  /**< inode value   */
+   } s;
+} bt_lookup_ret_t;
+
 /*
 **____________________________________________________________________
 */
@@ -253,6 +273,8 @@ typedef struct _bt_dirent_msg_t
   {  
     bt_readdir_arg_t readdir_rq;
     bt_readdir2_ret  readdir_rsp;
+    bt_lookup_arg_t  lookup_rq;
+    bt_lookup_ret_t  lookup_rsp;
   } s;
 } bt_dirent_msg_t;
 
@@ -303,4 +325,60 @@ void rozofs_bt_readdir2_cbk(void *ruc_buffer);
 */
 int rozofs_bt_dirent_thread_intf_create(char * hostname, int instance_id, int nb_threads);
 
+
+void rozofs_bt_show_dirent_cache(char * argv[], uint32_t tcpRef, void *bufRef);
+
+/*
+ **______________________________________________________________________________
+ */
+
+/**
+ * Attempt to release the cache entry associated with the root dirent file
+ *
+ * @param dirfd: file descriptor of the parent directory
+ * @param *name: pointer to the name of the mdirentry to put
+ * @param fid_parent: unique identifier of the parent directory
+ *  @param fid: unique identifier of the mdirentry to put
+ * @param type: type of the mdirentry to put
+ *
+ * @retval  0 -> success
+ * @retval -1 -> the entry does not exist
+ */
+
+int bt_dirent_remove_root_entry_from_cache(fid_t fid, int root_idx);
+
+/*
+**____________________________________________________________________
+*/
+/**
+*  attempt to perform a local readdir if the dirent files of the directory are available
+
+   @param  eid: export identifier
+   @param  parent_fid: fid of the parent directory
+   @param  name: name for which we want the inode
+   @param  fuse_ctx_p: fuse context
+         
+   @retval 0 on success
+   @retval -1 on error (see errno for details)
+*/
+int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *name,void *fuse_ctx_p);
+
+#if 0
+/*
+**__________________________________________________________________________________________________
+*/
+/*
+**
+   Get the slave inodes if any: only fro regular files
+
+   @param tracking_ret_p: pointer to the tracking file cache entry
+   @param rozofs_inode_p: pointer to the master rozofs inode
+   @param ie: inode ientry pointer
+   
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+
+*/
+int rozofs_bt_get_slave_inode(rozofs_bt_tracking_cache_t *tracking_ret_p,rozofs_inode_t *rozofs_inode_p,ientry_t *ie);
+#endif
 #endif

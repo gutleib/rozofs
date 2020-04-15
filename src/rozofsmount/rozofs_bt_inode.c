@@ -74,6 +74,15 @@ static pthread_rwlock_t rozofs_bt_inode_lock;
 */
 rozofs_bt_thread_ctx_t rozofs_bt_inode_thread_ctx_tb[ROZOFS_BT_INODE_MAX_THREADS];
 rozofs_bt_thread_ctx_t rozofs_bt_rcu_thread_ctx[ROZOFS_BT_INODE_MAX_THREADS];
+/*
+** RCU garbage collector
+*/
+list_t rozofs_bt_rcu_thread_garbage_collector_head;  /**< ruc thread garbage collectot for releasing tracking file memory payload */
+static pthread_rwlock_t rozofs_bt_rcu_thread_garbage_collector_lock;  /**< lock on the garbage collector linked list         */
+uint64_t rozofs_bt_rcu_thread_garbage_collector_deadline_delay_sec = ROZOFS_BT_GARBAGE_DEADLINE_SEC; 
+uint64_t rozofs_bt_rcu_garbage_collector_count = 0;  /**< number of payload in the garbage collector   */
+uint64_t rozofs_bt_rcu_garbage_collector_size = 0;  /**< size of memory taken by the payload pushed on the garbage collector   */
+
 rozofs_queue_prio_t rozofs_bt_ino_queue_req;
 rozofs_queue_t rozofs_bt_ino_queue_rsp;
 #define ROZOFS_BT_MAX_TRK_CACHE 1024
@@ -86,8 +95,6 @@ uint64_t rozobs_bt_inode_track_cache_entry_delay_sec = ROZOFS_BT_DEADLINE_SEC;
 
 rozofs_bt_tracking_cache_t  **rozofs_bt_inode_debug_tb_p = NULL;
 rozofs_bt_lookup_stats_t rozofs_bt_lookup_stats;
-
-
 
 
 /**
@@ -377,6 +384,7 @@ void rozofs_bt_put_tracking(rozofs_bt_tracking_cache_t * trk_p)
 
  void rozofs_bt_del_tracking(rozofs_bt_tracking_cache_t * trk_p) 
 {
+    int removed = 0;
 
     pthread_rwlock_wrlock(&rozofs_bt_inode_lock);
     /*
@@ -387,11 +395,17 @@ void rozofs_bt_put_tracking(rozofs_bt_tracking_cache_t * trk_p)
     rozofs_tracking_file_count--;
     htable_del_entry(&htable_bt_inode, &trk_p->he);
     list_remove(&trk_p->list);
-    xfree(trk_p);    
-
+    removed = 1;
 out:
     pthread_rwlock_unlock(&rozofs_bt_inode_lock);
-
+    if (removed)
+    {
+      /*
+      ** need to release the payload if it exists
+      */
+      if (trk_p->trk_payload != NULL) xfree(trk_p->trk_payload);
+      xfree(trk_p);                
+    }
 }
 
 /*
@@ -515,14 +529,13 @@ rozofs_bt_track_key_t rozofs_bt_inode_get_filekey_from_inode(uint64_t inode)
 */
 int rozofs_bt_load_tracking_file(rozofs_bt_track_key_t file_key,rozofs_bt_attr_ctx_t *working_p,rozofs_bt_pfc_callback_t rsp_trk_read_cbk)
 {
-   ssize_t read_size;
    rozofs_bt_tracking_cache_t *image_p;
    /*
    ** allocate the memory to store a full tracking file
    */
-   read_size = sizeof(exp_trck_file_header_t)+EXP_TRCK_MAX_INODE_PER_FILE*sizeof(ext_mattr_t);   
+//   read_size = sizeof(exp_trck_file_header_t)+EXP_TRCK_MAX_INODE_PER_FILE*sizeof(ext_mattr_t);   
 
-   image_p = xmalloc(read_size + sizeof(rozofs_bt_tracking_cache_t));
+   image_p = xmalloc(sizeof(rozofs_bt_tracking_cache_t));
    if (image_p == NULL)
    {
      errno = ENOMEM;
@@ -541,21 +554,24 @@ int rozofs_bt_load_tracking_file(rozofs_bt_track_key_t file_key,rozofs_bt_attr_c
    image_p->reload_count = 0;
    image_p->access_count = 0;
 
-   image_p->length = read_size;
    image_p->mtime = 0;
    image_p->errcode = 0;
    list_init(&image_p->list);
    list_init(&image_p->pending_list);
-   /*
-   ** insert in the hash table
-   */
    image_p->timestamp = 0;
    image_p->cache_time = 0;
    image_p->deadline_sec = time(NULL) + rozobs_bt_inode_track_cache_entry_delay_sec;  
    /*
+   ** prepare the array for payload
+   */
+   image_p->trk_payload = NULL;
+   /*
    ** assert the pending flag and insert the entry in the hash table
    */
-   image_p->pending = 1;;
+   image_p->pending = 1;
+   /*
+   ** insert in the hash table
+   */
    rozofs_bt_put_tracking(image_p);
    /*
    ** send a read request towards the tracking file client reader
@@ -628,12 +644,25 @@ ext_mattr_t *rozofs_bt_get_inode_ptr_from_image(rozofs_bt_tracking_cache_t *trac
    uint16_t idx;  
    ext_mattr_t  *inode_p;
    rozofs_inode_t *inode_val_p;
+   rozofs_bt_tracking_cache_payload_hdr_t *payload_p;
 
    
    rozofs_ino.fid[0] = 0;
    rozofs_ino.fid[1] = inode;   
-   
-   trk_hdr_p = (exp_trck_file_header_t*)(tracking_p+1);
+   /*
+   ** set the pointer to the beginning of the tracking file image in memory
+   */ 
+   payload_p = tracking_p->trk_payload;
+   if ( payload_p == NULL)
+   {
+     /*
+     ** this not normal
+     */
+     severe("the tracking file memory is not allocated !!");
+     errno = EPROTO;
+     return NULL;
+   }
+   trk_hdr_p = (exp_trck_file_header_t*)payload_p->tracking_payload;
    
    off = GET_FILE_OFFSET(rozofs_ino.s.idx);
    p8 = (uint8_t*)trk_hdr_p;
@@ -1167,7 +1196,6 @@ void rozofs_bt_process_init(void *recv_buf,int socket_id)
 */
 int rozofs_bt_load_tracking_file_for_io_read(uint64_t inode,rozofs_bt_attr_ctx_t *working_p,rozofs_bt_pfc_callback_t rsp_trk_read_cbk)
 {
-   ssize_t read_size;
    rozofs_bt_tracking_cache_t *image_p = NULL;
    rozofs_bt_track_key_t file_key;
    
@@ -1201,9 +1229,8 @@ int rozofs_bt_load_tracking_file_for_io_read(uint64_t inode,rozofs_bt_attr_ctx_t
    /*
    ** it does not exists: allocate the memory to store a full tracking file
    */
-   read_size = sizeof(exp_trck_file_header_t)+EXP_TRCK_MAX_INODE_PER_FILE*sizeof(ext_mattr_t);   
 
-   image_p = xmalloc(read_size + sizeof(rozofs_bt_tracking_cache_t));
+   image_p = xmalloc(sizeof(rozofs_bt_tracking_cache_t));
    if (image_p == NULL)
    {
      errno = ENOMEM;
@@ -1222,21 +1249,24 @@ int rozofs_bt_load_tracking_file_for_io_read(uint64_t inode,rozofs_bt_attr_ctx_t
    image_p->reload_count = 0;
    image_p->access_count = 0;
    
-   image_p->length = read_size;
    image_p->mtime = 0;
    image_p->errcode = 0;
    list_init(&image_p->list);
    list_init(&image_p->pending_list);
-   /*
-   ** insert in the hash table
-   */
    image_p->timestamp = 0;
    image_p->cache_time = 0;
    image_p->deadline_sec = time(NULL) + rozobs_bt_inode_track_cache_entry_delay_sec;  
    /*
+   ** prepare the array for payload
+   */
+   image_p->trk_payload = NULL;
+   /*
    ** assert the pending flag and insert the entry in the hash table
    */
    image_p->pending = 1;
+   /*
+   ** insert in the hash table
+   */
    rozofs_bt_put_tracking(image_p);
    /*
    ** send a read request towards the tracking file client reader
@@ -1535,6 +1565,7 @@ void rozofs_bt_process_read_trk_file_for_directory(expbt_msgint_full_t *msg_th_p
 
 typedef struct _rozofs_bt_rcu_private_t {
    uint64_t period_sec;  /**< polling period en seconds */
+   uint64_t garbage_collector_deletion;
    uint64_t messages_count;
    uint64_t check_count;
    uint64_t reload_count;
@@ -1563,16 +1594,20 @@ char  *show_trkrd_rcu_thread_stats_display(char *pChar,rozofs_bt_thread_ctx_t *t
    rozofs_bt_rcu_private_t *private_p = NULL;
    private_p = thread_ctx_p->thread_private;
    
-   pChar +=sprintf(pChar,"Polling period : %llu sec\n",(unsigned long long int)private_p->period_sec);
-   pChar +=sprintf(pChar,"deletion       : %s\n",(private_p->deletion_enable)?"ENABLED":"DISABLED");
-   pChar +=sprintf(pChar,"polling count  : %llu \n",(unsigned long long int)private_p->polling_count);
-   pChar +=sprintf(pChar,"polling time   : %llu us \n",(unsigned long long int)private_p->polling_time);
-   pChar +=sprintf(pChar,"polling rate  :  %llu msg/s\n",(unsigned long long int)((private_p->polling_time==0)?0:(private_p->polling_count*1000000)/private_p->polling_time));
-   pChar +=sprintf(pChar,"messages count : %llu \n",(unsigned long long int)private_p->messages_count);
-   pChar +=sprintf(pChar,"check count    : %llu \n",(unsigned long long int)private_p->check_count);
-   pChar +=sprintf(pChar,"check rate     : %llu check/sec\n",(unsigned long long int)((private_p->polling_time==0)?0:(private_p->check_count*1000000)/private_p->polling_time));
-   pChar +=sprintf(pChar,"reload count   : %llu \n",(unsigned long long int)private_p->reload_count);
-   pChar +=sprintf(pChar,"deletion count : %llu \n",(unsigned long long int)private_p->deletion_count);
+   pChar +=sprintf(pChar,"Polling period      : %llu sec\n",(unsigned long long int)private_p->period_sec);
+   pChar +=sprintf(pChar,"deletion            : %s\n",(private_p->deletion_enable)?"ENABLED":"DISABLED");
+   pChar +=sprintf(pChar,"polling count       : %llu \n",(unsigned long long int)private_p->polling_count);
+   pChar +=sprintf(pChar,"polling time        : %llu us \n",(unsigned long long int)private_p->polling_time);
+   pChar +=sprintf(pChar,"polling rate        :  %llu msg/s\n",(unsigned long long int)((private_p->polling_time==0)?0:(private_p->polling_count*1000000)/private_p->polling_time));
+   pChar +=sprintf(pChar,"messages count      : %llu \n",(unsigned long long int)private_p->messages_count);
+   pChar +=sprintf(pChar,"check count         : %llu \n",(unsigned long long int)private_p->check_count);
+   pChar +=sprintf(pChar,"check rate          : %llu check/sec\n",(unsigned long long int)((private_p->polling_time==0)?0:(private_p->check_count*1000000)/private_p->polling_time));
+   pChar +=sprintf(pChar,"reload count        : %llu \n",(unsigned long long int)private_p->reload_count);
+   pChar +=sprintf(pChar,"deletion count      : %llu \n",(unsigned long long int)private_p->deletion_count);
+   pChar +=sprintf(pChar,"garbage coll. del   : %llu \n",(unsigned long long int)private_p->garbage_collector_deletion);
+   pChar +=sprintf(pChar,"garbage coll. count : %llu \n",(unsigned long long int)rozofs_bt_rcu_garbage_collector_count);
+   pChar +=sprintf(pChar,"garbage coll. size  : %llu Bytes \n",(unsigned long long int)rozofs_bt_rcu_garbage_collector_size);
+   pChar +=sprintf(pChar,"garbage coll. delay : %llu seconds \n",(unsigned long long int)rozofs_bt_rcu_thread_garbage_collector_deadline_delay_sec);
    
    if (reset)
    {
@@ -1581,7 +1616,8 @@ char  *show_trkrd_rcu_thread_stats_display(char *pChar,rozofs_bt_thread_ctx_t *t
      private_p->check_count = 0;
      private_p->reload_count = 0;
      private_p->deletion_count = 0;
-     private_p->polling_time = 0;   
+     private_p->polling_time = 0;        
+     private_p->deletion_count = 0;   
    }
    return pChar;
 
@@ -1782,6 +1818,12 @@ void rozofs_bt_inode_rcu_process_tracking_file_update_th(rozofs_bt_thread_ctx_t 
      {
         if (msg_th_p->rsp.check_rsp.entry[i].errcode == ENOENT)
 	{
+#warning tracking cache entry remove on ENOENT
+	   /*
+	   ** not the right place to delete the cache entry since we might have somr clients that are linked in the pending list of 
+	   ** the tracking cache context. It is better to do it at the inode thread level 
+	   ** and to remove the entry based on the deadline time
+	   */
 	   rozofs_bt_inode_delete_cache_entry(thread_ctx_p,image_p);
 	}
 	continue;
@@ -2017,6 +2059,83 @@ wait_data:
 }
 
 
+/**
+**_______________________________________________________________________________________
+*/
+/**
+  Insertion of the payload of a tracking cache in the RCU garbage collector
+  
+  @param payload_p: pointer to the payload context to insert
+  
+  @retval none
+*/
+void rozofs_bt_rcu_queue_trk_file_payload_in_garbage_collector(rozofs_bt_tracking_cache_payload_hdr_t *payload_p)
+{
+   pthread_rwlock_wrlock(&rozofs_bt_rcu_thread_garbage_collector_lock);
+
+   rozofs_bt_rcu_garbage_collector_count++;
+   list_init(&payload_p->list_delete);
+   payload_p->deadline_delete = time(NULL) + rozofs_bt_rcu_thread_garbage_collector_deadline_delay_sec;
+   rozofs_bt_rcu_garbage_collector_size +=payload_p->datalen;
+   /*
+   ** insert in the garbage collector
+   */   
+   list_push_back(&rozofs_bt_rcu_thread_garbage_collector_head, &payload_p->list_delete);
+
+   
+   pthread_rwlock_unlock(&rozofs_bt_rcu_thread_garbage_collector_lock);
+
+}
+
+/**
+**_______________________________________________________________________________________
+*/
+/**
+  Flush any entry that has expired within the tracking file payload garbage collector
+  
+  @param thread_ctx_p: pointer to the rcu thread context
+  
+  @retval none
+*/
+void rozofs_bt_rcu_flush_garbage_collector(rozofs_bt_thread_ctx_t *thread_ctx_p)
+{
+    list_t *p, *q;
+    time_t cur_time;
+    rozofs_bt_rcu_private_t *private_p = NULL;
+
+    private_p = thread_ctx_p->thread_private;
+    
+    if (rozofs_bt_rcu_garbage_collector_count == 0) 
+    {
+      /*
+      ** the garbage collector is empty
+      */
+      return;
+    }
+    cur_time = time(NULL);
+    /*
+    ** go through the garbage collector remove all the entries that have reached their deadline
+    */
+    pthread_rwlock_wrlock(&rozofs_bt_rcu_thread_garbage_collector_lock);
+
+    list_for_each_forward_safe(p, q, &rozofs_bt_rcu_thread_garbage_collector_head) {
+        rozofs_bt_tracking_cache_payload_hdr_t *payload_p = list_entry(p, rozofs_bt_tracking_cache_payload_hdr_t, list_delete);
+        /*
+	** check if the deadline has been reached
+	*/
+	if (payload_p->deadline_delete > cur_time) break;
+	/*
+	** the deadline is reached, remove it from the garbage collector and release the memory
+	*/
+	list_remove(p);
+	rozofs_bt_rcu_garbage_collector_count--;
+	private_p->garbage_collector_deletion++;
+	rozofs_bt_rcu_garbage_collector_size -=payload_p->datalen;
+    }
+
+   pthread_rwlock_unlock(&rozofs_bt_rcu_thread_garbage_collector_lock);
+}
+
 
 int xxx_debug =0;
 
@@ -2048,6 +2167,13 @@ static void *rozofs_bt_rcu_inode_polling_thread(void *v) {
 
         nanosleep(&ts, NULL);  
 	tic = rozofs_get_ticker_us();
+	/*
+	** Garbage collector check
+	*/
+	rozofs_bt_rcu_flush_garbage_collector(thread_ctx_p);
+	/*
+	** tracking file check
+	*/
 	rozofs_bt_inode_rcu_check_tracking_file_update_th(thread_ctx_p);     
 	gettimeofday(&tc,(struct timezone *)0);
         toc = rozofs_get_ticker_us();
@@ -2075,8 +2201,15 @@ int rozofs_bt_rcu_thread_create(int queue_depth)
     int i;
     rozofs_bt_thread_ctx_t *p;
     rozofs_bt_rcu_private_t *private_p = NULL;    
-    
-    
+    /*
+    ** init of the RCU garbage collector
+    */
+    list_init(&rozofs_bt_rcu_thread_garbage_collector_head);
+    pthread_rwlock_init(&rozofs_bt_rcu_thread_garbage_collector_lock,NULL);
+    rozofs_bt_rcu_thread_garbage_collector_deadline_delay_sec = ROZOFS_BT_GARBAGE_DEADLINE_SEC;      
+    rozofs_bt_rcu_garbage_collector_count = 0; 
+    rozofs_bt_rcu_garbage_collector_size = 0;
+        
     rozofs_bt_inode_rcu_tb_p = malloc(sizeof(rozofs_bt_tracking_cache_t *)*ROZOFS_BT_MAX_TRK_CACHE);
     if (rozofs_bt_inode_rcu_tb_p == NULL)
     {
