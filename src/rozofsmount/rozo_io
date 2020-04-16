@@ -735,7 +735,7 @@ while True :
         if average[column-1] != int(0):
           LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(average[column]/average[column-1])) + NORMAL
         else:
-          LINE = LINE + '|' + color + "%7s "%(int(0)) + NORMAL            
+          LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(0)) + NORMAL            
       else:
         LINE = LINE + '|' + color + "%7s "%(common_bytes_with_unit(average[column]/SIZE)) + NORMAL
     LINE = LINE + "|     " 
