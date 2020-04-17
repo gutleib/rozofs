@@ -96,7 +96,7 @@ add_executable(rozofsmount
    rozofs_io_error_trc.c   
 )
 #pthread need by fuse
-target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+target_link_libraries(rozofsmount rozofs fuse dl ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
 add_executable(rozo_locate_projections
        rozo_locate_projections.c    
