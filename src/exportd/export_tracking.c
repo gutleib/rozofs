@@ -10236,6 +10236,7 @@ int export_setxattr(export_t *e, fid_t fid, char *name, const void *value, size_
     int need_parent_update = 0;
 
     START_PROFILING(export_setxattr);
+    errno = EINVAL;
 
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
         severe("export_getattr failed: %s", strerror(errno));
