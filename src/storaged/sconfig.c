@@ -407,23 +407,55 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
           ** Default is to have one device only
           */
           devices    = 1;
-          mapper     = 1; 
-          redundancy = 1;        
+          mapper     = 0; 
+          redundancy = 0;        
 	}
         else {
+          /*
+          ** Read number of devices. It must be within [1..STORAGE_MAX_DEVICE_NB]
+          */
 	  if (devices > STORAGE_MAX_DEVICE_NB) {
               errno = EINVAL;
               severe("Device number exceed %d for storage %d.", STORAGE_MAX_DEVICE_NB, i);
               goto out;
           }
-
+	  if (devices < 1) {
+              errno = EINVAL;
+              severe("Device number %d < 1 for storage %d.", devices, i);
+              goto out;
+          }
+          /*
+          ** Read number of mapper devices. It must be within [1..devices]
+          */
 	  if (!config_setting_lookup_int(ms, SDEV_MAPPER, &mapper)) {
 	    mapper = devices;
 	  }
-
+	  if (mapper > devices) {
+              errno = EINVAL;
+              severe("Device mapper %d > devices %d for storage %d.", mapper, devices, i);
+              goto out;
+          }
+	  if (mapper < 1) {
+              errno = EINVAL;
+              severe("Device mapper %d < 1 for storage %d.", mapper, i);
+              goto out;
+          }
+          /*
+          ** Read number of redundancy devices. It must be within [1..mapper]
+          */
 	  if (!config_setting_lookup_int(ms, SDEV_RED, &redundancy)) {
-	    redundancy = 2;
+	    redundancy = mapper;
 	  }
+	  if (redundancy > mapper) {
+              errno = EINVAL;
+              severe("Device redundancy %d > mapper %d for storage %d.", redundancy, mapper, i);
+              goto out;
+          }
+	  if (redundancy < 1) {
+              errno = EINVAL;
+              severe("Device redundancy %d < 1 for storage %d.", redundancy, i);
+              goto out;
+          }
         }
 	
 	/*
@@ -636,26 +668,33 @@ int sconfig_validate(sconfig_t *config) {
             goto out;
         }
 	
-	if (e1->device.total < e1->device.mapper) {
-            severe("device total is %d and mapper is %d", 
-	           e1->device.total, e1->device.mapper);
-            errno = EINVAL;
-            goto out;
-	}
+        /*
+        ** Case of the mono device, without mapping nor redundancy
+        */
+        if ((e1->device.total == 1) && (e1->device.mapper == 0) && (e1->device.redundancy == 0)) {
+        }
+        else {
+	  if (e1->device.total < e1->device.mapper) {
+              severe("device total is %d and mapper is %d", 
+	             e1->device.total, e1->device.mapper);
+              errno = EINVAL;
+              goto out;
+	  }
 
-	if (e1->device.redundancy <= 0) {
-            severe("device redundancy is %d", 
-	           e1->device.redundancy);
-            errno = EINVAL;
-            goto out;
-	}
-        
-	if (e1->device.redundancy > e1->device.mapper) {
-            severe("device redundancy is %d and mapper is %d", 
-	           e1->device.redundancy, e1->device.mapper);
-            errno = EINVAL;
-            goto out;
-	}
+	  if (e1->device.redundancy <= 0) {
+              severe("device redundancy is %d", 
+	             e1->device.redundancy);
+              errno = EINVAL;
+              goto out;
+	  }
+
+	  if (e1->device.redundancy > e1->device.mapper) {
+              severe("device redundancy is %d and mapper is %d", 
+	             e1->device.redundancy, e1->device.mapper);
+              errno = EINVAL;
+              goto out;
+	  }
+        }
 	
         list_for_each_forward(q, &config->storages) {
             storage_config_t *e2 = list_entry(q, storage_config_t, list);

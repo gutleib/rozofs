@@ -723,7 +723,7 @@ static inline int storio_device_monitor_get_free_space(storage_t   * st,
   ** Check whether RozoFS storage structure is created under
   ** this device
   */
-  rozofs_storage_device_subdir_create(st->root, dev);
+  rozofs_storage_device_subdir_create(st->root, dev, st->mapper_modulo);
   
   *size = sfs.f_blocks;
   *bs   = sfs.f_bsize;

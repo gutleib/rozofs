@@ -1630,7 +1630,7 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev,
   /*
   ** Create sub-direcories if not yet done
   */
-  rozofs_storage_device_subdir_create(st->root,pDev->dev);
+  rozofs_storage_device_subdir_create(st->root,pDev->dev, st->mapper_modulo);
   
   /*
   ** Device is mounted now

@@ -913,7 +913,7 @@ static inline int storage_write(storage_t * st, storio_device_mapping_t * fidCtx
     char     * pBins;
     
     dbg("write bid %d nb %d",input_bid,input_nb_proj);
-    int block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
+    bid_t block_per_chunk       = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
     int chunk                   = input_bid/block_per_chunk;
 
     
@@ -921,6 +921,14 @@ static inline int storage_write(storage_t * st, storio_device_mapping_t * fidCtx
       errno = EFBIG;
       return -1;
     }  
+    
+    /*
+    ** Case of the mono device without header files. There is only chunk 0
+    */
+    if (st->mapper_modulo == 0) {
+      chunk = 0;
+      block_per_chunk *= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
+    }        
     
     bid = input_bid - (chunk * block_per_chunk);
            
@@ -981,7 +989,7 @@ static inline int storage_write_empty(storage_t * st, storio_device_mapping_t * 
     uint32_t   nb_proj;
     
     dbg("write bid %d nb %d",input_bid,input_nb_proj);
-    int block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
+    bid_t block_per_chunk       = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
     int chunk                   = input_bid/block_per_chunk;
 
     
@@ -989,6 +997,14 @@ static inline int storage_write_empty(storage_t * st, storio_device_mapping_t * 
       errno = EFBIG;
       return -1;
     }  
+    
+    /*
+    ** Case of the mono device without header files. There is only chunk 0
+    */
+    if (st->mapper_modulo == 0) {
+      chunk = 0;
+      block_per_chunk *= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
+    }
     
     bid = input_bid - (chunk * block_per_chunk);
            
@@ -1073,7 +1089,7 @@ static inline int storage_write_repair3(storage_t * st, storio_device_mapping_t 
         uint64_t *file_size, const bin_t * bins, int * is_fid_faulty) {
     bid_t      bid;
     char   * pBins;    
-    int      block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
+    bid_t    block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
     int      chunk                   = input_bid/block_per_chunk;
     int      last_relative_block_idx_in_1rst_chunk;
     int      first_block2repair_in_2nd_chunk;
@@ -1083,7 +1099,15 @@ static inline int storage_write_repair3(storage_t * st, storio_device_mapping_t 
     if (chunk>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) { 
       errno = EFBIG;
       return -1;
-    }  
+    } 
+    
+    /*
+    ** Case of the mono device without header files. There is only chunk 0
+    */
+    if (st->mapper_modulo == 0) {
+      chunk = 0;
+      block_per_chunk *= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
+    }
     
     bid = input_bid - (chunk * block_per_chunk);
          
@@ -1219,12 +1243,20 @@ static inline int storage_read(storage_t * st, storio_device_mapping_t * fidCtx,
     dbg("read bid %d nb %d",input_bid,input_nb_proj);
 
     *len_read = len_read1 = len_read2 = 0;       
-    int block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
+    bid_t block_per_chunk       = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
     int chunk                   = input_bid/block_per_chunk;
     
     if (chunk>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) {  
       return 0;
     }        
+    
+    /*
+    ** Case of the mono device without header files. There is only chunk 0
+    */
+    if (st->mapper_modulo == 0) {
+      chunk = 0;
+      block_per_chunk *= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
+    }
     
     bid = input_bid - (chunk * block_per_chunk);
     if ((bid+input_nb_proj) <= block_per_chunk){ 
@@ -1634,9 +1666,10 @@ uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
 **
 ** @param root   storage root path
 ** @param dev    device number
+** @param mapper Number of mapper devices
 **  
 */
-void rozofs_storage_device_subdir_create(char * root, int dev);
+void rozofs_storage_device_subdir_create(char * root, int dev, int mapper);
 
 /**
  *_______________________________________________________________________

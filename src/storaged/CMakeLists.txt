@@ -200,6 +200,10 @@ add_executable(rozodump
     storage.h   
     storio_crc32.c
     storio_crc32.h
+    rbs_sclient.h
+    rbs_eclient.c
+    rbs.h    
+    rbs.c      
 )
 target_link_libraries(rozodump rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 

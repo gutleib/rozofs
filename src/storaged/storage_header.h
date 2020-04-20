@@ -142,6 +142,12 @@ typedef union _rozofs_stor_bins_file_hdr_vall_t {
 typedef rozofs_stor_bins_file_hdr_v2_t rozofs_stor_bins_file_hdr_t;
 
 
+/*
+** Version 3 of header is a fake header in case 
+** of monodevice without header file
+*/
+#define ROZOFS_STORAGE_HDR_VERSION_MONODEV (3)
+
 
 /*________________________________________________________________________
 **  Compute the number of chunk to store on disk
@@ -293,6 +299,15 @@ static inline int rozofs_st_header_get_chunk(void * hdr, int chunk) {
   
   if (chunk >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) return ROZOFS_EOF_CHUNK;
   
+  /*
+  ** Monodevice mode
+  ** No header file on disk. Only chunk 0 for data
+  */
+  if (vall->version == ROZOFS_STORAGE_HDR_VERSION_MONODEV) {
+    if (chunk == 0) return 0;
+    return ROZOFS_EOF_CHUNK;
+  }
+  
   if (vall->version == 2) {
     return vall->v2.devFromChunk[chunk];
   }
@@ -313,6 +328,23 @@ static inline void rozofs_st_header_set_chunk(rozofs_stor_bins_file_hdr_t * hdr,
   
   if (chunk >= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) return;
 
+  /*
+  ** Monodevice mode
+  ** No header file on disk. Only chunk 0 for data
+  */
+  if (hdr->version == ROZOFS_STORAGE_HDR_VERSION_MONODEV) {
+    if (chunk != 0) {
+      severe("MONODEV rozofs_st_header_set_chunk chunk %d with device %d",chunk,dev);
+      return;
+    }
+    if ((dev != 0)&&(dev!=ROZOFS_EOF_CHUNK)&&(dev!=ROZOFS_EMPTY_CHUNK)) {
+      severe("MONODEV rozofs_st_header_set_chunk chunk %d with device %d",chunk,dev);
+      return;
+    }
+    hdr->devFromChunk[chunk] = dev;
+    return;
+  }
+  
   /*
   ** All header files should be encoded in v2 format
   */

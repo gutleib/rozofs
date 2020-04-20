@@ -41,6 +41,7 @@
 #include <rozofs/rpc/mproto.h>
 #include <rozofs/rpc/rozofs_rpc_util.h>
 #include <rozofs/rpc/rpcclt.h>
+#include <rozofs/rpc/eproto.h>
 #include <rozofs/core/rozofs_ip_utilities.h>
 #include <rozofs/rozofs_timer_conf.h>
 #include <rozofs/common/daemon.h>
@@ -51,6 +52,7 @@
 #include "stspare_fid_cache.h"
 #include "rbs.h"
 #include "rbs_eclient.h"
+#include "rbs_sclient.h"
 
 sconfig_t     storaged_config;
 static char   storaged_config_file[PATH_MAX] = STORAGED_DEFAULT_CONFIG;
@@ -964,46 +966,72 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     if (fidCtx == NULL) goto release;
 
     /*
-    ** Let's read the header files on disk
-    */    
-    read_hdr_res = storage_read_header_file(
-            st,       // cid/sid context
-            fid,      // FID we are looking for
-	    1,        // Whether the storage is spare for this FID
-	    &file_hdr, // Returned header file content
-            0 );      // Update header file when not the same recycling value
-
-
-    /*
-    ** Error accessing all the devices  
+    ** Case of monodevice
     */
-    if (read_hdr_res == STORAGE_READ_HDR_ERRORS) {
+    if (st->mapper_modulo == 0) {
+      ep_mattr_t attr;
+      uint32_t   bsize;
+      uint8_t    layout;
+      int        ret;
       /*
-      ** Impossible to read the header files ????
+      ** No header file. Ask exportd about this file
       */
-      severe("storage_read_header_file - %s - %s",pathname,strerror(errno));
-      goto release;
+      ret = rbs_get_fid_attr(common_config.export_hosts, fid, &attr, &bsize, &layout);
+      if (ret != 0) {
+        /*
+        ** Export does not respond or FID does not exist any more.
+        */ 
+        goto release; 
+      }  
+      fidCtx->data.layout = layout;
+      fidCtx->data.bsize  = bsize;
+      memcpy(fidCtx->data.dist, attr.sids, sizeof(fidCtx->data.dist));
+      fidCtx->data.mtime  = 0; /* This tells that the file not yet read */
     }
 
-    if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) {
+    else {
       /*
-      ** Should we cleanup this file ???
-      */
-      warning("storage_read_header_file for %s not found",pathname);
-      goto release;
-    }
-        
-    /*
-    ** Save interresting information
-    */
-    fidCtx->data.layout = file_hdr.layout;
-    fidCtx->data.bsize  = file_hdr.bsize;
-    int size2copy = sizeof(file_hdr.distrib);
-    memcpy(fidCtx->data.dist,file_hdr.distrib,size2copy);
-    memset(&fidCtx->data.dist[size2copy],0,sizeof(fidCtx->data.dist)-size2copy);
-    fidCtx->data.mtime  = 0; /* This tells that the file not yet read */
-  }        
+      ** Let's read the header files on disk
+      */    
+      file_hdr.version = 0;
+      read_hdr_res = storage_read_header_file(
+              st,       // cid/sid context
+              fid,      // FID we are looking for
+	      1,        // Whether the storage is spare for this FID
+	      &file_hdr, // Returned header file content
+              0 );      // Update header file when not the same recycling value
 
+      /*
+      ** Error accessing all the devices  
+      */
+      if (read_hdr_res == STORAGE_READ_HDR_ERRORS) {
+        /*
+        ** Impossible to read the header files ????
+        */
+        severe("storage_read_header_file - %s - %s",pathname,strerror(errno));
+        goto release;
+      }
+
+      if (read_hdr_res == STORAGE_READ_HDR_NOT_FOUND) {
+        /*
+        ** Should we cleanup this file ???
+        */
+        warning("storage_read_header_file for %s not found",pathname);
+        goto release;
+      }
+
+      /*
+      ** Save interresting information
+      */
+      fidCtx->data.layout = file_hdr.layout;
+      fidCtx->data.bsize  = file_hdr.bsize;
+      int size2copy = sizeof(file_hdr.distrib);
+      memcpy(fidCtx->data.dist,file_hdr.distrib,size2copy);
+      memset(&fidCtx->data.dist[size2copy],0,sizeof(fidCtx->data.dist)-size2copy);
+      fidCtx->data.mtime  = 0; /* This tells that the file not yet read */
+    }        
+  }
+  
   /*
   ** When mtime has not changed, no need to reread the file
   */

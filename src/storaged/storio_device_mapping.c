@@ -813,6 +813,16 @@ uint32_t storio_device_mapping_new_chunk(uint16_t                  chunk,
   uint8_t     device;
 
   /*
+  ** Case of the mono device without header files. There is only chunk 0
+  */
+  if (st->mapper_modulo == 0) {
+    if (chunk != 0) {
+      severe("storio_device_mapping_new_chunk %d", chunk);
+    }
+    return 0;  
+  }  
+
+  /*
   ** size balancing
   */    
   if (common_config.file_distribution_rule == rozofs_file_distribution_size_balancing) {

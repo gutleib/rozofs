@@ -1,4 +1,3 @@
-
 /*
  Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
  This file is part of Rozofs.
@@ -46,9 +45,10 @@
 #include <rozofs/rozofs_srv.h>
 #include <rozofs/core/rozofs_string.h>
 #include <rozofs/common/common_config.h>
+#include <rozofs/rpc/eproto.h>
 #include "storage.h"
 #include "storio_crc32.h"
-
+#include "rbs_sclient.h"
 #define VERY_LAST (0x100000000000)
 
 int firstBlock = 0;
@@ -319,7 +319,7 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
   if (spare==0) {
   
     /* Header version 1. Find the sid in  the distribution */
-    if (hdr->v0.version == 2) {
+    if ((hdr->v0.version == 2)||(hdr->v0.version == ROZOFS_STORAGE_HDR_VERSION_MONODEV)) {
       int fwd = rozofs_get_rozofs_forward(hdr->v2.layout);
       int idx;
       for (idx=0; idx< fwd;idx++) {
@@ -546,6 +546,73 @@ void read_chunk_file(uuid_t fid, char * path, rozofs_stor_bins_file_hdr_vall_t *
   close(fd); free(buffer);
   
 }    
+/*_________________________________________________________________________
+**  Build speudo header file from information got from the exportd
+**
+**  @param hdr          The header file to initialize
+**  @param pRoot        The storage root path
+**  @param spare        Whether this storage is spare for this FID
+**  
+**  @retval 0 when OK. -1 in case of any error
+**_________________________________________________________________________
+*/
+static inline int rozodump_build_header(rozofs_stor_bins_file_hdr_vall_t * hdr, char * pRoot, int * spare) {
+  ep_mattr_t attr;
+  uint32_t   bsize;
+  uint8_t    layout;
+  char     * pChar;
+  uint32_t   sid;
+  int        ret;
+  uint8_t    safe;
+  uint8_t    fwd;
+  uint8_t    inv;
+  int        idx;
+
+  hdr->version = ROZOFS_STORAGE_HDR_VERSION_MONODEV; /* monodevice without header file */
+
+  /*
+  ** Get current sid from storage path
+  */
+  pChar = pRoot + strlen(pRoot);
+  while(*pChar != '_') pChar--;
+  pChar++;
+  ret = sscanf(pChar, "%u", (unsigned int *) &sid);
+  if (ret != 1) {
+    printf("Can not get SID from root path %s !!!\n",pRoot);  
+    return -1;    
+  }
+
+  /*
+  ** Get distribution from exportd
+  */
+  ret = rbs_get_fid_attr(common_config.export_hosts, hdr->v2.fid, &attr, &bsize, &layout);
+  if (ret != 0) {
+    printf("Can not get FID from export %s !!!\n",strerror(errno));  
+    return -1;    
+  }
+  rozofs_get_rozofs_invers_forward_safe(layout, &inv, &fwd, &safe);
+
+  hdr->v2.bsize  = bsize;
+  hdr->v2.layout = layout;
+  hdr->v2.cid    = attr.cid;
+  hdr->v2.sid    = sid;
+  memcpy(hdr->v2.distrib, attr.sids, sizeof(hdr->v2.distrib));
+  /*
+  ** Find out whther this SID is spare
+  */
+  *spare = 1;
+  for (idx = 0; idx < fwd; idx++) {
+    if (sid == hdr->v2.distrib[idx]) {
+      *spare = 0;
+      break;
+    }  
+  }
+  return 0;
+}   
+/*_________________________________________________________________________
+**  usage
+**_________________________________________________________________________
+*/ 
 char * utility_name=NULL;
 char * input_file_name = NULL;
 void usage() {
@@ -582,9 +649,10 @@ int main(int argc, char *argv[]) {
   rozofs_stor_bins_file_hdr_vall_t hdr;
   char          path[256];
   int           spare;
-  int           block_per_chunk;
+  bid_t         block_per_chunk;
   int           chunk;
   int           chunk_stop;
+  int           monodev = 0;
 
   /*
   ** read common config file (to get number of slices)
@@ -757,25 +825,45 @@ int main(int argc, char *argv[]) {
   */
   if (read_hdr_file(pRoot,devices, slice, &hdr, fid, &spare)!= 0) {
     printf("No header file found for %s under %s !!!\n",pFid,pRoot);
-    return -1;
+    if (devices !=1 ) {
+      return -1;
+    }  
+    /*
+    ** This may be a mono device config without header file
+    */
+    monodev = 1;
   }
   
-  block_per_chunk = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(hdr.v0.bsize);
-   
-  
-  if (first == 0) {
-    chunk = 0;
+  if (monodev) {    
+    block_per_chunk = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(0) * ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
+    chunk      = 0;
+    chunk_stop = 1;
+    /* 
+    ** Build pseudo header file
+    */
+    memcpy(hdr.v2.fid,fid,sizeof(fid_t));
+    if (rozodump_build_header(&hdr,pRoot,&spare) != 0) {
+      exit(1);
+    }  
+      
   }
   else {
-    chunk = first / block_per_chunk;
-  }  
-  
-  if (last == -1) {
-    chunk_stop = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE+1;
+    block_per_chunk = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(hdr.v0.bsize);
+    if (first == 0) {
+      chunk = 0;
+    }
+    else {
+      chunk = first / block_per_chunk;
+    }  
+
+
+    if (last == -1) {
+      chunk_stop = ROZOFS_STORAGE_MAX_CHUNK_PER_FILE+1;
+    }
+    else {
+      chunk_stop = (last / block_per_chunk)+1;
+    }  
   }
-  else {
-    chunk_stop = (last / block_per_chunk)+1;
-  }  
      
   while(chunk<chunk_stop) {
     int dev;

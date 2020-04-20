@@ -162,15 +162,24 @@ class host_class:
     print "nodeid = 0;"
     print "storages = ("
     for s in self.sid:
-      if rozofs.device_automount == True:
-        if s.cid.volume.vid == 1 :
-          print "\t%s{cid = %s; sid = %s; nodeid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.cid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)      
+      sys.stdout.write("\t%s{cid = %s; sid = %s; nodeid = %s;"%(nexts,s.cid.cid,s.sid,s.cid.cid))
+      if rozofs.device_automount != True:
+        sys.stdout.write(" root =\"%s\";"%(s.get_root_path(self.number)))
+      # ADD device configuration  
+      # 1) Monodevice             : dev_mapper is 0.              No need to configure any device
+      # 2) Legacy single device   : dev_total & dev_mapper is 1.  Just configure device-total = 1;
+      # 3) Legacy multiple device :                               Configure device-total, device-mapper & device-redundancy
+      if s.cid.dev_mapper != 0:
+        if s.cid.dev_total == 1:
+          sys.stdout.write(" device-total = %s;"%(s.cid.dev_total))
         else:
-          print "\t%s{cid = %s; sid = %s; nodeid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; spare-mark = \"%s\";}"%(nexts,s.cid.cid,s.sid,s.cid.cid, s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red,s.cid.volume.vid)                
-      else:
-        print "\t%s{cid = %s; sid = %s; nodeid = %s; root =\"%s\"; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.cid,s.get_root_path(self.number),s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)
+          sys.stdout.write(" device-total = %s; device-mapper = %s; device-redundancy = %s;"%(s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red))
+      if s.cid.volume.vid != 1 :
+        sys.stdout.write(" spare-mark = \"%s\";"%(s.cid.volume.vid))               
+      sys.stdout.write( "}\n")              
       nexts=","
-    print "); "
+    sys.stdout.write( "); ")
+    sys.stdout.flush()
        
   def process(self,opt):
     string="ps -fC %s/build/src/launcher/rozolauncher"%(os.getcwd())
@@ -379,12 +388,26 @@ class sid_class:
       return
       
     mnt="%s/%s"%(self.get_root_path(h.number),device)
+
     cmd = "rm -rf %s/bins*"%mnt
     syslog.syslog(cmd) 
-    os.system(cmd)            
+
+    parsed = shlex.split(cmd)
+    res = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    res.wait()
+    if res.returncode != 0:
+      res = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)      
+      res.wait()
+
     cmd="rm -rf %s/hdr*"%mnt
     syslog.syslog(cmd) 
-    os.system(cmd)            
+
+    parsed = shlex.split(cmd)
+    res = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    res.wait()
+    if res.returncode != 0:
+      res = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)      
+      res.wait()
       
         
   def rebuild(self,argv):

@@ -993,7 +993,7 @@ def get_2nd_subfile_header_and_bins(fname):
   os.system("rm -f /tmp/get_header_and_bins")
   return cid,sid,mapper,bins
 #___________________________________________________
-def run_mapper_corruption(cid,sid,mapper,crcfile):
+def run_mapper_corruption(hid, cid,sid,mapper,crcfile):
 #___________________________________________________
 
   backline("Truncate mapper/header file %s "%(mapper))
@@ -1006,8 +1006,11 @@ def run_mapper_corruption(cid,sid,mapper,crcfile):
     report("%s has not been truncated"%(mapper))
     return -1
 
-  # Reread the file
+  # Restart the storage so it forgets about the file
+  storageStartAndWait(hid,1)  
   clean_cache()
+  
+  # Reread the file
   os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
 
   # Check mapper file has been repaired
@@ -1028,8 +1031,11 @@ def run_mapper_corruption(cid,sid,mapper,crcfile):
 
   backline("Corrupt mapper/header file %s "%(mapper))
 
-  # Reread the file
+  # Restart the storage so it forgets about the file
+  storageStartAndWait(hid,1)  
   clean_cache()
+
+  # Reread the file
   os.system("dd of=/dev/null if=%s bs=1M > /dev/null 2>&1"%(crcfile))  
 
   # Check file has been re written
@@ -1144,7 +1150,7 @@ def crc32():
   device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
   
   if int(mapper_redundancy) > 1: 
-    ret = run_mapper_corruption(cid,sid,mapper,crcfile)
+    ret = run_mapper_corruption(hid, cid,sid,mapper,crcfile)
     if ret != 0: return 1
 
   ret = run_bins_corruption (cid,sid,bins,crcfile)   
@@ -1160,7 +1166,7 @@ def crc32():
   device_number,mapper_modulo,mapper_redundancy = get_device_numbers(hid,cid)   
   
   if int(mapper_redundancy) > 1: 
-    ret = run_mapper_corruption(cid,sid,mapper,crcfile)
+    ret = run_mapper_corruption(hid, cid,sid,mapper,crcfile)
     if ret != 0: return 1
 
   ret = run_bins_corruption (cid,sid,bins,crcfile)   

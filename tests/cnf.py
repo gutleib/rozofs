@@ -150,7 +150,7 @@ rozofs.set_self_healing(1,"spareOnly")
 #rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
-rozofs.set_ext4(320)
+
 #rozofs.set_xfs(1000,None)
 #rozofs.set_xfs(1000,"4096")
 #rozofs.set_xfs(1000,"64K")
@@ -186,16 +186,59 @@ xtraSID = 0
 # Add extra MB on devices of each new cluster
 xtraDevice = 0
 
-#-------------- NB devices per sid
-devices    = 1
-mapper     = 1
-redundancy = 1
+#_________________________________________________
+#          NB devices per sid
+#_________________________________________________
+
+device_mode = "mono"
+sid_size_MB = 320
+
+#-------------------
+# Mono device mode : no header file
+#
+if device_mode == "mono":
+  rozofs.set_ext4(sid_size_MB)  
+  devices    = 1
+  mapper     = 0
+  redundancy = 0
+#-------------------
+# Legacy single device mode : 1 device with mapper/header file
+#
+elif  device_mode == "single":
+  rozofs.set_ext4(sid_size_MB)  
+  devices    = 1
+  mapper     = 1
+  redundancy = 1
+#-------------------
+# 2 devices with mapper/header file
+#
+elif  device_mode == "dual":
+  rozofs.set_ext4(sid_size_MB/2)  
+  devices    = 2
+  mapper     = 2
+  redundancy = 2
+#-------------------
+# 3 devices with mapper/header file
+#
+elif  device_mode == "triple":
+  rozofs.set_ext4(sid_size_MB/3)  
+  devices    = 3
+  mapper     = 2
+  redundancy = 2
+else:
+  print "Unexpected device mode %s"%(device_mode)
+
 
 
 # default is to have one mount point per site and export
 clients_nb = 1
 # Define default layout
 setLayout(1)
+
+
+#_________________________________________________
+#          Multi file configuration
+#_________________________________________________
 
 unit_512K = 1
 unit_1M = 2
@@ -206,7 +249,7 @@ factor_5_files = 4
 
 config_choice = "multiple"
 
-#_________________________________________________
+#-------------------
 # Single 
 #
 if config_choice == "single":
@@ -214,7 +257,7 @@ if config_choice == "single":
   vol = setVolumeHosts(nbHosts = 4, nbclusters = 5)
   e = addExport(vol,layout=1,eid=1)
 
-#_________________________________________________
+#-------------------
 # multiple 
 #
 if config_choice == "multiple":
@@ -222,9 +265,8 @@ if config_choice == "multiple":
   vol = setVolumeHosts(nbHosts = 4, nbclusters = 5)
   exp = addExport(vol,layout=1,eid=1)
   exp.set_striping(factor_3_files,unit_1M)
-
   
-#_________________________________________________
+#-------------------
 # Hybrid 
 # 
 if config_choice == "hybrid":
@@ -235,9 +277,9 @@ if config_choice == "hybrid":
   exp = addExport(vol,layout=1,eid=1)
   exp.set_vid_fast(vfast)
   exp.set_fast_mode("hybrid")
-  exp.set_striping(factor_3_files,unit_1M)
+  exp.set_striping(factor_3_files,unit_1M)  
   
-#_________________________________________________
+#-------------------
 # aging 
 # 
 if config_choice == "aging":

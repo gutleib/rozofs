@@ -519,7 +519,14 @@ int storage_write_header_file(storage_t * st, int dev, char * path, rozofs_stor_
   char                     *pChar;
   struct stat               buf;
   int                       size2write;
-     
+
+  /*
+  ** Case of the mono device without header files. There is only chunk 0
+  */
+  if ((st) && (st->mapper_modulo == 0)) {
+    return 0;
+  }
+         
   /*
   ** Create directory when needed */
   if (storage_create_dir(path) < 0) {   
@@ -586,7 +593,14 @@ int storage_write_all_header_files(storage_t * st, fid_t fid, uint8_t spare, roz
   int                       storage_slice;
   char                      path[FILENAME_MAX];
   int                       result=0;
-  
+
+  /*
+  ** Case of the mono device without header files. There is only chunk 0
+  */
+  if ((st) && (st->mapper_modulo == 0)) {
+    return 1;
+  }
+    
   storage_slice = rozofs_storage_fid_slice(fid);
   
   /*
@@ -919,6 +933,43 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
   storage_slice = rozofs_storage_fid_slice(fid);    
  
   nbMapper = st->mapper_redundancy;
+
+  /*
+  ** Case of the mono device without header files. There is only chunk 0
+  ** Check whether the file exist
+  */
+  if (st->mapper_modulo == 0) {
+    /*
+    ** Build the chunk file name using the newly allocated device id
+    */
+    storage_build_chunk_full_path(path, st->root, 0, spare, storage_slice, fid, 0);
+    ret = stat(path,&buf);
+    if (ret < 0) { 
+      /*
+      ** If device is not failed. ENOENT
+      */
+      if (st->device_ctx[0].status < storage_device_status_failed) { 
+        return STORAGE_READ_HDR_NOT_FOUND;
+      }
+      /*
+      ** Error reading the device
+      */
+      storio_hdr_error(fid, 0, "stat()");       
+      storage_error_on_device(st, 0);
+      return STORAGE_READ_HDR_ERRORS; 
+    }
+        
+    rozofs_st_header_init(hdr);
+    hdr->version     = ROZOFS_STORAGE_HDR_VERSION_MONODEV;
+    hdr->layout      = -1; ///< layout used for this file.
+    hdr->bsize       = 0;  ///< Block size as defined in enum ROZOFS_BSIZE_E 
+    memcpy(hdr->fid,fid,sizeof(fid_t));
+    hdr->cid         = st->cid;
+    hdr->sid         = st->sid;
+    hdr->crc32       = 0;
+    hdr->devFromChunk[0] = 0;
+    return STORAGE_READ_HDR_OK;
+  }
    
   /*
   ** Search for the last updated file.
@@ -1243,6 +1294,9 @@ static inline storage_dev_map_distribution_write_ret_e
       file_hdr->cid = st->cid;
       file_hdr->sid = st->sid;
       memcpy(file_hdr->fid, fid,sizeof(fid_t)); 
+      if (st->mapper_modulo == 0) {
+        file_hdr->version = ROZOFS_STORAGE_HDR_VERSION_MONODEV;
+      }
     }
     
       
@@ -1308,6 +1362,7 @@ void rozofs_storage_device_one_subdir_create(char * pDir) {
   pChar = pDir;
   pChar += strlen(pDir);
 
+  
   for (slice=0; slice<common_config.storio_slice_number; slice++) {
     rozofs_u32_append(pChar,slice);
     if (access(pDir, F_OK) != 0) {  
@@ -1323,9 +1378,10 @@ void rozofs_storage_device_one_subdir_create(char * pDir) {
 **
 ** @param root   storage root path
 ** @param dev    device number
+** @param mapper Number of mapper devices
 **  
 */
-void rozofs_storage_device_subdir_create(char * root, int dev) {
+void rozofs_storage_device_subdir_create(char * root, int dev, int mapper) {
   char   path[FILENAME_MAX];
   char * pChar;
 
@@ -1337,12 +1393,14 @@ void rozofs_storage_device_subdir_create(char * root, int dev) {
   /*
   ** Build 2nd level directories
   */
-  rozofs_string_append(pChar,"/hdr_0/");
-  rozofs_storage_device_one_subdir_create(path);
+  if (dev < mapper) {
+    rozofs_string_append(pChar,"/hdr_0/");
+    rozofs_storage_device_one_subdir_create(path);
 
-  rozofs_string_append(pChar,"/hdr_1/");
-  rozofs_storage_device_one_subdir_create(path);
-
+    rozofs_string_append(pChar,"/hdr_1/");
+    rozofs_storage_device_one_subdir_create(path);
+  }
+  
   rozofs_string_append(pChar,"/bins_0/");
   rozofs_storage_device_one_subdir_create(path);
 
@@ -1407,7 +1465,7 @@ int storage_subdirectories_create(storage_t *st) {
       /*
       ** Build 2nd level directories
       */
-      rozofs_storage_device_subdir_create(st->root,dev);
+      rozofs_storage_device_subdir_create(st->root,dev, st->mapper_modulo);
   }
 
   status = 0;
@@ -2788,10 +2846,10 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
     uint16_t rozofs_disk_psize;
     bid_t bid_truncate;
     size_t nb_write = 0;
-    int block_per_chunk         = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
-    int chunk                   = input_bid/block_per_chunk;
+    bid_t block_per_chunk;
+    int chunk ;
     int result;
-    bid_t bid = input_bid - (chunk * block_per_chunk);
+    bid_t bid;
     STORAGE_READ_HDR_RESULT_E read_hdr_res;
     int chunk_idx;
     rozofs_stor_bins_file_hdr_t file_hdr;
@@ -2799,10 +2857,22 @@ int storage_truncate(storage_t * st, storio_device_mapping_t * fidCtx, uint8_t l
     storage_dev_map_distribution_write_ret_e map_result = MAP_FAILURE;
     uint8_t   dev;
 
+    block_per_chunk  = ROZOFS_STORAGE_NB_BLOCK_PER_CHUNK(bsize);
+    chunk            = input_bid/block_per_chunk;
     if (chunk>=ROZOFS_STORAGE_MAX_CHUNK_PER_FILE) { 
       errno = EFBIG;
       return -1;
     } 
+    
+    /*
+    ** Case of the mono device without header files. There is only chunk 0
+    */
+    if (st->mapper_modulo == 0) {
+      chunk = 0;
+      block_per_chunk *= ROZOFS_STORAGE_MAX_CHUNK_PER_FILE;
+    }
+
+    bid = input_bid - (chunk * block_per_chunk);
     dev = storio_get_dev(fidCtx,chunk);
     
     // No specific fault on this FID detected
