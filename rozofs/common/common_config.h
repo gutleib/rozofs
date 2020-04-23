@@ -354,6 +354,32 @@ typedef struct _common_config_t {
   int32_t     min_rmda_size_KB;
   // number of Mojette threads
   int32_t     mojette_thread_count;
+
+  /*
+  ** expbt scope configuration parameters
+  */
+
+  // Whether export file tracking reader for rozofsmount batch is enabled
+  int32_t     expbt_active;
+  /// Number of file tracking reader threads.
+  int32_t     nb_expbt_thread;
+  // Number of STORIO receive buffer.
+  int32_t     expbt_buf_cnt;
+
+  /*
+  ** batch scope configuration parameters
+  */
+
+  // Max number of entries in the dirent and root bitmap caches
+  int32_t     dirent_cache_size;
+  // retention delay before memory release for dirent and bitmap entries in cache (seconds)
+  int32_t     dirent_garbage_delay;
+  // Max number of entries in tracking file cache
+  int32_t     trk_cache_size;
+  // retention delay before memory release in tracking file cache (seconds)
+  int32_t     trk_garbage_delay;
+  // expiration delay of an entry of the tracking file cache (seconds)
+  int32_t     trk_expiration_delay;
 } common_config_t;
 
 extern common_config_t common_config;

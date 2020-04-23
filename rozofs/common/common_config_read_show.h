@@ -295,6 +295,30 @@ static inline int common_config_generated_set(char * pChar, char *parameter, cha
   if (strcmp(parameter,"diagnostic_mode")==0) {
     COMMON_CONFIG_DIAGNOSTIC_MODE_SET_ENUM(value);
   }
+  if (strcmp(parameter,"expbt_active")==0) {
+    COMMON_CONFIG_SET_BOOL(expbt_active,value);
+  }
+  if (strcmp(parameter,"nb_expbt_thread")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(nb_expbt_thread,value,2,32);
+  }
+  if (strcmp(parameter,"expbt_buf_cnt")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(expbt_buf_cnt,value,8,128);
+  }
+  if (strcmp(parameter,"dirent_cache_size")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(dirent_cache_size,value,2,500000);
+  }
+  if (strcmp(parameter,"dirent_garbage_delay")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(dirent_garbage_delay,value,1,60);
+  }
+  if (strcmp(parameter,"trk_cache_size")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(trk_cache_size,value,32,8192);
+  }
+  if (strcmp(parameter,"trk_garbage_delay")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(trk_garbage_delay,value,1,60);
+  }
+  if (strcmp(parameter,"trk_expiration_delay")==0) {
+    COMMON_CONFIG_SET_INT_MINMAX(trk_expiration_delay,value,4,600);
+  }
   pChar += rozofs_string_append_error(pChar,"No such parameter ");
   pChar += rozofs_string_append_error(pChar,parameter);
   pChar += rozofs_eol(pChar);\
@@ -1118,6 +1142,78 @@ static inline int common_config_generated_search(char * pChar, char *parameter) 
     pChar += rozofs_string_append(pChar,"// both       Each RozoFS module is client as well as server\n");
     pChar += rozofs_string_append(pChar,"//    \n");
     COMMON_CONFIG_SHOW_ENUM(diagnostic_mode,""both"","both,server,client");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("expbt_active",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_BOOL(expbt_active,False);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// Whether export file tracking reader for rozofsmount batch is enabled\n");
+    COMMON_CONFIG_SHOW_BOOL(expbt_active,False);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("nb_expbt_thread",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(nb_expbt_thread,4);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"/// Number of file tracking reader threads.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_expbt_thread,4,"2:32");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("expbt_buf_cnt",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(expbt_buf_cnt,32);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(expbt_buf_cnt,32,"8:128");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("dirent_cache_size",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(dirent_cache_size,250000);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// Max number of entries in the dirent and root bitmap caches\n");
+    COMMON_CONFIG_SHOW_INT_OPT(dirent_cache_size,250000,"2:500000");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("dirent_garbage_delay",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(dirent_garbage_delay,5);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// retention delay before memory release for dirent and bitmap entries in cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(dirent_garbage_delay,5,"1:60");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("trk_cache_size",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(trk_cache_size,2048);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// Max number of entries in tracking file cache\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_cache_size,2048,"32:8192");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("trk_garbage_delay",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(trk_garbage_delay,5);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// retention delay before memory release in tracking file cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_garbage_delay,5,"1:60");
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("trk_expiration_delay",parameter) != NULL) {
+    match++;
+    COMMON_CONFIG_IS_DEFAULT_INT(trk_expiration_delay,120);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    pChar += rozofs_string_append(pChar,"// expiration delay of an entry of the tracking file cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_expiration_delay,120,"4:600");
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
   if (match == 0) {
@@ -2466,6 +2562,158 @@ char * show_common_config_module_storcli_short(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
+** expbt scope configuration parameters
+**
+*/
+char * show_common_config_module_expbt(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    EXPBT SCOPE CONFIGURATION PARAMETERS          ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(expbt_active,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Whether export file tracking reader for rozofsmount batch is enabled\n");
+  COMMON_CONFIG_SHOW_BOOL(expbt_active,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_expbt_thread,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"/// Number of file tracking reader threads.\n");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_expbt_thread,4,"2:32");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(expbt_buf_cnt,32);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
+  COMMON_CONFIG_SHOW_INT_OPT(expbt_buf_cnt,32,"8:128");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** expbt scope configuration parameters
+**
+*/
+char * show_common_config_module_expbt_short(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    EXPBT SCOPE CONFIGURATION PARAMETERS          ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(expbt_active,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether export file tracking reader for rozofsmount batch is enabled\n");
+    COMMON_CONFIG_SHOW_BOOL(expbt_active,False);
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_expbt_thread,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"/// Number of file tracking reader threads.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_expbt_thread,4,"2:32");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(expbt_buf_cnt,32);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(expbt_buf_cnt,32,"8:128");
+  }
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** batch scope configuration parameters
+**
+*/
+char * show_common_config_module_batch(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    BATCH SCOPE CONFIGURATION PARAMETERS          ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(dirent_cache_size,250000);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Max number of entries in the dirent and root bitmap caches\n");
+  COMMON_CONFIG_SHOW_INT_OPT(dirent_cache_size,250000,"2:500000");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(dirent_garbage_delay,5);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// retention delay before memory release for dirent and bitmap entries in cache (seconds)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(dirent_garbage_delay,5,"1:60");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_cache_size,2048);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// Max number of entries in tracking file cache\n");
+  COMMON_CONFIG_SHOW_INT_OPT(trk_cache_size,2048,"32:8192");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_garbage_delay,5);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// retention delay before memory release in tracking file cache (seconds)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(trk_garbage_delay,5,"1:60");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_expiration_delay,120);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  pChar += rozofs_string_append(pChar,"// expiration delay of an entry of the tracking file cache (seconds)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(trk_expiration_delay,120,"4:600");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** batch scope configuration parameters
+**
+*/
+char * show_common_config_module_batch_short(char * pChar) {
+
+  pChar += rozofs_string_append_effect(pChar,"#                                                            \n#     ", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"    BATCH SCOPE CONFIGURATION PARAMETERS          ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+  pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(dirent_cache_size,250000);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Max number of entries in the dirent and root bitmap caches\n");
+    COMMON_CONFIG_SHOW_INT_OPT(dirent_cache_size,250000,"2:500000");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(dirent_garbage_delay,5);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// retention delay before memory release for dirent and bitmap entries in cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(dirent_garbage_delay,5,"1:60");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_cache_size,2048);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Max number of entries in tracking file cache\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_cache_size,2048,"32:8192");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_garbage_delay,5);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// retention delay before memory release in tracking file cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_garbage_delay,5,"1:60");
+  }
+
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_expiration_delay,120);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// expiration delay of an entry of the tracking file cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_expiration_delay,120,"4:600");
+  }
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
 ** global scope configuration parameters
 **
 */
@@ -3091,6 +3339,82 @@ char * save_common_config_module_storcli(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
+** expbt scope configuration parameters
+**
+*/
+char * save_common_config_module_expbt(char * pChar) {
+
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
+  pChar += rozofs_string_append(pChar,"# ");
+  pChar += rozofs_string_append(pChar,"expbt");
+  pChar += rozofs_string_append(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(expbt_active,False);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Whether export file tracking reader for rozofsmount batch is enabled\n");
+    COMMON_CONFIG_SHOW_BOOL(expbt_active,False);
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_expbt_thread,4);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"/// Number of file tracking reader threads.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(nb_expbt_thread,4,"2:32");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(expbt_buf_cnt,32);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
+    COMMON_CONFIG_SHOW_INT_OPT(expbt_buf_cnt,32,"8:128");
+  }
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** batch scope configuration parameters
+**
+*/
+char * save_common_config_module_batch(char * pChar) {
+
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n");
+  pChar += rozofs_string_append(pChar,"# ");
+  pChar += rozofs_string_append(pChar,"batch");
+  pChar += rozofs_string_append(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_INT(dirent_cache_size,250000);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Max number of entries in the dirent and root bitmap caches\n");
+    COMMON_CONFIG_SHOW_INT_OPT(dirent_cache_size,250000,"2:500000");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(dirent_garbage_delay,5);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// retention delay before memory release for dirent and bitmap entries in cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(dirent_garbage_delay,5,"1:60");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_cache_size,2048);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// Max number of entries in tracking file cache\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_cache_size,2048,"32:8192");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_garbage_delay,5);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// retention delay before memory release in tracking file cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_garbage_delay,5,"1:60");
+  }
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trk_expiration_delay,120);
+  if (isDefaultValue==0) {
+    pChar += rozofs_string_append(pChar,"// expiration delay of an entry of the tracking file cache (seconds)\n");
+    COMMON_CONFIG_SHOW_INT_OPT(trk_expiration_delay,120,"4:600");
+  }
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
 ** Save configuration parameter on disk
 ** 
 ** @param pChar   Parameter name
@@ -3149,6 +3473,20 @@ static inline int common_config_generated_save(char * pChar) {
     return -1;
   }
   pBuff = save_common_config_module_storcli(myBigBuffer);
+  if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
+    close(fd);
+    return -1;
+  }
+  pBuff = save_common_config_module_expbt(myBigBuffer);
+  if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
+    pChar += rozofs_string_append_error(pChar,"Can not write ");
+    pChar += rozofs_string_append_error(pChar,common_config_file_name);
+    close(fd);
+    return -1;
+  }
+  pBuff = save_common_config_module_batch(myBigBuffer);
   if (write(fd,myBigBuffer,pBuff-myBigBuffer)<0) {
     pChar += rozofs_string_append_error(pChar,"Can not write ");
     pChar += rozofs_string_append_error(pChar,common_config_file_name);
@@ -3330,6 +3668,40 @@ char  * moduleName = NULL;
         uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
         return;
       }
+      else if (strcasecmp("expbt",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_common_config_module_expbt(pChar);
+        } else {
+          pChar = show_common_config_module_expbt_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
+      else if (strcasecmp("batch",moduleName)==0) {
+        if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+          severe( "ruc_buf_getPayload(%p)", bufRef );
+          return;
+        }
+        /*
+        ** Set the command recall string
+        */
+        pChar = uma_dbg_cmd_recall((UMA_MSGHEADER_S *)pHead);
+        if (longformat) {
+          pChar = show_common_config_module_batch(pChar);
+        } else {
+          pChar = show_common_config_module_batch_short(pChar);
+        } 
+        uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, TRUE);
+        return;
+      }
       else {
         pChar += rozofs_string_append_error(pChar, "Unexpected configuration scope\n");
         uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -3431,6 +3803,44 @@ char  * moduleName = NULL;
     pChar = show_common_config_module_storcli(pChar);
   } else {
     pChar = show_common_config_module_storcli_short(pChar);
+  } 
+  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
+  
+  bufRef = uma_dbg_get_new_buffer(tcpRef);
+  if (bufRef == NULL) {
+    warning( "uma_dbg_get_new_buffer() Buffer depletion");
+    return;
+  }
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return;
+  }
+  pChar = pHead+sizeof(UMA_MSGHEADER_S);
+  *pChar = 0;
+  
+  if (longformat) {
+    pChar = show_common_config_module_expbt(pChar);
+  } else {
+    pChar = show_common_config_module_expbt_short(pChar);
+  } 
+  uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
+  
+  bufRef = uma_dbg_get_new_buffer(tcpRef);
+  if (bufRef == NULL) {
+    warning( "uma_dbg_get_new_buffer() Buffer depletion");
+    return;
+  }
+  if ((pHead = (char *)ruc_buf_getPayload(bufRef)) == NULL) {
+    severe( "ruc_buf_getPayload(%p)", bufRef );
+    return;
+  }
+  pChar = pHead+sizeof(UMA_MSGHEADER_S);
+  *pChar = 0;
+  
+  if (longformat) {
+    pChar = show_common_config_module_batch(pChar);
+  } else {
+    pChar = show_common_config_module_batch_short(pChar);
   } 
   uma_dbg_send_buffer(tcpRef, bufRef, pChar-pHead, FALSE);
   
@@ -3734,6 +4144,28 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT(min_rmda_size_KB,64);
   // number of Mojette threads 
   COMMON_CONFIG_READ_INT_MINMAX(mojette_thread_count,4,1,4);
+  /*
+  ** expbt scope configuration parameters
+  */
+  // Whether export file tracking reader for rozofsmount batch is enabled 
+  COMMON_CONFIG_READ_BOOL(expbt_active,False);
+  /// Number of file tracking reader threads. 
+  COMMON_CONFIG_READ_INT_MINMAX(nb_expbt_thread,4,2,32);
+  // Number of STORIO receive buffer. 
+  COMMON_CONFIG_READ_INT_MINMAX(expbt_buf_cnt,32,8,128);
+  /*
+  ** batch scope configuration parameters
+  */
+  // Max number of entries in the dirent and root bitmap caches 
+  COMMON_CONFIG_READ_INT_MINMAX(dirent_cache_size,250000,2,500000);
+  // retention delay before memory release for dirent and bitmap entries in cache (seconds) 
+  COMMON_CONFIG_READ_INT_MINMAX(dirent_garbage_delay,5,1,60);
+  // Max number of entries in tracking file cache 
+  COMMON_CONFIG_READ_INT_MINMAX(trk_cache_size,2048,32,8192);
+  // retention delay before memory release in tracking file cache (seconds) 
+  COMMON_CONFIG_READ_INT_MINMAX(trk_garbage_delay,5,1,60);
+  // expiration delay of an entry of the tracking file cache (seconds) 
+  COMMON_CONFIG_READ_INT_MINMAX(trk_expiration_delay,120,4,600);
  
   config_destroy(&cfg);
 }

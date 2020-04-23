@@ -250,3 +250,21 @@ BOOL    client storcli_read_parallel 		False
 //    
 ENUM  global diagnostic_mode        "both"   "both,server,client"
 
+
+// Whether export file tracking reader for rozofsmount batch is enabled
+BOOL   expbt  expbt_active                      False
+/// Number of file tracking reader threads.
+INT	expbt nb_expbt_thread         		4 2:32
+// Number of STORIO receive buffer.
+INT	expbt expbt_buf_cnt		        32 8:128
+
+// Max number of entries in the dirent and root bitmap caches
+INT	batch dirent_cache_size		        250000 2:500000
+// retention delay before memory release for dirent and bitmap entries in cache (seconds)
+INT	batch dirent_garbage_delay		5 1:60
+// Max number of entries in tracking file cache
+INT	batch trk_cache_size		        2048 32:8192
+// retention delay before memory release in tracking file cache (seconds)
+INT	batch trk_garbage_delay		        5 1:60
+// expiration delay of an entry of the tracking file cache (seconds)
+INT	batch trk_expiration_delay		120 4:600
