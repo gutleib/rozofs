@@ -21,6 +21,7 @@
  
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -54,6 +55,10 @@ void *rozofs_queue_get_prio(rozofs_queue_prio_t * q,int *prio);
 int rozofs_queue_put_prio(rozofs_queue_prio_t *q, void *j,int prio);
 int rozofs_queue_init_prio(rozofs_queue_prio_t * q, const unsigned int slots,int nb_prio);
 
+/*
+**__________________________________________________________________
+*/
+void *rozofs_queue_get_prio_with_mask(rozofs_queue_prio_t * q, int *prio,uint8_t mask);
 
 
 

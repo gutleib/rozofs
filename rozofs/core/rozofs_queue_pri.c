@@ -107,6 +107,42 @@ done:
     return j;
 }
 
+
+/*
+**__________________________________________________________________
+*/
+void *rozofs_queue_get_prio_with_mask(rozofs_queue_prio_t * q, int *prio,uint8_t mask)
+{
+    void *j = NULL;
+    int full = 0;
+    int i;
+
+    *prio = -1;
+    rozofs_queue_internal_t *q_int_p;
+    
+    pthread_mutex_lock(&q->lock);
+    while (j==NULL)
+    {
+      q_int_p =q->queue_ctx;
+      for (i = 0; i < q->nb_prio; i++,q_int_p++)
+      {
+
+        if ((mask & (1 << i) )== 0) continue;
+	j = rozofs_queue_get_internal(q_int_p,q->size,&full);
+	if (j != NULL) {
+	*prio = i;
+	goto done; 
+	}   
+      }
+      pthread_cond_wait(&q->wait_data,&q->lock);
+    }
+done:    
+    pthread_mutex_unlock(&q->lock);
+
+    if (full) pthread_cond_signal(&q->wait_room);
+
+    return j;
+}
 /*
 **__________________________________________________________________
 */
