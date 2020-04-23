@@ -41,6 +41,13 @@ ROZOFS_SERVICE_PORT_RANGE_DESC_T rozofs_service_port_range[ROZOFS_SERVICE_PORT_M
     .name         = "rozofs_export_geo_replica",
     .service      = "Export master geo-replication",
   },
+  
+  [ROZOFS_SERVICE_PORT_EXPBT] = {
+    .defaultValue = 53011,
+    .rangeSize    = NB_EXPBT+1,
+    .name         = "rozo_expbt",
+    .service      = "Rozofs file tracking reader for batch mode",
+  },
 
   [ROZOFS_SERVICE_PORT_EXPORT_RCMD] = {
     .defaultValue = 53030,
@@ -62,7 +69,15 @@ ROZOFS_SERVICE_PORT_RANGE_DESC_T rozofs_service_port_range[ROZOFS_SERVICE_PORT_M
     .name         = "rozofs_rebalance",
     .service      = "Rozofs re-balancing diagnostic",
   },
-   
+
+    
+  [ROZOFS_SERVICE_PORT_EXPBT_DIAG] = {
+    .defaultValue = 53025,
+    .rangeSize    = NB_EXPBT+1,
+    .name         = "rozo_expbt",
+    .service      = "Rozofs file tracking reader for batch mode debug",
+  },
+     
   [ROZOFS_SERVICE_PORT_MOUNT_DIAG] = {
     .defaultValue = 50003,
     .rangeSize    = NB_FSMOUNT*3,

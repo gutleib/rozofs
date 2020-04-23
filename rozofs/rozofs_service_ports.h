@@ -35,6 +35,7 @@
 #define NB_GEOCLI   30
 #define NB_EXPORT_SLAVE 8
 #define NB_REBALANCING 4
+#define NB_EXPBT 2
 
 typedef enum rozofs_service_port_range_e {
 
@@ -49,6 +50,8 @@ typedef enum rozofs_service_port_range_e {
   ROZOFS_SERVICE_PORT_STSPARE_DIAG,
   ROZOFS_SERVICE_PORT_EXPORT_RCMD,
   ROZOFS_SERVICE_PORT_EXPORT_RCMD_DIAG,
+  ROZOFS_SERVICE_PORT_EXPBT,
+  ROZOFS_SERVICE_PORT_EXPBT_DIAG,
   ROZOFS_SERVICE_PORT_ROZODIAG_SRV,
   
   ROZOFS_SERVICE_PORT_MAX
@@ -175,6 +178,20 @@ static inline uint16_t rozofs_get_service_port_geocli_storcli_diag(int idx,int s
 */
 static inline uint16_t rozofs_get_service_port_rebalancing_diag(int idx) {
   return rozofs_get_service_port(ROZOFS_SERVICE_PORT_REBALANCE_DIAG)+idx;
+}
+
+/*
+** expbt (file tracking reader) ports debug
+*/
+static inline uint16_t rozofs_get_service_port_expbt_diag(int idx) {
+  return rozofs_get_service_port(ROZOFS_SERVICE_PORT_EXPBT_DIAG)+idx;
+}
+
+/*
+** expbt (file tracking reader) ports serv vice
+*/
+static inline uint16_t rozofs_get_service_port_expbt(int idx) {
+  return rozofs_get_service_port(ROZOFS_SERVICE_PORT_EXPBT)+idx;
 }
 /*
 **__________________________________________________________________________
