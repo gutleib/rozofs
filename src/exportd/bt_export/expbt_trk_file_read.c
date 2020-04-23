@@ -406,11 +406,22 @@ static inline int export_lv2_resolve_path_internal(char *root_path, fid_t fid, c
 /*
 **_______________________________________________________________________________________
 */
-
-int expbt_rsync_for_load_dirent(int eid, uint64_t inode,uint32_t ipaddr,char *remote_path)
+/**
+  Trigger a rsync towards the client to replace/update the dirent files
+  
+  @param socketRef: index of the tcp connection (socket context within RozoFS
+  @param eid: export identifier
+  @param inode: inode of the directory
+  @param ipaddr: not used (obsolete)
+  @param remote_path: path towards the NVME on which the dirent files are written on the client
+  
+  @retval 0 on success
+  @retval -1 on error
+*/
+int expbt_rsync_for_load_dirent(int socketRef,int eid, uint64_t inode,uint32_t ipaddr,char *remote_path)
 {
 
-  struct sockaddr_in sa;
+//  struct sockaddr_in sa;
   char str[INET_ADDRSTRLEN];
   char *src_path1;
   char buffer_cmd[1024];  
@@ -428,20 +439,22 @@ int expbt_rsync_for_load_dirent(int eid, uint64_t inode,uint32_t ipaddr,char *re
   fake_inode.fid[0] = 0;
   fake_inode.fid[1] = inode;  
   fake_inode.s.eid = eid;
-  sa.sin_addr.s_addr = (unsigned long)ipaddr;
+//  sa.sin_addr.s_addr = (unsigned long)ipaddr;
   
   export_lv2_resolve_path_internal(expbt_get_export_path(eid),(uint8_t *)(&fake_inode.fid[0]),src_path);
   export_lv2_resolve_path_internal(remote_path,(uint8_t *)(&fake_inode.fid[0]),dst_path);
   
-
-
-
   // now get it back and print it
-  inet_ntop(AF_INET, &(sa.sin_addr), str, INET_ADDRSTRLEN);
+//  inet_ntop(AF_INET, &(sa.sin_addr), str, INET_ADDRSTRLEN);
+  ret = af_unix_get_ip_addr_with_sock_idx(socketRef,0,str);
   sprintf(buffer_cmd,"rsync -d -lptgoD -P -q --delete-before  --update %s/ --rsync-path=\"mkdir -p %s/ && rsync\" root@%s:%s/",src_path,dst_path,str,dst_path);
-
-  info("FDL rsync_cmd : %s",buffer_cmd);
+//  info("FDL rsync_cmd : %s",buffer_cmd);
   ret = system(buffer_cmd);
+  if (ret != 0)
+  {
+     ret = -1;
+     errno = EPROTO;
+  }
   return ret;
 
 
@@ -475,8 +488,8 @@ void expbt_load_dentry_in_thread(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p)
    hdr_p = (expbt_msg_hdr_t*)ruc_buf_getPayload(rozorpc_srv_ctx_p->decoded_arg);   
    cmd_p = (expbt_dirent_load_req_t*)(hdr_p+1);
    
-   ret = expbt_rsync_for_load_dirent(cmd_p->eid,cmd_p->inode,cmd_p->ipaddr,cmd_p->client_export_root_path);
-   if (ret >= 0)
+   ret = expbt_rsync_for_load_dirent(rozorpc_srv_ctx_p->socketRef,cmd_p->eid,cmd_p->inode,cmd_p->ipaddr,cmd_p->client_export_root_path);
+   if (ret == 0)
    {
      memcpy(hdr_rsp_p,hdr_p,sizeof(expbt_msg_hdr_t));
      hdr_rsp_p->dir = 1;
