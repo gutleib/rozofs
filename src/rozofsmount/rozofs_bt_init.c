@@ -34,6 +34,7 @@
 #include "rozofs_bt_api.h"
 #include "rozofs_bt_proto.h"
 #include "rozofs_bt_inode.h"
+#include "rozofs_bt_dirent.h"
 
 
 

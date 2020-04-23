@@ -41,7 +41,17 @@
  
 int rozofs_bt_thread_create( int nb_threads) ;
 
+typedef struct _rozofs_bt_lkup_thread_stats_t
+{
+   uint64_t lookup[3];
+   uint64_t readdir[3];
+} rozofs_bt_lkup_thread_stats_t;
 
+uint64_t rozofs_bt_lookup_local_attempt = 0;
+uint64_t rozofs_bt_lookup_local_reject_from_main = 0;
+uint64_t rozofs_bt_lookup_local_reject_from_dirent_thread = 0;
+uint64_t rozofs_bt_lookup_reject_from_dirent_thread_bad_errno = 0;
+uint64_t rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode = 0;
  /**
  * prototypes
  */
@@ -68,7 +78,7 @@ DECLARE_PROFILING(mpp_profiler_t);
 
 #define DISK_SO_SENDBUF  (300*1024)
 #define MAIN_DIRENT_SOCKET_NICKNAME "dirent_rsp_th"
-#define ROZOFS_BT_DIRENT_LKPUP_MAX_THREADS 1
+#define ROZOFS_BT_DIRENT_LKPUP_MAX_THREADS 4
 #define ROZOFS_BT_DIRENT_QDEPTH (1024+512)
 
 /*
@@ -77,10 +87,10 @@ DECLARE_PROFILING(mpp_profiler_t);
 int        af_unix_bt_dirent_south_socket_ref = -1;
 int        af_unix_bt_dirent_thread_count=0;
 int        af_unix_bt_dirent_pending_req_count = 0;
-int        dirent_lookup_thread_ready = 0;
+int        dirent_lookup_thread_ready[ROZOFS_BT_DIRENT_LKPUP_MAX_THREADS];
 
 struct  sockaddr_un rozofs_bt_dirent_south_socket_name;
-rozofs_queue_t dirent_queue_lookup;
+rozofs_queue_t dirent_queue_lookup[ROZOFS_BT_DIRENT_LKPUP_MAX_THREADS];
 rozofs_bt_thread_ctx_t rozofs_bt_dirent_lkup_thread_ctx_tb[ROZOFS_BT_DIRENT_LKPUP_MAX_THREADS];
 
 /*
@@ -94,7 +104,145 @@ ruc_sockCallBack_t af_unix_bt_dirent_callBack_sock=
      af_unix_bt_dirent_xmitEvtsock
   };
 
-  /*
+
+
+/*
+*_______________________________________________________________________
+*/
+
+#define SHOW_PROFILER_PROBE(probe) \
+  if (prof->probe[P_COUNT]) {\
+    *pChar++ = ' ';\
+    pChar += rozofs_string_padded_append(pChar, 25, rozofs_left_alignment, #probe);\
+    *pChar++ = '|';*pChar++ = ' ';\
+    pChar += rozofs_u64_padded_append(pChar, 16, rozofs_right_alignment, prof->probe[P_COUNT]);\
+    *pChar++ = ' '; *pChar++ = '|'; *pChar++ = ' ';\
+    pChar += rozofs_u64_padded_append(pChar, 9, rozofs_right_alignment, prof->probe[P_COUNT]?prof->probe[P_ELAPSE]/prof->probe[P_COUNT]:0);\
+    *pChar++ = ' '; *pChar++ = '|'; *pChar++ = ' ';\
+    pChar += rozofs_u64_padded_append(pChar, 19, rozofs_right_alignment, prof->probe[P_ELAPSE]);\
+    *pChar++ = ' '; *pChar++ = '|'; *pChar++ = ' ';\
+    pChar += rozofs_string_padded_append(pChar, 15, rozofs_right_alignment, " ");\
+    *pChar++ = '\n';\
+    *pChar = 0;\
+  }
+
+#define SHOW_PROFILER_PROBE_BYTE(probe) \
+  if (prof->probe[P_COUNT]) {\
+    *pChar++ = ' ';\
+    pChar += rozofs_string_padded_append(pChar, 25, rozofs_left_alignment, #probe);\
+    *pChar++ = '|';*pChar++ = ' ';\
+    pChar += rozofs_u64_padded_append(pChar, 16, rozofs_right_alignment, prof->probe[P_COUNT]);\
+    *pChar++ = ' '; *pChar++ = '|'; *pChar++ = ' ';\
+    pChar += rozofs_u64_padded_append(pChar, 9, rozofs_right_alignment, prof->probe[P_COUNT]?prof->probe[P_ELAPSE]/prof->probe[P_COUNT]:0);\
+    *pChar++ = ' '; *pChar++ = '|'; *pChar++ = ' ';\
+    pChar += rozofs_u64_padded_append(pChar, 19, rozofs_right_alignment, prof->probe[P_ELAPSE]);\
+    *pChar++ = ' '; *pChar++ = '|'; *pChar++ = ' ';\
+    pChar += rozofs_u64_padded_append(pChar, 15, rozofs_right_alignment, prof->probe[P_BYTES]);\
+    *pChar++ = '\n';\
+    *pChar = 0;\
+  }
+
+/*
+*_______________________________________________________________________
+*/
+static char * show_profiler_one(char * pChar, uint32_t thread_idx) {
+
+   rozofs_bt_lkup_thread_stats_t *prof;
+   rozofs_bt_thread_ctx_t *thread_ctx_p;
+   thread_ctx_p = &rozofs_bt_dirent_lkup_thread_ctx_tb[thread_idx];
+   prof = (rozofs_bt_lkup_thread_stats_t*)thread_ctx_p->thread_private;
+
+    if (prof == NULL) return pChar;
+        
+
+    // Compute uptime for storaged process
+    pChar += rozofs_string_append(pChar, "_______________________ Thread_id = ");
+    pChar += rozofs_u32_append(pChar,thread_idx);
+    pChar += rozofs_string_append(pChar, " _______________________ \n   procedure              |      count       |  time(us) |  cumulated time(us) |     bytes       |\n--------------------------+------------------+-----------+---------------------+-----------------+\n");
+
+    SHOW_PROFILER_PROBE(lookup);
+    SHOW_PROFILER_PROBE(readdir);
+
+    return pChar;
+}
+/*
+*_______________________________________________________________________
+*/
+void rozofs_bt_show_dirent_lkup_thread_reset_all()
+{
+   rozofs_bt_lkup_thread_stats_t *prof;
+   rozofs_bt_thread_ctx_t *thread_ctx_p;
+   int i;
+   for (i = 0; i < af_unix_bt_dirent_thread_count;i++)
+   {
+     thread_ctx_p = &rozofs_bt_dirent_lkup_thread_ctx_tb[i];
+     prof = (rozofs_bt_lkup_thread_stats_t*)thread_ctx_p->thread_private;
+     if (prof == NULL) continue;
+     memset(prof,0,sizeof(*prof));
+   }
+   rozofs_bt_lookup_local_attempt = 0;
+   rozofs_bt_lookup_local_reject_from_main = 0;
+   rozofs_bt_lookup_local_reject_from_dirent_thread = 0;
+   rozofs_bt_lookup_reject_from_dirent_thread_bad_errno =  0 ;
+   rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode = 0;
+}
+/*
+*_______________________________________________________________________
+*/
+static char * rozofs_bt_show_dirent_lkup_thread_help(char * pChar) {
+  pChar += rozofs_string_append(pChar,"Dirent threads statistics\n");  
+  pChar += rozofs_string_append(pChar,"usage:\ndirent_th_profiler reset  : reset statistics\ndirent_th_profiler        : display statistics\n");  
+  return pChar; 
+}
+
+
+/*
+**__________________________________________________________________________
+*/
+void rozofs_bt_show_dirent_lkup_thread(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char *pChar = uma_dbg_get_buffer();
+    *pChar = 0;
+    int i;
+
+    if (argv[1] == NULL) {
+      pChar +=sprintf(pChar,"Number of threads : %d\n",af_unix_bt_dirent_thread_count);
+      pChar +=sprintf(pChar," lookup attempts from main thread : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_attempt);
+      pChar +=sprintf(pChar," lookup rejects from main thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_main);
+      pChar +=sprintf(pChar," lookup rejects from lkup thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_dirent_thread);
+      pChar +=sprintf(pChar,"                - no child inode  : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode);
+      pChar +=sprintf(pChar,"                - bad errno       : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_bad_errno);
+      for (i = 0; i < af_unix_bt_dirent_thread_count;i++)
+      {
+        pChar = show_profiler_one(pChar,i);
+      }
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	  
+      return;
+    }
+
+    if (strcmp(argv[1],"reset")==0) {
+
+      if (argv[2] == NULL) {
+        pChar +=sprintf(pChar,"Number of threads : %d\n",af_unix_bt_dirent_thread_count);
+	pChar +=sprintf(pChar," lookup attempts from main thread : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_attempt);
+	pChar +=sprintf(pChar," lookup rejects from main thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_main);
+	pChar +=sprintf(pChar," lookup rejects from lkup thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_dirent_thread);
+	pChar +=sprintf(pChar,"                - no child inode  : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode);
+	pChar +=sprintf(pChar,"                - bad errno       : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_bad_errno);
+	for (i = 0; i < af_unix_bt_dirent_thread_count;i++)
+	{
+          pChar = show_profiler_one(pChar,i);
+	}	
+	rozofs_bt_show_dirent_lkup_thread_reset_all();
+	pChar += sprintf(pChar,"Reset done\n");
+	uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
+	return;	 
+      }
+    }
+    rozofs_bt_show_dirent_lkup_thread_help(pChar);
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	  
+    return;
+} 	  
+/*
 **__________________________________________________________________________
 */
 /**
@@ -384,13 +532,12 @@ static int af_unix_bt_dirent_response_socket_create(char *socketname)
 
    @param  eid: export identifier
    @param  parent_fid: fid of the parent directory
-   @param  name: name for which we want the inode
    @param  fuse_ctx_p: fuse context
          
    @retval 0 on success
    @retval -1 on error (see errno for details)
 */
-int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *name,void *fuse_ctx_p)
+int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,void *fuse_ctx_p)
 {
 
    rozofs_inode_t *rozofs_inode_p;   
@@ -400,6 +547,10 @@ int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *na
    void *xmit_buf;
    rozofs_bt_tracking_cache_t *tracking_ret_p = NULL;
    bt_dirent_msg_t  *lookup_rq_p;
+   uint32_t queue_idx;
+   char *name;
+   
+   RESTORE_FUSE_STRUCT_PTR(fuse_ctx_p,name);
 
    /*
    ** we do not care about @rozofs_uuid@xxxx-xxxxx-xxxx : this request is always sent to the export
@@ -410,6 +561,8 @@ int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *na
     return -1;
   }   
    rozofs_inode_p = (rozofs_inode_t*)parent_fid;
+   queue_idx = (rozofs_inode_p->s.idx)%af_unix_bt_dirent_thread_count;
+   
    inode = rozofs_inode_p->fid[1];
    ext_attr_parent_p = rozofs_bt_load_dirent_from_main_thread(inode,&tracking_ret_p,&dirent_valid);
    /*
@@ -452,7 +605,7 @@ int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *na
   /*
   ** send the message on the dirent thread queue
   */
-  rozofs_queue_put(&dirent_queue_lookup,xmit_buf);
+  rozofs_queue_put(&dirent_queue_lookup[queue_idx],xmit_buf);
 
   return 0;
 
@@ -497,7 +650,9 @@ int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *na
     {
       lookup_rsp_p->status = -1;
       lookup_rsp_p->s.errcode = errno;
-      FDL_INFO("FDL lookup fail:%s : %s",lookup_rq_p->s.lookup_rq.name,strerror(errno));
+      {
+      FDL_INFO("FDL lookup fail:%s : %s",name,strerror(errno));
+      }
     }
     else
     {
@@ -583,7 +738,15 @@ void rozofs_bt_lookup_cbk(void *ruc_buffer)
 	/*
 	** need to take care of the EAGAIN case, since it indicates that the dirent file where not available
 	*/	
-	if (errno == EAGAIN) goto enoent;
+	if (errno == ENOENT) goto enoent;
+	rozofs_bt_lookup_reject_from_dirent_thread_bad_errno++;
+#if 0
+	{
+	  char bufall_debug[64];
+	  rozofs_fid2string(msg_p->s.lookup_rsp.parent_fid,bufall_debug);      
+	  FDL_INFO ("FDL rozofs_bt_lookup_cbk_errno %s pfid :%s error:%s\n",name,bufall_debug,strerror(msg_p->s.lookup_rsp.s.errcode));	
+	}
+#endif
         goto resend2export;
     } 
     /*
@@ -598,11 +761,14 @@ void rozofs_bt_lookup_cbk(void *ruc_buffer)
     ext_attr_child_p = rozofs_bt_load_dirent_from_main_thread(inode,&tracking_ret_p,&dirent_valid);
     if (ext_attr_child_p == NULL)
     {
+#if 0
       {      
 	char bufall_debug[64];
 	rozofs_fid2string(child_fid,bufall_debug);      
-	FDL_INFO ("FDL rozofs_bt_lookup_cbk %s fid :%s   ext_attr_child_p %p dirent_valid %s\n",name,bufall_debug,ext_attr_child_p,(dirent_valid!=0)?"VALID":"INVALID");
+	info ("FDL rozofs_bt_lookup_cbk_no_child %s fid :%s   ext_attr_child_p %p dirent_valid %s\n",name,bufall_debug,ext_attr_child_p,(dirent_valid!=0)?"VALID":"INVALID");
       }
+#endif
+      rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode++;
       goto resend2export;
     }       
     /*
@@ -701,6 +867,7 @@ resend2export:
     {
       epgw_lookup_arg_t arg;
       memcpy(parent_fid, msg_p->s.lookup_rsp.parent_fid,sizeof(fid_t)); 
+      rozofs_bt_lookup_local_reject_from_dirent_thread++;
       /*
       ** release the buffer that has been allocated from the transaction pool
       */      
@@ -826,6 +993,7 @@ int rozofs_bt_readdir_req_from_main_thread(fid_t fid,uint64_t cookie,void *fuse_
   dirbuf_t   *db=NULL;
   struct fuse_file_info *fi ;
   dir_t *dir_p = NULL;
+  uint32_t queue_idx;
 
   RESTORE_FUSE_PARAM(fuse_ctx_p,fi);
 
@@ -843,6 +1011,7 @@ int rozofs_bt_readdir_req_from_main_thread(fid_t fid,uint64_t cookie,void *fuse_
    
   rozofs_inode_p = (rozofs_inode_t*)fid;
   inode = rozofs_inode_p->fid[1];
+  queue_idx = (rozofs_inode_p->s.idx)%af_unix_bt_dirent_thread_count;
   
   ext_attr_parent_p = rozofs_bt_load_dirent_from_main_thread(inode,NULL,&dirent_valid);
   if ((ext_attr_parent_p == NULL) || (dirent_valid == 0))
@@ -879,7 +1048,7 @@ int rozofs_bt_readdir_req_from_main_thread(fid_t fid,uint64_t cookie,void *fuse_
     /*
     ** send the message on the dirent thread queue
     */
-    rozofs_queue_put(&dirent_queue_lookup,xmit_buf);
+    rozofs_queue_put(&dirent_queue_lookup[queue_idx],xmit_buf);
 
     return 0;
 }
@@ -1177,22 +1346,30 @@ static void *rozofs_bt_dirent_lookup_thread(void *v) {
    rozofs_bt_thread_ctx_t * thread_ctx_p = (rozofs_bt_thread_ctx_t*)v; 
    void *ruc_buffer;
    expbt_msgint_hdr_t *hdr_p;
-   
-   uma_dbg_thread_add_self("bt_lkup_dirent");
-   dirent_lookup_thread_ready = 1;
+   int thread_idx;
+   char thread_name[32];
+   rozofs_bt_lkup_thread_stats_t *private_p;
+      
+   thread_idx = thread_ctx_p->thread_idx;
+   private_p = (rozofs_bt_lkup_thread_stats_t*)thread_ctx_p->thread_private;
+   sprintf(thread_name,"bt_lkup_dirent_%d",thread_idx);
+   uma_dbg_thread_add_self(thread_name);
+   dirent_lookup_thread_ready[thread_idx] = 1;
    
    while(1)
    {
 
-     ruc_buffer = rozofs_queue_get(&dirent_queue_lookup);
+     ruc_buffer = rozofs_queue_get(&dirent_queue_lookup[thread_idx]);
      hdr_p  = (expbt_msgint_hdr_t*) ruc_buf_getPayload(ruc_buffer);
      switch (hdr_p->opcode)
      {
        case ROZOFS_BT_DIRENT_READDIR:	    
 	 FDL_INFO("ROZOFS_BT_DIRENT_READDIR\n");
+	 private_p->readdir[0]++;
 	 rozofs_bt_readdir_req(thread_ctx_p,ruc_buffer); 
 	 break; 
        case ROZOFS_BT_DIRENT_GET_DENTRY:
+	 private_p->lookup[0]++;
 	 rozofs_bt_lookup_req(thread_ctx_p,ruc_buffer); 
 	 break;  
        default:
@@ -1213,12 +1390,12 @@ int rozofs_bt_dirent_thread_create(int nb_threads)
    int                        err;
    pthread_attr_t             attr;
    rozofs_bt_thread_ctx_t * thread_ctx_p;
-   /*
-   ** only 1 thread
-   */
-   nb_threads = 1;
 
-   rozofs_queue_init(&dirent_queue_lookup,ROZOFS_BT_DIRENT_QDEPTH);
+
+   for (i = 0; i < nb_threads ; i++) {   
+     rozofs_queue_init(&dirent_queue_lookup[i],ROZOFS_BT_DIRENT_QDEPTH);
+     dirent_lookup_thread_ready[i] = 0;
+   }
    /*
    ** clear the thread table
    */
@@ -1236,6 +1413,14 @@ int rozofs_bt_dirent_thread_create(int nb_threads)
 	fatal("rozofs_bt_thread_create fail to create socket: %s", strerror(errno));
 	return -1;   
      } 
+     thread_ctx_p->thread_private = malloc(sizeof(rozofs_bt_lkup_thread_stats_t));
+     if (thread_ctx_p->thread_private == NULL) 
+     {
+	fatal("Out of memory");
+	return -1;
+     }
+     memset(thread_ctx_p->thread_private,0,sizeof(rozofs_bt_lkup_thread_stats_t));
+     
      err = pthread_attr_init(&attr);
      if (err != 0) {
        fatal("rozofs_bt_thread_create pthread_attr_init(%d) %s",i,strerror(errno));
@@ -1251,6 +1436,28 @@ int rozofs_bt_dirent_thread_create(int nb_threads)
      
      thread_ctx_p++;
   }
+  /*
+  ** wait for the thread to become ready
+  */
+  {
+    int all_ready = 0;
+    int nb_loop = 0;
+    while (all_ready!= nb_threads)
+    {
+      all_ready = 0;
+      for (i = 0; i < nb_threads ; i++)
+      {
+	 if (dirent_lookup_thread_ready[i] != 0) all_ready++;
+      } 
+      if (all_ready == nb_threads) break;
+      nb_loop++;
+      if (nb_loop > 4) {
+	 fatal("Only %d threads are ready among %d\n",all_ready,nb_threads);
+      }
+      sleep(1);
+    }
+  } 
+  uma_dbg_addTopic("dirent_th_profiler",rozofs_bt_show_dirent_lkup_thread);         
   return 0;
 }
 
@@ -1267,6 +1474,7 @@ int rozofs_bt_dirent_cache_initialize();
 
 int rozofs_bt_dirent_thread_intf_create(char * hostname, int instance_id, int nb_threads) {
 
+  nb_threads = ROZOFS_BT_DIRENT_LKPUP_MAX_THREADS;
   af_unix_bt_dirent_thread_count = nb_threads;
   int ret;
   

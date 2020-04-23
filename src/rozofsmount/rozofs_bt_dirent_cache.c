@@ -22,6 +22,7 @@
 #include <rozofs/rozofs.h>
 #include <rozofs/common/log.h>
 #include <rozofs/common/xmalloc.h>
+#include <rozofs/common/common_config.h>
 #include "rozofs_bt_dirent.h"
 #include "rozofs_bt_proto.h"
 #include "../exportd/mdirent.h"
@@ -46,8 +47,8 @@ typedef struct _rozofs_bt_htable {
  *
  * used to keep track of open file descriptors and corresponding attributes
  */
-#define ROZOFS_BT_DIRENT_GARBAGE_DEADLINE_SEC 10
-#define ROZOFS_BT_MAX_CACHE_ENTRIES (1024*256)
+//#define ROZOFS_BT_DIRENT_GARBAGE_DEADLINE_SEC 10
+//#define ROZOFS_BT_MAX_CACHE_ENTRIES (1024*256)
 #define ROZOFS_BT_LEVEL0_HASH (64*1024)
 typedef struct rozofs_bt_dirent_cache_t {
     int max;            /**<  max entries in the cache  */
@@ -71,6 +72,7 @@ typedef struct rozofs_bt_dirent_cache_t {
 typedef struct _rozofs_bt_dirent_garbage_private_t {
    uint64_t period_sec;  /**< polling period en seconds */
    uint64_t garbage_collector_deletion;
+   uint64_t garbage_collector_btmap_deletion;
    uint64_t polling_count;
    uint64_t deletion_count;
    uint64_t polling_time;
@@ -118,6 +120,7 @@ char* rozofs_bt_dirent_cache_display(char *pChar) {
     pChar+=sprintf(pChar,"hit/miss                       : %llu/%llu\n", 
             (long long unsigned int) rozofs_bt_dirent_cache.hit,
             (long long unsigned int) rozofs_bt_dirent_cache.miss);
+    pChar+=sprintf(pChar,"garbage retention delay(s)     : %llu\n",(long long unsigned int)rozofs_bt_dirent_cache.garbage_collector_deadline_delay_sec);
  /*
     pChar+=sprintf(pChar,"collisions cumul level0/level1 : %llu/%llu\n", 
                   (long long unsigned int) dirent_bucket_cache_collision_level0_counter,
@@ -136,6 +139,11 @@ char* rozofs_bt_dirent_cache_display(char *pChar) {
             (long long unsigned int) rozofs_bt_dirent_cache.lru_del);
     pChar+=sprintf(pChar,"effective deletion             : %llu\n", 
             (long long unsigned int) private_p->garbage_collector_deletion);
+
+    pChar+=sprintf(pChar,"btmap pending deletion         : %llu\n", 
+            (long long unsigned int) rozofs_bt_root_btmap_garbage_collector_count);
+    pChar+=sprintf(pChar,"btmap effective deletion       : %llu\n", 
+            (long long unsigned int) private_p->garbage_collector_btmap_deletion);
     pChar+=sprintf(pChar,"Name chunk size                : %u\n",(unsigned int)MDIRENTS_NAME_CHUNK_SZ);
     pChar+=sprintf(pChar,"Name chunk max                 : %u\n",(unsigned int)MDIRENTS_NAME_CHUNK_MAX);
     pChar+=sprintf(pChar,"Sectors (nb sectors/size)      : %u/%u Bytes\n",
@@ -431,8 +439,8 @@ int rozofs_bt_dirent_cache_initialize() {
     thread_ctx_p = &rozofs_bt_dirent_garbage_collector_thread_ctx;
     
     memset(cache,0,sizeof(rozofs_bt_dirent_cache_t));
-    cache->max = ROZOFS_BT_MAX_CACHE_ENTRIES;
-    cache->garbage_collector_deadline_delay_sec = ROZOFS_BT_DIRENT_GARBAGE_DEADLINE_SEC;
+    cache->max = common_config.dirent_cache_size; // ROZOFS_BT_MAX_CACHE_ENTRIES;
+    cache->garbage_collector_deadline_delay_sec =common_config.dirent_garbage_delay; // ROZOFS_BT_DIRENT_GARBAGE_DEADLINE_SEC;
     
     ret = rozofs_bt_htable_initialize_th(&cache->htable, ROZOFS_BT_LEVEL0_HASH,ROZOFS_BT_LEVEL0_HASH, NULL, rozofs_bt_dirent_cache_cmp);
     if (ret < 0) return ret;
@@ -515,8 +523,9 @@ mdirents_cache_entry_t *bt_dirent_cache_bucket_search_entry(fid_t fid, uint16_t 
       /*
       ** if the entry is found, update the lru
       */
-      pthread_rwlock_wrlock(&cache->lru_lock);  
-      list_push_front(&cache->lru, &dentry_p->cache_link);
+      pthread_rwlock_wrlock(&cache->lru_lock); 
+      list_remove(&dentry_p->lru_link); 
+      list_push_front(&cache->lru, &dentry_p->lru_link);
       pthread_rwlock_unlock(&cache->lru_lock);    
       cache->hit++;
       return dentry_p;
@@ -567,11 +576,10 @@ int bt_dirent_put_root_entry_to_cache(fid_t fid, int root_idx, mdirents_cache_en
     /*
     ** remove the entry from the LRU linked list and update the number of entries on the cache
     */        
-    lru = list_entry(cache->lru.prev, mdirents_cache_entry_t, cache_link);  
-    list_remove(&lru->cache_link); 
+    lru = list_entry(cache->lru.prev, mdirents_cache_entry_t, lru_link);  
+    list_remove(&lru->lru_link); 
     cache->size--;
     pthread_rwlock_unlock(&cache->lru_lock); 
-
     /*
     ** remove it from the hash cache line
     */
@@ -603,9 +611,15 @@ int bt_dirent_put_root_entry_to_cache(fid_t fid, int root_idx, mdirents_cache_en
    ** compute the hash value for the bucket and the bucket_entry
    */
   root_p->hash = dirent_cache_bucket_hash_fnv(0, fid, &index);  
-  list_init(&root_p->cache_link);
+  list_init(&root_p->lru_link);
   root_p->he.key   = &root_p->key;
   root_p->he.value = root_p;
+  /*
+  ** insert on the lru
+  */
+  pthread_rwlock_wrlock(&cache->lru_lock);  
+  list_push_front(&cache->lru, &root_p->lru_link);
+  pthread_rwlock_unlock(&cache->lru_lock);    
   cache->size++;
   /*
   ** insert in the hash table
@@ -661,7 +675,7 @@ int bt_dirent_remove_root_entry_from_cache(fid_t fid, int root_idx)
   ** remove the entry from the LRU
   */
   pthread_rwlock_wrlock(&cache->lru_lock);   
-  list_remove(&dentry_p->cache_link); 
+  list_remove(&dentry_p->lru_link); 
   cache->size--;  
   pthread_rwlock_unlock(&cache->lru_lock); 
   /*
@@ -724,7 +738,7 @@ void rozofs_bt_dirent_flush_garbage_collector(rozofs_bt_thread_ctx_t *thread_ctx
         /*
 	** check if the deadline has been reached
 	*/
-	if (dentry_p->deadline_timestamp > (cur_time +cache->garbage_collector_deadline_delay_sec)) break;
+	if ((dentry_p->deadline_timestamp +cache->garbage_collector_deadline_delay_sec) > cur_time) break;
 	/*
 	** the deadline is reached, remove it from the garbage collector and release the memory
 	*/
@@ -743,10 +757,30 @@ void rozofs_bt_dirent_flush_garbage_collector(rozofs_bt_thread_ctx_t *thread_ctx
    */
    for (i = 0;i < current_count; i++)
    {
+     dentry_p = dentry_tab[i];
+     /*
+     ** check if it is still queued on the lru
+     **  That situation might happen when we need to release some entries because
+     **  we reach the max cache size and at the same time we have a get on the entry
+     **  that is released because of the cache size.
+     **  Since there are 2 locks (one for the hash entry and one for the lru) the operation
+     **  cannot be atomic
+     ** So it might be possible that the entry has been requeued on the LRU, so we have to
+     ** check that case at the time we release the memory of the entry.
+     */
+     if (list_empty(&dentry_p->lru_link) == 0)
+     {
+        /*
+	** Remove the entry from LRU
+	*/
+	pthread_rwlock_wrlock(&cache->lru_lock);   
+	list_remove(&dentry_p->lru_link); 
+	pthread_rwlock_unlock(&cache->lru_lock); 
+     }
      /*
      ** now release the memory allocated to cache the dirent files
      */
-     dirent_cache_release_entry(dentry_tab[i]);
+     dirent_cache_release_entry(dentry_p);
    }
 }
 
@@ -766,7 +800,7 @@ static void *rozofs_bt_dirent_garbage_collector_thread(void *v) {
    rozofs_bt_dirent_garbage_private_t *private_p = NULL;
    uint64_t tic,toc;
   struct timeval tc;
-
+    rozofs_bt_dirent_cache_t *cache = &rozofs_bt_dirent_cache;
    
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     
@@ -777,11 +811,26 @@ static void *rozofs_bt_dirent_garbage_collector_thread(void *v) {
 	ts.tv_sec = private_p->period_sec;    
 
         nanosleep(&ts, NULL);  
+	/*
+	** reload the max cache size and the garbage collector delay since it might have changed
+	*/
+	cache->max = common_config.dirent_cache_size;
+	rozofs_root_bmap_max_ientries = common_config.dirent_cache_size;
+	cache->garbage_collector_deadline_delay_sec =common_config.dirent_garbage_delay;
+	rozofs_bt_root_btmap_thread_garbage_collector_deadline_delay_sec = common_config.dirent_garbage_delay;
+	/*
+	** if deletion is forbibden, do nanosleep again
+	*/
+	if  (private_p->deletion_enable ==0) continue;
 	tic = rozofs_get_ticker_us();
 	/*
 	** Garbage collector check
 	*/
 	rozofs_bt_dirent_flush_garbage_collector(thread_ctx_p);
+	/*
+	** Flush the garbage collector of the root bitmap entries
+	*/
+	private_p->garbage_collector_btmap_deletion+= rozofs_bt_root_btmap_flush_garbage_collector();
 	gettimeofday(&tc,(struct timezone *)0);
         toc = rozofs_get_ticker_us();
 	private_p->polling_count++;

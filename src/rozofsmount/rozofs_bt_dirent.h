@@ -82,7 +82,10 @@ typedef struct _dentry_btmap_t {
     hash_entry_t he;
     uint64_t inode;  /**< inode of the directory   */
     uint64_t mtime;  /**< mtime of the directory   */
+    uint64_t     deadline_timestamp; /**< delay for garbage collector */
+    uint64_t     lru_timestamp;     /**< last time the entry has been move to the front of the lru */
     list_t   list;  /**< to create the linked list of the entries */
+    list_t   lru;  /**< to create the lru linked list of the entries */
     dirent_dir_root_idx_bitmap_t btmap;  /**< dirent bitmap */
 } dentry_btmap_t ;  
 
@@ -117,6 +120,23 @@ int rozofs_bt_dirent_hash_init(int eid, char *export_root_path);
   @retval -1 on error (see errno for details
 */
 int rozofs_bt_load_dirent_root_bitmap_file(uint64_t inode,uint64_t mtime);
+
+
+/**
+**_______________________________________________________________________________________
+*/
+/**
+  Flush any entry that has expired within the root btmap garbage collector
+  
+  @param none
+  
+  @retval number of deleted context
+*/
+
+uint64_t rozofs_bt_root_btmap_thread_garbage_collector_deadline_delay_sec;
+uint64_t rozofs_bt_root_btmap_garbage_collector_count;
+uint64_t rozofs_root_bmap_max_ientries;
+int rozofs_bt_root_btmap_flush_garbage_collector();
 
 /*
 **________________________________________________________________
@@ -355,13 +375,12 @@ int bt_dirent_remove_root_entry_from_cache(fid_t fid, int root_idx);
 
    @param  eid: export identifier
    @param  parent_fid: fid of the parent directory
-   @param  name: name for which we want the inode
    @param  fuse_ctx_p: fuse context
          
    @retval 0 on success
    @retval -1 on error (see errno for details)
 */
-int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *name,void *fuse_ctx_p);
+int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,void *fuse_ctx_p);
 
 #if 0
 /*
@@ -381,4 +400,9 @@ int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,char *na
 */
 int rozofs_bt_get_slave_inode(rozofs_bt_tracking_cache_t *tracking_ret_p,rozofs_inode_t *rozofs_inode_p,ientry_t *ie);
 #endif
+
+
+extern uint64_t rozofs_bt_lookup_local_attempt;
+extern uint64_t rozofs_bt_lookup_local_reject_from_main;
+extern uint64_t rozofs_bt_lookup_local_reject_from_dirent_thread;
 #endif

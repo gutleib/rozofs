@@ -35,6 +35,7 @@ int rozofs_bt_remove_dirent_from_cache(fid_t fid,int *remove_count_p);
 
 */
 
+#define ROZOFS_BT_LRU_DELAY  20  /**< delay in seconds before putting the entry at the front of the LRU */
 
  uint32_t export_profiler_eid;
 /*
@@ -50,13 +51,21 @@ int rozofs_bt_dirent_eid = 0;
 */
 htable_t htable_root_bitmap;
 uint64_t rozofs_root_bmap_ientries_count = 0;  /**< number of active entries in the hash table */
+uint64_t rozofs_root_bmap_max_ientries = 0;  /**< max number of entries in the cache */
 list_t root_bitmap_entries;
 uint64_t hash_root_btmap_collisions_count;
 uint64_t hash_root_btmap_max_collisions;
 uint64_t hash_root_btmap_cur_collisions;
 static pthread_rwlock_t rozofs_bt_root_btmap_lock;
-int rozofs_bt_dirent_load_debug = 1;
+pthread_rwlock_t rozofs_bt_root_btmap_lru_lock;
 
+pthread_rwlock_t rozofs_bt_root_btmap_garbage_collector_lock;  /**< lock for the garbage collector */
+list_t rozofs_bt_root_btmap_garbage_collector_head;           /**< head of the garbage collector for bitmap */
+list_t rozofs_bt_root_btmap_lru;                              /**< lru of bitmap cache  */
+int rozofs_bt_dirent_load_debug = 1;
+uint64_t rozofs_bt_root_btmap_garbage_collector_count = 0;
+uint64_t rozofs_bt_root_btmap_total_deletion = 0;
+uint64_t rozofs_bt_root_btmap_thread_garbage_collector_deadline_delay_sec;
 
 /*
 **________________________________________________________________
@@ -220,7 +229,7 @@ static inline uint32_t dirent_ino_hash(void *n) {
 
 static inline void put_btmap_entry(dentry_btmap_t * ie) {
 
-    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lock);
+    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lock);    
 
     rozofs_root_bmap_ientries_count++;
     ie->he.key   = &ie->inode;
@@ -230,17 +239,18 @@ static inline void put_btmap_entry(dentry_btmap_t * ie) {
 
     pthread_rwlock_unlock(&rozofs_bt_root_btmap_lock);
 }
+
 /*
 **________________________________________________________________
 */
 /**
-   Remove a root bitmap entry from the hash table
+   Remove a root bitmap entry from the hash table and insert it in the garbage collector
    
    @param root_p: pointer to the root bitmap context
    
    @retval none
 */
-static inline void del_btmap_entry(dentry_btmap_t * ie) {
+static inline void remove_btmap_entry(dentry_btmap_t * ie) {
     
     pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lock);
 
@@ -248,11 +258,167 @@ static inline void del_btmap_entry(dentry_btmap_t * ie) {
     htable_del_entry(&htable_root_bitmap, &ie->he);
     list_remove(&ie->list);
 
-    xfree(ie);    
+    pthread_rwlock_unlock(&rozofs_bt_root_btmap_lock);
+    /*
+    ** remove the entry from the LRU
+    */
+    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lru_lock); 
+    /*
+    ** to prevent a race condition for LRU insertion, change the timestamp of the LRU
+    ** to avoid a LRU re-insert since we can have a race condition with a get
+    */
+    ie->lru_timestamp = 4*ROZOFS_BT_LRU_DELAY+time(NULL);    
+    pthread_rwlock_unlock(&rozofs_bt_root_btmap_lru_lock); 
+    /*
+    ** insert in the to delete list, 
+    */
+    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_garbage_collector_lock);  
+    /*
+    ** Insert the entry in the garbage collector list
+    ** set the deadline time before deleting the cache 
+    */
+    ie->deadline_timestamp = time(NULL);
+    list_push_back(&rozofs_bt_root_btmap_garbage_collector_head, &ie->he.list);
+    rozofs_bt_root_btmap_garbage_collector_count++;
+    pthread_rwlock_unlock(&rozofs_bt_root_btmap_garbage_collector_lock);        
+}
+
+
+/**
+**_______________________________________________________________________________________
+*/
+/**
+  Check if we need to release some entries before the cache size is exhausted
+  
+  @param none
+  
+  @retval number of deleted context
+*/
+void rozofs_bt_root_btmap_lru_check()
+{
+  dentry_btmap_t *lru;
+  int max_count = 0;
+
+  while ((rozofs_root_bmap_ientries_count >= rozofs_root_bmap_max_ientries))
+  {
+    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lru_lock); 
+    if (list_empty(&rozofs_bt_root_btmap_lru))
+    {
+      pthread_rwlock_unlock(&rozofs_bt_root_btmap_lru_lock); 
+      break;
+    }    
+    /*
+    ** remove the entry from the LRU linked list and update the number of entries on the cache
+    */        
+    lru = list_entry(rozofs_bt_root_btmap_lru.prev, dentry_btmap_t, lru);  
+    list_remove(&lru->lru); 
+    /*
+    ** to prevent a race condition for LRU insertion, change the timestamp of the LRU
+    ** to avoid a LRU re-insert since we can have a race condition with a get
+    */
+    lru->lru_timestamp = 4*ROZOFS_BT_LRU_DELAY+time(NULL);
+    pthread_rwlock_unlock(&rozofs_bt_root_btmap_lru_lock); 
+    /*
+    ** remove it from the hash cache line
+    */
+    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lock);
+
+    rozofs_root_bmap_ientries_count--;
+    max_count++;
+    htable_del_entry(&htable_root_bitmap, &lru->he);
+    list_remove(&lru->list);
 
     pthread_rwlock_unlock(&rozofs_bt_root_btmap_lock);
+    /*
+    ** insert in the to delete list, 
+    */
+    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_garbage_collector_lock);  
+    /*
+    ** Insert the entry in the garbage collector list
+    ** set the deadline time before deleting the cache 
+    */
+    lru->deadline_timestamp = time(NULL);
+    list_push_back(&rozofs_bt_root_btmap_garbage_collector_head, &lru->he.list);
+    rozofs_bt_root_btmap_garbage_collector_count++;
+    pthread_rwlock_unlock(&rozofs_bt_root_btmap_garbage_collector_lock);  
+    if (max_count == 32) break;           
+  }
 
 }
+/**
+**_______________________________________________________________________________________
+*/
+/**
+  Flush any entry that has expired within the root btmap garbage collector
+  
+  @param none
+  
+  @retval number of deleted context
+*/
+#define ROZOFS_BT_DIRENT_MAX_FLUSH 32
+
+int rozofs_bt_root_btmap_flush_garbage_collector()
+{
+    list_t *p, *q;
+    time_t cur_time;
+    dentry_btmap_t *btmap_p;
+    dentry_btmap_t *btmap_tab[ROZOFS_BT_DIRENT_MAX_FLUSH];
+    int current_count = 0;
+    int deleted_count = 0;
+    int i;
+    /*
+    ** check the LRU
+    */
+    rozofs_bt_root_btmap_lru_check();
+    /*
+    ** check the garbage collector
+    */
+    cur_time = time(NULL);
+    /*
+    ** go through the garbage collector remove all the entries that have reached their deadline
+    */
+    pthread_rwlock_wrlock(&rozofs_bt_root_btmap_garbage_collector_lock);  ;
+
+    list_for_each_forward_safe(p, q, &rozofs_bt_root_btmap_garbage_collector_head) {
+        btmap_p = list_entry(p, dentry_btmap_t, he.list);
+        /*
+	** check if the deadline has been reached
+	*/
+	if ((btmap_p->deadline_timestamp + rozofs_bt_root_btmap_thread_garbage_collector_deadline_delay_sec) > cur_time) break;
+	/*
+	** the deadline is reached, remove it from the garbage collector and release the memory
+	*/
+	list_remove(p);
+	rozofs_bt_root_btmap_garbage_collector_count--;
+	deleted_count++;
+	btmap_tab[current_count] = btmap_p;
+	current_count++;
+	if (current_count >= ROZOFS_BT_DIRENT_MAX_FLUSH) break;
+
+    }
+
+   pthread_rwlock_unlock(&rozofs_bt_root_btmap_garbage_collector_lock);
+   /*
+   ** now release the memory
+   */
+   btmap_p = btmap_tab[0];
+   for (i = 0;i < current_count; i++)
+   {
+     btmap_p = btmap_tab[i];
+     rozofs_bt_root_btmap_total_deletion++;
+     /*
+     ** now release the memory allocated to cache the dirent files: not needed
+     */
+//     pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lru_lock);
+//     list_remove(&btmap_p->lru);
+//     pthread_rwlock_unlock(&rozofs_bt_root_btmap_lru_lock);
+     xfree(btmap_p);
+   }
+   return deleted_count;
+}
+
+
+
 
 /*
 **________________________________________________________________
@@ -268,6 +434,10 @@ static inline void del_btmap_entry(dentry_btmap_t * ie) {
 
 static inline dentry_btmap_t *get_btmap_entry_by_inode(uint64_t ino) {
     uint64_t inode;
+    time_t   cur_time;
+    int update_lru = 0;
+    
+    cur_time= time(NULL);
     
     dentry_btmap_t *p;
     
@@ -276,8 +446,28 @@ static inline dentry_btmap_t *get_btmap_entry_by_inode(uint64_t ino) {
     pthread_rwlock_rdlock(&rozofs_bt_root_btmap_lock);
     
     p = htable_get(&htable_root_bitmap, &inode);
-
+    if (p!= NULL)
+    {
+      /*
+      ** check if the lru time stamp must be updated
+      */
+      if (p->lru_timestamp < cur_time)
+      { 
+         p->lru_timestamp = ROZOFS_BT_LRU_DELAY+cur_time;
+	 update_lru = 1;
+      }
+    }
     pthread_rwlock_unlock(&rozofs_bt_root_btmap_lock);
+    /*
+    ** update the lru if needed
+    */
+    if (update_lru)
+    {    
+      pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lru_lock);
+      list_remove(&p->lru);
+      list_push_front(&rozofs_bt_root_btmap_lru,&p->lru);
+      pthread_rwlock_unlock(&rozofs_bt_root_btmap_lru_lock);    
+    }
     return p;
 }
 
@@ -333,7 +523,9 @@ static inline dentry_btmap_t *alloc_btmap_entry_by_fid(fid_t fid) {
 	rozofs_inode_t *inode_p ;
 	uint64_t inode;
 	int ret;
+	time_t cur_time;
 	
+	cur_time = time(NULL);
 	inode_p = (rozofs_inode_t*) fid;
 	inode = rozofs_bt_inode_normalize(inode_p->fid[1]);
 
@@ -342,6 +534,8 @@ static inline dentry_btmap_t *alloc_btmap_entry_by_fid(fid_t fid) {
 	
 	ie->inode = inode; 
 	list_init(&ie->list);
+	list_init(&ie->lru);
+	ie->deadline_timestamp = 0;
 	/*
 	** load the bitmap of the dirent
 	*/
@@ -351,6 +545,16 @@ static inline dentry_btmap_t *alloc_btmap_entry_by_fid(fid_t fid) {
 	  warning("error while loading dirent bitmap for inode %llx:%s",(unsigned long long int)inode,strerror(errno));
 	  goto error;
         }
+	/*
+	** insert in the LRU before inserting it in the hash table
+	*/
+	ie->lru_timestamp = ROZOFS_BT_LRU_DELAY+cur_time;
+	pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lru_lock);
+	list_push_front(&rozofs_bt_root_btmap_lru,&ie->lru);
+	pthread_rwlock_unlock(&rozofs_bt_root_btmap_lru_lock);   
+	/*
+	** insert in the hash table
+	*/	
 	put_btmap_entry(ie);
 	return ie;
 error:
@@ -376,7 +580,9 @@ static inline dentry_btmap_t *alloc_btmap_entry_by_inode(uint64_t ino,uint64_t m
 	dentry_btmap_t *ie;
 	uint64_t inode;
 	int ret;
+	time_t cur_time;
 	
+	cur_time = time(NULL);	
 	inode = rozofs_bt_inode_normalize(ino);
 
 	ie = xmalloc(sizeof(dentry_btmap_t));
@@ -384,7 +590,10 @@ static inline dentry_btmap_t *alloc_btmap_entry_by_inode(uint64_t ino,uint64_t m
 	
 	ie->inode = inode; 
 	ie->mtime = mtime;
+	ie->deadline_timestamp = 0;
+
 	list_init(&ie->list);
+	list_init(&ie->lru);
 	/*
 	** load the bitmap of the dirent
 	*/
@@ -394,6 +603,16 @@ static inline dentry_btmap_t *alloc_btmap_entry_by_inode(uint64_t ino,uint64_t m
 	  warning("error while loading dirent bitmap for inode %llx:%s",(unsigned long long int)inode,strerror(errno));
 	  goto error;
 	}
+	/*
+	** insert in the LRU before inserting it in the hash table
+	*/
+	ie->lru_timestamp = ROZOFS_BT_LRU_DELAY+cur_time;
+	pthread_rwlock_wrlock(&rozofs_bt_root_btmap_lru_lock);
+	list_push_front(&rozofs_bt_root_btmap_lru,&ie->lru);
+	pthread_rwlock_unlock(&rozofs_bt_root_btmap_lru_lock);   
+	/*
+	** insert in the hash table
+	*/	
 	put_btmap_entry(ie);
 
 	return ie;
@@ -675,6 +894,11 @@ void show_btmap_entry_delete(char * argv[], uint32_t tcpRef, void *bufRef) {
       }
       list_t * p;
       ie = NULL;
+      /*
+      ** go throught the list of the entries, need to take the lock to avoid
+      ** a SIGSEGV
+      */
+      pthread_rwlock_rdlock(&rozofs_bt_root_btmap_lock);
       list_for_each_forward(p, &root_bitmap_entries) {
         inode--;
 	if (inode==0) {
@@ -682,6 +906,7 @@ void show_btmap_entry_delete(char * argv[], uint32_t tcpRef, void *bufRef) {
 	  break;
 	}    
       }	
+      pthread_rwlock_unlock(&rozofs_bt_root_btmap_lock);
       if (ie == NULL) {
           pChar += sprintf(pChar, "No btmap_entry for this number\n");
           uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
@@ -723,15 +948,28 @@ void show_btmap_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
   rozofs_inode_t  rozofs_inode;
   int delete = 0;
   char pathname[1024];
-  char date[64];
+//  char date[64];
   struct tm tm;
   int count = 0;
   
   if (argv[1] == NULL) {
+      pChar += sprintf(pChar, "Hash table buckets  : %u\n", (unsigned int) ROOT_BTMAP_HSIZE);
+      pChar += sprintf(pChar, "btmap_entry max     : %llu\n", (long long unsigned int) rozofs_root_bmap_max_ientries);
+      pChar += sprintf(pChar, "btmap_entry counter : %llu\n", (long long unsigned int) rozofs_root_bmap_ientries_count);
+      pChar += sprintf(pChar, "btmap_entry_size    : %u\n",  (unsigned int)sizeof(dirent_dir_root_idx_bitmap_t));
+      pChar += sprintf(pChar, "Total memory (KB)   : %llu\n",  (long long unsigned int)((rozofs_root_bmap_ientries_count*sizeof(dirent_dir_root_idx_bitmap_t)+(ROOT_BTMAP_HSIZE)*sizeof(list_t))/1024));
+      pChar += sprintf(pChar, "retention delay(s)  : %llu\n",(long long unsigned int)rozofs_bt_root_btmap_thread_garbage_collector_deadline_delay_sec);
+      pChar += sprintf(pChar, "pending deletion    : %llu\n",(long long unsigned int)rozofs_bt_root_btmap_garbage_collector_count);
+      pChar += sprintf(pChar, "total deletion      : %llu\n",(long long unsigned int)rozofs_bt_root_btmap_total_deletion);
+
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());  
+      return;
+  } 
+  if (strcmp(argv[1],"?")==0) {
       pChar = show_btmap_entry_help(pChar);
       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
       return;
-  } 
+  }
   if (strcmp(argv[1],"coll")==0) {
       pChar += sprintf(pChar, "btmap_entry collisions: %llu\n", (long long unsigned int) hash_root_btmap_collisions_count);
       pChar += sprintf(pChar, "btmap_entry max colls : %llu\n", (long long unsigned int) hash_root_btmap_max_collisions);
@@ -800,6 +1038,12 @@ void show_btmap_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
       }
       list_t * p;
       ie = NULL;
+      /*
+      ** go throught the list of the entries, need to take the lock to avoid
+      ** a SIGSEGV
+      */
+      pthread_rwlock_rdlock(&rozofs_bt_root_btmap_lock);
+      
       list_for_each_forward(p, &root_bitmap_entries) {
         inode--;
 	if (inode==0) {
@@ -807,6 +1051,8 @@ void show_btmap_entry(char * argv[], uint32_t tcpRef, void *bufRef) {
 	  break;
 	}    
       }	
+      pthread_rwlock_unlock(&rozofs_bt_root_btmap_lock);
+      
       if (ie == NULL) {
           pChar += sprintf(pChar, "No btmap_entry for this number\n");
           uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   
@@ -955,6 +1201,10 @@ int rozofs_bt_dirent_hash_init(int eid, char *export_root_path)
     rozofs_bt_dirent_export_rootpath = strdup(export_root_path);
     rozofs_bt_dirent_eid = eid;
     pthread_rwlock_init(&rozofs_bt_root_btmap_lock, NULL);
+    pthread_rwlock_init(&rozofs_bt_root_btmap_lru_lock, NULL);
+    pthread_rwlock_init(&rozofs_bt_root_btmap_garbage_collector_lock,NULL);
+    list_init(&rozofs_bt_root_btmap_garbage_collector_head);
+    list_init(&rozofs_bt_root_btmap_lru);
 
     
 
@@ -965,6 +1215,10 @@ int rozofs_bt_dirent_hash_init(int eid, char *export_root_path)
     hash_root_btmap_max_collisions = 0;
     hash_root_btmap_cur_collisions = 0;
     rozofs_root_bmap_ientries_count = 0;
+    rozofs_bt_root_btmap_garbage_collector_count = 0;
+    rozofs_bt_root_btmap_total_deletion = 0;
+    rozofs_root_bmap_max_ientries = common_config.dirent_cache_size;
+    rozofs_bt_root_btmap_thread_garbage_collector_deadline_delay_sec = common_config.dirent_garbage_delay;
     uma_dbg_addTopic("trkrd_btmap_entry", show_btmap_entry);
     rozofs_bt_dirent_load_debug = 0;
     uma_dbg_addTopic("trkrd_stats", show_trkrd_stats);
@@ -1121,68 +1375,6 @@ int dirent_remove_root_entry_from_cache(fid_t fid, int root_idx);
   @retval < 0 on error (see errno for details)
   
 */
-#if 0
-int rozofs_bt_remove_dirent_from_cache(fid_t fid,int *remove_count_p)	
-{
-
-  dentry_btmap_t *btmap_entry_p = NULL;
-  dirent_dir_root_idx_bitmap_t *btmap_p;
-  mdirents_cache_entry_t *dirent_p;
-  uint8_t byte_value;  
-  int remove_count = 0;
-  int byte;
-  int bit_idx;
-  int root_idx;
-  
-  if (remove_count_p!= NULL) *remove_count_p = 0;
-
-  btmap_entry_p = get_btmap_entry_by_fid(fid);
-  if (btmap_entry_p == NULL)
-  {
-    /*
-    ** nothing there
-    */
-    errno = ENOENT;
-    return -1;
-  }
-  btmap_p = &btmap_entry_p->btmap;
-  root_idx = 0;
-  for (byte = 0; byte <DIRENT_FILE_BYTE_BITMAP_SZ;byte++)
-  {
-     byte_value =  btmap_p->bitmap[byte];
-     if (byte_value == 0) continue;
-     for (bit_idx = 0; bit_idx < 8; bit_idx++)
-     {
-       if ((byte_value & 1<<bit_idx) == 0) continue;
-       root_idx = byte*8+bit_idx;
-       dirent_p = dirent_cache_bucket_search_entry(&dirent_cache_level0,fid,root_idx);
-       if (dirent_p == NULL)
-       {
-	  /*
-	  ** nothing in the cache : go to the next entry
-	  */
-	  continue;
-       }
-       /*
-       ** Remove the entry from the hash table
-       */
-       dirent_remove_root_entry_from_cache(fid,root_idx);
-       /*
-       ** now release the memory allocated to cache the dirent files
-       */
-       dirent_cache_release_entry(dirent_p);
-       remove_count++;
-     }
-  }
-  /*
-  ** now remove the bitmap entry from the cache
-  */
-  del_btmap_entry(btmap_entry_p);
-  if (remove_count_p!= NULL) *remove_count_p = remove_count;
-  return 0;
-}
-#endif
-
 int rozofs_bt_remove_dirent_from_cache(fid_t fid,int *remove_count_p)	
 {
 
@@ -1223,7 +1415,7 @@ int rozofs_bt_remove_dirent_from_cache(fid_t fid,int *remove_count_p)
   /*
   ** now remove the bitmap entry from the cache
   */
-  del_btmap_entry(btmap_entry_p);
+  remove_btmap_entry(btmap_entry_p);
   if (remove_count_p!= NULL) *remove_count_p = remove_count;
   return 0;
 }

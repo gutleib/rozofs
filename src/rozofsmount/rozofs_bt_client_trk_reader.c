@@ -898,6 +898,10 @@ void rozofs_bt_reading_tracking_file_remote_cbk(void *this,void *param)
       */
       image_p->trk_payload = new_payload;
       /*
+      ** stats update
+      */
+      rozofs_bt_trk_update_byte_count(image_p,1,old_payload);
+      /*
       ** queue the old entry in the garbage collector if it exists
       */
       if (old_payload != NULL) rozofs_bt_rcu_queue_trk_file_payload_in_garbage_collector(old_payload);

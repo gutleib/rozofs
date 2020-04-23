@@ -42,8 +42,10 @@ extern pthread_rwlock_t rozofs_bt_buf_pool_lock;
 extern int rozofs_bt_debug;
 
 #define FDL_INFO(fmt, ...) if (rozofs_bt_debug) info( fmt, ##__VA_ARGS__)
-#define ROZOFS_BT_DEADLINE_SEC  120 /**< duration of a file tracking cache entry validity */
+//#define ROZOFS_BT_DEADLINE_SEC  120 /**< duration of a file tracking cache entry validity */
 #define ROZOFS_BT_GARBAGE_DEADLINE_SEC  10 /**< duration before releasing the memory that contains the palyoad of a tracking file */
+//#define ROZOFS_BT_ROOT_BTMAP_GARBAGE_DEADLINE_SEC  3 /**< duration before releasing the memory that contains the palyoad of a bitmap file */
+
 
 #define PRIO_CMDQ 3
 #define PRIO_CMD 2
@@ -219,10 +221,11 @@ void rozofs_bt_put_tracking(rozofs_bt_tracking_cache_t * trk_p);
 
    @param trk_p: pointer to the tracking file context
    
-   @retval none
+   @retval 0: deletion done
+   @retval 1: not done
 */
 
- void rozofs_bt_del_tracking(rozofs_bt_tracking_cache_t * trk_p);
+ int rozofs_bt_del_tracking(rozofs_bt_tracking_cache_t * trk_p) ;
  /*
 **__________________________________________________________________
 */
@@ -397,4 +400,24 @@ ext_mattr_t *rozofs_bt_get_inode_ptr_from_image(rozofs_bt_tracking_cache_t *trac
   @retval none
 */
 void rozofs_bt_rcu_queue_trk_file_payload_in_garbage_collector(rozofs_bt_tracking_cache_payload_hdr_t *payload_p);
+
+
+/**
+*  Update the memory occupancy of the tracking file cache upon loading or re-loading of an entry or the remove of the entry
+
+  @param p : pointer to the tracking cache entry
+  @param add: 1: add / 0:sub
+  @param old_payload: pointer to the old payload for the case of the reload (might be null)
+  
+  @retval none
+*/
+void rozofs_bt_trk_update_byte_count(rozofs_bt_tracking_cache_t *p,int add, rozofs_bt_tracking_cache_payload_hdr_t  *old_payload);
+/**
+*  Update the memory occupancy of the tracking file cache upon releasing memory from garbage collector
+
+  @param datalen: size to release
+  
+  @retval none
+*/
+void rozofs_bt_trk_update_byte_count_garbage(uint32_t datalen);
 #endif
