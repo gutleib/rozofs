@@ -237,6 +237,37 @@ static inline void rozo_diag_srv_ctx_reinit(rozofs_diag_srv_ctx_t * pCtx) {
 /*
 **____________________________________________________
 **
+** Free a rozofs diagnostic context
+** 
+** @param pCtx   Serveur context
+**____________________________________________________
+*/
+void rozo_diag_srv_ctx_disconnect(rozofs_diag_srv_ctx_t * pCtx) {
+  uint64_t idx;
+
+  list_remove(&pCtx->list);
+    
+  /*
+  ** Free the nick name
+  */
+  if (pCtx->target) {
+    free(pCtx->target);
+    pCtx->target = NULL;
+  }  
+  rozo_diag_srv_ctx_reinit(pCtx);
+  
+  /*
+  ** Disconnect this socket from the socket controler
+  ** The context index is the socket controler index.
+  */
+  idx = get_cnx_idx_from_ctx(pCtx);
+  if (idx >= 0) {
+    af_unix_delete_socket(idx);  
+  }  
+}  
+/*
+**____________________________________________________
+**
 ** Register a server with the name it gives
 **____________________________________________________
 */
@@ -254,6 +285,14 @@ void rozo_diag_srv_register(rozofs_diag_srv_ctx_t * pCtx,UMA_MSGHEADER_S * pHead
     pCtx->target = NULL;
   }  
   pChar = (char *) (pHead+1);
+  /*
+  ** Remove trailing spaces
+  */
+  {
+    char * p = pChar;
+    while ((*p!=0)&&(*p!= ' ')) p++;
+    if (*p == ' ') *p = 0;
+  }
   pCtx->target = strdup(pChar);
 
   /*
@@ -280,7 +319,6 @@ void rozo_diag_srv_register(rozofs_diag_srv_ctx_t * pCtx,UMA_MSGHEADER_S * pHead
 **____________________________________________________
 */
 void rozo_diag_srv_forward(rozofs_diag_srv_ctx_t * pFrom,UMA_MSGHEADER_S * pHead, void *recv_buf) {
-  char                  * pChar;
   rozofs_diag_srv_ctx_t * pTo; 
 
   /*
@@ -292,6 +330,8 @@ void rozo_diag_srv_forward(rozofs_diag_srv_ctx_t * pFrom,UMA_MSGHEADER_S * pHead
   ** The destination may be disconnected now...
   */
   if (!pTo->used) {
+    
+    ruc_buf_freeBuffer(recv_buf);
   
     if (pFrom->server) {
       /*
@@ -301,12 +341,9 @@ void rozo_diag_srv_forward(rozofs_diag_srv_ctx_t * pFrom,UMA_MSGHEADER_S * pHead
       return;
     }
     /*
-    ** Server does not exist. Tell it to the requester client.
+    ** Server does not exist. disconnect the requester client.
     */    
-    pChar = (char *) (pHead+1);
-    pChar += rozofs_string_append (pChar,"No such serveur ");
-    pChar += rozofs_u32_append (pChar, pHead->fwd);
-    uma_dbg_send_buffer(get_cnx_idx_from_ctx(pFrom), recv_buf, pChar-(char*)pHead, 1);
+    rozo_diag_srv_ctx_disconnect(pFrom);
     return;
   }  
   
@@ -380,37 +417,7 @@ void rozofs_diag_srv_ctx_init() {
   uma_dbg_addTopicAndMan("clients", rozofs_diag_srv_client_debug, rozofs_diag_srv_client_man, 0); 
    
 }
-/*
-**____________________________________________________
-**
-** Free a rozofs diagnostic context
-** 
-** @param pCtx   Serveur context
-**____________________________________________________
-*/
-void rozo_diag_srv_ctx_disconnect(rozofs_diag_srv_ctx_t * pCtx) {
-  uint64_t idx;
 
-  list_remove(&pCtx->list);
-    
-  /*
-  ** Free the nick name
-  */
-  if (pCtx->target) {
-    free(pCtx->target);
-    pCtx->target = NULL;
-  }  
-  rozo_diag_srv_ctx_reinit(pCtx);
-  
-  /*
-  ** Disconnect this socket from the socket controler
-  ** The context index is the socket controler index.
-  */
-  idx = get_cnx_idx_from_ctx(pCtx);
-  if (idx >= 0) {
-    af_unix_delete_socket(idx);  
-  }  
-}  
  /*
 **____________________________________________________
 **
