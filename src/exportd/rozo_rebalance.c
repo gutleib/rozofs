@@ -1147,7 +1147,7 @@ int rozofs_do_visit(void *exportd, ext_mattr_t *inode_p, ext_mattr_t *slave_p, u
     if (!S_ISREG(inode_p->s.attrs.mode)) {
       return 0;
     }
-    
+    if (chunk_len == 0) return 0;
     /*
     ** This chunk may not be in the balanced volume in case some export
     ** are configured with vid as well as vid_fast.
