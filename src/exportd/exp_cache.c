@@ -145,10 +145,6 @@ static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
   
   list_remove(&entry->list);
   /*
-  ** remove from the move_list
-  */
-  list_remove(&entry->move_list); 
-  /*
   ** check if there was a thin-provisioning context. If it the case we should release the
   ** entry
   */
@@ -486,10 +482,6 @@ lv2_entry_t *lv2_cache_put(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache,
     
     list_init(&entry->list);
     /*
-    ** init of the move list
-    */
-    list_init(&entry->move_list);
-    /*
     ** Try to remove older entries
     */
     count = 0;
@@ -616,10 +608,6 @@ static inline lv2_entry_t *lv2_cache_put_forced_internal(lv2_cache_t *cache, fid
     list_init(&entry->file_lock);
     entry->nb_locks = 0;
     list_init(&entry->list);
-    /*
-    ** init of the move list
-    */
-    list_init(&entry->move_list);
     /*
     ** Try to remove older entries
     */
@@ -858,13 +846,6 @@ lv2_entry_t *export_lookup_fid_internal(export_tracking_table_t *trk_tb_p,lv2_ca
       }         
     }
 out:
-    if (lv2!= NULL)
-    {
-       if ((fake_inode_src_p->s.key != ROZOFS_REG_S_MOVER) && (fake_inode_src_p->s.key != ROZOFS_REG_D_MOVER))
-       {
-          rozofs_mover_invalidate(lv2);
-       }
-    }
 //    STOP_PROFILING(export_lookup_fid);
     return lv2;
 }

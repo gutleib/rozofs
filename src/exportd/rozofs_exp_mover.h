@@ -49,41 +49,8 @@ typedef struct _rozofs_mv_idx_dist_t
    @retval -1 on error
    
 */
-int rozofs_mover_file_create (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,cid_t cid, sid_t *sids_p);
+int rozofs_mover_file_create (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,cid_t cid, sid_t *sids_p);
 
-/*
-**__________________________________________________________________
-*/
-/**
-*  allocate an index for moving a file towards
-   a new set of cid/sids
-   
-   @param lv2: level 2 cache entry associated with the file to move
-   @param trash_mv_p : pointer to the trash context associated with the former file mover
-   @param guard_time: guard delay
-   @param mover: assert to 1 when the source is the "mover", 0 otherwise
-   
-   @retval 0 on success
-   @retval -1 on error (see errno for details)
-   
-*/
-int rozofs_mover_file_validate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,uint64_t guard_time,int mover);
-
-/*
-**__________________________________________________________________
-*/
-/**
-*  Invalidate the mover
-
-   @param lv2: level 2 cache entry associated with the file
-
-  @retval none
-   
-*/
-static inline void rozofs_mover_invalidate (lv2_entry_t *lv2) 
-{
-  lv2->access_cpt = 1;
-}
 
 /*
 **__________________________________________________________________
@@ -119,6 +86,19 @@ int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,uint64_t guard_time);
 /*
 **__________________________________________________________________
 **
+**  Check moving is on going and is not broken by a write
+**   
+**  @param e: export context
+**  @param lv2: level 2 cache entry associated with the file to move
+**
+**  @retval 0     moving is on going
+**  @retval -1    no moving, or moving is broken
+**__________________________________________________________________   
+*/
+int rozofs_mover_check (export_t *e,lv2_entry_t *lv2);
+/*
+**__________________________________________________________________
+**
 **   scanning of the mover file invalidation
 
     @param lv2: pointer to the cache entry that contains the i-node data.
@@ -148,23 +128,6 @@ int rozofs_mover_put_trash(export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_t *tr
 **__________________________________________________________________
 */
 /**
-*  check if the i-node has some pending distribution to move
-
-   When it is the case, the "mover distribution must be deleted and the i-node re-writtren
-   
-   @param lv2: level 2 cache entry associated with the file to move
-   @param trash_mv_p : pointer to the trash context associated with the former file mover
-   @param guard_time: guard delay
-   
-   @retval 0 on success
-   @retval -1 on error (see errno for details)
-   
-*/
-void rozofs_mover_check_for_validation (export_t *e,lv2_entry_t *lv2,fid_t fid);
-/*
-**__________________________________________________________________
-*/
-/**
 *  Put the fid and distribution of the file that has been moved by the "mover" process in the trash
    That function is intended to be called when there is an unlink of the regular file
 
@@ -175,4 +138,63 @@ void rozofs_mover_check_for_validation (export_t *e,lv2_entry_t *lv2,fid_t fid);
    @retval < 0 on error (see errno for details)
 */
 int rozofs_mover_unlink_mover_distribution(export_t *e,lv2_entry_t *lv2);
- #endif
+/*
+**__________________________________________________________________
+*/
+/**
+*  Invalidate the mover
+
+   @param lv2: level 2 cache entry associated with the file
+
+  @retval none
+   
+*/
+static inline void rozofs_mover_invalidate (lv2_entry_t *lv2) 
+{
+  if (lv2->is_moving == 0) return;
+  
+  //info("is_moving %p clear : %x",lv2, lv2->is_moving);
+  lv2->is_moving = 0;
+}
+/*
+**__________________________________________________________________
+**  Modifying the is_moving bitmap of the master lv2
+**
+**  @param lv2: pointer to the cache entry that contains the i-node information
+**
+**__________________________________________________________________
+*/
+static inline void rozofs_set_moving(export_t *e, lv2_entry_t * lv2) {
+  lv2_entry_t * master = export_get_master_lv2(e,lv2);
+  int           idx = 0;
+  if (master) {
+    if (master != lv2) {
+      idx = lv2->attributes.s.multi_desc.slave.file_idx+1;
+    }    
+    master->is_moving |= (1<<idx); 
+    //info("is_moving %p Set #%d : %x",master,idx,master->is_moving);
+  }  
+}
+static inline void rozofs_reset_moving(export_t *e, lv2_entry_t * lv2) {
+  lv2_entry_t * master = export_get_master_lv2(e,lv2);
+  int           idx = 0;
+  if (master) {
+    if (master != lv2) {
+      idx = lv2->attributes.s.multi_desc.slave.file_idx+1;
+    }    
+    master->is_moving &= ~(1<<idx);
+    //info("is_moving %p Reset #%d : %x",master,idx,master->is_moving);
+  }  
+}
+static inline int rozofs_is_moving(export_t *e, lv2_entry_t * lv2) {
+  lv2_entry_t * master = export_get_master_lv2(e,lv2);
+  int           idx = 0;
+  if (master) {
+    if (master != lv2) {
+      idx = lv2->attributes.s.multi_desc.slave.file_idx+1;
+    }    
+    return (master->is_moving & (1<<idx));
+  }
+  return 0;  
+}
+#endif

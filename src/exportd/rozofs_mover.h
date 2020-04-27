@@ -36,8 +36,9 @@ typedef struct _rozofs_mover_job_t {
   char      * name;                     /* File name */
   uint64_t    size;                     /* Size of the file to move */
   list_t      list;                     /* For job chaining */
-  mover_status_e    status;                   /* 0 if OK and -1 if error */
+  mover_status_e    status;             /* 0 if OK and -1 if error */
   int         error;                    /* error code */
+  time_t      validation_time;          /* Time to validate a move */
 } rozofs_mover_job_t;
 /*-----------------------------------------------------------------------------
 **

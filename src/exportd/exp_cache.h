@@ -54,20 +54,23 @@ typedef struct lv2_entry {
     list_t list;        ///< list used by cache    
     int          locked_in_cache:1;  /**< assert to 1 to lock the entry in the lv2 cache                    */
     int          dirty_bit:1;          /**< that bit is intended to be used by attributes related to directory to deal with per directory byte count   */
-    int          filler:30;          /**< for future usage                                                  */
     /*
-    ** File mover
+    ** File mover invalidator 
+    ** To validate a move, one has to be sure that no write occured to the file during the move. 
+    ** At the start of the move, the export sets up a bit corresponding to the slave inode to move in the lv2 cache. 
+    ** In case a write block is received for the file, all the moving bits are cleared. 
+    ** So at the time of the validation the export can check whether a write occured during the move by testing the bits.
+    ** Since the write block is not sent on each write, the mover has to wait a few seconds before requesting the move validation. 
+    ** The export can know for sure that no write has occured during the write.
     */
-    int           access_cpt:1;         /**< assert to 1 each time the attributes are read when time_move is not 0. */
-    int           mover_state:3;        /**< mover state.                                                           */
-    int           mover_guard_timer:28; /**< mover guard timer in seconds.                                          */
-    time_t        time_move;            /**< date of the file move start                                            */       
+    int          is_moving:9;         /**< 1 bit per subfile to validate that no write occurs during the move  */
+
+    int          filler:21;          /**< for future usage                                                  */
     /* 
     ** File locking
     */
     int            nb_locks;    ///< Number of locks on the FID
     list_t         file_lock;   ///< List of the lock on the FID
-    list_t         move_list;   ///< pending fist of the file waiting for move validation
     void           *thin_provisioning_ctx_p;   /**< pointer to the thin provisioning context (for exportd with thin provisioning option) */
     ext_mattr_t    *slave_inode_p;   /**< pointer to the contexts of the slave inode associated with a master inode */
 } lv2_entry_t;

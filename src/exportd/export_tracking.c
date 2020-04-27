@@ -2063,6 +2063,37 @@ out:
     return status;
 }
 /*
+**__________________________________________________________________________________
+**
+** Find out the master lv2 entry from a slave lv2 entry
+**
+** @param e       export context
+** @param lv2     input slave inode lv2 entry
+**__________________________________________________________________________________
+*/
+lv2_entry_t * export_get_master_lv2(export_t *e, lv2_entry_t *lv2) {
+  fid_t               master_fid;
+  rozofs_inode_t    * inode_p = (rozofs_inode_t  *) &master_fid;
+
+  /*
+  ** Simple file. No slave entry !!!
+  */
+  if (lv2->attributes.s.multi_desc.byte == 0) return lv2;
+
+  /*
+  ** Master file 
+  */
+  if (lv2->attributes.s.multi_desc.common.master != 0) return lv2;
+  
+
+  /*
+  ** Retrieve the master lv2 entry
+  */
+  memcpy(master_fid,lv2->attributes.s.attrs.fid, sizeof(fid_t));
+  inode_p->s.idx -= (lv2->attributes.s.multi_desc.slave.file_idx+1);
+  return EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, master_fid);
+} 
+/*
 **__________________________________________________________________
 **
 ** Retrieve the master inode from an input inode that may a slave 
@@ -2167,11 +2198,7 @@ static int export_recopy_extended_attributes_multifiles(export_t                
     /*
     ** Retrieve master entry
     */
-    fid_t               master_fid;
-    inode_p = (rozofs_inode_t  *) &master_fid;
-    memcpy(master_fid,lv2->attributes.s.attrs.fid, sizeof(fid_t));
-    inode_p->s.idx -= (lv2->attributes.s.multi_desc.slave.file_idx+1);
-    master = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, master_fid);
+    master = export_get_master_lv2(e,lv2);
     if (master == NULL) {    
       errno = ENOENT; 
       return -1;
@@ -2441,10 +2468,6 @@ int export_lookup(export_t *e, fid_t pfid, char *name, struct inode_internal_t *
         }
         goto out;
     }
-    /*
-    ** take care of the case of the mover
-    */
-    rozofs_mover_check_for_validation(e,lv2,child_fid);
     export_recopy_extended_attributes_multifiles(e, child_fid, lv2, attrs, slave_ino_len, slave_inode_p);
 
     /*
@@ -2643,10 +2666,6 @@ int export_getattr(export_t *e, fid_t fid, struct inode_internal_t *attrs,struct
       }
       goto out;
     } 
-    /*
-    ** take care of the case of the mover
-    */
-    rozofs_mover_check_for_validation(e,lv2,fid);  
     /*
     ** Recopy the nb of blocks in the children field 
     ** which is where the rozofsmount expects it to be in case of thin provisioning
@@ -7857,6 +7876,12 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	  goto out;	  
        }
     }
+    
+    /*
+    ** Invalidate every moving running by clearing is_moving field
+    */
+    rozofs_mover_invalidate(lv2);
+    
 
     // Update size of file
     if (off + len > lv2->attributes.s.attrs.size) {
@@ -8458,12 +8483,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   DISPLAY_ATTR_UINT("VID_FAST",mover.fid_st_idx.vid_fast);  
   DISPLAY_ATTR_UINT("PRI.IDX",mover.fid_st_idx.primary_idx);  
   DISPLAY_ATTR_UINT("MOV.IDX",mover.fid_st_idx.mover_idx);  
-  if (lv2->time_move != 0)
-  {
-    bufall[0] = 0;
-    ctime_r((const time_t *)&lv2->time_move,bufall);
-    DISPLAY_ATTR_TXT_NOCR("MOVETM", bufall);  
-  }
+
   /*
   ** display the FID used for the storage
   */
@@ -8594,6 +8614,21 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 	  DISPLAY_ATTR_TITLE("ST.SLICE");
 	  p += rozofs_u32_append(p,rozofs_storage_fid_slice(slave_p->s.attrs.fid)); 
 	  p += rozofs_eol(p);
+          {
+            rozofs_mover_sids_t *dist_mv_p;
+            dist_mv_p = (rozofs_mover_sids_t*)&slave_p->s.attrs.sids;
+            if (dist_mv_p->dist_t.mover_cid != 0)
+            {  
+              DISPLAY_ATTR_UINT("CLUSTERM",dist_mv_p->dist_t.mover_cid);
+              DISPLAY_ATTR_TITLE("STORAGEM");
+              p += rozofs_u32_padded_append(p,3,rozofs_zero, dist_mv_p->dist_t.mover_sids[0]); 
+              for (idx = 1; idx < rozofs_safe; idx++) {
+                *p++ = '-';
+                p += rozofs_u32_padded_append(p,3, rozofs_zero,dist_mv_p->dist_t.mover_sids[idx]);
+              } 
+              p += rozofs_eol(p);
+            }
+          }                    
           mover.u32 = slave_p->s.attrs.children;
           DISPLAY_ATTR_UINT("VID_FAST",mover.fid_st_idx.vid_fast);  
           DISPLAY_ATTR_UINT("PRI.IDX",mover.fid_st_idx.primary_idx);  
@@ -8898,7 +8933,7 @@ int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) {
   */  
   export_setxattr(e, lv2->attributes.s.attrs.fid, ROZOFS_XATTR_FLOCKP, buf_xattr, p-buf_xattr, 0, NULL);
   return p-buf_xattr;
-}
+} 
 /*
 **__________________________________________________________________________________
 **
@@ -8914,33 +8949,19 @@ int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) {
 **__________________________________________________________________________________
 */
 static inline int export_update_slave_buffer_in_master_lv2(export_t *e, lv2_entry_t *lv2) {
-  fid_t               master_fid;
   lv2_entry_t       * master = NULL;  
-  rozofs_inode_t    * inode_p = (rozofs_inode_t  *) &master_fid;
   ext_mattr_t       * attr_p;
 
-  /*
-  ** Simple file. No slave entry !!!
-  */
-  if (lv2->attributes.s.multi_desc.byte == 0) return 0;
-
-  /*
-  ** Master file 
-  */
-  if (lv2->attributes.s.multi_desc.common.master != 0) return 0;
-  
-
-  /*
-  ** Retrieve the master lv2 entry
-  */
-  memcpy(master_fid,lv2->attributes.s.attrs.fid, sizeof(fid_t));
-  inode_p->s.idx -= (lv2->attributes.s.multi_desc.slave.file_idx+1);
-  master = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, master_fid);
+  master = export_get_master_lv2(e,lv2);
   if (master == NULL) {    
     char   slaveString[40];
     fid2string(lv2->attributes.s.attrs.fid,slaveString);
     severe("export_update_slave_buffer_in_master_lv2 slave %s without master",slaveString);
     return -1;
+  }
+    
+  if (master == lv2) {    
+    return 0;
   }  
 
   /*
@@ -9384,7 +9405,10 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   */
   if (sscanf(p," mover_allocate = %d", &new_cid) == 1)
   {
-     return (rozofs_mover_allocate_scan(value,p,length,e,lv2,new_cid));  
+     if (rozofs_mover_allocate_scan(value,p,length,e,lv2,new_cid) != 0) {
+       return -1;
+     }   
+     return export_update_slave_buffer_in_master_lv2(e,lv2);  
   }
   if (sscanf(p," mover_invalidate = %llu", (long long unsigned int *)&valu64) == 1)
   {
@@ -9400,15 +9424,26 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   if (sscanf(p," mover_validate = %llu", (long long unsigned int *)&valu64) == 1)
   {
      if (rozofs_mover_valid_scan(e,lv2,valu64)<0){
+       /*
+       ** EACCES means the file has been written during the move
+       */
+       if (errno == EACCES) {
+         export_update_slave_buffer_in_master_lv2(e,lv2); 
+         errno = EACCES;
+       }
        return -1;
      }    
      /*
      ** Update slave buffer of master lv2 context
      */
      return export_update_slave_buffer_in_master_lv2(e,lv2);    
-     
   }
-
+  /*
+  ** Check the moving is still valid
+  */
+  if (strcmp(p,"mover_check") == 0) {
+     return rozofs_mover_check(e,lv2);    
+  }
   /*
   ** File must not yet be written 
   */

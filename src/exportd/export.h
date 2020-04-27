@@ -1239,4 +1239,15 @@ int rozofs_save_flocks_in_xattr(export_t *e, lv2_entry_t *lv2) ;
  *_______________________________________________________________________
  */
 volume_t *volumes_lookup_volume(vid_t vid);
+/*
+**__________________________________________________________________________________
+**
+** Find out the master lv2 entry from a slave lv2 entry
+**
+** @param e       export context
+** @param lv2     input slave inode lv2 entry
+**__________________________________________________________________________________
+*/
+lv2_entry_t * export_get_master_lv2(export_t *e, lv2_entry_t *lv2) ;
+
 #endif

@@ -39,7 +39,7 @@
    @retval -1 on error
    
 */
-int rozofs_mover_file_create (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,cid_t cid, sid_t *sids_p)
+int rozofs_mover_file_create (export_t *e, lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,cid_t cid, sid_t *sids_p)
 {
    ext_mattr_t *attr_p;
    rozofs_mover_sids_t *dist_mv_p;   
@@ -78,11 +78,10 @@ int rozofs_mover_file_create (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,
    dist_mv_p->dist_t.mover_cid =cid;
    memcpy(dist_mv_p->dist_t.mover_sids,sids_p,ROZOFS_SAFE_MAX_STORCLI); 
    /*
-   ** put the timestamp in the lv2_entry
+   ** Set moving slave bit in master lv2 entry
    */
-   lv2->time_move = time(NULL);
-   lv2->mover_state = ROZOFS_MOVER_IN_PRG;
-   lv2->access_cpt = 0; 
+   rozofs_set_moving(e,lv2);
+
    attr_p->s.attrs.children = mover_idx.u32;
    /*
    ** lock the entry in the level 2 cache
@@ -104,7 +103,7 @@ int rozofs_mover_file_create (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,
    @retval -1 on error (see errno for details)
    
 */
-int rozofs_mover_file_invalidate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p)
+int rozofs_mover_file_invalidate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p)
 {
    ext_mattr_t *attr_p;
    rozofs_mover_sids_t *dist_mv_p;   
@@ -132,6 +131,11 @@ int rozofs_mover_file_invalidate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_m
      errno = EINVAL;
      return -1;
    }
+
+   /*
+   ** Reset slave moving bit in master inode
+   */
+   rozofs_reset_moving(e,lv2);
 
    /*
    ** Recopy the mover distribution to the trash entry
@@ -150,16 +154,7 @@ int rozofs_mover_file_invalidate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_m
    ** Unlock the lv2 entry
    */
    lv2_cache_unlock_entry_in_cache(lv2);
-   
-   /*
-   ** Reset moving status
-   */
-   lv2->mover_state = ROZOFS_MOVER_IDLE;
-   
-   /*
-   ** remove from the move_list
-   */
-   list_remove(&lv2->move_list);  
+      
    return 0;  	
 }
 /*
@@ -171,220 +166,125 @@ int rozofs_mover_file_invalidate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_m
    
    @param lv2: level 2 cache entry associated with the file to move
    @param trash_mv_p : pointer to the trash context associated with the former file mover
-   @param guard_time: guard delay (relevant when source is mover )
-   @param mover: assert to 1 when the source is the "mover", 0 otherwise
    
    @retval 0 on success
    @retval -1 on error (see errno for details)
    
 */
-int rozofs_mover_file_validate (lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p,uint64_t guard_time,int mover)
+int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_t *trash_mv_p)
 {
-   ext_mattr_t *attr_p;
-   rozofs_mover_sids_t *dist_mv_p;   
-   rozofs_mover_children_t mover_idx;  
-   int status;
-   
-   attr_p = &lv2->attributes;
-   mover_idx.u32 = attr_p->s.attrs.children;
-   
-   trash_mv_p->cid = 0;
-   
-   if (mover_idx.fid_st_idx.mover_idx == mover_idx.fid_st_idx.primary_idx)
-   {
-      /*
-      ** nothing to do
-      */
-      errno = EINVAL;
-      return -1;
-   }
-   dist_mv_p = (rozofs_mover_sids_t*)&attr_p->s.attrs.sids;
-   if (dist_mv_p->dist_t.mover_cid == 0)
-   {
+  ext_mattr_t *attr_p;
+  rozofs_mover_sids_t *dist_mv_p;   
+  rozofs_mover_children_t mover_idx;  
+
+  attr_p = &lv2->attributes;
+  mover_idx.u32 = attr_p->s.attrs.children;
+
+  trash_mv_p->cid = 0;
+
+  if (mover_idx.fid_st_idx.mover_idx == mover_idx.fid_st_idx.primary_idx)
+  {
      /*
-     ** no move pending
+     ** nothing to do
      */
      errno = EINVAL;
      return -1;
-   }
-   if (mover)
-   {
-     switch (lv2->mover_state)
-     {
-	case ROZOFS_MOVER_IDLE:
-	default:
-          /*
-	  ** need to flush the distribution of the mover
-	  */
-          rozofs_mover_file_invalidate (lv2,trash_mv_p);
-	  errno = EACCES;
-	  return -1;   	
+  }
+  dist_mv_p = (rozofs_mover_sids_t*)&attr_p->s.attrs.sids;
+  if (dist_mv_p->dist_t.mover_cid == 0)
+  {
+    /*
+    ** no move pending
+    */
+    errno = EINVAL;
+    return -1;
+  }
+  
+  /*
+  ** Check slave moving bit in master inode
+  */
+  if (!rozofs_is_moving(e,lv2))
+  {
+    /*
+    ** there was some access during the move of the file-> reject
+    */
+    rozofs_mover_file_invalidate (e,lv2,trash_mv_p);
+    errno = EACCES;
+    return -1;
+  } 
+  /*
+  ** Reset slave moving bit in master inode
+  */
+  rozofs_reset_moving(e,lv2);
 
-	case ROZOFS_MOVER_IN_PRG:
-	case ROZOFS_MOVER_DONE:
-	  if (lv2->access_cpt != 0)
-	  {
-	    /*
-	    ** there was some access during the move of the file-> reject
-	    */
-	    rozofs_mover_file_invalidate (lv2,trash_mv_p);
-	    errno = EACCES;
-	    return -1;
-	  } 
-	  lv2->mover_state = ROZOFS_MOVER_DONE;
-	  /*
-	  ** check the timestamp
-	  */
-	  if ((time(NULL) - lv2->time_move) < guard_time)
-	  {
-	     /*
-	     ** EAGAIN-> insert the entry in the pending list of the file whose distribution 
-	     **          has been changed by the mover and are waiting for guard timer expiration
-	     */
-#warning insert the lv2 entry in the pending list waiting for mover guard timer expiration
-	     lv2->mover_guard_timer = guard_time;
-	     errno = EAGAIN;
-	     return -1;
-	  }
-	  /*
-	  ** swap the primary and the mover information
-	  */
-	  trash_mv_p->mov_idx = mover_idx.fid_st_idx.primary_idx;
-	  trash_mv_p->cid = attr_p->s.attrs.cid; 
-	  memcpy(trash_mv_p->sids,dist_mv_p->dist_t.primary_sids,ROZOFS_SAFE_MAX_STORCLI); 
+  /*
+  ** swap the primary and the mover information
+  */
+  trash_mv_p->mov_idx = mover_idx.fid_st_idx.primary_idx;
+  trash_mv_p->cid = attr_p->s.attrs.cid; 
+  memcpy(trash_mv_p->sids,dist_mv_p->dist_t.primary_sids,ROZOFS_SAFE_MAX_STORCLI); 
 
-	  attr_p->s.attrs.cid = dist_mv_p->dist_t.mover_cid;  
-	  memcpy(attr_p->s.attrs.sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI); 
-	  mover_idx.fid_st_idx.primary_idx = mover_idx.fid_st_idx.mover_idx;
-	  attr_p->s.attrs.children = mover_idx.u32 ;
-	  /*
-	  ** clear the "mover" distribution
-	  */
+  attr_p->s.attrs.cid = dist_mv_p->dist_t.mover_cid;  
+  memcpy(attr_p->s.attrs.sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI); 
+  mover_idx.fid_st_idx.primary_idx = mover_idx.fid_st_idx.mover_idx;
+  attr_p->s.attrs.children = mover_idx.u32 ;
+  /*
+  ** clear the "mover" distribution
+  */
 
-	  memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
-	  dist_mv_p->dist_t.mover_cid = 0;
-	  /*
-	  ** clear the time_move otherwise the entry will be locked in the export cache
-	  */
-	  lv2->mover_state = ROZOFS_MOVER_IDLE;
-	  /*
-	  ** remove from the move_list
-	  */
-	  list_remove(&lv2->move_list);  
-	  lv2_cache_unlock_entry_in_cache(lv2);
-	  lv2->time_move = 0;
-	  return 0;
-     }
-   }
-   /*
-   ** case of a call for validation from lookup or getattr
-   */
-   switch (lv2->mover_state)
-   {
-      case ROZOFS_MOVER_IDLE:
-      default:
-        /*
-	** need to flush the distribution of the mover
-	*/
-	rozofs_mover_file_invalidate (lv2,trash_mv_p);
-	errno = EACCES;
-	status = -1;   
-	break;	
-      
-      case ROZOFS_MOVER_IN_PRG:
-        lv2->access_cpt = 1;
-	errno = EINVAL;
-	status= -1;
-	break;
-	
-      case ROZOFS_MOVER_DONE:
-	if ((lv2->access_cpt != 0) || ((time(NULL) - lv2->time_move) < lv2->mover_guard_timer))
-	{
-	  /*
-	  ** there was some access during the move of the file-> reject
-	  */
-          rozofs_mover_file_invalidate (lv2,trash_mv_p);
-	  errno = EACCES;
-	  status = -1;
-	  break;
-	} 
-	/*
-	** swap the primary and the mover information
-	*/
-	trash_mv_p->mov_idx = mover_idx.fid_st_idx.primary_idx;
-	trash_mv_p->cid = attr_p->s.attrs.cid; 
-	memcpy(trash_mv_p->sids,dist_mv_p->dist_t.primary_sids,ROZOFS_SAFE_MAX_STORCLI); 
+  memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
+  dist_mv_p->dist_t.mover_cid = 0;
 
-	attr_p->s.attrs.cid = dist_mv_p->dist_t.mover_cid;  
-	memcpy(attr_p->s.attrs.sids,dist_mv_p->dist_t.mover_sids,ROZOFS_SAFE_MAX_STORCLI); 
-	mover_idx.fid_st_idx.primary_idx = mover_idx.fid_st_idx.mover_idx;
-	attr_p->s.attrs.children = mover_idx.u32 ;
-	/*
-	** clear the "mover" distribution
-	*/
-
-	memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
-	dist_mv_p->dist_t.mover_cid = 0;
-	/*
-	** clear the time_move otherwise the entry will be locked in the export cache
-	*/
-	lv2->mover_state = ROZOFS_MOVER_IDLE;
-	lv2_cache_unlock_entry_in_cache(lv2);
-	lv2->time_move = 0;
-	errno = 0;
-	/*
-	** remove from the move_list
-	*/
-	list_remove(&lv2->move_list);  
-	status = 0;
-	break;
-   }
-   return status;
+  lv2_cache_unlock_entry_in_cache(lv2);
+  return 0;
 }
 /*
 **__________________________________________________________________
+**
+**  Check moving is on going and is not broken by a write
+**   
+**  @param e: export co,text
+**  @param lv2: level 2 cache entry associated with the file to move
+**
+**  @retval 0 on success
+**  @retval -1 on error (see errno for details)
+**__________________________________________________________________   
 */
-/**
-*  check if the i-node has some pending distribution to move
+int rozofs_mover_check (export_t *e,lv2_entry_t *lv2) {
+  ext_mattr_t *attr_p;
+  rozofs_mover_sids_t *dist_mv_p;   
+  rozofs_mover_children_t mover_idx;  
 
-   When it is the case, the "mover distribution must be deleted and the i-node re-writtren
-   
-   @param lv2: level 2 cache entry associated with the file to move
-   @param trash_mv_p : pointer to the trash context associated with the former file mover
-   @param guard_time: guard delay
-   
-   @retval 0 on success
-   @retval -1 on error (see errno for details)
-   
-*/
-void rozofs_mover_check_for_validation (export_t *e,lv2_entry_t *lv2,fid_t fid)
-{
-   int ret;
-   rozofs_mv_idx_dist_t trash_mv;
-   rozofs_inode_t *inode_p;
-   /*
-   ** Check the mode of the object
-   */
-   if (!S_ISREG(lv2->attributes.s.attrs.mode)) return;
-   
-   inode_p = (rozofs_inode_t*)fid;
-   /*
-   ** nothing to do for the case of the file mover
-   */
-   if ((inode_p->s.key == ROZOFS_REG_S_MOVER) || (inode_p->s.key == ROZOFS_REG_D_MOVER)) return;
-   /*
-   ** case of a regular file access
-   */
-   ret = rozofs_mover_file_validate (lv2,&trash_mv,0,0);
-   if (ret < 0) 
-   {
-     if (errno != EACCES) return;
-   }
-   /*
-   ** push to the trash the old distribution and storage fid
-   */
-   rozofs_mover_put_trash(e,lv2,&trash_mv);    
-   export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* no sync */);
+  attr_p = &lv2->attributes;
+  mover_idx.u32 = attr_p->s.attrs.children;
+
+  if (mover_idx.fid_st_idx.mover_idx == mover_idx.fid_st_idx.primary_idx)
+  {
+     /*
+     ** nothing to do
+     */
+     errno = EINVAL;
+     return -1;
+  }
+  dist_mv_p = (rozofs_mover_sids_t*)&attr_p->s.attrs.sids;
+  if (dist_mv_p->dist_t.mover_cid == 0)
+  {
+    /*
+    ** no move pending
+    */
+    errno = EINVAL;
+    return -1;
+  }
+  
+  /*
+  ** Check slave moving bit in master inode
+  */
+  if (!rozofs_is_moving(e,lv2))
+  {
+    errno = EACCES;
+    return -1;
+  } 
+  return 0;
 }
 /*
 **__________________________________________________________________
@@ -486,7 +386,7 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
   for (idx=0; idx < rozofs_safe; idx++) {
     sids[idx] = new_sids[idx];
   }
-  ret = rozofs_mover_file_create (lv2,&trash_mv,cid,sids);  
+  ret = rozofs_mover_file_create (e,lv2,&trash_mv,cid,sids);  
   /*
   ** move to trash the old distribution if any
   */
@@ -521,7 +421,7 @@ int rozofs_mover_valid_scan(export_t *e,lv2_entry_t *lv2,uint64_t guard_time)
   rozofs_mv_idx_dist_t trash_mv;
 
   errno = 0;
-  ret = rozofs_mover_file_validate (lv2,&trash_mv,guard_time,1);
+  ret = rozofs_mover_file_validate (e,lv2,&trash_mv);
   if (ret < 0) 
   {
     if (errno != EACCES) return ret;
@@ -555,7 +455,7 @@ int rozofs_mover_invalid_scan(export_t *e,lv2_entry_t *lv2,uint64_t unused)
   rozofs_mv_idx_dist_t trash_mv;
 
   errno = 0;
-  ret = rozofs_mover_file_invalidate (lv2,&trash_mv);
+  ret = rozofs_mover_file_invalidate (e,lv2,&trash_mv);
   if (ret < 0) 
   {
     return ret;

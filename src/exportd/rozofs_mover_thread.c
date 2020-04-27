@@ -498,7 +498,31 @@ void queue_put(struct queue *q, void *j)
     pthread_mutex_unlock(&q->lock);
     return;
 }
+/*
+**__________________________________________________________________________________________
+** Check that the moving is still not broken
+**__________________________________________________________________________________________
+*/
+#define CHECK_CMD   "mover_check"
+int rozofs_check_access(rozofs_mover_job_t * job_p) {
+  char                 dst_fname[128];
+  rozofs_inode_t     * inode_p; 
+  char               * pChar;  
 
+  /*
+  ** Build the mover destination name
+  */
+  pChar = dst_fname;
+  pChar += rozofs_string_append(pChar,"@rozofs_uuid@");
+  inode_p = (rozofs_inode_t*)job_p->name;  
+  inode_p->s.key = ROZOFS_REG_D_MOVER;
+  pChar += rozofs_fid_append(pChar,(unsigned char *)job_p->name);
+
+  /*
+  ** Do request check
+  */
+  return setxattr(dst_fname, "user.rozofs", CHECK_CMD, strlen(CHECK_CMD),0);
+}
 /*-----------------------------------------------------------------------------
 **
 ** Move one file in fid mode
@@ -547,7 +571,7 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
   if (access(src_fname,R_OK) != 0) {
     xerrno = errno;
     severe("Can not access file \"%s\"",src_fname);
-    goto generic_error;
+    goto error;
   }  
   /*
   ** Open source file for reading
@@ -556,7 +580,7 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
   if (src < 0) {
     xerrno = errno;
     severe("open(%s) %s",src_fname,strerror(errno));
-    goto generic_error;
+    goto error;
   }
 
   /*
@@ -571,13 +595,13 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
   }
   if (setxattr(dst_fname, "user.rozofs", buf, strlen(buf),0)<0) {
     if (errno==EINVAL) {
-       xerrno = errno;
+      xerrno = errno;
       severe("invalid distibution %s:%s",dst_fname,buf);
-      goto generic_error;   
+      goto error;   
     }
     xerrno = errno;
     severe("fsetxattr(%s) %s",dst_fname,strerror(errno));   
-    goto generic_error;
+    goto error;
   }
   
   /*
@@ -587,7 +611,7 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
   if (dst < 0) {
     xerrno = errno;
     severe("open(%s) %s",dst_fname,strerror(errno));
-    goto abort;    
+    goto error;    
   }   
 
   /*
@@ -603,7 +627,7 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
     if (size < 0) {
       xerrno = errno;
       severe("pread(%s) %s",src_fname,strerror(errno)); 
-      goto abort;         
+      goto error;         
     }
     
     /*
@@ -617,12 +641,22 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
     if (pwrite(dst, buf, size, offset)<0) {
       xerrno = errno;
       severe("pwrite(%s,%d) %s",dst_fname,size,strerror(errno));     
-      goto abort;       
+      goto error;       
     }
     
     offset += size;
     ctx_p->last_offset = offset;
     
+    /*
+    ** Check the move is not broken by a write every 64GB
+    */
+    if ((offset % 0x1000000000ULL) == 0) {
+      if (rozofs_check_access(job) < 0) {
+        xerrno = EACCES;
+        goto error;       
+      }      
+    }
+        
     /*
     ** When throughput limitation is set adapdt the speed accordingly
     ** by sleeping for a while
@@ -637,42 +671,16 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
   if (ret < 0) {
     xerrno = errno;
     severe("close(%s) %s",dst_fname,strerror(errno));     
-    goto abort;       
+    goto error;       
   }
-    
-  pChar = buf;
-  pChar += sprintf(pChar,"mover_validate = 0");
-  if (setxattr(dst_fname, "user.rozofs", buf, strlen(buf),0)<0) {
-    xerrno = errno;
-    if (errno == EACCES)
-    {
-       //fmove_stats_p->updated++;
-       job->status = MOVER_UPDATED_E; 
-       goto specific_error;
-    }
-    severe("fsetxattr(%s,%s) %s",dst_fname,buf,strerror(errno));   
-    goto generic_error;
-  }
-//  fmove_stats_p->success++;
-//  fmove_stats_p->bytes += offset;
     
   /*
   ** Done
   */
   job->status = MOVER_SUCCESS_E;
   return 0;
-
-abort:
-  pChar = buf;
-  pChar += sprintf(pChar,"mover_invalidate = 0");
-  if (setxattr(dst_fname, "user.rozofs", buf, strlen(buf),0)<0) {
-    severe("fsetxattr(%s,%s) %s",dst_fname,buf,strerror(errno));   
-  }
   
-generic_error:
-//  fmove_stats_p->error++;
-  
-specific_error:  
+error:  
 
   strcpy(failed_fname,src_fname);
   /*
@@ -688,8 +696,7 @@ specific_error:
     close(dst);
     dst = -1;
   } 
-  errno = xerrno;
-  
+  errno = xerrno;  
   job->error = errno;
   return -1;
 }
@@ -729,6 +736,61 @@ int create_mover_threads(int count) {
      }  
    }
   return 0;
+}
+
+/*
+**__________________________________________________________________________________________
+** To validate a move, one has to be sure that no write occured to the file during the move. 
+** At the start of the move, the export sets up a bit corresponding to the slave inode to move 
+** in the lv2 cache. In case a write block is received for the file, all the moving bits are cleared. 
+** So at the time of the validation the export can check whether a write occured during the move 
+** by testing the bits. Since the write block is not sent on each write, the mover has to wait 
+** a few seconds before requesting the move validation. The export can know for sure that no 
+** write has occured during the write.
+**__________________________________________________________________________________________
+*/
+#define VALIDATE_CMD   "mover_validate = 0"
+#define INVALIDATE_CMD "mover_invalidate = 0"
+void rozofs_validate_on_export(rozofs_mover_job_t * job_p) {
+  char                 dst_fname[128];
+  rozofs_inode_t     * inode_p; 
+  char               * pChar;  
+
+  /*
+  ** Build the mover destination name
+  */
+  pChar = dst_fname;
+  pChar += rozofs_string_append(pChar,"@rozofs_uuid@");
+  inode_p = (rozofs_inode_t*)job_p->name;  
+  inode_p->s.key = ROZOFS_REG_D_MOVER;
+  pChar += rozofs_fid_append(pChar,(unsigned char *)job_p->name);
+
+  if (job_p->status != MOVER_SUCCESS_E) {
+    if (setxattr(dst_fname, "user.rozofs", INVALIDATE_CMD, strlen(INVALIDATE_CMD),0)<0) {
+      severe("fsetxattr(%s,%s) %s",dst_fname,INVALIDATE_CMD,strerror(errno));   
+    }
+    return;       
+  }    
+  
+  /*
+  ** Wait it is time to validate
+  */
+  while (job_p->validation_time > time(NULL)) sleep(1);
+  
+  /*
+  ** Do validate
+  */
+  if (setxattr(dst_fname, "user.rozofs", VALIDATE_CMD, strlen(VALIDATE_CMD),0)<0) {
+    if (errno == EACCES) {
+      /* 
+      ** A write ocuured during the move
+      */
+      job_p->status = MOVER_UPDATED_E; 
+      return;
+    }
+    job_p->status = MOVER_ERROR_E;
+    severe("fsetxattr(%s,%s) %s",dst_fname,VALIDATE_CMD,strerror(errno));  
+  }
 }
 
 /*
@@ -787,6 +849,7 @@ void *mover_thread_periodic(void * ctx)
      rozofs_cmove_read_stats();
      rozofs_cmove_read_nb_threads();     
   }
+  return NULL;
 }
 /*
 **__________________________________________________________________
@@ -848,10 +911,16 @@ void * mover_thread(void * ctx) {
    */
    rozofs_do_move_one_file_fid_mode_th(job_p,0,pCtx);
 
+   /*
+   ** Set the validation delay to respect
+   */
+   if (job_p->status == MOVER_SUCCESS_E) {
+     job_p->validation_time = time(NULL) + 3;
+   }   
    queue_put(&queue_response,job_p);   
   }
+  return NULL;
 }
-
 
 /*
  *_______________________________________________________________________
@@ -883,6 +952,12 @@ void * response_thread(void * ctx) {
   {
   
    job_p = queue_get(&queue_response);
+   
+   /*
+   ** Process (in)validation toward export
+   */
+   rozofs_validate_on_export(job_p);
+   
    switch (job_p->status)
    {
       case MOVER_SUCCESS_E:
@@ -910,6 +985,7 @@ void * response_thread(void * ctx) {
    pthread_mutex_unlock(&pending_lock);
 
   }
+  return NULL;
 }
 
 
@@ -1449,7 +1525,7 @@ void rozofs_mover_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
 **
 **----------------------------------------------------------------------------
 */
-static void on_crash(int sig) {
+void on_crash(int sig) {
 
   
   /*
