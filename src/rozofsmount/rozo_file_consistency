@@ -230,7 +230,7 @@ class display_line:
       for i in range(start): line+=" "
       line+=val
       for i in range(end): line+=" " 
-      line+=endeffect
+      if eff != None: line+=endeffect
       line+=" | "  
       col+=joined 
     print line
@@ -372,11 +372,48 @@ def check_different(grp, ref, error):
     val = grp.get(storage) 
     if val != ref: continue   
     set_error(storage,error)
+#__________________________________________________
+# Compute user block number in file from block in subfile
+#__________________________________________________
+def compute_user_bid(bid,slave,hybrid,factor,stripe):
+
+  #___Single file : mapping is immediate
+  if factor == int(0): return "%s/%s"%(bid,bid)
+
+  #___Hybrid file 
+  if hybrid != int(0):
+    # 1rst subfile is immediate     
+    if slave == int(0): return "%s/%s"%(bid,bid)
+    # compute number of full stripe +  extra blocks
+    fullStripes  = bid / stripe
+    xtraBlocks = bid % stripe 
+    # Start with the hybrid part
+    fileBid = hybrid 
+    # Add full stripes
+    fileBid += (fullStripes * stripe * factor) 
+    # Add a stripe per lower slave file
+    fileBid += ((slave-1) * stripe)
+    # Add extra blocks  
+    fileBid += xtraBlocks
+    return "%s/%s"%(bid,fileBid)
+
+  #___Multifile  
+  # compute number of full stripe
+  fullStripes  = bid / stripe
+  xtraBlocks = bid % stripe 
+  # Add full stripes
+  fileBid = (fullStripes * stripe * factor) 
+  # Add a stripe per lower slave file
+  fileBid += (slave * stripe)
+  # Add extra blocks  
+  fileBid += xtraBlocks
+  return "%s/%s"%(bid,fileBid)
+
 
 #__________________________________________________
 # Display results for one sub-sfile
 #
-def display_one_sub_file(rg,slave):
+def display_one_sub_file(rg,slave,hybrid,factor,stripe):
   global fidChunk
   no_error = True
   first_consistent_bid = None
@@ -418,6 +455,7 @@ def display_one_sub_file(rg,slave):
   #
   # Put 2nd line title (host names)
   #   
+  d.set_column(1,"SUB/USER")
   idx = int(2)
   for host in host_list:
     d.set_column(idx,host)
@@ -490,7 +528,7 @@ def display_one_sub_file(rg,slave):
 
     if consitent_blocks != int(0):
       d.new_center_line()
-      d.set_column(1,first_consistent_bid)     
+      d.set_column(1,compute_user_bid(first_consistent_bid,slave,hybrid,factor,stripe))     
       d.set_column(2,"%s consistent blocks"%(consitent_blocks))
       idx = int(3)    
       for storage in storage_list:
@@ -501,8 +539,8 @@ def display_one_sub_file(rg,slave):
     #
     # Add new line in the result array
     #
-    d.new_line()  
-    d.set_column(1,bid)           
+    d.new_line()        
+    d.set_column(1,compute_user_bid(bid,slave,hybrid,factor,stripe))           
     idx = int(2)    
     for storage in storage_list:
       error = errors.get(storage)
@@ -527,7 +565,7 @@ def display_one_sub_file(rg,slave):
     
   if consitent_blocks != int(0):
     d.new_center_line()
-    d.set_column(1,first_consistent_bid)     
+    d.set_column(1,compute_user_bid(first_consistent_bid,slave,hybrid,factor,stripe))     
     d.set_column(2,"%s consistent blocks"%(consitent_blocks))
     idx = int(3)    
     for storage in storage_list:
@@ -668,7 +706,7 @@ def syntax(string=None):
 #_________________________
 # Process on subfile 
 #
-def process_one_subfile(slave,rsp):
+def process_one_subfile(slave,rsp,hybrid,factor,stripe):
   global fidChunk, block_start, block_stop
 
   try:
@@ -709,7 +747,7 @@ def process_one_subfile(slave,rsp):
         bidMax =  int(f['size'])/int(1048) + (blkPerChunk*chunk)
         if bidMax > offset: 
           parse_one_projection_rozodump(f,chunk,rg) 
-      res += display_one_sub_file(rg,slave)
+      res += display_one_sub_file(rg,slave,hybrid,factor,stripe)
 
   return res
 #_________________________
@@ -896,11 +934,24 @@ else:
 fname=""
 
 
+try:    
+  factor = int(response['factor'])
+except: 
+  factor = int(0)
+try:    
+  stripe = int(response['stripe'])
+except: 
+  stripe = int(0)
+try:    
+ hybrid = int(response['hybrid'])
+except: 
+ hybrid = int(0)
+
 #
 # Release 3 only one subfile
 #
 if release == int(3): 
-  exit_code = process_one_subfile(0,response)
+  exit_code = process_one_subfile(0,response,hybrid,factor,stripe)
   sys.exit(exit_code)  
 
 #
@@ -912,5 +963,5 @@ for slave in response['slaves']:
   slaveNb  = slaveNb + int(1)
   if options.slave != None:
     if int(options.slave) != int(slaveNb): continue
-  exit_code += process_one_subfile(slaveNb,slave)
+  exit_code += process_one_subfile(slaveNb,slave,hybrid,factor,stripe)
 sys.exit(exit_code)  

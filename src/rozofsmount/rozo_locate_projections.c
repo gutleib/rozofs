@@ -269,9 +269,52 @@ int main(int argc, char *argv[]) {
   cid = 0;
   fidString[0] = 0;
 
+  int hsize  = 0;
+  int msize  = 0;
+  int factor = 0;
+
   token = strtok(value,"\n");
   while ((token = strtok(NULL,"\n")) != 0) {
-         
+
+     /*
+     ** multifile unit
+     */
+     if (strncmp(token,"S_UNIT",strlen("S_UNIT")) == 0) {
+     
+       token += strlen("S_UNIT");
+       
+       if (sscanf(token," : %d", &msize) != 1) {
+         printf("Error parsing S_UNIT id in xattr %s",strerror(errno));
+         exit(1);
+       }
+       continue;
+     }           
+     /*
+     ** hybrid size
+     */
+     if (strncmp(token,"S_HSIZE",strlen("S_HSIZE")) == 0) {
+     
+       token += strlen("S_HSIZE");
+       
+       if (sscanf(token," : %d", &hsize) != 1) {
+         printf("Error parsing S_HSIZE id in xattr %s",strerror(errno));
+         exit(1);
+       }
+       continue;
+     }           
+     /*
+     ** hybrid size
+     */
+     if (strncmp(token,"S_FACTOR",strlen("S_FACTOR")) == 0) {
+     
+       token += strlen("S_FACTOR");
+       
+       if (sscanf(token," : %d", &factor) != 1) {
+         printf("Error parsing S_FACTOR id in xattr %s",strerror(errno));
+         exit(1);
+       }
+       continue;
+     }           
      /*
      ** Scan cluster id
      */
@@ -320,7 +363,10 @@ int main(int argc, char *argv[]) {
   */
   pChar += sprintf(pChar," > %s", remote_fname);    
 
-  printf("\n{\n  \"fname\" : \"%s\",\n", fname);          
+  printf("\n{\n  \"fname\" : \"%s\",\n", fname);      
+  printf("  \"factor\" : %d,\n", factor);      
+  printf("  \"stripe\" : %d,\n", msize/4096);      
+  printf("  \"hybrid\" : %d,\n", hsize/4096);      
   fflush(stdout);
   
   /*
