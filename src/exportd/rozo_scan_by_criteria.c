@@ -3271,7 +3271,7 @@ int rozofs_scan_eval_one_field_inode(
       if (S_ISDIR(inode_p->s.attrs.mode)) {    
         project = inode_p->s.attrs.cid;
       }
-      else if (S_ISREG(inode_p->s.attrs.mode)) {
+      else if ((S_ISREG(inode_p->s.attrs.mode))||(S_ISLNK(inode_p->s.attrs.mode))) {
         project = inode_p->s.hpc_reserved.reg.share_id;
       }
       VVERBOSE_U64(project);
