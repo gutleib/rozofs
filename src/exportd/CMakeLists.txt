@@ -503,3 +503,4 @@ install(TARGETS rozo_export_send_stats
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(PROGRAMS rozofs-metadata-backup DESTINATION bin)
+install(PROGRAMS rozo_quota_fix DESTINATION bin)
