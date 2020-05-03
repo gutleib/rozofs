@@ -621,7 +621,10 @@ class mount_point_class:
  
     # Activate the trace  
     os.system("rozodiag -T mount:%s -c trc enable -c trc count %s > /dev/null 2>&1"%(self.instance,self.trc_count))
-          
+    cmd="attr -q -s rozofs -V \" project = %s \" %s 2>/dev/null"%(self.eid.eid,self.get_mount_path())
+    #print "%s"%(cmd)
+    os.system(cmd)
+     
   def stop(self):
     try: self.nfs(False)
     except: pass
