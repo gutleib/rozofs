@@ -3469,6 +3469,62 @@ void fdl_debug_print_storage(export_t *e,ext_mattr_t *q,int master,int fileid)
 }
 /*
 **___________________________________________________________________________________________
+** 
+** Choose distibution for a master inode in hybrid mode
+**
+**  @param e: pointer tio the exportd context
+**  @param site_number: site identifier
+    
+    @retval 0 on success, -1 else
+**___________________________________________________________________________________________
+*/ 
+int export_choose_hybrid_distribution(export_t *e,uint32_t site_number, ext_mattr_t  *ext_attrs_p) {
+  rozofs_mover_children_t *children_p = (rozofs_mover_children_t*) &ext_attrs_p->s.attrs.children;
+
+  children_p->fid_st_idx.vid_fast = 0;
+  
+  /*
+  ** When no fast volume exist, distribution must be choosen on slow volume
+  */
+  if (e->volume_fast == NULL) {
+    return volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids);
+  }  
+    
+  /*
+  ** Check that some space left for the new file in case a hard quota is set for the fast volume
+  */
+  if (e->hquota_fast) {
+    export_fstat_t * estats = export_fstat_get_stat(e->eid); 
+    /*
+    ** the thin provisioning does not apply to fast volume
+    ** need to take care of the max size of the striping_unit.
+    */         
+    if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
+      /*
+      ** no space left: use the slow volume
+      */
+      return volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids);
+    }
+  }
+  	     
+  /*
+  ** attempt to allocate on fast volume
+  */
+  if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) != 0) {
+    /*
+    ** fallback to slow volume
+    */
+    return volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids);
+  }
+    
+  /*
+  ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
+  */
+  children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
+  return 0;
+}
+/*
+**___________________________________________________________________________________________
 */
 /*
     @param e: pointer tio the exportd context
@@ -3503,6 +3559,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       int k; 
       int inode_allocated = 0;
       volume_t * volume;
+      rozofs_mover_children_t  * pChildren;
 
       *attr_slave_p = NULL;
       
@@ -3534,64 +3591,11 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       ** For the case of the hybrid mode, we try to allocate the distribution of the master inode in the 
       ** fast volume: the max size that could be written is found in striping_unit_byte
       */
-      if (e->volume_fast == NULL) fast_mode = rozofs_econfig_fast_none;
-      if (fast_mode == rozofs_econfig_fast_hybrid)
-      {
-	/*
-	** get the distribution for the file:
-	**  When the export has a fast volume, we check the suffix of the file to figure out if the file can be allocated
-	**  with the fast volume. When the fast volume is full or because the fast quota is reached, we allocate the file
-	**  within the default volume associated with the exportd
-	*/
-	while (1)
-	{
-	  if ((e->volume_fast != NULL) /*&& (rozofs_htable_tab_p[e->suffix_file_idx] !=NULL)*/)
-	  {
-             /*
-	     ** we check if the suffix of the file can be candidate for fast volume
-	     */
-	     /* if (export_file_create_check_fast_htable(name,e->suffix_file_idx) >= 0) */
-	     {
-	       /*
-	       ** Check that some space left for the new file in case a hard quota is set for the fast volume
-	       */
-	       if (e->hquota_fast) {
-		 export_fstat_t * estats = export_fstat_get_stat(e->eid); 
-		 /*
-		 ** the thin provisioning does not apply to fast volume
-		 ** need to take care of the max size of the striping_unit.
-		 */         
-		 if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
-        	   /*
-		   ** no space left: use the regular procedure
-		   */
-		   if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) != 0)
-        	       goto error;
-		   break;
-		 }
-	       }	     
-	       /*
-	       ** attempt to allocate on fast volume
-	       */
-	       if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) == 0)
-	       {
-		 rozofs_mover_children_t *children_p;
-		 /*
-		 ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
-		 */
-		 children_p = (rozofs_mover_children_t*) &ext_attrs_p->s.attrs.children;
-		 children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
-		 break;
-	       }
-	     }
-	  }	
-	  /*
-	  ** default case
-	  */ 
-	  if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) != 0)
-              goto error;
-	  break;
-	}
+      //if (e->volume_fast == NULL) fast_mode = rozofs_econfig_fast_none;
+      if (fast_mode == rozofs_econfig_fast_hybrid) {
+	if (export_choose_hybrid_distribution(e, site_number, ext_attrs_p) != 0) {
+          goto error;
+        }
       }
       
 //      fdl_debug_print_storage(e,ext_attrs_p,1,0);
@@ -3615,9 +3619,14 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       /*
       ** fill up the hybrid section
       */
-       if (fast_mode == rozofs_econfig_fast_hybrid) ext_attrs_p->s.hybrid_desc.s.no_hybrid = 0;
-       else ext_attrs_p->s.hybrid_desc.s.no_hybrid = 1;
-      ext_attrs_p->s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;
+       if (fast_mode == rozofs_econfig_fast_hybrid) {
+         ext_attrs_p->s.hybrid_desc.s.no_hybrid = 0;
+         ext_attrs_p->s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;
+       }  
+       else {
+         ext_attrs_p->s.hybrid_desc.s.no_hybrid = 1;
+         ext_attrs_p->s.hybrid_desc.s.hybrid_sz = 0;
+      }  
       
 
      /*
@@ -3631,7 +3640,8 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       ** Use fast volume in aging mode. Else use slow volume.
       */
       if (fast_mode == rozofs_econfig_fast_aging) {
-        volume = e->volume_fast;
+        if (e->volume_fast) volume = e->volume_fast;
+        else                volume = e->volume;
         ext_attrs_p->s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
       }  
       else {
@@ -3662,7 +3672,16 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
              goto error;
 	     
 //	 fdl_debug_print_storage(e,buf_slave_inode_work_p,0,k);
-
+        /*
+        **  Store used volume
+        */
+        pChildren = (rozofs_mover_children_t*) &buf_slave_inode_work_p->s.attrs.children;  
+        if (volume == e->volume_fast) {
+          pChildren->fid_st_idx.vid_fast = e->volume_fast->vid;
+        }  
+        else {
+          pChildren->fid_st_idx.vid_fast = 0;
+        }
 	 /*
 	 ** Put the file index in the multi-file descriptor and adjust the fid (index part)
 	 */
@@ -4070,12 +4089,13 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
           /*
           ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
           */
-          if ((e->volume_fast != NULL) && (fast_mode==rozofs_econfig_fast_aging)) {
-            volume = e->volume_fast;
-            ext_attrs.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;        
-          }
+          if (fast_mode == rozofs_econfig_fast_aging) {
+            if (e->volume_fast) volume = e->volume_fast;
+            else                volume = e->volume;
+            ext_attrs.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+          }  
           else {
-            volume = e->volume;  
+            volume = e->volume;
             ext_attrs.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;        
           }  
 	  /*
@@ -6953,6 +6973,12 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     ext_attrs.s.i_state = 0;
     ext_attrs.s.i_file_acl = 0;
     ext_attrs.s.i_link_name = 0;
+    
+    /*
+    ** Get project id from the parent
+    */
+    ext_attrs.s.hpc_reserved.reg.share_id = plv2->attributes.s.attrs.cid;  
+       
     /*
     ** create the inode and write the attributes on disk
     */
@@ -9381,7 +9407,44 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
       return -1;            
     }
     if (lv2->attributes.s.attrs.size != valu64) {
+      // Don't skip intermediate computation to keep ceil rounded
+      uint64_t nbold = (lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1) / ROZOFS_BSIZE_BYTES(e->bsize);
+      uint64_t nbnew = (valu64 + ROZOFS_BSIZE_BYTES(e->bsize) - 1) / ROZOFS_BSIZE_BYTES(e->bsize);
+      /*
+      ** update user and group quota
+      */
+      if (valu64 > lv2->attributes.s.attrs.size) {
+	rozofs_qt_block_update(e->eid,
+                               lv2->attributes.s.attrs.uid,
+                               lv2->attributes.s.attrs.gid,
+	                       (valu64 - lv2->attributes.s.attrs.size),
+                               ROZOFS_QT_INC,
+                               lv2->attributes.s.hpc_reserved.reg.share_id);
+      }
+      else {
+	rozofs_qt_block_update(e->eid,
+                               lv2->attributes.s.attrs.uid,
+                               lv2->attributes.s.attrs.gid,
+	                       (lv2->attributes.s.attrs.size - valu64),
+                               ROZOFS_QT_DEC,
+                               lv2->attributes.s.hpc_reserved.reg.share_id);
+      }
+
+      export_update_blocks(e,lv2, nbnew, nbold,lv2->attributes.s.attrs.children);
       lv2->attributes.s.attrs.size = valu64;
+      /*
+      ** adjust the directory statistics
+      */      
+      lv2_entry_t *plv2  = export_dir_get_parent(e,lv2);
+      if (plv2) {      
+        int bbytes = ROZOFS_BSIZE_BYTES(e->bsize);    
+	if (nbnew > nbold){
+          export_dir_adjust_child_size(plv2,(nbnew-nbold)*bbytes,1,bbytes);
+	}
+	else{
+	  export_dir_adjust_child_size(plv2,(nbold-nbnew)*bbytes,0,bbytes);
+	}  
+      }
       /*
       ** Save new distribution on disk
       */
