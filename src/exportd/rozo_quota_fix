@@ -204,7 +204,7 @@ do_quota_fix_one_project() {
   #
   # Get project id of root directory
   
-  prj=`rozo_scan -e 1 d pfid eq 00000000-0000-0000-0000-000000000000 out project | awk -F'=' '{print $2;}'`
+  prj=`rozo_scan -e ${eid} d pfid eq 00000000-0000-0000-0000-000000000000 out project | awk -F'=' '{print $2;}'`
   if [ ${prj} -eq ${projectid} ];
   then
     inodes=$((inodes-1))
