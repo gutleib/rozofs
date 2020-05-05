@@ -600,7 +600,7 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
       */
       if (vid_fast)
       {
-	if (n_fast > tab_p->memory.blocks) {
+	if (n_fast > tab_p->memory.blocks_fast) {
           severe("export %s blocks %"PRIu64" files %"PRIu64". Releasing %lld blocks for fast volume",
 		tab_p->pathname, tab_p->memory.blocks_fast, tab_p->memory.files_fast, n_fast); 
           n_fast = tab_p->memory.blocks_fast;

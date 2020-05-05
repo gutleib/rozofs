@@ -122,9 +122,10 @@ int check_regular_file(char * base, int nb, int nlinks, int line) {
   struct stat stats;
   int ret;
   char file[128];
+  int  error = 0;
 
   sprintf(file, "%s%d", base, nb);
-    
+reloop:    
   ret = lstat(file,&stats);
   if (ret < 0) {
     printf("%d lstat(%s) %s\n",line, file, strerror(errno));
@@ -135,7 +136,12 @@ int check_regular_file(char * base, int nb, int nlinks, int line) {
     return -1;
   }  
   if (nlinks != stats.st_nlink) {
-    printf("%d file %s has %d links while expecting %d\n",line,file,(int)stats.st_nlink,nlinks);
+    if (error < 3) {
+      error++;
+      usleep(200000);
+      goto reloop;
+    }  
+    printf("[%d] file %s has %d links while expecting %d\n",line,file,(int)stats.st_nlink,nlinks);
     return -1;
   }
   return 0;
@@ -288,7 +294,7 @@ int do_one_test(char * base, int count) {
   return 0;
   
 error:
-  for (i=0; i<=NB_HARD_LINKS; i++) remove_file(base,i);
+  //for (i=0; i<=NB_HARD_LINKS; i++) remove_file(base,i);
   return -1;
 }
 int loop_test_process() {

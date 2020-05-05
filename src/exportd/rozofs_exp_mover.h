@@ -175,7 +175,7 @@ static inline void rozofs_set_moving(export_t *e, lv2_entry_t * lv2) {
     //info("is_moving %p Set #%d : %x",master,idx,master->is_moving);
   }  
 }
-static inline void rozofs_reset_moving(export_t *e, lv2_entry_t * lv2) {
+static inline lv2_entry_t * rozofs_reset_moving(export_t *e, lv2_entry_t * lv2) {
   lv2_entry_t * master = export_get_master_lv2(e,lv2);
   int           idx = 0;
   if (master) {
@@ -184,7 +184,8 @@ static inline void rozofs_reset_moving(export_t *e, lv2_entry_t * lv2) {
     }    
     master->is_moving &= ~(1<<idx);
     //info("is_moving %p Reset #%d : %x",master,idx,master->is_moving);
-  }  
+  } 
+  return master; 
 }
 static inline int rozofs_is_moving(export_t *e, lv2_entry_t * lv2) {
   lv2_entry_t * master = export_get_master_lv2(e,lv2);

@@ -21,6 +21,7 @@
 #include <rozofs/common/common_config.h>
 #include "rozofs_exp_mover.h"
 #include <rozofs/rozofs_srv.h>
+#include "export_quota_thread_api.h"
 
 
 /*
@@ -176,6 +177,7 @@ int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_
   ext_mattr_t *attr_p;
   rozofs_mover_sids_t *dist_mv_p;   
   rozofs_mover_children_t mover_idx;  
+  lv2_entry_t *master = NULL;
 
   attr_p = &lv2->attributes;
   mover_idx.u32 = attr_p->s.attrs.children;
@@ -215,7 +217,7 @@ int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_
   /*
   ** Reset slave moving bit in master inode
   */
-  rozofs_reset_moving(e,lv2);
+  master = rozofs_reset_moving(e,lv2);
 
   /*
   ** swap the primary and the mover information
@@ -234,6 +236,74 @@ int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_
 
   memset(dist_mv_p->dist_t.mover_sids,0,ROZOFS_SAFE_MAX_STORCLI);
   dist_mv_p->dist_t.mover_cid = 0;
+
+  
+  /*
+  ** If there is a volume change between fast and slow volume
+  ** block statistics must be updated
+  */
+  while (master) {
+    int      old_vid;
+    int      new_vid;
+    uint32_t blocks;
+    int      bbytes;
+    uint32_t hybrid_blocks = 0;
+    
+    /*
+    ** Only one volume so no volume change
+    */
+    if (e->volume_fast == NULL) break;
+    /*
+    ** Get vid associated to the new cluster
+    */
+    new_vid = export_get_vid_from_cid(lv2->attributes.s.attrs.cid);  
+    if (new_vid == e->volume->vid) new_vid = 0; // slow volume is set to 0 in children field
+    /*
+    ** Get master current volume id in master inode
+    */
+    rozofs_mover_children_t *children_p = (rozofs_mover_children_t *) &master->attributes.s.attrs.children;
+    old_vid = children_p->fid_st_idx.vid_fast;
+
+    if (new_vid == old_vid) break;
+    
+    /*
+    ** Aging case
+    */
+    if (master->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {    
+      
+      bbytes = ROZOFS_BSIZE_BYTES(e->bsize);
+      blocks = ((master->attributes.s.attrs.size + bbytes - 1) / bbytes);
+      /*
+      ** Decrement from old volume and then ibcrement on new volume
+      */
+      export_fstat_update_blocks(e->eid, 0, blocks, e->thin, old_vid,0xFFFFFFFF);
+      export_fstat_delete_files(e->eid,1,old_vid);
+      children_p->fid_st_idx.vid_fast = new_vid;
+      export_fstat_create_files(e->eid,1,new_vid);  
+      export_fstat_update_blocks(e->eid, blocks, 0, e->thin, new_vid,0xFFFFFFFF); 
+      break;   
+    }
+    
+    /*
+    ** Hybrid case, when the master inode is moved
+    */
+    if (master != lv2) break;
+    hybrid_blocks = rozofs_get_hybrid_size(&master->attributes.s.multi_desc,&master->attributes.s.hybrid_desc);
+    hybrid_blocks /= ROZOFS_BSIZE_BYTES(e->bsize);
+    if (hybrid_blocks == 0) break;
+      
+    bbytes = ROZOFS_BSIZE_BYTES(e->bsize);
+    blocks = ((master->attributes.s.attrs.size + bbytes - 1) / bbytes);
+    /*
+    ** Decrement from old volume and then ibcrement on new volume
+    */
+    export_fstat_update_blocks(e->eid, 0, blocks, e->thin, old_vid,hybrid_blocks);
+    export_fstat_delete_files(e->eid,1,old_vid);
+    children_p->fid_st_idx.vid_fast = new_vid;
+    export_fstat_create_files(e->eid,1,new_vid);  
+    export_fstat_update_blocks(e->eid, blocks, 0, e->thin, new_vid,hybrid_blocks);   
+    break;       
+  }
 
   lv2_cache_unlock_entry_in_cache(lv2);
   return 0;

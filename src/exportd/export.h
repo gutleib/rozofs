@@ -1249,5 +1249,14 @@ volume_t *volumes_lookup_volume(vid_t vid);
 **__________________________________________________________________________________
 */
 lv2_entry_t * export_get_master_lv2(export_t *e, lv2_entry_t *lv2) ;
-
+/*
+**_______________________________________________________________________
+** Find out the vid of a cid from the read export configuration
+**   
+** @param cid
+** 
+** @ret_val vid
+**_______________________________________________________________________
+*/
+vid_t export_get_vid_from_cid(cid_t cid) ;
 #endif

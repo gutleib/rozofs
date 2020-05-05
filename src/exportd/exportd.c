@@ -1988,6 +1988,49 @@ static void on_stop() {
     }    
 }
 /*
+**_______________________________________________________________________
+** Find out the vid of a cid from the read export configuration
+**   
+** @param cid
+** 
+** @ret_val vid
+**_______________________________________________________________________
+*/
+vid_t export_get_vid_from_cid(cid_t cid) {
+  list_t * v, * c;
+  vid_t    vid = 0;
+  
+  if ((errno = pthread_rwlock_rdlock(&config_lock)) != 0) {
+    severe("can't lock config: %s", strerror(errno));
+    return 0;
+  } 
+     
+  if ((errno = pthread_rwlock_rdlock(&volumes_lock)) != 0) {
+    severe("can't lock volumes: %s", strerror(errno));
+  }
+
+  list_for_each_forward(v, &exportd_config.volumes) {
+    volume_config_t * volume = list_entry(v, volume_config_t, list);
+    list_for_each_forward(c, &volume->clusters) {	
+      cluster_config_t *cluster = list_entry(c, cluster_config_t, list);
+      if (cluster->cid != cid) continue;
+      vid = volume->vid;
+      goto out;
+    }
+  }
+  
+out:  
+  if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
+    severe("can't unlock volumes: %s", strerror(errno));
+  } 
+
+  //Release lock on export gateways list
+  if ((errno = pthread_rwlock_unlock(&config_lock)) != 0) {
+    severe("can't lock export gateways: %s", strerror(errno));
+  }
+  return vid;
+}
+/*
  *_______________________________________________________________________
  */
 /**

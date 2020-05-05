@@ -1422,7 +1422,7 @@ static int export_update_files(export_t *e, int32_t n,uint32_t children) {
 static int export_update_blocks(export_t * e,lv2_entry_t *lv2, uint64_t newblocks, uint64_t oldblocks,uint32_t children) {
     int status = -1;
     rozofs_mover_children_t vid_fast;
-    uint32_t hybrid_size_bytes = 0;
+    uint32_t fast_blocks = 0;
     
 
     if (oldblocks == newblocks) return 0;
@@ -1431,9 +1431,15 @@ static int export_update_blocks(export_t * e,lv2_entry_t *lv2, uint64_t newblock
     /*
     ** get the size of the hybrid section
     */
-    hybrid_size_bytes = rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc,&lv2->attributes.s.hybrid_desc);
+    if (lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+      fast_blocks = 0xFFFFFFFF;
+    }
+    else {
+      fast_blocks = rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc,&lv2->attributes.s.hybrid_desc);
+      fast_blocks /= ROZOFS_BSIZE_BYTES(e->bsize);
+    }   
     vid_fast.u32 = children;
-     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin,vid_fast.fid_st_idx.vid_fast,hybrid_size_bytes/ROZOFS_BSIZE_BYTES(e->bsize));
+    status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin,vid_fast.fid_st_idx.vid_fast,fast_blocks);
     STOP_PROFILING(export_update_blocks);
     return status;
 }
@@ -3639,9 +3645,16 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       /*
       ** Use fast volume in aging mode. Else use slow volume.
       */
+      pChildren = (rozofs_mover_children_t*) &ext_attrs_p->s.attrs.children;
       if (fast_mode == rozofs_econfig_fast_aging) {
-        if (e->volume_fast) volume = e->volume_fast;
-        else                volume = e->volume;
+        if (e->volume_fast) {
+          volume = e->volume_fast;
+          pChildren->fid_st_idx.vid_fast = e->volume_fast->vid;
+        }  
+        else {
+          volume = e->volume;
+         pChildren->fid_st_idx.vid_fast = 0;          
+        }  
         ext_attrs_p->s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
       }  
       else {

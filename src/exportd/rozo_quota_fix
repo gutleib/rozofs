@@ -65,7 +65,10 @@ do_quota_fix_one_user() {
   
   size=`awk '{if (($1=="\"sum") && ($2=="file") && ($3=="size\"")) print $5;}' ${tmp} | awk -F',' '{print $1}'`
   inodes=$((files+dirs+symlinks))
-  if [ ${userid} -eq 0 ];
+  #
+  # Substrack 1 for root path uid
+  #
+  if [ ${ROOT_UID} -eq ${userid} ];
   then
     inodes=$((inodes-1))
   fi
@@ -134,7 +137,10 @@ do_quota_fix_one_group() {
 
   size=`awk '{if (($1=="\"sum") && ($2=="file") && ($3=="size\"")) print $5;}' ${tmp} | awk -F',' '{print $1}'`
   inodes=$((files+dirs+symlinks))
-  if [ ${groupid} -eq 0 ];
+  #
+  # Substrack 1 for root path group
+  #
+  if [ ${ROOT_GID} -eq ${groupid} ];
   then
     inodes=$((inodes-1))
   fi
@@ -202,10 +208,9 @@ do_quota_fix_one_project() {
   inodes=$((files+dirs+symlinks))
   
   #
-  # Get project id of root directory
-  
-  prj=`rozo_scan -e ${eid} d pfid eq 00000000-0000-0000-0000-000000000000 out project | awk -F'=' '{print $2;}'`
-  if [ ${prj} -eq ${projectid} ];
+  # Substrack 1 for root project
+  #
+  if [ ${ROOT_PROJECT} -eq ${projectid} ];
   then
     inodes=$((inodes-1))
   fi
@@ -237,6 +242,22 @@ do_quota_fix_one_project() {
 
 #_______________________________________
 do_loop() {
+
+  #
+  # Get root directory project, uid and gid, since root path is counted by rozo_scan
+  # by not by rep_quota
+  #
+  for val in `rozo_scan -e ${eid} d pfid eq 00000000-0000-0000-0000-000000000000 out project,uid,gid,count1`
+  do
+    name=`echo $val | awk -F'=' '{print $1;}'`
+    case "$name" in
+      "uid") ROOT_UID=`echo $val | awk -F'=' '{print $2;}'`;;
+      "gid") ROOT_GID=`echo $val | awk -F'=' '{print $2;}'`;;
+      "project") ROOT_PROJECT=`echo $val | awk -F'=' '{print $2;}'`;;
+      *);;
+    esac  
+  done
+  
 
   inpoutnum=""
   case "$1" in
