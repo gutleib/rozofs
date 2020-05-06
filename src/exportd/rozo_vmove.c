@@ -64,6 +64,7 @@ uint64_t  scanned_directories = 0;
 uint64_t  scanned_over_sized  = 0;
 uint64_t  scanned_under_sized = 0;
 uint64_t  scanned_under_age =0;
+uint64_t  scanned_bad_prj = 0;
 
 uint64_t  creation_time_before     = 0;
 uint64_t  modification_time_before = 0;
@@ -125,10 +126,19 @@ scan_index_context_t        scan_context;
 uint64_t                    rozofs_vmove_size2move;
 uint64_t                    rozofs_vmove_nb2move;
 int                         whole_eid = 0;
-
+fid_t                       target_fid;
+int                         project = -1;
 
 #define ROZOFS_VMOVE_MAX_SIZE2MOVE_IN_A_RUN (200ULL*1024ULL*1024ULL*1024ULL)
 #define ROZOFS_VMOVE_MAX_NB2MOVE_IN_A_RUN   (2000ULL)
+
+typedef enum _rozofs_vmove_scope_e {
+  rozofs_vmove_scope_whole_eid,
+  rozofs_vmove_scope_directories,
+  rozofs_vmove_scope_one_file
+} rozofs_vmove_scope_e;
+
+rozofs_vmove_scope_e rozofs_vmove_scope = rozofs_vmove_scope_whole_eid; 
 /*
 **_______________________________________________________________________
 **
@@ -666,7 +676,14 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   ext_mattr_t        * slave_p;
   int                  nb_slave;
   int                  match;
-  
+
+  /*
+  ** Just one file
+  */
+  if (rozofs_vmove_scope == rozofs_vmove_scope_one_file) {
+     rozo_lib_stop_var = 1;
+  }
+    
   /*
   ** Simple file case
   */
@@ -685,7 +702,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
     scanned_hybrid++;
   }
-  else if (inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+  else if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
     scanned_aging++;
   }
   else {
@@ -697,7 +714,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   /*
   ** Check the directory it is in
   */
-  if (whole_eid == 0) {
+  if (rozofs_vmove_scope == rozofs_vmove_scope_directories) {
     for (idx=0; idx< nbFid; idx++) {  
       ret = memcmp(pFidTable[idx], inode_p->s.pfid, sizeof(fid_t));
       if (ret == 0) break;
@@ -706,11 +723,30 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     if (idx == nbFid) return 0;
   }
 
+  if (rozofs_vmove_scope == rozofs_vmove_scope_one_file) {
+    rozofs_inode_t  * ino1_p = (rozofs_inode_t*) target_fid;
+    rozofs_inode_t  * ino2_p = (rozofs_inode_t*) inode_p->s.attrs.fid;    
+    if (ino1_p->s.file_id != ino2_p->s.file_id)   return 0;
+    if (ino1_p->s.usr_id  != ino2_p->s.usr_id)    return 0;
+    if (ino1_p->s.idx     != ino2_p->s.idx)       return 0;
+  }
+  
   /*
   ** It is under the tree 
   */
   scanned_match_path++;
   
+
+  /*
+  ** Check project
+  */
+  if (project !=  -1) {
+    if (project != inode_p->s.hpc_reserved.reg.share_id) {
+      scanned_bad_prj++;
+      return 0;      
+    }
+  }
+
   /*
   ** Check the file size against given size criteria
   */
@@ -779,7 +815,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   ** Aging case. Check every sub file 
   */
   match = 0;
-  if (inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+  if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
     slave_p = inode_p;
     slave_p ++;
     nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
@@ -1084,15 +1120,15 @@ static void usage(char * fmt, ...) {
     printf("\n"ROZOFS_COLOR_BOLD""ROZOFS_COLOR_RED"!!!  %s !!! "ROZOFS_COLOR_NONE"\n",error_buffer);  
   }
   
-  printf("RozoFS hybrid volume mover - %s\n", VERSION);    
+  printf("RozoFS hybrid/aging volume mover - %s\n", VERSION);    
   printf("Move subfiles between slow and fast volumes in hybrid or aging mode.\n");
-  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory FID>|--name <directory name>|--eid <eid>} [--recursive] [OPTIONS]"ROZOFS_COLOR_NONE"\n");
+  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory/file FID>|--name <directory/file name>|--eid <eid>} [--recursive] [OPTIONS]"ROZOFS_COLOR_NONE"\n");
   printf("The direction of the move is defined by one of the following mandatory parameter:\n");
   printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\t\tMove subfiles from slow volume to fast volume.\n");
   printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\t\tMove subfiles from fast volume to slow volume.\n");
   printf("The files to move are defined as follow:\n");
-  printf(ROZOFS_COLOR_BOLD"\t-n, --name <directory name>"ROZOFS_COLOR_NONE"\tRoot directory name on which the move applies.\n");  
-  printf(ROZOFS_COLOR_BOLD"\t-F, --fid <directory FID>"ROZOFS_COLOR_NONE"\tRoot directory FID on which the move applies.\n");  
+  printf(ROZOFS_COLOR_BOLD"\t-n, --name <directory/file name>"ROZOFS_COLOR_NONE"\tSingle file or directory name on which the move applies.\n");  
+  printf(ROZOFS_COLOR_BOLD"\t-F, --fid <directory/file FID>"ROZOFS_COLOR_NONE"\tSingle file or directory name on which the move applies.\n");  
   printf(ROZOFS_COLOR_BOLD"\t-e, --eid <eid>"ROZOFS_COLOR_NONE"\t\t\tWhole eid must be moved (--recursive is implicit).\n");  
   printf(ROZOFS_COLOR_BOLD"\t-r, --recursive"ROZOFS_COLOR_NONE"\t\t\tApply vmove recursively on each sub-directory under the root directory.\n");
   printf("Miscellaneous OPTIONS:\n");
@@ -1104,6 +1140,7 @@ static void usage(char * fmt, ...) {
   printf(ROZOFS_COLOR_BOLD"\t-T, --threads <nb_threads>"ROZOFS_COLOR_NONE"\tThe number of threads of the file mover (default %u)\n",20);
   printf(ROZOFS_COLOR_BOLD"\t-C, --created <nbHours>"ROZOFS_COLOR_NONE"\t\tMove files created more than <nbHours> before\n");
   printf(ROZOFS_COLOR_BOLD"\t-M, --modified <nbHours>"ROZOFS_COLOR_NONE"\tMove files not modified for more than <nbHours>\n");
+  printf(ROZOFS_COLOR_BOLD"\t-p, --project <projectId>"ROZOFS_COLOR_NONE"\tMove files of project <projectId>\n");
   printf(ROZOFS_COLOR_BOLD"\t-m, --mount <path>"ROZOFS_COLOR_NONE"\t\tMountpoint to use for moving\n");
   printf("\n");
   exit(EXIT_SUCCESS); 
@@ -1160,11 +1197,7 @@ void rozofs_vmove_get_fid_from_name(char * dname, fid_t fid) {
   size = getxattr(dname,"user.rozofs",printfBuffer,sizeof(printfBuffer));    
   if (size == -1) {
     usage("%s is not a RozoFS directory",dname);
-  }    
-  
-  if (strstr(printfBuffer,"MODE    : DIRECTORY") == NULL) {
-    usage("%s is not a directory",dname);
-  }    
+  }     
     
   p = strstr(printfBuffer,"FID     :");
   if (p == NULL) {
@@ -1184,11 +1217,11 @@ void rozofs_vmove_get_fid_from_name(char * dname, fid_t fid) {
 int main(int argc, char *argv[]) {
   int                c;
   char             * configFileName = EXPORTD_DEFAULT_CONFIG;
-  char             * directory = NULL;
+//  char             * name = NULL;
+  char             * target = NULL;
   int                eid;
   rozofs_inode_t   * ino_p;
   long long unsigned int throughput = 0;
-  fid_t              parent;
   char               path[1024];
   int                ret;
   int                nb_threads=20;
@@ -1245,6 +1278,7 @@ int main(int argc, char *argv[]) {
       {"name", required_argument, 0, 'n'},
       {"fid", required_argument, 0, 'F'},
       {"eid", required_argument, 0, 'e'},
+      {"prj", required_argument, 0, 'p'},
       {"recursive", no_argument, 0, 'r'},
       {"over", required_argument, 0, 'o'},
       {"under", required_argument, 0, 'u'},
@@ -1259,7 +1293,7 @@ int main(int argc, char *argv[]) {
   while (1) {
 
     int option_index = -1;
-    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:o:u:T:C:M:m:", long_options, &option_index);
+    c = getopt_long(argc, argv, "rhfsc:n:F:e:t:o:u:T:C:M:m:p:", long_options, &option_index);
 
     if (c == -1)
         break;
@@ -1289,8 +1323,8 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'F':
-        directory = optarg;
-        if (rozofs_uuid_parse(optarg,parent) != 0) {
+        target = optarg;
+        if (rozofs_uuid_parse(optarg,target_fid) != 0) {
           usage("Bad FID format \"%s\"",optarg);
         }  
         break;
@@ -1314,12 +1348,13 @@ int main(int argc, char *argv[]) {
         break;
         
       case 'n':
-        directory = optarg;
-        rozofs_vmove_get_fid_from_name(optarg,parent);
+        target = optarg;
+//        name = optarg;
+        rozofs_vmove_get_fid_from_name(optarg,target_fid);
         break;
 
       case 'e':
-        directory = optarg;
+        target = optarg;
         if (sscanf(optarg,"%d", &whole_eid)!= 1) {
           usage("Bad eid number %s", optarg);
         }  
@@ -1340,7 +1375,13 @@ int main(int argc, char *argv[]) {
           usage("Bad --over format \"%s\"",optarg);
         }  
         break;
-        
+
+      case 'p':
+        if (sscanf(optarg,"%d",&project) != 1) {
+          usage("Bad --prj format \"%s\"",optarg);
+        }  
+        break;   
+             
       case 'u':
         if (sscanf(optarg,"%llu",&size_under) != 1) {
           usage("Bad --under format \"%s\"",optarg);
@@ -1367,7 +1408,7 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  if (directory == NULL) {
+  if (target == NULL) {
     usage("Missing mandatory option --name or --fid or --eid");
   }
   if (destination == ROZOFS_VMOVE_UNDEFINED) {  
@@ -1394,10 +1435,20 @@ int main(int argc, char *argv[]) {
   ** Extract eid from directory 
   */
   if (whole_eid == 0) {
-    ino_p = (rozofs_inode_t*) parent;
+    ino_p = (rozofs_inode_t*) target_fid;
     eid = ino_p->s.eid;
+    if (ino_p->s.key == ROZOFS_DIR) {
+      rozofs_vmove_scope = rozofs_vmove_scope_directories;
+    }  
+    else if (ino_p->s.key == ROZOFS_REG) {
+      rozofs_vmove_scope = rozofs_vmove_scope_one_file;
+    }
+    else {
+      usage("Bad FID value %s", export_attr_type2String(ino_p->s.key));
+    }  
   }
   else {
+    rozofs_vmove_scope = rozofs_vmove_scope_whole_eid;
     eid = whole_eid;
   }  
   /*
@@ -1422,7 +1473,7 @@ int main(int argc, char *argv[]) {
     usage("eid %d only uses volume %d and no fast volume",eid,econfig->vid);
   }
   
-  sprintf(path,"%seid_%d_dir_%s",ROZO_VMOVE_PATH,eid,directory);
+  sprintf(path,"%seid_%d_dir_%s",ROZO_VMOVE_PATH,eid,target);
   ret = rozofs_mkpath ((char*)path,S_IRUSR | S_IWUSR | S_IXUSR);
   if (ret < 0)
   {
@@ -1452,15 +1503,34 @@ int main(int argc, char *argv[]) {
   */
   list_init(&jobs);
   list_init(&subdirectories);
+  rozo_lib_reset_index_context(&scan_context);
   
   /*
-  ** Build the list of diredtory to scan for files
+  ** No the whole eid, so just one file, directory or subtree
   */
-  if (whole_eid == 0) {
-    rozofs_build_directory_list(rozofs_export_p,parent,recursive);
-  }
+  switch (rozofs_vmove_scope) { 
+
+   /*
+   ** One directory as input : build the list of directories to scan for files
+   */
+    case rozofs_vmove_scope_directories:
+      rozofs_build_directory_list(rozofs_export_p,target_fid,recursive);
+      break;
+
+    /*
+    ** One file as input : set the scanning context accordingly
+    */
+    case rozofs_vmove_scope_one_file:  
+      ino_p = (rozofs_inode_t*) target_fid;
+      scan_context.file_id   = ino_p->s.file_id;
+      scan_context.user_id   = ino_p->s.usr_id;
+      scan_context.inode_idx = ino_p->s.idx;
+      break;
+
+    default:
+      break;
+  }  
      
-  rozo_lib_reset_index_context(&scan_context);
   while (1) {  
 
     /*
@@ -1496,23 +1566,34 @@ int main(int argc, char *argv[]) {
     rozofs_mover_print_stat(printfBuffer);
     printf("%s",printfBuffer);       
 
+    if (rozofs_vmove_scope == rozofs_vmove_scope_one_file) {
+      break;
+    }
   }  
 
   printf("{ \"vmove\" : {\n");
-  if (!whole_eid) {
-    printf("     \"directory\"      : \"%s\",\n", directory);
-  }  
+  switch (rozofs_vmove_scope) { 
+    case rozofs_vmove_scope_directories:
+      printf("     \"directory\"      : \"%s\",\n", target);
+      break;
+    case rozofs_vmove_scope_one_file:  
+      printf("     \"file\"      : \"%s\",\n", target);
+      break;
+    default:
+      break;
+  }   
   printf("     \"eid\"            : %d,\n", eid);
   printf("     \"vid fast\"       : %d,\n", econfig->vid_fast);
   printf("     \"vid slow\"       : %d,\n", econfig->vid);
   printf("     \"destination\"    : \"%s\",\n", (destination==ROZOFS_VMOVE_FAST)?"fast":"slow");  
   printf("     \"throughput MB\"  : %llu,\n", throughput);  
-  if (!whole_eid) {
+  if (rozofs_vmove_scope == rozofs_vmove_scope_directories) {
     printf("     \"directories\"    : %llu,\n",(long long unsigned int)scanned_directories);
   }  
   printf("     \"hybridFiles\"    : %llu,\n",(long long unsigned int)scanned_hybrid);
   printf("     \"agingFiles\"     : %llu,\n",(long long unsigned int)scanned_aging);
   printf("     \"match path\"     : %llu,\n",(long long unsigned int)scanned_match_path);
+  printf("     \"bad project\"    : %llu,\n",(long long unsigned int)scanned_bad_prj);
   printf("     \"under sized\"    : %llu,\n",(long long unsigned int)scanned_under_sized);
   printf("     \"under age\"      : %llu,\n",(long long unsigned int)scanned_under_age);
   printf("     \"over sized\"     : %llu,\n",(long long unsigned int)scanned_over_sized);
