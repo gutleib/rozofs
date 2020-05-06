@@ -1278,7 +1278,7 @@ int main(int argc, char *argv[]) {
       {"name", required_argument, 0, 'n'},
       {"fid", required_argument, 0, 'F'},
       {"eid", required_argument, 0, 'e'},
-      {"prj", required_argument, 0, 'p'},
+      {"project", required_argument, 0, 'p'},
       {"recursive", no_argument, 0, 'r'},
       {"over", required_argument, 0, 'o'},
       {"under", required_argument, 0, 'u'},
@@ -1378,7 +1378,7 @@ int main(int argc, char *argv[]) {
 
       case 'p':
         if (sscanf(optarg,"%d",&project) != 1) {
-          usage("Bad --prj format \"%s\"",optarg);
+          usage("Bad --project format \"%s\"",optarg);
         }  
         break;   
              
