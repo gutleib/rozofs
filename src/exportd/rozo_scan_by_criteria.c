@@ -648,6 +648,8 @@ static void usage(char * fmt, ...) {
   printf("\t\033[1mOx, Ow, Or\033[0m\tOther users have executable, write, read priviledge.\n");
   printf("\t\033[1mOnx, Onw, Onr\033[0m\tOther users have NOT executable, write, read priviledge.\n");
   printf("\t\033[1mhybrid\033[0m\t\tFile/directory is hybrid.\n");
+  printf("\t\033[1maging\033[0m\tFile/directory is in agging mode.\n");
+  printf("\t\033[1mnoaging\033[0m\t\tFile/directory is not in aging mode.\n");
   printf("\t\033[1mnohybrid\033[0m\tFile/directory is NOT hybrid.\n");
   printf("\033[1m  \033[4mFIELD:\033[0m\033[1m <FIELDNAME> <COMPARATOR> <VALUE>\033[0m\n");
   printf("\033[1m    \033[4mVALUE:\033[0m\n");              
@@ -1249,7 +1251,7 @@ void get_directory_striping_info(ext_mattr_t  * inode_p,
   *hybridSize = 0;
 
 
-  if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) != 0) {
+  if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
     *isaging = 1;
   }
                                
@@ -1291,7 +1293,7 @@ void get_directory_striping_info(ext_mattr_t  * inode_p,
   ** nothing defined at directory level so get the information from the export conf
   */       
 
-  if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) != 0) {
+  if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
     *isaging = 1;
     return;
   }
@@ -1913,7 +1915,7 @@ int rozofs_scan_eval_one_field_rmfentry(
       switch(comp) {
         case rozofs_scan_keyw_comparator_eq:
           if (rmentry->cid == field_value->u32[0]) {
-            if (rozofs_check_sid_in_list(rmentry->initial_dist_set, field_value->u32[1], field_range->min, field_range->max)) {       
+            if (rozofs_check_sid_in_list(rmentry->current_dist_set, field_value->u32[1], field_range->min, field_range->max)) {       
               return 1;
             }
           }          
@@ -1921,7 +1923,7 @@ int rozofs_scan_eval_one_field_rmfentry(
           break;
         case rozofs_scan_keyw_comparator_ne:
           if (rmentry->cid == field_value->u32[0]) {
-            if (rozofs_check_sid_in_list(rmentry->initial_dist_set, field_value->u32[1], field_range->min, field_range->max)) {       
+            if (rozofs_check_sid_in_list(rmentry->current_dist_set, field_value->u32[1], field_range->min, field_range->max)) {       
               return 0;
             }
           }          
@@ -2234,7 +2236,7 @@ int rozofs_scan_eval_one_criteria_inode(
       /*
       ** Regular file
       */       
-      if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) != 0) {
+      if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
         /*
         ** is aging
         */
@@ -2261,7 +2263,7 @@ int rozofs_scan_eval_one_criteria_inode(
       /*
       ** Regular file
       */
-      if ((inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) == 0) {
+      if (!ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
         /*
         ** no aging 
         */
@@ -4405,7 +4407,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
           pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
         }
         NEW_FIELD(aging); 
-        if (inode_p->s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+        if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
           pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
         }
         else {

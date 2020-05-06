@@ -343,6 +343,11 @@ typedef union
 #define ROZOFS_I_EXTRA_ISIZE_BIS (sizeof(ext_mattr_t) -sizeof(struct inode_internal_t))
 
 
+#define ROZOFS_IS_BITFIELD1(attr_p,bit)    ((attr_p)->s.bitfield1 & bit)
+#define ROZOFS_SET_BITFIELD1(attr_p,bit)   { (attr_p)->s.bitfield1  |= bit; }
+#define ROZOFS_CLEAR_BITFIELD1(attr_p,bit) { (attr_p)->s.bitfield1  &= ~(bit); }
+
+
 /** initialize mattr_t
  *
  * fid is not initialized
