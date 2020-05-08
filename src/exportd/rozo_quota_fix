@@ -290,7 +290,7 @@ do_loop() {
     # Get number of inode and size
     #
     CHECK_SIZE="${words[2]}"
-    CHECK_INODES="${words[5]}"  
+    CHECK_INODES="${words[6]}"  
     #
     # Translate read id into name and input user into identifier
     #  
@@ -393,10 +393,10 @@ shift 1
 echo "    ID  Name                         rozo_repquota  |  rozo_scan"  
 
 case "$1" in
-  "user")    QUOTA_OPT="${QUOTA_OPT} -vnu ";   do_loop $2;;
-  "group")   QUOTA_OPT="${QUOTA_OPT} -vng ";   do_loop $2;;
-  "project") QUOTA_OPT="${QUOTA_OPT} -vns ";   do_loop $2;;
-  "all")     QUOTA_OPT="${QUOTA_OPT} -vnugs "; do_loop ;;
+  "user")    QUOTA_OPT="${QUOTA_OPT} -pvnu ";   do_loop $2;;
+  "group")   QUOTA_OPT="${QUOTA_OPT} -pvng ";   do_loop $2;;
+  "project") QUOTA_OPT="${QUOTA_OPT} -pvns ";   do_loop $2;;
+  "all")     QUOTA_OPT="${QUOTA_OPT} -pvnugs "; do_loop ;;
   *) syntax;;
 esac
 rm -f ${tmp}
