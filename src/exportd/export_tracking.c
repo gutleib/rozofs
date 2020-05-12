@@ -1431,7 +1431,7 @@ static int export_update_blocks(export_t * e,lv2_entry_t *lv2, uint64_t newblock
     /*
     ** get the size of the hybrid section
     */
-    if (lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+    if (ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING)) {
       fast_blocks = 0xFFFFFFFF;
     }
     else {
@@ -3180,7 +3180,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
       {
 	export_fstat_t * estats = export_fstat_get_stat(e->eid);
 	if ((estats != NULL)&&(estats->blocks >= e->hquota)) {
-          errno = ENOSPC;
+          errno = EDQUOT;
           goto error;
 	}
       }
@@ -3188,7 +3188,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
       {
 	export_fstat_t * estats = export_fstat_get_stat(e->eid);
 	if ((estats != NULL)&&(estats->blocks_thin >= e->hquota)) {
-          errno = ENOSPC;
+          errno = EDQUOT;
           goto error;
 	}
       }      
@@ -3202,7 +3202,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
        ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
        if (ret < 0)
        {
-         errno = ENOSPC;
+         errno = EDQUOT;
          goto error;
        }         
     }
@@ -3476,15 +3476,18 @@ void fdl_debug_print_storage(export_t *e,ext_mattr_t *q,int master,int fileid)
 /*
 **___________________________________________________________________________________________
 ** 
-** Choose distibution for a master inode in hybrid mode
+** Choose distibution o fast volume if possible
 **
-**  @param e: pointer tio the exportd context
+**  @param e: pointer to the exportd context
 **  @param site_number: site identifier
-    
-    @retval 0 on success, -1 else
+**  @param ext_attrs_p: attributes
+**  @param quota_slow: whether slow volume is usable
+**  @param quota_fast: whether fast volume is usable
+**    
+**  @retval 0 on success, -1 else
 **___________________________________________________________________________________________
 */ 
-int export_choose_hybrid_distribution(export_t *e,uint32_t site_number, ext_mattr_t  *ext_attrs_p) {
+int export_choose_hybrid_distribution(export_t *e,uint32_t site_number, ext_mattr_t  *ext_attrs_p, int quota_slow, int quota_fast) {
   rozofs_mover_children_t *children_p = (rozofs_mover_children_t*) &ext_attrs_p->s.attrs.children;
 
   children_p->fid_st_idx.vid_fast = 0;
@@ -3492,42 +3495,22 @@ int export_choose_hybrid_distribution(export_t *e,uint32_t site_number, ext_matt
   /*
   ** When no fast volume exist, distribution must be choosen on slow volume
   */
-  if (e->volume_fast == NULL) {
-    return volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids);
+  if (quota_fast) {
+    if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) == 0) {
+      children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
+      return 0;
+    }
   }  
     
   /*
   ** Check that some space left for the new file in case a hard quota is set for the fast volume
   */
-  if (e->hquota_fast) {
-    export_fstat_t * estats = export_fstat_get_stat(e->eid); 
-    /*
-    ** the thin provisioning does not apply to fast volume
-    ** need to take care of the max size of the striping_unit.
-    */         
-    if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
-      /*
-      ** no space left: use the slow volume
-      */
-      return volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids);
-    }
-  }
-  	     
-  /*
-  ** attempt to allocate on fast volume
-  */
-  if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids) != 0) {
-    /*
-    ** fallback to slow volume
-    */
+  if (quota_slow) {
     return volume_distribute(e->layout,e->volume,site_number, &ext_attrs_p->s.attrs.cid, ext_attrs_p->s.attrs.sids);
   }
-    
-  /*
-  ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
-  */
-  children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
-  return 0;
+
+  errno = EDQUOT;
+  return -1;
 }
 /*
 **___________________________________________________________________________________________
@@ -3553,7 +3536,8 @@ int export_choose_hybrid_distribution(export_t *e,uint32_t site_number, ext_matt
 
 int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
                            uint32_t gid, mode_t mode, ext_mattr_t  *ext_attrs_p,lv2_entry_t *plv2,uint32_t pslice,ext_mattr_t **attr_slave_p,
-			   uint32_t striping_factor,uint32_t striping_unit,rozofs_econfig_fast_mode_e fast_mode,uint32_t hybrid_nb_blocks)
+			   uint32_t striping_factor,uint32_t striping_unit,rozofs_econfig_fast_mode_e fast_mode,uint32_t hybrid_nb_blocks,
+                           int quota_slow, int quota_fast)
 {
       int inode_count;
       ext_mattr_t *buf_slave_inode_p = NULL;
@@ -3599,7 +3583,7 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       */
       //if (e->volume_fast == NULL) fast_mode = rozofs_econfig_fast_none;
       if (fast_mode == rozofs_econfig_fast_hybrid) {
-	if (export_choose_hybrid_distribution(e, site_number, ext_attrs_p) != 0) {
+	if (export_choose_hybrid_distribution(e, site_number, ext_attrs_p, quota_slow, quota_fast) != 0) {
           goto error;
         }
       }
@@ -3646,22 +3630,37 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       ** Use fast volume in aging mode. Else use slow volume.
       */
       pChildren = (rozofs_mover_children_t*) &ext_attrs_p->s.attrs.children;
+      /*
+      ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
+      */
       if (fast_mode == rozofs_econfig_fast_aging) {
-        if (e->volume_fast) {
+        ROZOFS_SET_BITFIELD1(ext_attrs_p,ROZOFS_BITFIELD1_AGING);
+        /*
+        ** Select the volume
+        */          
+        if (quota_fast) {           
           volume = e->volume_fast;
           pChildren->fid_st_idx.vid_fast = e->volume_fast->vid;
         }  
-        else {
+        else if (quota_slow) {
           volume = e->volume;
-         pChildren->fid_st_idx.vid_fast = 0;          
-        }  
-        ext_attrs_p->s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+        }
+        else {
+          errno = EDQUOT;
+          goto error;
+        }         
       }  
       else {
-        volume = e->volume;
-        ext_attrs_p->s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;        
-      }  
-
+        ROZOFS_CLEAR_BITFIELD1(ext_attrs_p,ROZOFS_BITFIELD1_AGING); 
+        if (quota_slow) {
+          volume = e->volume;
+        }
+        else {
+          errno = EDQUOT;
+          goto error;
+        }  
+      }   
+      
       /*
       ** create the inode and write the attributes on disk:
       ** allocate one more inode because we should consider the master inode
@@ -3800,7 +3799,7 @@ void rozofs_get_striping_factor_and_unit(export_t *e,lv2_entry_t *plv2,uint32_t 
    *striping_factor = plv2->attributes.s.multi_desc.master.striping_factor;
    *striping_unit= plv2->attributes.s.multi_desc.master.striping_unit;
    if (plv2->attributes.s.hybrid_desc.s.no_hybrid != 0) {
-     if (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
+     if (ROZOFS_IS_BITFIELD1(&plv2->attributes,ROZOFS_BITFIELD1_AGING)) {
        *fast_mode = rozofs_econfig_fast_aging;
      }
      else {
@@ -3861,6 +3860,8 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     int ret;
     ext_mattr_t *attr_slave_p = NULL;
     volume_t * volume;
+    int quota_slow;
+    int quota_fast;
    
     START_PROFILING(export_mknod);
     
@@ -3961,32 +3962,6 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
         goto error_read_only;
     }
     /*
-    ** Check that some space os left for the new file in case a hard quota is set
-    */
-    if (e->hquota) {
-      export_fstat_t * estats = export_fstat_get_stat(e->eid); 
-      /*
-      ** check the case of the thin provisioning versus not thin provisioning..
-      ** When thin-provisioning is enabled for the exportd, the number of blocks
-      ** that we should compare is in the blocks_thin field versus blocks field
-      ** for the default mode
-      */
-      if (e->thin == 0)
-      {   
-	if ((estats!=NULL) && (estats->blocks >= e->hquota)) {
-          errno = ENOSPC;
-          goto error;
-	}
-      }
-      else
-      {
-	if ((estats!=NULL) && (estats->blocks_thin >= e->hquota)) {
-          errno = ENOSPC;
-          goto error;
-	}
-      }
-    }
-    /*
     **  check user and group quota
     */
     {
@@ -3995,7 +3970,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
        ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
        if (ret < 0)
        {
-         errno = ENOSPC;
+         errno = EDQUOT;
          goto error;
        }         
     }
@@ -4015,6 +3990,12 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     else {
       exp_trck_get_slice(pfid,&pslice);
     }
+    
+    /*
+    ** Get export quotas
+    */
+    export_fstat_check_quotas(e, &quota_slow, &quota_fast);
+    
     /*
     ** Check if the file must be created with slave inodes: it will depends on the directory , the way the
     ** export has been configured and the suffix of the file to create
@@ -4026,7 +4007,8 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
                                     pfid,name,uid,gid, mode,
 				    &ext_attrs,
 				    plv2,pslice,&attr_slave_p,
-			            striping_factor,striping_unit,fast_mode,hybrid_nb_blocks);
+			            striping_factor,striping_unit,fast_mode,hybrid_nb_blocks,
+                                    quota_slow, quota_fast);
        if (ret < 0) goto error;
        /*
        ** Indicate that the inodes have been allocated (master and slaves)
@@ -4035,7 +4017,6 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     } 
     else
     {   
-    
       /*
       ** copy the parent fid of the regular file
       */
@@ -4052,6 +4033,11 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
       lv2_recycle = export_get_recycled_inode(e,pfid,&ext_attrs);
       if (lv2_recycle == NULL)
       {
+        /*
+        ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
+        */
+        if (fast_mode == rozofs_econfig_fast_aging) ROZOFS_SET_BITFIELD1(&ext_attrs,ROZOFS_BITFIELD1_AGING)
+        else                                        ROZOFS_CLEAR_BITFIELD1(&ext_attrs,ROZOFS_BITFIELD1_AGING)        
 	/*
 	** get the distribution for the file:
 	**  When the export has a fast volume, we check the suffix of the file to figure out if the file can be allocated
@@ -4070,47 +4056,50 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
 	       /*
 	       ** Check that some space os left for the new file in case a hard quota is set for the fast volume
 	       */
-	       if (e->hquota_fast) {
-		 export_fstat_t * estats = export_fstat_get_stat(e->eid); 
-		 /*
-		 ** the thin provisioning does not apply to fast volume
-		 */         
-		 if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
-        	   /*
-		   ** no space left: use the regular procedure
+	       if (quota_fast) {
+	         /*
+	         ** attempt to allocate on fast volume
+	         */
+	         if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) == 0)
+	         {
+		   rozofs_mover_children_t *children_p;
+		   /*
+		   ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
 		   */
-		   if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
-        	       goto error;
+		   children_p = (rozofs_mover_children_t*) &ext_attrs.s.attrs.children;
+		   children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
 		   break;
-		 }
-	       }	     
-	       /*
-	       ** attempt to allocate on fast volume
-	       */
-	       if (volume_distribute(e->layout,e->volume_fast,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) == 0)
-	       {
-		 rozofs_mover_children_t *children_p;
-		 /*
-		 ** OK we got a distribution: so store the reference of the volume fast in the i-node: needed to deal with quota
+	         }
+               }
+               if (quota_slow) {                   
+        	 /*
+		 ** no space left: use the regular procedure
 		 */
-		 children_p = (rozofs_mover_children_t*) &ext_attrs.s.attrs.children;
-		 children_p->fid_st_idx.vid_fast = e->volume_fast->vid;
-		 break;
+		 if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
+        	     goto error;
+                 break;        
 	       }
+               errno = EDQUOT;
+               goto error;
 	     }
+             break;
 	  }
           /*
-          ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
-          */
-          if (fast_mode == rozofs_econfig_fast_aging) {
-            if (e->volume_fast) volume = e->volume_fast;
-            else                volume = e->volume;
-            ext_attrs.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+          ** Select the volume
+          */          
+          if ((fast_mode == rozofs_econfig_fast_aging) && (quota_fast)) { 
+            rozofs_mover_children_t *children_p;          
+            volume = e->volume_fast;
+            children_p = (rozofs_mover_children_t*) &ext_attrs.s.attrs.children;
+	    children_p->fid_st_idx.vid_fast = e->volume_fast->vid;            
           }  
-          else {
+          else if (quota_slow) {
             volume = e->volume;
-            ext_attrs.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;        
-          }  
+          }
+          else {
+            errno = EDQUOT;
+            goto error;
+          }   
 	  /*
 	  ** default case
 	  */ 
@@ -4426,7 +4415,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       {
 	export_fstat_t * estats = export_fstat_get_stat(e->eid);    
 	if ((estats!=NULL) && (estats->blocks >= e->hquota)) {
-          errno = ENOSPC;
+          errno = EDQUOT;
 	 goto error;
 	}
       }
@@ -4434,7 +4423,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       {
 	export_fstat_t * estats = export_fstat_get_stat(e->eid);    
 	if ((estats!=NULL) && (estats->blocks_thin >= e->hquota)) {
-          errno = ENOSPC;
+          errno = EDQUOT;
 	 goto error;
 	}
       }      
@@ -4448,7 +4437,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
        ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
        if (ret < 0)
        {
-         errno = ENOSPC;
+         errno = EDQUOT;
          goto error;
        }         
     }
@@ -4492,11 +4481,11 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
       {
         ext_attrs.s.multi_desc.byte = plv2->attributes.s.multi_desc.byte;
 	ext_attrs.s.hybrid_desc.byte = plv2->attributes.s.hybrid_desc.byte;
-        if (plv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {
-          ext_attrs.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+        if (ROZOFS_IS_BITFIELD1(&plv2->attributes,ROZOFS_BITFIELD1_AGING)) {
+          ROZOFS_SET_BITFIELD1(&ext_attrs,ROZOFS_BITFIELD1_AGING);
         }
         else {
-          ext_attrs.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;
+          ROZOFS_CLEAR_BITFIELD1(&ext_attrs,ROZOFS_BITFIELD1_AGING);
         }
       }
     }
@@ -6956,7 +6945,7 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     ret = rozofs_qt_check_quota(e->eid,uid,gid,plv2->attributes.s.attrs.cid);
     if (ret < 0)
     {
-      errno = ENOSPC;
+      errno = EDQUOT;
       goto error;
     }         
             
@@ -8475,14 +8464,13 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
 
   if (S_ISLNK(lv2->attributes.s.attrs.mode)) {
     DISPLAY_ATTR_TXT("MODE", "SYMBOLIC LINK");
-    DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);    
   }  
   else {
     DISPLAY_ATTR_TXT("MODE", "REGULAR FILE");
-    DISPLAY_ATTR_INT("PROJECT",lv2->attributes.s.hpc_reserved.reg.share_id);    
-    if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin); // Thin prov fix
-    DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
-  }
+  }  
+  DISPLAY_ATTR_INT("PROJECT",lv2->attributes.s.hpc_reserved.reg.share_id);    
+  if (e->thin)     DISPLAY_ATTR_UINT("NB_BLOCKS",lv2->attributes.s.hpc_reserved.reg.nb_blocks_thin); // Thin prov fix
+  DISPLAY_ATTR_HEX("MODE",lv2->attributes.s.attrs.mode);
   
   /*
   ** File only
@@ -8559,7 +8547,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     DISPLAY_ATTR_TXT("WRERROR", "no");
   }
   
-  if (lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK){
+  if (ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_PERSISTENT_FLOCK)) {
     DISPLAY_ATTR_TXT("FLOCKP", "This file");
   }
   else if (e->flockp)  {
@@ -8581,6 +8569,8 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   /*
   ** case of the multi file
   */
+  DISPLAY_ATTR_TXT ("AGING",ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING)?"Yes":"No");    
+  
   if ((S_ISREG(lv2->attributes.s.attrs.mode)) && ( lv2->attributes.s.multi_desc.common.master != 0))
   {
     ext_mattr_t *slave_p;
@@ -8614,7 +8604,6 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
        }
           
     }
-    DISPLAY_ATTR_TXT ("AGING",(lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING)?"Yes":"No");    
     if (lv2->slave_inode_p == NULL)
     {
       DISPLAY_ATTR_TXT ("STATUS","Corrupted");
@@ -8930,7 +8919,7 @@ int rozofs_are_persistent_file_locks_configured(export_t *e, lv2_entry_t *lv2) {
   */
   if (e->flockp) return 1; 
   if (common_config.persistent_file_locks) return 1;
-  if ((lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK) != 0) return 1;
+  if (ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_PERSISTENT_FLOCK)) return 1;
   return 0;
 }     
 /*
@@ -9098,12 +9087,12 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     */
     if (valu64 == 0) {
 
-      if ((lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK)==0) {
+      if ( ! ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_PERSISTENT_FLOCK)) {
         /* Already done */
         return 0;
       }  
       /* Remove bit */
-      lv2->attributes.s.bitfield1 &= ~ROZOFS_BITFIELD1_PERSISTENT_FLOCK;
+      ROZOFS_CLEAR_BITFIELD1(&lv2->attributes, ROZOFS_BITFIELD1_PERSISTENT_FLOCK);
 
       /* 
       ** When persistent file locks are not set any more
@@ -9118,13 +9107,13 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     /*
     ** Set persistent lock
     */
-    if ((lv2->attributes.s.bitfield1 & ROZOFS_BITFIELD1_PERSISTENT_FLOCK)!=0) {
+    if (ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_PERSISTENT_FLOCK)) {
       /* ALready done */
       return 0;
     }  
 
     /* Set bit */
-    lv2->attributes.s.bitfield1 |= ROZOFS_BITFIELD1_PERSISTENT_FLOCK;
+    ROZOFS_SET_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_PERSISTENT_FLOCK);
     
     /* Format and save current locks in specific RozoFS xattribute */
     rozofs_save_flocks_in_xattr(e, lv2);
@@ -9304,17 +9293,17 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     {
       lv2->attributes.s.hybrid_desc.s.no_hybrid = 0;
       lv2->attributes.s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;
-      lv2->attributes.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;	
+      ROZOFS_CLEAR_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);	
     }
     else
     {
       lv2->attributes.s.hybrid_desc.s.no_hybrid = 1;
       lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;
       if (hybrid_enable == 2) {
-        lv2->attributes.s.bitfield1 |= ROZOFS_BITFIELD1_AGING;
+        ROZOFS_SET_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);
       }	
       else {
-        lv2->attributes.s.bitfield1 &= ~ROZOFS_BITFIELD1_AGING;	
+        ROZOFS_CLEAR_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);	
       }      	
     }
     return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);  
