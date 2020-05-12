@@ -101,4 +101,15 @@ void show_export_fstat_thread(char * argv[], uint32_t tcpRef, void *bufRef);
  * @return 0 on success -1 otherwise
  */
 int expthin_fstat_update_blocks(uint16_t eid,uint32_t nb_blocks, int dir);
+/*
+**__________________________________________________________________
+** Check whether slow and fast quota have exceeded or not
+**
+** @param e: the export context
+** @param quota_slow: return 1 if allocation is possible, 0 else
+** @param quota_fast: return 1 if allocation is possible, 0 else
+**
+**__________________________________________________________________
+*/
+void export_fstat_check_quotas(export_t *e, int * quota_slow, int * quota_fast);
  #endif

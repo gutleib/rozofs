@@ -484,7 +484,6 @@ int export_fstat_create_files(uint16_t eid, uint32_t n,uint8_t vid_fast) {
  * @return 0 on success -1 otherwise
  */
 int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblocks,int thin_provisioning,uint8_t vid_fast,uint32_t hybrid_size_block) {
-    int status = -1;
     export_fstat_ctx_t *tab_p;
     time_t timecur;
     long long int n = newblocks - oldblocks;
@@ -586,16 +585,6 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
       n_fast= -n_fast;
 
       /*
-      ** Releasing more blocks than allocated !!!
-      */
-      if (n > tab_p->memory.blocks) {
-        severe("export %s blocks %"PRIu64" files %"PRIu64". Releasing %lld blocks",
-	      tab_p->pathname, tab_p->memory.blocks, tab_p->memory.files, n); 
-        n = tab_p->memory.blocks;
-      }
-
-      tab_p->memory.blocks -= n;
-      /*
       ** check the case of the fast volume
       */
       if (vid_fast)
@@ -608,73 +597,187 @@ int export_fstat_update_blocks(uint16_t eid, uint64_t newblocks, uint64_t oldblo
 
 	tab_p->memory.blocks_fast -= n_fast;            
       }
-    }
-    else 
-    {
+      else {
+        n_fast = 0;
+      }
+      
+      if (n >= n_fast) n -= n_fast;
+      else             n = 0;
       /*
-      ** do that control only for exportd that do not support thin provisioning
+      ** Releasing more blocks than allocated !!!
       */
+      if (n > tab_p->memory.blocks) {
+        severe("export %s blocks %"PRIu64" files %"PRIu64". Releasing %lld blocks",
+	      tab_p->pathname, tab_p->memory.blocks, tab_p->memory.files, n); 
+        n = tab_p->memory.blocks;
+      }
+
+      tab_p->memory.blocks -= n;
+      
+      //info("Releasing %llu/%llu", n, n_fast);
+      return 0;
+    }
+    
+    
+    /*
+    ** check the case of the fast volume
+    */
+    if (vid_fast)
+    {
       if (thin_provisioning == 0)
       {
-	if (tab_p->hquota > 0 && tab_p->memory.blocks + n > tab_p->hquota) 
+	if (tab_p->hquota_fast > 0 && tab_p->memory.blocks_fast + n_fast > tab_p->hquota_fast) 
 	{
-	   tab_p->quota_exceeded_flag = 1;
+           tab_p->quota_exceeded_flag_fast = 1;
 	   /*
 	   ** send a warning if is time to do it
 	   */
 	   timecur = time(NULL);
-	   if ((timecur -tab_p->quota_exceeded_time ) > export_fstat_quota_delay)
+	   if (((timecur -tab_p->quota_exceeded_time_fast ) > export_fstat_quota_delay))
 	   {
-              warning("quota exceed: %llu over %llu", tab_p->memory.blocks + n,
-                       (long long unsigned int)tab_p->hquota);
-  	      tab_p->quota_exceeded_time = time(NULL); 
+              warning("quota exceed for fast volume: %llu over %llu", tab_p->memory.blocks_fast + n_fast,
+                       (long long unsigned int)tab_p->hquota_fast);
+  	      tab_p->quota_exceeded_time_fast = time(NULL); 
            }
-           errno = EDQUOT;
-           goto out;
+           /*
+	   ** do not report quota error: the control is done at creation file only
+	   */
 	}
 	else
 	{
-          tab_p->quota_exceeded_flag = 0;
+          tab_p->quota_exceeded_flag_fast = 0;
 	}
       }
-      tab_p->memory.blocks += n; 
-      /*
-      ** check the case of the fast volume
-      */
-      if (vid_fast)
-      {
-	if (thin_provisioning == 0)
-	{
-	  if (tab_p->hquota_fast > 0 && tab_p->memory.blocks_fast + n_fast > tab_p->hquota_fast) 
-	  {
-             tab_p->quota_exceeded_flag_fast = 1;
-	     /*
-	     ** send a warning if is time to do it
-	     */
-	     timecur = time(NULL);
-	     if (((timecur -tab_p->quota_exceeded_time_fast ) > export_fstat_quota_delay))
-	     {
-        	warning("quota exceed for fast volume: %llu over %llu", tab_p->memory.blocks_fast + n_fast,
-                	 (long long unsigned int)tab_p->hquota_fast);
-  		tab_p->quota_exceeded_time_fast = time(NULL); 
-             }
-             /*
-	     ** do not report quota error: the control is done at creation file only
-	     */
-	  }
-	  else
-	  {
-            tab_p->quota_exceeded_flag_fast = 0;
-	  }
-	}
-	tab_p->memory.blocks_fast += n_fast;       
-      }           
-    }
-    status = 0;
-out:
-    return status;
-}
+      tab_p->memory.blocks_fast += n_fast;       
+    }    
+    else {
+      n_fast = 0;
+    } 
 
+    if (n >= n_fast) n -= n_fast;
+    else             n = 0;
+       
+    /*
+    ** do that control only for exportd that do not support thin provisioning
+    */
+    if (thin_provisioning == 0)
+    {
+      if (tab_p->hquota > 0 && tab_p->memory.blocks + n > tab_p->hquota) 
+      {
+	 tab_p->quota_exceeded_flag = 1;
+	 /*
+	 ** send a warning if is time to do it
+	 */
+	 timecur = time(NULL);
+	 if ((timecur -tab_p->quota_exceeded_time ) > export_fstat_quota_delay)
+	 {
+            warning("quota exceed: %llu over %llu", tab_p->memory.blocks + n,
+                     (long long unsigned int)tab_p->hquota);
+  	    tab_p->quota_exceeded_time = time(NULL); 
+         }
+         /*
+	 ** do not report quota error: the control is done at creation file only
+	 */
+      }
+      else
+      {
+        tab_p->quota_exceeded_flag = 0;
+      }
+    }
+    tab_p->memory.blocks += n; 
+    //info("Adding %llu/%llu exceed %d/%d", n, n_fast, tab_p->quota_exceeded_flag, tab_p->quota_exceeded_flag_fast);
+    return 0;
+} 
+/*
+**__________________________________________________________________
+** Check whether slow and fast quota have exceeded or not
+**
+** @param e: the export context
+** @param quota_slow: return 1 if allocation is possible, 0 else
+** @param quota_fast: return 1 if allocation is possible, 0 else
+**
+**__________________________________________________________________
+*/
+void export_fstat_check_quotas(export_t *e, int * quota_slow, int * quota_fast) {
+  export_fstat_t * estats;
+  estats = export_fstat_get_stat(e->eid); 
+  
+  /*
+  ** Fast quota
+  */
+  while (1) {
+  
+    /*
+    ** No fast volume
+    */
+    if (e->volume_fast == NULL) {
+      *quota_fast = 0;
+      break;
+    }   
+    /*
+    ** No quota, no limit
+    */
+    if (e->hquota_fast == 0) {
+      *quota_fast = 1;
+      break;
+    }
+
+    /*
+    ** check the case of the thin provisioning versus not thin provisioning..
+    ** When thin-provisioning is enabled for the exportd, the number of blocks
+    ** that we should compare is in the blocks_thin field versus blocks field
+    ** for the default mode
+    */
+    if (e->thin == 0) {   
+      if ((estats!=NULL) && (estats->blocks_fast >= e->hquota_fast)) {
+        *quota_fast = 0;
+        break;
+      }
+      *quota_fast = 1;
+      break;
+    }
+
+    if ((estats!=NULL) && (estats->blocks_thin >= e->hquota_fast)) {
+      *quota_fast = 0;
+      break;
+    }
+    *quota_fast = 1;
+    break;
+  }
+  
+  /*
+  ** Slow quota
+  */
+
+  /*
+  ** No quota, no limit
+  */
+  if (e->hquota == 0) {
+    *quota_slow = 1;
+    return;
+  }
+  /*
+  ** check the case of the thin provisioning versus not thin provisioning..
+  ** When thin-provisioning is enabled for the exportd, the number of blocks
+  ** that we should compare is in the blocks_thin field versus blocks field
+  ** for the default mode
+  */
+  if (e->thin == 0) {   
+    if ((estats!=NULL) && (estats->blocks >= e->hquota)) {
+      *quota_slow = 0;
+      return;
+    }
+    *quota_slow = 1;
+    return;
+  }
+
+  if ((estats!=NULL) && (estats->blocks_thin >= e->hquota)) {
+    *quota_slow = 0;
+    return;
+  }
+  *quota_slow = 1;
+  return; 
+}   
 /*
 **__________________________________________________________________
 */
