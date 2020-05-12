@@ -362,6 +362,7 @@ int rozofs_mover_check (export_t *e,lv2_entry_t *lv2) {
 /**
 *   scanning of the mover file allocation
 
+    @param e: pointer to the export context
     @param value: pointer to the beginning of the buffer that contains the extended attributes
     @param p: pointer to the buffer that contains the extended attributes
     @param length: length of the extended attributes
@@ -385,6 +386,7 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
   char         *saveptr;
   char         *token;
   rozofs_mv_idx_dist_t trash_mv;
+  int           quota_slow, quota_fast;
 
   /*
   ** Skip the part that has already been scanned
@@ -438,16 +440,39 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
       }
     }
   }  
+  
+  /*
+  ** Read volume quota 
+  */
+  export_fstat_check_quotas(e, &quota_slow, &quota_fast);
+
   /*
   ** Check cluster and sid exist
   */
-  if (volume_distribution_check(e->volume, rozofs_safe, new_cid, new_sids) != 0) {
-
+  if (volume_distribution_check(e->volume, rozofs_safe, new_cid, new_sids) == 0) {
+    /*
+    ** This is a distribution on the slow volume.
+    ** Check whether slow volume quota is exceeded
+    */
+    if (!quota_slow) {
+      errno = EDQUOT;
+      return -1;
+    } 
+  }
+  else {
     if (e->volume_fast == NULL) return -1;
     
     if (volume_distribution_check(e->volume_fast, rozofs_safe, new_cid, new_sids) != 0) {
       return -1;
     }  
+    /*
+    ** This is a distribution on the fast volume.
+    ** Check whether fast volume quota is exceeded
+    */
+    if (!quota_fast) {
+      errno = EDQUOT;
+      return -1;
+    } 
   }
   /*
   ** OK for the new distribution
