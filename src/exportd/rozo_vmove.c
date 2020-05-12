@@ -55,6 +55,7 @@ list_t             cluster_distributor;
 export_config_t  * econfig = NULL;
 
 uint64_t  scanned_match_path   = 0;
+uint64_t  scanned_mono_volume  = 0;
 uint64_t  scanned_hybrid  = 0;
 uint64_t  scanned_aging  = 0;
 uint64_t  scanned_already = 0;
@@ -683,29 +684,27 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   if (rozofs_vmove_scope == rozofs_vmove_scope_one_file) {
      rozo_lib_stop_var = 1;
   }
-    
-  /*
-  ** Simple file case
-  */
-  if (inode_p->s.multi_desc.byte == 0) {
-    return 0;  
-  }  
-
-  /*
-  ** Multiple file case. 
-  */
 
   /*
   ** In hybrid mode we move the 1rst stride
   ** In aging mode we move every stride
   */
-  if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
-    scanned_hybrid++;
-  }
-  else if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
+  
+  if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
     scanned_aging++;
   }
+  else if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** Single file without aging
+    */
+    scanned_mono_volume++;
+    return 0;  
+  }  
+  else if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
+    scanned_hybrid++;
+  }
   else {
+    scanned_mono_volume++;
     /* Neither hybrid nor aging */
     return 0;
   }
@@ -781,9 +780,9 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   rozofs_get_multiple_file_sizes(inode_p, &vector);
   
   /*
-  ** Hybrid case. Check the 1rts inode 
+  ** Hybrid case or si. Check the 1rts inode 
   */
-  if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
+  if ((inode_p->s.hybrid_desc.s.no_hybrid == 0)||(inode_p->s.multi_desc.byte == 0)) {
 
     /*
     ** Check whether it needs to be moved
@@ -1323,6 +1322,9 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'F':
+        if (target != NULL) {
+          usage("2 targets are defined unding -n -e or -F");
+        }  
         target = optarg;
         if (rozofs_uuid_parse(optarg,target_fid) != 0) {
           usage("Bad FID format \"%s\"",optarg);
@@ -1348,12 +1350,18 @@ int main(int argc, char *argv[]) {
         break;
         
       case 'n':
+        if (target != NULL) {
+          usage("2 targets are defined unding -n -e or -F");
+        }  
         target = optarg;
 //        name = optarg;
         rozofs_vmove_get_fid_from_name(optarg,target_fid);
         break;
 
       case 'e':
+        if (target != NULL) {
+          usage("2 targets are defined unding -n -e or -F");
+        }  
         target = optarg;
         if (sscanf(optarg,"%d", &whole_eid)!= 1) {
           usage("Bad eid number %s", optarg);
@@ -1590,6 +1598,7 @@ int main(int argc, char *argv[]) {
   if (rozofs_vmove_scope == rozofs_vmove_scope_directories) {
     printf("     \"directories\"    : %llu,\n",(long long unsigned int)scanned_directories);
   }  
+  printf("     \"mono volume\"    : %llu,\n",(long long unsigned int)scanned_mono_volume);
   printf("     \"hybridFiles\"    : %llu,\n",(long long unsigned int)scanned_hybrid);
   printf("     \"agingFiles\"     : %llu,\n",(long long unsigned int)scanned_aging);
   printf("     \"match path\"     : %llu,\n",(long long unsigned int)scanned_match_path);
