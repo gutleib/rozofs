@@ -248,7 +248,8 @@ static inline int eid_check_free_quota(uint32_t bsize, uint64_t oldSize, uint64_
   uint64_t oldBlocks;
   uint64_t newBlocks;
   uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize);
-
+  return 1;
+  
   if (eid_free_quota == -1) return 1; // No quota so go on
   
   // File truncate is always good
