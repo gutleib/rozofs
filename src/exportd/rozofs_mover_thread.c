@@ -88,7 +88,7 @@ typedef struct _rozofs_mover_stat_t {
   uint64_t         submited;    /**< incremented each time the main thread submits a file to move */
   uint64_t         not_mounted; /**< incremented if the mountpath is not mounted */ 
   uint64_t         updated;     /**< incremented each time the file to move has been updated  */
-  uint64_t         xattr;       /**< not used */
+  uint64_t         quota;       /**< incremented in case of quota excess  */
   uint64_t         error;       /**< incremented each time an error is encountered during the file move */
   uint64_t         success;     /**< incremented eadch time the file has been successfully moved */
   uint64_t         bytes_thread; /**< incremented in realtime by thread while updating the throughput */
@@ -653,6 +653,7 @@ int rozofs_do_move_one_file_fid_mode_th(rozofs_mover_job_t * job, int throughput
     if ((offset % 0x1000000000ULL) == 0) {
       if (rozofs_check_access(job) < 0) {
         xerrno = EACCES;
+        job->status = MOVER_UPDATED_E;
         goto error;       
       }      
     }
@@ -964,12 +965,21 @@ void * response_thread(void * ctx) {
         fmove_stats_p->success++;
 	fmove_stats_p->bytes += job_p->size;	
 	break;
-      default:
+        
       case MOVER_UPDATED_E:
         fmove_stats_p->updated++;
 	break;
+      
+      default:  
       case MOVER_ERROR_E:
-	fmove_stats_p->error++;
+        switch (job_p->error) {
+          case EDQUOT: 
+	    fmove_stats_p->quota++;
+            break;
+          default:   
+	    fmove_stats_p->error++;
+            break;
+        }    
 	log_error(job_p);
 	break;
     }
@@ -1490,6 +1500,7 @@ void rozofs_mover_print_stat(char * pChar) {
   pChar += sprintf(pChar,"     \"submitted files\": %llu,\n",(unsigned long long)fmove_stats_p->submited);
   pChar += sprintf(pChar,"     \"mount error\"    : %llu,\n",(unsigned long long)fmove_stats_p->not_mounted);
   pChar += sprintf(pChar,"     \"updated files\"  : %llu,\n",(unsigned long long)fmove_stats_p->updated);
+  pChar += sprintf(pChar,"     \"quota exceeded\" : %llu,\n",(unsigned long long)fmove_stats_p->quota);
   pChar += sprintf(pChar,"     \"other error\"    : %llu,\n",(unsigned long long)fmove_stats_p->error);
   pChar += sprintf(pChar,"     \"success\"        : %llu,\n",(unsigned long long)fmove_stats_p->success);
   pChar += sprintf(pChar,"     \"bytes moved\"    : %llu,\n",(unsigned long long)fmove_stats_p->bytes);
