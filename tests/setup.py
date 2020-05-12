@@ -760,6 +760,7 @@ class export_class:
       self.layout = rozofs.layout(layout)
     self.hquota= ""
     self.squota= "" 
+    self.hquota_fast= "" 
     self.mount =[]
     if int(rozofs.failures(layout)) <=  int(volume.get_failures()): 
       self.failures = rozofs.failures(layout)   
@@ -779,6 +780,9 @@ class export_class:
     
   def set_hquota(self,quota):
     self.hquota= quota
+    
+  def set_hquota_fast(self,quota):
+    self.hquota_fast= quota
     
   def set_thin(self):
     self.thin = True
@@ -1056,6 +1060,8 @@ class exportd_class:
           LINE += " squota=\"%s\";"%(e.squota)
         if e.hquota != "": 
           LINE += " hquota=\"%s\";"%(e.hquota)
+        if e.hquota_fast != "": 
+          LINE += " hquota_fast=\"%s\";"%(e.hquota_fast)
         if e.thin == True: 
           LINE += " thin-provisioning = True;"
 	LINE += " vid=%s;"%(v.vid)
