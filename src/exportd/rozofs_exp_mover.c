@@ -381,6 +381,7 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
   uint8_t      rozofs_safe;
   sid_t        sids[ROZOFS_SAFE_MAX];
   cid_t        cid;
+  int          old_vid;
   int          ret;
   char         *str;
   char         *saveptr;
@@ -442,22 +443,29 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
   }  
   
   /*
-  ** Read volume quota 
+  ** Get vid of old distribution 
   */
-  export_fstat_check_quotas(e, &quota_slow, &quota_fast);
+  old_vid = export_get_vid_from_cid(lv2->attributes.s.attrs.cid);
 
   /*
   ** Check cluster and sid exist
   */
   if (volume_distribution_check(e->volume, rozofs_safe, new_cid, new_sids) == 0) {
+  
     /*
-    ** This is a distribution on the slow volume.
-    ** Check whether slow volume quota is exceeded
+    ** The new distribution is on the slow volume.
+    ** If old vid was not on the slow volume, check quota are not exceeded on slow volume
     */
-    if (!quota_slow) {
-      errno = EDQUOT;
-      return -1;
-    } 
+    if (old_vid != e->volume->vid) {
+      /*
+      ** Check whether slow volume quota is exceeded
+      */
+      export_fstat_check_quotas(e, &quota_slow, &quota_fast);      
+      if (!quota_slow) {
+        errno = EDQUOT;
+        return -1;
+      } 
+    }  
   }
   else {
     if (e->volume_fast == NULL) return -1;
@@ -466,13 +474,16 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
       return -1;
     }  
     /*
-    ** This is a distribution on the fast volume.
-    ** Check whether fast volume quota is exceeded
+    ** The new idistribution is on the fast volume.
+    ** If old vid was not on the fast volume, check quota are not exceeded on fast volume
     */
-    if (!quota_fast) {
-      errno = EDQUOT;
-      return -1;
-    } 
+    export_fstat_check_quotas(e, &quota_slow, &quota_fast);
+    if (old_vid != e->volume_fast->vid) {
+      if (!quota_fast) {
+        errno = EDQUOT;
+        return -1;
+      } 
+    }
   }
   /*
   ** OK for the new distribution
