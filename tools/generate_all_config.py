@@ -33,3 +33,7 @@ config_generate(file_name       = "trash.conf",
                 input_file_name = "../src/exportd/trash_process_config.input",   
                 cli_name        = "trash_process_config")
                                                 
+config_generate(file_name       = "rozofsmount_netdata_cfg.conf",     
+                input_file_name = "../src/rozofsmount/rozofsmount_netdata_cfg.input",   
+                cli_name        = "netdata")
+                                                

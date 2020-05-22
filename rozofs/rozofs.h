@@ -1155,7 +1155,7 @@ static inline int rozofs_kpi_mkpath(char * directory_path) {
     }
     
     if (access(directory_path, F_OK) != 0) {
-      if (mkdir(directory_path, 0744) != 0) {
+      if (mkdir(directory_path, 0755) != 0) {
         if (errno != EEXIST)
 	{
 	  severe("mkdir(%s) %s", directory_path, strerror(errno));
@@ -1190,7 +1190,7 @@ static inline void *rozofs_kpi_map(char *path,char *name,int size,void *init_buf
   
   sprintf(pathname,"%s/%s",path,name);  
   
-  fd = open (pathname, O_RDWR| O_CREAT, 0644);
+  fd = open (pathname, O_RDWR| O_CREAT, 0755);
   if (fd == 1) {
           severe ("open failure for %s : %s",path,strerror(errno));
           return NULL;

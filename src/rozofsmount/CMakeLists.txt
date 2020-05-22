@@ -108,6 +108,12 @@ add_executable(rozo_mount_send_stats
 )
 target_link_libraries(rozo_mount_send_stats rozofs ${CONFIG_LIBRARY})
 
+add_executable(rozofsmount_netdata.plugin
+    rozofsmount_netdata.c
+    rozofsmount_netdata_cfg.c
+)
+target_link_libraries(rozofsmount_netdata.plugin rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
+
 
 add_executable(rozo_multifile 
     rozofs_multiple_dir.c
@@ -143,6 +149,15 @@ install(TARGETS rozo_mount_send_stats
     ARCHIVE DESTINATION lib
     COMPONENT rozo_mount_send_stats
 )
+
+# Install rozofsmount_netdata
+install(TARGETS rozofsmount_netdata.plugin
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozofsmount_netdata.plugin
+)
+    
 # Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse (mount.rozofs command)
 install(CODE "MESSAGE(\"Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse\")")
 install(CODE "EXECUTE_PROCESS (COMMAND ln -sf /sbin/mount.fuse /sbin/mount.rozofs)" COMPONENT client)

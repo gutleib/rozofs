@@ -1,0 +1,120 @@
+#_______________________________________________________________________________________
+# 
+# Call  ../../tools/generate_all_config.py to generate rozofsmount_common.h as well as rozofsmount_config.c
+#
+#_______________________________________________________________________________________
+#
+# Syntax is as follow:
+# 
+# ......................................................
+# // one or more...
+# // ... comment lines
+# <type> <scope> <name> <default> [<extra>]
+# ......................................................
+#
+# Where
+#   //          is the begining of a comment line for the following parameter
+#   <type>      is the parameter type within 
+#               - INT   : at least 32 bits signed integer
+#               - LONG  : 64 bits signed integer
+#               - STRING: character string
+#               - ENUM  : a character string within a list of values
+#               - BOOL  ; boolean True or False
+#   <scope>     is any string you want to classify the different parameters in groups
+#   <name>      is any parameter name
+#   <default>   is the default parameter value. (STRING must be quoted).
+#   <extra>     is an optional field of the parameter dependant on the <type>
+#               - INT and LONG extra: 
+#                 min:max : minimum and maximum values (included) of the integer
+#               - ENUM mandatory extra
+#                 a comma separated list of possible values.
+#
+#_______________________________________________________________________________________
+
+
+// Whether to display counts graph
+BOOL   global  display_count                      True
+// Whether to display duration graph
+BOOL   global  display_duration                   True
+// Whether to display bytes graph
+BOOL   global  display_bytes                      True
+// Whether to display bytes graph
+BOOL   global  debug                              False
+
+// Count to display
+BOOL count  display_count_lookup  True
+BOOL count  display_count_lookup_agg  True
+BOOL count  display_count_forget  True
+BOOL count  display_count_getattr  True
+BOOL count  display_count_setattr  True
+BOOL count  display_count_readlink  True
+BOOL count  display_count_mknod  True
+BOOL count  display_count_mkdir  True
+BOOL count  display_count_unlink  True
+BOOL count  display_count_rmdir  True
+BOOL count  display_count_symlink  True
+BOOL count  display_count_rename  True
+BOOL count  display_count_open  True
+BOOL count  display_count_link  True
+BOOL count  display_count_read  True
+BOOL count  display_count_write  True
+BOOL count  display_count_flush  True
+BOOL count  display_count_release  True
+BOOL count  display_count_opendir  True
+BOOL count  display_count_readdir  True
+BOOL count  display_count_releasedir  True
+BOOL count  display_count_fsyncdir  True
+BOOL count  display_count_statfs  True
+BOOL count  display_count_setxattr  True
+BOOL count  display_count_getxattr  True
+BOOL count  display_count_listxattr  True
+BOOL count  display_count_removexattr  True
+BOOL count  display_count_access  True
+BOOL count  display_count_create  True
+BOOL count  display_count_getlk  True
+BOOL count  display_count_setlk  True
+BOOL count  display_count_setlk_int  True
+BOOL count  display_count_ioctl  True
+BOOL count  display_count_clearlkowner  True              
+
+// Duration to display
+BOOL duration  display_duration_lookup  True
+BOOL duration  display_duration_lookup_agg  True
+BOOL duration  display_duration_forget  True
+BOOL duration  display_duration_getattr  True
+BOOL duration  display_duration_setattr  True
+BOOL duration  display_duration_readlink  True
+BOOL duration  display_duration_mknod  True
+BOOL duration  display_duration_mkdir  True
+BOOL duration  display_duration_unlink  True
+BOOL duration  display_duration_rmdir  True
+BOOL duration  display_duration_symlink  True
+BOOL duration  display_duration_rename  True
+BOOL duration  display_duration_open  True
+BOOL duration  display_duration_link  True
+BOOL duration  display_duration_read  True
+BOOL duration  display_duration_write  True
+BOOL duration  display_duration_flush  True
+BOOL duration  display_duration_release  True
+BOOL duration  display_duration_opendir  True
+BOOL duration  display_duration_readdir  True
+BOOL duration  display_duration_releasedir  True
+BOOL duration  display_duration_fsyncdir  True
+BOOL duration  display_duration_statfs  True
+BOOL duration  display_duration_setxattr  True
+BOOL duration  display_duration_getxattr  True
+BOOL duration  display_duration_listxattr  True
+BOOL duration  display_duration_removexattr  True
+BOOL duration  display_duration_access  True
+BOOL duration  display_duration_create  True
+BOOL duration  display_duration_getlk  True
+BOOL duration  display_duration_setlk  True
+BOOL duration  display_duration_setlk_int  True
+BOOL duration  display_duration_ioctl  True
+BOOL duration  display_duration_clearlkowner  True 
+
+
+// Bytes to display   
+BOOL bytes  display_bytes_read  True
+BOOL bytes  display_bytes_write  True
+      
