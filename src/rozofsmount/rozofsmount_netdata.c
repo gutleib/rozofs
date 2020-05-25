@@ -71,7 +71,7 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
   char                              stringIndex[16];\
 \
   if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_count '' 'number of calls to "#X" api' 'calls' "#X" '' stacked 1000 1 rozofsmount_netadata.plugin");\
+    NEWLINE("CHART rozofsmount."#X"_count '' 'number of calls to "#X" api' 'calls' "#X" '' stacked 100 1 rozofsmount_netadata.plugin");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
@@ -85,7 +85,7 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
   char                              stringIndex[16];\
 \
   if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_duration_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_duration '' 'duration of a call to "#X" api' 'ms' "#X" '' area 1000 1 rozofsmount_netadata.plugin");\
+    NEWLINE("CHART rozofsmount."#X"_duration '' 'duration of a call to "#X" api' 'microseconds' "#X" '' area 100 1 rozofsmount_netadata.plugin");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       if (ctx->instance == -1) continue;\
@@ -100,7 +100,7 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
   char                              stringIndex[16];\
 \
   if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_bytes_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_throughput '' '"#X" throughput' 'MB/s' "#X" '' stacked 1000 1 rozofsmount_netadata.plugin");\
+    NEWLINE("CHART rozofsmount."#X"_throughput '' '"#X" throughput' 'MB/s' "#X" '' stacked 100 1 rozofsmount_netadata.plugin");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
@@ -168,7 +168,7 @@ void create_rozofsmount_charts() { \
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
-      NEWLINE("SET %s = %llu",stringIndex,(long long unsigned int)ctx->profiler.rozofs_ll_##X[0]);\
+      NEWLINE("SET %s = %llu",stringIndex,(long long unsigned int)ctx->profiler.rozofs_ll_##X[P_COUNT]);\
     }\
     NEWLINE("END");\
   }\
@@ -184,11 +184,11 @@ void create_rozofsmount_charts() { \
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       if (ctx->instance == -1) continue;\
       build_string_from_index(ctx, stringIndex);\
-      if (ctx->profiler.rozofs_ll_##X[0] == ctx->old_profiler.rozofs_ll_##X[0]) {\
+      if (ctx->profiler.rozofs_ll_##X[P_COUNT] == ctx->old_profiler.rozofs_ll_##X[P_COUNT]) {\
         NEWLINE("SET %s = 0",stringIndex);\
       }\
       else {\
-        NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)(ctx->profiler.rozofs_ll_##X[1] - ctx->old_profiler.rozofs_ll_##X[1])/(ctx->profiler.rozofs_ll_##X[0] - ctx->old_profiler.rozofs_ll_##X[0]));\
+        NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)(ctx->profiler.rozofs_ll_##X[P_ELAPSE] - ctx->old_profiler.rozofs_ll_##X[P_ELAPSE])/(ctx->profiler.rozofs_ll_##X[P_COUNT] - ctx->old_profiler.rozofs_ll_##X[P_COUNT]));\
       }\
     }\
     NEWLINE("END");\
@@ -204,7 +204,7 @@ void create_rozofsmount_charts() { \
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
-      NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)ctx->profiler.rozofs_ll_##X[2]/1000000);\
+      NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)ctx->profiler.rozofs_ll_##X[P_BYTES]/1000000);\
     }\
     NEWLINE("END");\
   }\
@@ -283,13 +283,13 @@ rozofsmount_ctx_t * allocate_rozofsmount_context(int instance, int fd) {
 *_________________________________________________________________
 */
 #define SUM_UP_2(X) {\
-  ctx_all->profiler.rozofs_ll_##X[0] += ctx->profiler.rozofs_ll_##X[0];\
-  ctx_all->profiler.rozofs_ll_##X[1] += ctx->profiler.rozofs_ll_##X[1];\
+  ctx_all->profiler.rozofs_ll_##X[P_COUNT] += ctx->profiler.rozofs_ll_##X[P_COUNT];\
+  ctx_all->profiler.rozofs_ll_##X[P_ELAPSE] += ctx->profiler.rozofs_ll_##X[P_ELAPSE];\
 }
 #define SUM_UP_3(X) {\
-  ctx_all->profiler.rozofs_ll_##X[0] += ctx->profiler.rozofs_ll_##X[0];\
-  ctx_all->profiler.rozofs_ll_##X[1] += ctx->profiler.rozofs_ll_##X[1];\
-  ctx_all->profiler.rozofs_ll_##X[2] += ctx->profiler.rozofs_ll_##X[2];\
+  ctx_all->profiler.rozofs_ll_##X[P_COUNT] += ctx->profiler.rozofs_ll_##X[P_COUNT];\
+  ctx_all->profiler.rozofs_ll_##X[P_ELAPSE] += ctx->profiler.rozofs_ll_##X[P_ELAPSE];\
+  ctx_all->profiler.rozofs_ll_##X[P_BYTES] += ctx->profiler.rozofs_ll_##X[P_BYTES];\
 }
 void sum_up_all_profiler() {
   list_t                          * p;
