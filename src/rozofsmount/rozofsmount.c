@@ -33,6 +33,7 @@
 //#include <rozofs/core/malloc_tracking.h>
 #include <rozofs/common/rozofs_site.h>
 #include <rozofs/common/common_config.h>
+#include "rozofsmount_netdata_cfg.h"
 #include <rozofs/core/rozofs_cpu.h>
 
 #include "rozofs_fuse.h"
@@ -2519,7 +2520,22 @@ int main(int argc, char *argv[]) {
     ** read common config file
     */
     common_config_read(NULL);  
-
+    /*
+    ** Read configuration file
+    */
+    {
+      char cfg_file[128];
+      sprintf(cfg_file,"%s/rozofsmount_netdata_cfg.conf",ROZOFS_CONFIG_DIR);
+      if (access(cfg_file,R_OK) !=0 ) {
+        /**
+        * Create empty configuration file
+        */
+        int fd = open(cfg_file, O_RDWR|O_CREAT, 0755); 
+        close(fd);
+      }
+      rozofsmount_netdata_cfg_read(cfg_file);
+    }  
+     
     /*
     **  Rozofsmount instance must be lower than 128
     */

@@ -20,7 +20,7 @@
 #include <rozofs/common/log.h>
 #include <rozofs/common/list.h>
 #include "rozofsmount_netdata_cfg.h"
-
+#include <pthread.h>
 
 typedef struct _rozofsmount_ctx_t {
   list_t         list;
@@ -35,6 +35,8 @@ rozofsmount_ctx_t   * ctx_all = NULL;
 uint64_t              rozofsmout_period_micro = 0;
 list_t                rozofsmount_list;
 uint64_t              next_run = 0;
+uint64_t              delay_between_run = 0;
+uint64_t              last_run = 0;
 
 
 #define NEWLINE(fmt, ...) {\
@@ -69,7 +71,7 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
   char                              stringIndex[16];\
 \
   if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_count '' 'number of calls to "#X" api' 'calls' "#X" '' line 10 1");\
+    NEWLINE("CHART rozofsmount."#X"_count '' 'number of calls to "#X" api' 'calls' "#X" '' stacked 1000 1 rozofsmount_netadata.plugin");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
@@ -83,9 +85,10 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
   char                              stringIndex[16];\
 \
   if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_duration_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_duration '' 'duration of a call to "#X" api' 'ms' "#X" '' line 10 1");\
+    NEWLINE("CHART rozofsmount."#X"_duration '' 'duration of a call to "#X" api' 'ms' "#X" '' area 1000 1 rozofsmount_netadata.plugin");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      if (ctx->instance == -1) continue;\
       build_string_from_index(ctx, stringIndex);\
       NEWLINE("DIMENSION %s '' absolute",stringIndex);\
     }\
@@ -97,7 +100,7 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
   char                              stringIndex[16];\
 \
   if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_bytes_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_throughput '' '"#X" throughput' 'MB/s' "#X" '' line 10 1");\
+    NEWLINE("CHART rozofsmount."#X"_throughput '' '"#X" throughput' 'MB/s' "#X" '' stacked 1000 1 rozofsmount_netadata.plugin");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
@@ -161,7 +164,7 @@ void create_rozofsmount_charts() { \
   char                              stringIndex[16];\
 \
   if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    NEWLINE("BEGIN rozofsmount."#X"_count %llu",(long long unsigned int)rozofsmout_period_micro);\
+    NEWLINE("BEGIN rozofsmount."#X"_count %llu",(unsigned long long) rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
@@ -175,10 +178,11 @@ void create_rozofsmount_charts() { \
   rozofsmount_ctx_t               * ctx;\
   char                              stringIndex[16];\
 \
-  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    NEWLINE("BEGIN rozofsmount."#X"_duration %llu",(long long unsigned int)rozofsmout_period_micro);\
+  if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_duration_##X)) {\
+    NEWLINE("BEGIN rozofsmount."#X"_duration %llu",(unsigned long long) rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      if (ctx->instance == -1) continue;\
       build_string_from_index(ctx, stringIndex);\
       if (ctx->profiler.rozofs_ll_##X[0] == ctx->old_profiler.rozofs_ll_##X[0]) {\
         NEWLINE("SET %s = 0",stringIndex);\
@@ -195,12 +199,12 @@ void create_rozofsmount_charts() { \
   rozofsmount_ctx_t               * ctx;\
   char                              stringIndex[16];\
 \
-  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    NEWLINE("BEGIN rozofsmount."#X"_throughput %llu",(long long unsigned int)rozofsmout_period_micro);\
+  if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_bytes_##X)) {\
+    NEWLINE("BEGIN rozofsmount."#X"_throughput %llu",(unsigned long long) rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       build_string_from_index(ctx, stringIndex);\
-      NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)ctx->profiler.rozofs_ll_##X[2]);\
+      NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)ctx->profiler.rozofs_ll_##X[2]/1000000);\
     }\
     NEWLINE("END");\
   }\
@@ -249,6 +253,7 @@ void update_rozofsmount_charts() {
   UPDATE_2_CHARTS(setlk_int);
   UPDATE_2_CHARTS(ioctl);
   UPDATE_2_CHARTS(clearlkowner); 
+  fflush(stdout);
 }
 /*________________________________________________________________
 ** Allocate a rozofsmount context
@@ -372,7 +377,7 @@ void read_all_profiler_files() {
       read_profiler_file(ctx);
     }  
   }
-  sum_up_all_profiler();
+  //sum_up_all_profiler();
 }
 /*________________________________________________________________
 ** Get time in micro seconds
@@ -400,7 +405,14 @@ void wait_time_to_run() {
   while ( now_micro < next_run ) {
     usleep(next_run - now_micro);
     now_micro = get_time_microseconds();
-  }     
+  }  
+  if (last_run == 0) {
+    delay_between_run = rozofsmout_period_micro;
+  }
+  else {
+    delay_between_run =  now_micro - last_run;
+  }   
+  last_run = now_micro; 
 }
 /*________________________________________________________________
 ** Build the list of rozofsmount instances
@@ -426,7 +438,7 @@ int build_rofsmount_context_list() {
   /*
   ** Create the all context
   */
-  ctx_all = allocate_rozofsmount_context(-1,-1);
+  //ctx_all = allocate_rozofsmount_context(-1,-1);
   
 
   pChar += rozofs_string_append(pChar, ROZOFS_KPI_ROOT_PATH);
@@ -464,7 +476,7 @@ int build_rofsmount_context_list() {
   }
   if (count == 0) return -1;
   
-  sum_up_all_profiler();
+  //sum_up_all_profiler();
   return 0;
 }
 /*________________________________________________________________
@@ -519,7 +531,22 @@ int main(int argc, char *argv[]) {
   ** Create charts
   */
   create_rozofsmount_charts();
-  
+
+  {
+    struct sched_param my_priority;
+    int policy=-1;
+    int ret= 0;
+
+    pthread_getschedparam(pthread_self(),&policy,&my_priority);
+    my_priority.sched_priority= 98;
+    policy = SCHED_RR;
+    ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
+    if (ret < 0) 
+    {
+      severe("error on sched_setscheduler: %s",strerror(errno));	
+    }
+  }  
+    
   while (1) {
     
     /*
