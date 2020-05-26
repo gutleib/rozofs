@@ -640,6 +640,7 @@ def go_build_struct(struct_name):
   print "void %s_read(char * fname);"%(struct_name)
   print ""
   print "int %s_does_file_exist(char * fname);"%(struct_name) 
+  print "uint64_t %s_get_mtime(char * fname);"%(struct_name) 
 
   print ""  
   print "/*_______________________________"
@@ -1069,6 +1070,30 @@ def go_build_save(file_name,struct_name):
   print "}" 
 #_______________________________________________
 def go_build_read(file_name,struct_name,command):   
+  print "/*____________________________________________________________________________________________"
+  print "**"
+  print "** Get the modification time of the configuration file"
+  print "** "
+  print "** @param fname   Configuration file of NULL (use default)"
+  print "**"
+  print "** @retval  the file modification time"
+  print "*/"
+  print "uint64_t %s_get_mtime(char * fname) {"%(struct_name)
+  print "  struct stat buf;"
+  print "  if (fname == NULL) {"
+  print "    strcpy(%s_file_name,ROZOFS_CONFIG_DIR\"/%s\");"%(struct_name,file_name)
+  print "  }"
+  print "  else {"
+  print "    strcpy(%s_file_name,fname); "%(struct_name)
+  print "  } "
+  print ""
+  print "  if (stat(%s_file_name,&buf)!=0) {"%(struct_name)
+  print "    return 0;"  
+  print "  }"
+  print "  return (buf.st_mtim.tv_sec*1000000)+buf.st_mtim.tv_nsec/1000;"       	    
+  print "}"
+  print ""
+
   print "/*____________________________________________________________________________________________"
   print "**"
   print "** Check the presence of the configuration file"
