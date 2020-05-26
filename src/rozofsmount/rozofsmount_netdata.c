@@ -30,7 +30,6 @@ typedef struct _rozofsmount_ctx_t {
   mpp_profiler_t old_profiler;
 } rozofsmount_ctx_t;
 
-
 rozofsmount_ctx_t   * ctx_all = NULL;
 uint64_t              rozofsmout_period_micro = 0;
 list_t                rozofsmount_list;
@@ -46,21 +45,7 @@ uint32_t              rozofsmount_count = 0;
   if (rozofsmount_netdata_cfg.debug) info("%s",string);\
   printf("%s\n",string);\
 }  
-/*________________________________________________________________
-** Build an instacne string
-**
-** @param ctx         rozofsmount context
-** @param stringIndex Where to format the string
-*_________________________________________________________________
-*/
-static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * stringIndex) {
-  if (ctx->instance == -1) {
-    strcpy(stringIndex, "all");
-  }
-  else {
-    sprintf(stringIndex, "mount%d", ctx->instance);
-  }
-}
+
 /*________________________________________________________________
 ** Create all rozofsmount charts
 **
@@ -69,44 +54,52 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
 #define CREATE_ONE_CHART_COUNT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
-  char                              stringIndex[16];\
+  char                              line[4096];\
+  char                            * pChar = line;\
 \
   if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_count '' 'number of calls to "#X" api' 'calls' "#X" '' stacked 100 1 rozofsmount_netadata.plugin");\
+    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_count '' 'number of calls to "#X" api' 'calls' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
-      build_string_from_index(ctx, stringIndex);\
-      NEWLINE("DIMENSION %s '' incremental",stringIndex);\
+      pChar += rozofs_string_append(pChar,"DIMENSION mount");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar," '' incremental\n");\
     }\
+    fputs(line,stdout);\
   }\
 }
 #define CREATE_ONE_CHART_DURATION(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
-  char                              stringIndex[16];\
+  char                              line[4096];\
+  char                            * pChar = line;\
 \
   if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_duration_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_duration '' 'duration of a call to "#X" api' 'microseconds' "#X" '' area 100 1 rozofsmount_netadata.plugin");\
+    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_duration '' 'duration of a call to "#X" api' 'microseconds' "#X" '' area 100 1 rozofsmount_netdata.plugin\n");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
-      if (ctx->instance == -1) continue;\
-      build_string_from_index(ctx, stringIndex);\
-      NEWLINE("DIMENSION %s '' absolute",stringIndex);\
+      pChar += rozofs_string_append(pChar,"DIMENSION mount");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar," '' absolute\n");\
     }\
+    fputs(line,stdout);\
   }\
 }
 #define CREATE_ONE_CHART_THROUGHPUT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
-  char                              stringIndex[16];\
+  char                              line[4096];\
+  char                            * pChar = line;\
 \
   if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_bytes_##X)) {\
-    NEWLINE("CHART rozofsmount."#X"_throughput '' '"#X" throughput' 'MB/s' "#X" '' stacked 100 1 rozofsmount_netadata.plugin");\
+    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_throughput '' '"#X" throughput' 'MB/s' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
-      build_string_from_index(ctx, stringIndex);\
-      NEWLINE("DIMENSION %s '' incremental",stringIndex);\
+      pChar += rozofs_string_append(pChar,"DIMENSION mount");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar," '' incremental\n");\
     }\
+    fputs(line,stdout);\
   }\
 }
 #define CREATE_2_CHARTS(X) {\
@@ -163,52 +156,66 @@ void create_rozofsmount_charts() {
 #define UPDATE_ONE_CHART_COUNT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
-  char                              stringIndex[16];\
+  char                              line[4096];\
+  char                            * pChar = line;\
 \
   if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    NEWLINE("BEGIN rozofsmount."#X"_count %llu",(unsigned long long) rozofsmout_period_micro);\
+    pChar += rozofs_string_append(pChar,"BEGIN rozofsmount."#X"_count ");\
+    pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
-      build_string_from_index(ctx, stringIndex);\
-      NEWLINE("SET %s = %llu",stringIndex,(long long unsigned int)ctx->profiler.rozofs_ll_##X[P_COUNT]);\
+      pChar += rozofs_string_append(pChar,"\nSET mount");\
+      pChar += rozofs_u32_append(pChar, ctx->instance);\
+      pChar += rozofs_string_append(pChar," = ");\
+      pChar += rozofs_u64_append(pChar, ctx->profiler.rozofs_ll_##X[P_COUNT]);\
     }\
-    NEWLINE("END");\
+    pChar += rozofs_string_append(pChar,"\nEND\n");\
+    fputs(line,stdout);\
   }\
 }
 #define UPDATE_ONE_CHART_DURATION(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
-  char                              stringIndex[16];\
+  char                              line[4096];\
+  char                            * pChar = line;\
 \
   if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_duration_##X)) {\
-    NEWLINE("BEGIN rozofsmount."#X"_duration %llu",(unsigned long long) rozofsmout_period_micro);\
+    pChar += rozofs_string_append(pChar,"BEGIN rozofsmount."#X"_duration ");\
+    pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
-      if (ctx->instance == -1) continue;\
-      build_string_from_index(ctx, stringIndex);\
+      pChar += rozofs_string_append(pChar,"\nSET mount");\
+      pChar += rozofs_u32_append(pChar, ctx->instance);\
+      pChar += rozofs_string_append(pChar," = ");\
       if (ctx->profiler.rozofs_ll_##X[P_COUNT] == ctx->old_profiler.rozofs_ll_##X[P_COUNT]) {\
-        NEWLINE("SET %s = 0",stringIndex);\
+        pChar += rozofs_string_append(pChar,"0");\
       }\
       else {\
-        NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)(ctx->profiler.rozofs_ll_##X[P_ELAPSE] - ctx->old_profiler.rozofs_ll_##X[P_ELAPSE])/(ctx->profiler.rozofs_ll_##X[P_COUNT] - ctx->old_profiler.rozofs_ll_##X[P_COUNT]));\
+        pChar += rozofs_u64_append(pChar,(ctx->profiler.rozofs_ll_##X[P_ELAPSE] - ctx->old_profiler.rozofs_ll_##X[P_ELAPSE])/(ctx->profiler.rozofs_ll_##X[P_COUNT] - ctx->old_profiler.rozofs_ll_##X[P_COUNT]));\
       }\
     }\
-    NEWLINE("END");\
+    pChar += rozofs_string_append(pChar,"\nEND\n");\
+    fputs(line,stdout);\
   }\
 }
 #define UPDATE_ONE_CHART_TROUGHPUT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
-  char                              stringIndex[16];\
+  char                              line[4096];\
+  char                            * pChar = line;\
 \
   if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_bytes_##X)) {\
-    NEWLINE("BEGIN rozofsmount."#X"_throughput %llu",(unsigned long long) rozofsmout_period_micro);\
+    pChar += rozofs_string_append(pChar,"BEGIN rozofsmount."#X"_throughput ");\
+    pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
-      build_string_from_index(ctx, stringIndex);\
-      NEWLINE("SET %s = %llu",stringIndex, (long long unsigned int)ctx->profiler.rozofs_ll_##X[P_BYTES]/1000000);\
+      pChar += rozofs_string_append(pChar,"\nSET mount");\
+      pChar += rozofs_u32_append(pChar, ctx->instance);\
+      pChar += rozofs_string_append(pChar," = ");\
+      pChar += rozofs_u64_append(pChar,ctx->profiler.rozofs_ll_##X[P_BYTES]/1000000);\
     }\
-    NEWLINE("END");\
+    pChar += rozofs_string_append(pChar,"\nEND\n");\
+    fputs(line,stdout);\
   }\
 }
 #define UPDATE_2_CHARTS(X) {\
