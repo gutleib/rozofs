@@ -41,6 +41,38 @@ static char *local_buf_flush= NULL;  /**< flush buffer for asynchronous flush */
 
 int rozofs_ll_read_defer_first(void *param,uint8_t *buffer,int received_len,void *shared_buf_ref);
 
+/*
+**___________________________________________________________________________________________
+** Update measures for rozo_io. To be called before fuse_reply
+**
+** @param length     length read
+** @param fuseCtx    Fuse contest where is saved the start time of the command
+** @param line       The line of the call for debug purpose
+**___________________________________________________________________________________________
+*/
+static inline void rozofsmount_update_read_io(uint64_t length, void * fusectx, int line) {
+  /*
+  ** Update the bandwidth/IO statistics
+  */
+  uint64_t delta;
+  PROFILING_MICRO(fusectx,delta);
+  rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
+  rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)length);
+  rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY],delta);  
+#if 0
+  {
+    int rank = rozofs_get_ticker_s() % ROZOFS_THR_CNTS_NB;
+    info("READ %d rank:%d count:%llu bytes:+%llu=%llu latency:+%llu=%llu", line, rank,
+        (long long unsigned int) rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO]->second[rank].count,
+        (long long unsigned int) length, 
+        (long long unsigned int) rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR]->second[rank].count,
+        (long long unsigned int) delta, 
+        (long long unsigned int) rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY]->second[rank].count);
+  } 
+#endif       
+}
+
+
 /**
 * Allocation of the flush buffer
   @param size_kB : size of the flush buffer in KiloBytes
@@ -478,6 +510,10 @@ void rozofs_ll_read_defer(void *param)
      if (length == -1)
          goto error;
      fuse_reply_buf(req, (char *) buff, length);
+     /*
+     ** Update the bandwidth/IO statistics
+     */
+     rozofsmount_update_read_io(length, param, __LINE__);
      goto out;           
 
 error:
@@ -674,17 +710,11 @@ void rozofs_ll_read_nb(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
      fuse_reply_buf(req, (char *) buff, length);
      file->current_pos = (off+length);
      
-    /*
-    ** Update the bandwidth/IO statistics
-    */
-    {
-      uint64_t delta;
-      PROFILING_MICRO(buffer_p,delta);
-      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
-      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)length);
-      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY],delta);  
-    }   
-    goto out;           
+     /*
+     ** Update the bandwidth/IO statistics
+     */
+     rozofsmount_update_read_io(length, buffer_p, __LINE__);
+     goto out;           
 
 error:
     fuse_reply_err(req, errno);
@@ -905,17 +935,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
       ** case without shared memory
       */
       position = XDR_GETPOS(&xdrs);
-    }
-    /*
-    ** Update the bandwidth/IO statistics
-    */
-    {
-      uint64_t delta;
-      PROFILING_MICRO(param,delta);
-      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
-      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)received_len);
-      rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY],delta);  
-    }   
+    }  
 
     /*
     ** check the length: caution, the received length can
@@ -1065,6 +1085,10 @@ void rozofs_ll_read_cbk(void *this,void *param)
       */
       update_pending_buffer_todo = 0;
       rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0,use_page_cache); 
+      /*
+      ** Update the bandwidth/IO statistics
+      */
+      rozofsmount_update_read_io(length, param, __LINE__);
       /*
       ** update the current position in the file
       */
@@ -1519,6 +1543,10 @@ void rozofs_ll_read_cbk(void *this,void *param)
 	  */
           update_pending_buffer_todo = 0;
 	  rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0,use_page_cache);
+          /*
+          ** Update the bandwidth/IO statistics
+          */
+          rozofsmount_update_read_io(length, param, __LINE__);
 	}
 	else
 #endif
@@ -1526,6 +1554,10 @@ void rozofs_ll_read_cbk(void *this,void *param)
           char *buf_sharem = buff;
 
           fuse_reply_buf(req, (char *) buf_sharem, length);
+          /*
+          ** Update the bandwidth/IO statistics
+          */
+          rozofsmount_update_read_io(length, param, __LINE__);          
 	}
         file->current_pos = (off+length);
         /*
@@ -1555,6 +1587,11 @@ void rozofs_ll_read_cbk(void *this,void *param)
     if (readahead == 0)
     {
       fuse_reply_buf(req, (char *) buff, length);
+      /*
+      ** Update the bandwidth/IO statistics
+      */
+      rozofsmount_update_read_io(length, param, __LINE__);
+      
 #ifdef TRACE_FS_READ_WRITE
       info("FUSE READ_CBK_OUT ,read_rcv[%llx:%llx],wrb%d[%llx:%llx],rdb[%llx:%llx]",
             (long long unsigned int)off,(long long unsigned int)(off+length),
