@@ -33,6 +33,7 @@
 void rozofsmount_netdata_cfg_read(char * fname);
 
 int rozofsmount_netdata_cfg_does_file_exist(char * fname);
+uint64_t rozofsmount_netdata_cfg_get_mtime(char * fname);
 
 /*_______________________________
 ** ENUM definion

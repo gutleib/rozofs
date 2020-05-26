@@ -24,7 +24,7 @@
 
 typedef struct _rozofsmount_ctx_t {
   list_t         list;
-  int            instance; /*<< Rozofsmount instance. -1 for sall sum pseudo instance */
+  int            instance; /*<< Rozofsmount instance. */
   int            fd;       /*<< Profiler file fd */
   mpp_profiler_t profiler;
   mpp_profiler_t old_profiler;
@@ -37,7 +37,8 @@ list_t                rozofsmount_list;
 uint64_t              next_run = 0;
 uint64_t              delay_between_run = 0;
 uint64_t              last_run = 0;
-
+uint64_t              cfg_mtime;
+uint32_t              rozofsmount_count = 0;
 
 #define NEWLINE(fmt, ...) {\
   char string[128];\
@@ -117,7 +118,8 @@ static inline void build_string_from_index(rozofsmount_ctx_t   * ctx, char * str
   CREATE_ONE_CHART_DURATION(X)\
   CREATE_ONE_CHART_THROUGHPUT(X)\
 }  
-void create_rozofsmount_charts() { \
+void create_rozofsmount_charts() { 
+  if (rozofsmount_count==0) return;
   CREATE_2_CHARTS(lookup);
   CREATE_2_CHARTS(lookup_agg);
   CREATE_2_CHARTS(forget);
@@ -219,6 +221,7 @@ void create_rozofsmount_charts() { \
   UPDATE_ONE_CHART_TROUGHPUT(X)\
 }
 void update_rozofsmount_charts() { 
+  if (rozofsmount_count==0) return;
   UPDATE_2_CHARTS(lookup);
   UPDATE_2_CHARTS(lookup_agg);
   UPDATE_2_CHARTS(forget);
@@ -278,72 +281,22 @@ rozofsmount_ctx_t * allocate_rozofsmount_context(int instance, int fd) {
   return ctx;
 }
 /*________________________________________________________________
-** Summ all profiler into the all context
+** Find out a rozofsmount context from its instance
 **
+** @param instance         Rozofsmout instance
+**
+** @retval rozofsmount context address or null
 *_________________________________________________________________
 */
-#define SUM_UP_2(X) {\
-  ctx_all->profiler.rozofs_ll_##X[P_COUNT] += ctx->profiler.rozofs_ll_##X[P_COUNT];\
-  ctx_all->profiler.rozofs_ll_##X[P_ELAPSE] += ctx->profiler.rozofs_ll_##X[P_ELAPSE];\
-}
-#define SUM_UP_3(X) {\
-  ctx_all->profiler.rozofs_ll_##X[P_COUNT] += ctx->profiler.rozofs_ll_##X[P_COUNT];\
-  ctx_all->profiler.rozofs_ll_##X[P_ELAPSE] += ctx->profiler.rozofs_ll_##X[P_ELAPSE];\
-  ctx_all->profiler.rozofs_ll_##X[P_BYTES] += ctx->profiler.rozofs_ll_##X[P_BYTES];\
-}
-void sum_up_all_profiler() {
+rozofsmount_ctx_t * find_rozofsmount_context(int instance) {
   list_t                          * p;
   rozofsmount_ctx_t               * ctx;
 
-  /*
-  ** Save old values
-  */
-  memcpy(&ctx_all->old_profiler,&ctx_all->profiler, sizeof(ctx->profiler));
-
-  /*
-  ** Reset new values
-  */
-  memset(&ctx_all->profiler, 0, sizeof(ctx_all->profiler)); 
-
   list_for_each_forward(p, &rozofsmount_list) {
     ctx = list_entry(p, rozofsmount_ctx_t, list);
-    if (ctx->instance != -1) {
-      SUM_UP_2(lookup);
-      SUM_UP_2(lookup_agg);
-      SUM_UP_2(forget);
-      SUM_UP_2(getattr);
-      SUM_UP_2(setattr);
-      SUM_UP_2(readlink);
-      SUM_UP_2(mknod);
-      SUM_UP_2(mkdir);
-      SUM_UP_2(unlink);
-      SUM_UP_2(rmdir);
-      SUM_UP_2(symlink);
-      SUM_UP_2(rename);
-      SUM_UP_2(open);
-      SUM_UP_2(link);
-      SUM_UP_3(read);
-      SUM_UP_3(write);
-      SUM_UP_2(flush);
-      SUM_UP_2(release);
-      SUM_UP_2(opendir);
-      SUM_UP_2(readdir);
-      SUM_UP_2(releasedir);
-      SUM_UP_2(fsyncdir);
-      SUM_UP_2(statfs);
-      SUM_UP_2(setxattr);
-      SUM_UP_2(getxattr);
-      SUM_UP_2(listxattr);
-      SUM_UP_2(removexattr);
-      SUM_UP_2(access);
-      SUM_UP_2(create);
-      SUM_UP_2(getlk);
-      SUM_UP_2(setlk);
-      SUM_UP_2(setlk_int);
-      SUM_UP_2(ioctl);
-      SUM_UP_2(clearlkowner); 
-    }  
+    if (ctx->instance == instance) return ctx;
   }
+  return NULL;  
 }
 /*________________________________________________________________
 ** Read profiler file 
@@ -377,7 +330,6 @@ void read_all_profiler_files() {
       read_profiler_file(ctx);
     }  
   }
-  //sum_up_all_profiler();
 }
 /*________________________________________________________________
 ** Get time in micro seconds
@@ -417,6 +369,7 @@ void wait_time_to_run() {
 /*________________________________________________________________
 ** Build the list of rozofsmount instances
 **
+** @retval number of new rozofsmount instance found
 *_________________________________________________________________
 */
 int build_rofsmount_context_list() {
@@ -428,19 +381,10 @@ int build_rofsmount_context_list() {
   int                  instance;
   rozofsmount_ctx_t *  ctx;  
   int                  fd;
-  int                  count = 0;
-  
-  /*
-  ** Initialize the list of context
-  */
-  list_init(&rozofsmount_list);
+  int                  new = 0;  
 
-  /*
-  ** Create the all context
-  */
-  //ctx_all = allocate_rozofsmount_context(-1,-1);
-  
-
+  rozofsmount_count = 0;
+ 
   pChar += rozofs_string_append(pChar, ROZOFS_KPI_ROOT_PATH);
   pChar += rozofs_string_append(pChar, "/mount/");
   
@@ -458,6 +402,19 @@ int build_rofsmount_context_list() {
       continue;
     }
     
+    ctx = find_rozofsmount_context(instance);
+    if (ctx) {
+      /*
+      ** already in list 
+      */
+      rozofsmount_count++;
+      continue;
+    }
+    
+    /*
+    ** New context
+    */  
+    
     /*
     ** Open profile file
     */
@@ -472,12 +429,44 @@ int build_rofsmount_context_list() {
     */
     ctx = allocate_rozofsmount_context(instance,fd);
     read_profiler_file(ctx);
-    count++;
-  }
-  if (count == 0) return -1;
+    new++;
+    rozofsmount_count++;
+  }  
+  return new;
+}
+/*________________________________________________________________
+** Check for any change 
+**
+*_________________________________________________________________
+*/
+void check_for_changes() {
+  uint64_t   new_cfg_mtime;
+  int        new;
   
-  //sum_up_all_profiler();
-  return 0;
+  /*
+  ** Recheck the list of rozofsmount
+  */
+  new = build_rofsmount_context_list();
+  
+  /*
+  ** Reread configuration file modification time
+  */
+  new_cfg_mtime = rozofsmount_netdata_cfg_get_mtime(NULL); 
+  if (new_cfg_mtime != cfg_mtime) {
+    /*
+    ** Re-read the configuration file
+    */
+    rozofsmount_netdata_cfg_read(NULL);
+  } 
+   
+  /*
+  ** If some new rozofsmount appear
+  ** or new config parameters, re-print the charts
+  */
+  if ((new) || (new_cfg_mtime != cfg_mtime)) {
+    create_rozofsmount_charts();
+    cfg_mtime = new_cfg_mtime;
+  }  
 }
 /*________________________________________________________________
 ** Main
@@ -487,6 +476,7 @@ int build_rofsmount_context_list() {
 *_________________________________________________________________
 */
 int main(int argc, char *argv[]) {
+  uint64_t      loop = 0;
   
   /*
   ** Check input parameter
@@ -504,6 +494,11 @@ int main(int argc, char *argv[]) {
   rozofsmout_period_micro *= 1000000;
   
   /*
+  ** Initialize the list of context
+  */
+  list_init(&rozofsmount_list);
+  
+  /*
   ** Read configuration file
   */
   {
@@ -516,16 +511,21 @@ int main(int argc, char *argv[]) {
       int fd = open(cfg_file, O_RDWR|O_CREAT, 0755); 
       close(fd);
     }
+    /*
+    ** Record configuration file modification time to check later
+    ** whether it has been updated
+    */
+    cfg_mtime = rozofsmount_netdata_cfg_get_mtime(NULL); 
+    /*
+    ** Read the configuration file
+    */
     rozofsmount_netdata_cfg_read(NULL);
   }
+  
   /*
   ** Build the list of rozofsmount instances
   */
-  if (build_rofsmount_context_list() < 0) {
-    severe("No rozofsmount found");
-    NEWLINE("DISABLE");
-    exit(1);
-  }  
+  build_rofsmount_context_list();
   
   /*
   ** Create charts
@@ -548,6 +548,15 @@ int main(int argc, char *argv[]) {
   }  
     
   while (1) {
+  
+    loop++;
+    
+    /*
+    ** Check every minute whether something has changed
+    */
+    if ((loop % 60)==0)  {
+      check_for_changes();
+    }
     
     /*
     ** Wait until next run

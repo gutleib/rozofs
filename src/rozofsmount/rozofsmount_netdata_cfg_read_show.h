@@ -2585,6 +2585,29 @@ char  * moduleName = NULL;
 }
 /*____________________________________________________________________________________________
 **
+** Get the modification time of the configuration file
+** 
+** @param fname   Configuration file of NULL (use default)
+**
+** @retval  the file modification time
+*/
+uint64_t rozofsmount_netdata_cfg_get_mtime(char * fname) {
+  struct stat buf;
+  if (fname == NULL) {
+    strcpy(rozofsmount_netdata_cfg_file_name,ROZOFS_CONFIG_DIR"/rozofsmount_netdata_cfg.conf");
+  }
+  else {
+    strcpy(rozofsmount_netdata_cfg_file_name,fname); 
+  } 
+
+  if (stat(rozofsmount_netdata_cfg_file_name,&buf)!=0) {
+    return 0;
+  }
+  return (buf.st_mtim.tv_sec*1000000)+buf.st_mtim.tv_nsec/1000;
+}
+
+/*____________________________________________________________________________________________
+**
 ** Check the presence of the configuration file
 ** 
 ** @param fname   Configuration file of NULL (use default)
