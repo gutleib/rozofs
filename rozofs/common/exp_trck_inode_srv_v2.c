@@ -29,6 +29,7 @@
 #include "export_track.h"
 #include <malloc.h>
 #include "export_track_change.h"
+#include <rozofs/common/expbt_inode_file_tracking.h>
 
 
 //static char pathname[1024];
@@ -1187,6 +1188,7 @@ int exp_trck_rw_attributes(char *root_path,rozofs_inode_t *inode,void *attr_p,in
 int exp_metadata_write_attributes(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz, int sync)
 {
    exp_trck_header_memory_t  *main_trck_p;
+   int ret;
 
    main_trck_p = top_hdr_p->entry_p[inode->s.usr_id];
    if (main_trck_p == NULL)
@@ -1200,12 +1202,16 @@ int exp_metadata_write_attributes(exp_trck_top_header_t *top_hdr_p,rozofs_inode_
       errno = EFBIG;
       return -1;
    }
+
+//   expt_set_bit(top_hdr_p->trck_inode_p,inode->s.usr_id,inode->s.file_id);
+   
+   
+   ret = exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0,sync);
    /*
    ** take care of the tracking
    */
-//   expt_set_bit(top_hdr_p->trck_inode_p,inode->s.usr_id,inode->s.file_id);
-   
-   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0,sync);
+   expbt_track_inode_update(inode);
+   return ret;
 }
 
 
@@ -1273,10 +1279,15 @@ int exp_metadata_create_attributes_burst(exp_trck_top_header_t *top_hdr_p,rozofs
    } 
    CLOSE_CONTROL(__LINE__);
    if (fd != -1) close(fd);
+   /*
+   ** take care of the tracking
+   */
+   expbt_track_inode_update(inode);
+
    return 0; 
 
    
-   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0,sync);
+//   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0,sync);
 }
 
 
