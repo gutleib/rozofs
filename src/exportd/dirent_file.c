@@ -129,6 +129,10 @@ uint32_t dirent_bucket_cache_enable = 0;
 #endif
 uint8_t dirent_cache_safe_enable = 1;
 
+/*
+** default init for the exportd
+*/
+dirent_bt_cache_cbk_t dirent_bt_cache_cbk = {0,NULL,NULL,NULL};
 
 
 /*
@@ -747,7 +751,12 @@ dirent_range_t dirent_range_table[] = {
 
 mdirents_cache_entry_t * dirent_get_root_entry_from_cache(fid_t fid, int root_idx) {
     if (dirent_bucket_cache_enable == 0) return NULL;
-    return dirent_cache_bucket_search_entry(&dirent_cache_level0, fid, (uint16_t) root_idx);
+    if (dirent_bt_cache_cbk.batch_mode_enable == 0) return dirent_cache_bucket_search_entry(&dirent_cache_level0, fid, (uint16_t) root_idx);
+    /*
+    ** batch mode
+    */
+    return (*dirent_bt_cache_cbk.get)( fid, (uint16_t) root_idx);
+    
 }
 
 /*
@@ -768,8 +777,19 @@ mdirents_cache_entry_t * dirent_get_root_entry_from_cache(fid_t fid, int root_id
  */
 
 int dirent_remove_root_entry_from_cache(fid_t fid, int root_idx) {
+    int ret;
     if (dirent_bucket_cache_enable == 0) return 0;
-    return dirent_cache_bucket_remove_entry(&dirent_cache_level0, fid, (uint16_t) root_idx);
+    if (dirent_bt_cache_cbk.batch_mode_enable == 0)
+    {
+      ret = dirent_cache_bucket_remove_entry(&dirent_cache_level0, fid, (uint16_t) root_idx);
+      if (ret == 0) dirent_bucket_cache_append_counter--;
+      return ret;
+    }
+    /*
+    ** batch mode
+    */
+    return (*dirent_bt_cache_cbk.remove)( fid, (uint16_t) root_idx);
+
 }
 
 /*
@@ -784,6 +804,8 @@ char* dirent_cache_display(char *pChar) {
     pChar+=sprintf(pChar,"Malloc size (MB/B)             : %llu/%llu\n",(long long unsigned int)malloc_size/(1024*1024), 
                    (long long unsigned int)malloc_size);    
     pChar+=sprintf(pChar,"Level 0 cache state            : %s\n", (dirent_bucket_cache_enable == 0) ? "Disabled" : "Enabled");
+    pChar+=sprintf(pChar,"Max entries                    : %u\n",dirent_cache_level0.max);
+    pChar+=sprintf(pChar,"Cur entries                    : %u\n",dirent_cache_level0.size);
     pChar+=sprintf(pChar,"Number of entries level 0      : %u\n", dirent_bucket_cache_append_counter);
     pChar+=sprintf(pChar,"hit/miss                       : %llu/%llu\n", 
             (long long unsigned int) dirent_bucket_cache_hit_counter,
@@ -872,8 +894,16 @@ void dirent_cache_bucket_print_stats()
 
 int dirent_put_root_entry_to_cache(fid_t fid, int root_idx, mdirents_cache_entry_t *root_p) {
     if (dirent_bucket_cache_enable == 0) return -1;
-    dirent_bucket_cache_append_counter++;
-    return dirent_cache_bucket_insert_entry(&dirent_cache_level0, fid, (uint16_t) root_idx, (void*) root_p);
+    if (dirent_bt_cache_cbk.batch_mode_enable == 0)
+    {
+      dirent_bucket_cache_append_counter++;
+      return dirent_cache_bucket_insert_entry(&dirent_cache_level0, fid, (uint16_t) root_idx, (void*) root_p);
+    }
+    /*
+    ** batch mode
+    */
+    return (*dirent_bt_cache_cbk.put)(fid, (uint16_t) root_idx, (void*) root_p);
+
 }
 
 int dirent_append_entry = 0;
@@ -1337,7 +1367,8 @@ int get_mdirentry(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent_in, char *
     /*
     ** check if the file exists, otherwise skip it
     */
-    root_idx_bit = dirent_check_root_idx_bit(hash1 & mask);
+    if (dirent_bt_cache_cbk.batch_mode_enable == 0) root_idx_bit = dirent_check_root_idx_bit(hash1 & mask);
+    else root_idx_bit = export_dir_check_root_idx_bitmap_bit(root_idx_bitmap_p,hash1 & mask);
     if (root_idx_bit == 0) continue;  
     ret = get_mdirentry_internal(root_idx_bitmap_p,dirfd,fid_parent,name,fid,type,mask,len,hash1,hash2);
     if (ret == 0)
@@ -1412,7 +1443,8 @@ int get_mdirentry_internal(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent, 
         /*
 	** cleat the bit in the root_idx bitmap
 	*/
-        dirent_clear_root_idx_bit(root_idx);    
+        if (dirent_bt_cache_cbk.batch_mode_enable == 0) dirent_clear_root_idx_bit(root_idx);    
+	else export_dir_update_root_idx_bitmap(root_idx_bitmap_p,root_idx,0);
         goto out;
     }
     /*
@@ -1420,8 +1452,8 @@ int get_mdirentry_internal(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent, 
     ** is to fix an issue that can happen if the bitmap file was
     ** not correctly updated on disk
     */
-    dirent_set_root_idx_bit(root_idx);    
-
+     if (dirent_bt_cache_cbk.batch_mode_enable == 0) dirent_set_root_idx_bit(root_idx);    
+     else export_dir_update_root_idx_bitmap(root_idx_bitmap_p,root_idx,1);
     /*
      ** Check if the entry has to be inserted in the cache
      */
@@ -1756,7 +1788,8 @@ int del_mdirentry_internal(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent, 
 
 	    if (cache_entry_p->header.level_index == 0) 
 	    {
-	       dirent_clear_root_idx_bit(cache_entry_p->header.dirent_idx[0]);    
+	       if (dirent_bt_cache_cbk.batch_mode_enable == 0) dirent_clear_root_idx_bit(cache_entry_p->header.dirent_idx[0]);  
+	       else  export_dir_update_root_idx_bitmap(root_idx_bitmap_p,cache_entry_p->header.dirent_idx[0],0);
 	    }
 #ifndef DIRENT_SKIP_DISK
             int ret;
@@ -1839,7 +1872,8 @@ int del_mdirentry_internal(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent, 
 	        mdirent_resolve_path(fid_parent,(char*)pathname_dentry_file,path);
 		if (root_entry_p->header.level_index == 0) 
 		{
-		   dirent_clear_root_idx_bit(root_entry_p->header.dirent_idx[0]);    
+		   if (dirent_bt_cache_cbk.batch_mode_enable == 0) dirent_clear_root_idx_bit(root_entry_p->header.dirent_idx[0]);    
+		   else export_dir_update_root_idx_bitmap(root_idx_bitmap_p,root_entry_p->header.dirent_idx[0],0);
 		}
 		/*
 		** invalidate the writeback cache for that entry
@@ -2080,7 +2114,8 @@ int list_mdirentries(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, ch
 	   /*
 	   ** check if the bit is asserted for the root_idx
 	   */
-	   root_idx_bit = dirent_check_root_idx_bit(root_idx);
+	   if (dirent_bt_cache_cbk.batch_mode_enable == 0) root_idx_bit = dirent_check_root_idx_bit(root_idx);
+	   else root_idx_bit = export_dir_check_root_idx_bitmap_bit(root_idx_bitmap_p,root_idx);
 	   if (root_idx_bit == 1)
 	   {
               /*
@@ -2615,7 +2650,8 @@ int list_mdirentries2(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, c
 	   /*
 	   ** check if the bit is asserted for the root_idx
 	   */
-	   root_idx_bit = dirent_check_root_idx_bit(root_idx);
+	   if (dirent_bt_cache_cbk.batch_mode_enable == 0) root_idx_bit = dirent_check_root_idx_bit(root_idx);
+	   else root_idx_bit = export_dir_check_root_idx_bitmap_bit(root_idx_bitmap_p,root_idx);
 	   if (root_idx_bit == 1)
 	   {
               /*

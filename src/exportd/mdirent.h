@@ -763,6 +763,11 @@ typedef struct _mdirents_cache_key_t {
  * Dirent cache entry structure
  */
 typedef struct _mdirents_cache_entry_t {
+    hash_entry_t he;       /**< BATCH mode use only */
+    uint32_t     hash;     /**< BATCH mode use only */
+    uint64_t     deadline_timestamp; /**< BATCH mode use only */
+    list_t       lru_link;      /**< BATCH mode : lru list   */
+
     list_t cache_link; /**< linked list of the root dirent cache entries   */
     list_t coll_link; /**< linked list of the dirent collision entries    */
 //    void    *hash_ptr;    /**< pointer to the hash entry                      */
@@ -786,6 +791,27 @@ typedef struct _mdirents_cache_entry_t {
     mdirent_cache_ptr_t dirent_coll_lvl0_p[MDIRENTS_CACHE_DIRENT_COLL_LVL0_NB_PTR]; ///< dirent collision file array pointers */
 
 } mdirents_cache_entry_t;
+
+
+/*
+** structure needed by the batch mode on the rozofsmount client: the rozofsmount uses a different cache structure
+**  Its cache structure supports parallel lookup which not the case for the export
+*/
+typedef int (*dirent_remove_root_entry_from_cache_t)(fid_t fid, int root_idx);
+typedef  int (*dirent_put_root_entry_to_cache_t)(fid_t fid, int root_idx, mdirents_cache_entry_t *root_p);
+typedef mdirents_cache_entry_t * (*dirent_cache_bucket_search_entry_t)(fid_t fid, uint16_t index);
+
+
+typedef struct _dirent_bt_cache_cbk_t
+{
+    int batch_mode_enable;  /**< assert to 1 for the client rozofsmount and 0 for the exportd  */
+    dirent_put_root_entry_to_cache_t  put;
+    dirent_cache_bucket_search_entry_t get;
+    dirent_remove_root_entry_from_cache_t remove;
+} dirent_bt_cache_cbk_t;
+
+extern dirent_bt_cache_cbk_t dirent_bt_cache_cbk;
+
 
 #define DIRENT_ROOT_UPDATE_REQ(root)  if (root != NULL) root->root_updated_requested = 1;
 #define DIRENT_ROOT_UPDATE_DONE(root) if (root != NULL) root->root_updated_requested = 0;
