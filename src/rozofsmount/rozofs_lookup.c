@@ -19,6 +19,7 @@
 #include <rozofs/rpc/eproto.h>
 
 #include "rozofs_fuse_api.h"
+#include "rozofs_bt_dirent.h"
 #include <rozofs/core/rozofs_string.h>
 
 DECLARE_PROFILING(mpp_profiler_t);
@@ -277,6 +278,341 @@ int rozofs_parse_object_name(char *name,mattr_obj_t *attr_p)
   return 0;
 
 }
+/*
+**__________________________________________________________________________________________________
+*/
+/**
+   Check if the ientry of a directory is still valid
+
+   @param parent_fid: fid of the directory
+   @param pie: directory ientry
+ 
+   @retval 0 on success
+   @retval -1 on lookup fail
+*/
+
+int rozofs_bt_local_check_parent_attributes(fid_t parent_fid,ientry_t *pie)
+{
+   rozofs_inode_t *rozofs_inode_p;
+   ext_mattr_t * ext_attr_parent_p;
+   ext_dir_mattr_t *stats_attr_p;
+   uint64_t update_time;
+   int dirent_valid;
+   rozofs_bt_tracking_cache_t *tracking_ret_p = NULL;
+   uint64_t inode;
+  
+   rozofs_inode_p = (rozofs_inode_t*)parent_fid;
+   inode = rozofs_inode_p->fid[1];
+
+   ext_attr_parent_p = rozofs_bt_load_dirent_from_main_thread(inode,&tracking_ret_p,&dirent_valid);
+   if (ext_attr_parent_p == NULL)
+   {
+     /*
+     ** clear the timestamp of the ientry in order to force an access towards the exportd:
+     ** !!WARNING!! not a good idea since a getattr can permit to update that information
+     ** so we should not touch the timestamp: the only thing that will happen is to provide a shorter cache time to the kernel
+     */
+     //pie->timestamp = 0;
+     return -1;
+   }
+   stats_attr_p = (ext_dir_mattr_t *)&ext_attr_parent_p->s.attrs.sids[0];
+   update_time = rozofs_get_parent_update_time_from_ie(pie);
+   
+   if (update_time == stats_attr_p->s.update_time)
+   {
+     /*
+     ** all is fine: copy the current timestamp of tracking file
+     */
+     pie->timestamp = tracking_ret_p->timestamp;
+     return 0;
+   }
+   /*
+   ** we need to update the parent attributes in the ientry cache
+   ** among the update, the cache time is also asserted according to the mtime of the regular file, we should do the same for the directories
+   */
+   rozofs_ientry_update(pie,(struct inode_internal_t*)ext_attr_parent_p);      
+   /*
+   ** the timestamp of the directory is update with the current time in the rozofs_ientry_update(), it will be better if we update
+   ** it with the timestamp of the tracking file
+   */
+   pie->timestamp = tracking_ret_p->timestamp;
+   return 0;  
+}
+
+/*
+**__________________________________________________________________________________________________
+*/
+/**
+   get the current time stamp of the tracking cache file: use for the case when attributes are valid and the inode is provided by fuse kernel
+
+   @param parent_fid: fid of file
+   @param pie: ientry 
+ 
+  @retval none
+*/
+
+void rozofs_bt_local_set_regular_file_timestamp(fid_t fid,ientry_t *pie)
+{
+   rozofs_inode_t *rozofs_inode_p;
+   ext_mattr_t * ext_attr_p;
+   rozofs_bt_tracking_cache_t *tracking_ret_p = NULL;
+   int dirent_valid;
+   uint64_t inode;
+     
+   rozofs_inode_p = (rozofs_inode_t*) fid;
+   if (rozofs_inode_p->s.key != ROZOFS_REG) return;
+   inode = rozofs_inode_p->fid[1];
+   
+   ext_attr_p = rozofs_bt_load_dirent_from_main_thread(inode,&tracking_ret_p,&dirent_valid);
+   if (ext_attr_p == NULL)
+   {
+     return ;
+   }
+   /*
+   ** copy the timestamp of the tracking cache entry in the ientry
+   */
+   if (tracking_ret_p->errcode != 0) return;
+   pie->timestamp = tracking_ret_p->timestamp;
+        
+}
+/*
+**__________________________________________________________________________________________________
+*/
+/*
+**
+   Get the slave inodes if any: only fro regular files
+
+   @param tracking_ret_p: pointer to the tracking file cache entry
+   @param rozofs_inode_p: pointer to the master rozofs inode
+   @param ie: inode ientry pointer
+   
+   @retval 0 on success
+   @retval < 0 on error (see errno for details)
+
+*/
+int rozofs_bt_get_slave_inode(rozofs_bt_tracking_cache_t *tracking_ret_p,rozofs_inode_t *rozofs_inode_p,ientry_t *ie)
+{
+   int attr_sz;
+   rozofs_slave_inode_t *slave_inode_p;
+   int cur_slave = 0;
+   ext_mattr_t * ext_attr_p;
+   
+   if (rozofs_inode_p->s.key != ROZOFS_REG)
+   {
+     errno = ENOTSUP;
+     warning("attempt to get slave inode for an inode that is not associated with a regular file");
+     return -1;
+   }
+   if (ie->attrs.multi_desc.common.master == 0)
+   {
+     /*
+     ** it not the case of the multifile, so exit
+     */
+     return 0;
+   }
+   attr_sz = sizeof(rozofs_slave_inode_t)*(ie->attrs.multi_desc.master.striping_factor+1);
+   /*
+   ** allocate the array if not yet done:
+   ** The entry can be be there becasue it is an update of an inode
+   */
+   if (ie->slave_inode_p == NULL)
+   {
+     ie->slave_inode_p = malloc(attr_sz);
+     if (ie->slave_inode_p== NULL)
+     {
+       severe("Out of memory while allocating memory for slave inodes (%d)",attr_sz);
+       errno = ENOMEM;
+       return -1;
+     }
+   }
+   /*
+   ** now loop on the slave inodes
+   */
+   slave_inode_p = ie->slave_inode_p;
+   rozofs_inode_p->s.idx += 1;
+   for (cur_slave = 0; cur_slave < ie->attrs.multi_desc.master.striping_factor+1;cur_slave++,slave_inode_p++)
+   {
+     ext_attr_p = rozofs_bt_get_inode_ptr_from_image(tracking_ret_p,rozofs_inode_p->fid[1]);
+     rozofs_inode_p->s.idx += 1;
+
+     if (ext_attr_p == NULL)
+     {
+       severe("slave inode index %d not found",cur_slave);
+       errno = EPROTO;
+       return -1;
+     }
+     /*
+     ** copy the part of the slave inode in the ientry
+     */
+     memcpy(slave_inode_p->sids,ext_attr_p->s.attrs.sids,sizeof(sid_t)*ROZOFS_SAFE_MAX);
+     slave_inode_p->cid = ext_attr_p->s.attrs.cid;
+     slave_inode_p->size = ext_attr_p->s.attrs.size;
+     slave_inode_p->children = ext_attr_p->s.attrs.children;  
+   }
+   
+   errno = 0;
+   return 0;
+}
+
+/*
+**__________________________________________________________________________________________________
+*/
+/**
+
+   @param eid: export identifier
+   @param parent_fid: fid of the parent directory
+   @param name: name to search
+   @param param: fuse context
+   @param pie: parent ientry
+ 
+   @retval 0 on success
+   @retval -1 on lookup fail
+*/
+
+int rozofs_bt_local_lookup_attempt(uint32_t eid,fid_t parent_fid,char *name,void *param,ientry_t *pie) 
+{
+
+   rozofs_inode_t *rozofs_inode_p;   
+   ext_mattr_t * ext_attr_parent_p;
+   ext_mattr_t * ext_attr_child_p;  
+   fid_t child_fid; 
+   struct stat stbuf;
+   fuse_req_t req; 
+   int trc_idx;
+   int ret;
+   int dirent_valid;
+   uint64_t inode;
+
+   struct fuse_entry_param fep;
+   ientry_t *child_ie = NULL;
+   rozofs_inode_t *fake_id_p;
+   rozofs_bt_tracking_cache_t *tracking_ret_p = NULL;
+
+   RESTORE_FUSE_PARAM(param,req);
+   RESTORE_FUSE_PARAM(param,trc_idx);
+   
+   /*
+   ** we do not care about @rozofs_uuid@xxxx-xxxxx-xxxx : this request is always sent to the export
+   */
+  if ((strncmp(name,"@rozofs_uuid@",13) == 0) ||(strncmp(name,ROZOFS_DIR_TRASH,strlen(ROZOFS_DIR_TRASH)) == 0))
+  {
+    errno = EAGAIN;
+    return -1;
+  }   
+   rozofs_inode_p = (rozofs_inode_t*)parent_fid;
+   inode = rozofs_inode_p->fid[1];
+   ext_attr_parent_p = rozofs_bt_load_dirent_from_main_thread(inode,NULL,&dirent_valid);
+   /*
+   ** we stop here if either the parent attributes are not available or the dirent file are not up to date
+   */
+   if ((ext_attr_parent_p == NULL) || (dirent_valid == 0))
+   {
+     return -1;
+   }
+   /*
+   ** now attempt to get the inode for the required name
+   */
+   ret = rozofs_bt_get_mdirentry(parent_fid,name,child_fid);
+   if (ret < 0)
+   {
+     if (errno == EAGAIN) return -1;
+     if (errno == ENOENT) goto enoent;
+     return -1;
+   }   
+   /*
+   ** We have found the inode, attempt to get the attributes now
+   */
+   rozofs_inode_p = (rozofs_inode_t*)child_fid;
+   inode = rozofs_inode_p->fid[1];
+   ext_attr_child_p = rozofs_bt_load_dirent_from_main_thread(inode,&tracking_ret_p,&dirent_valid);
+   if (ext_attr_child_p == NULL)
+   {
+     return -1;
+   }
+   /*
+   ** we have both attributes
+   */
+   if (!(child_ie = get_ientry_by_fid(ext_attr_child_p->s.attrs.fid))) {
+       child_ie = alloc_ientry(ext_attr_child_p->s.attrs.fid);
+   } 
+   /*
+   ** among the update, the cache time is also asserted according to the mtime of the regular file, we should do the same for the directories
+   */
+   rozofs_ientry_update(child_ie,(struct inode_internal_t*)ext_attr_child_p);     
+   /*
+   ** need to take care of the slave inode here: only for the case of the regular file
+   */
+   if (S_ISREG(ext_attr_child_p->s.attrs.mode))
+   {
+      ret = rozofs_bt_get_slave_inode(tracking_ret_p,rozofs_inode_p,child_ie);
+   }   
+    memset(&fep, 0, sizeof (fep));
+    mattr_to_stat((struct inode_internal_t*)ext_attr_child_p, &stbuf,exportclt.bsize);
+    stbuf.st_ino = child_ie->inode;
+    /*
+    ** check the case of the directory
+    */
+    if ((S_ISDIR(ext_attr_child_p->s.attrs.mode)) &&(strncmp(name,"@rozofs_uuid@",13) == 0))
+    {
+        rozofs_inode_t fake_id;
+		
+	fake_id.fid[1]= child_ie->inode;
+	fake_id.s.key = ROZOFS_DIR_FID;
+        fep.ino = fake_id.fid[1];  
+    }
+    else
+    {
+      fep.ino = child_ie->inode;
+    }
+    stbuf.st_size = child_ie->attrs.attrs.size;
+    fake_id_p = (rozofs_inode_t *)ext_attr_child_p->s.attrs.fid;
+    if (fake_id_p->s.del)
+    {
+      fep.attr_timeout  = 0;
+      fep.entry_timeout = 0;
+    }
+    else
+    {
+      fep.attr_timeout = rozofs_get_linux_caching_time_second(child_ie);
+      fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(child_ie->inode));    
+    }
+    memcpy(&fep.attr, &stbuf, sizeof (struct stat));
+    child_ie->nlookup++;
+
+    rozofs_inode_t * finode = (rozofs_inode_t *) child_ie->attrs.attrs.fid;
+    fep.generation = finode->fid[0]; 
+    /*
+    ** set the parent update time in the ientry of the child inode
+    */
+    child_ie->parent_update_time = rozofs_get_parent_update_time_from_ie(pie);
+    
+    rz_fuse_reply_entry(req, &fep);  
+    errno = 0;
+    goto out;   
+
+enoent:
+   /*
+   ** Case of non existent entry. 
+   ** Tell FUSE to keep responding ENOENT for this name for a few seconds
+   */
+   memset(&fep, 0, sizeof (fep));
+   fep.ino = 0;
+   fep.attr_timeout  = rozofs_tmr_get_enoent();
+   fep.entry_timeout = rozofs_tmr_get_enoent();
+   rz_fuse_reply_entry(req, &fep);
+   errno = ENOENT;
+
+out:
+
+   rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xfacebeef,(child_ie==NULL)?NULL:child_ie->attrs.attrs.fid,0,(child_ie==NULL)?-1:child_ie->attrs.attrs.size,trc_idx);   
+   return 0;
+
+
+}       
+
+/*
+**__________________________________________________________________________________________________
+*/
 /**
 *  metadata Lookup
 
@@ -290,6 +626,7 @@ int rozofs_parse_object_name(char *name,mattr_obj_t *attr_p)
  @retval none
 */
 void rozofs_ll_lookup_cbk(void *this,void *param);
+
 
 void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name) 
 {
@@ -311,6 +648,7 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     fuse_ino_t ino = 0;
     int trace_flag = 0;
     int fast_reconnect = 0;
+//    uint64_t parent_update_time;
 
     /*
     ** Update the IO statistics
@@ -435,12 +773,20 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     ** check if the lookup is a lookup revalidate. In such a case, the VFS provides*
     ** the inode. So if the i-node attributes are fine, we do not worry
     */
-    if ((child != 0) && ((lookup_flags & 0x100) == 0))
+    if ((child != 0) /*&& ((lookup_flags & 0x100) == 0)*/)
     {
+
       nie = get_ientry_by_inode(child);
       if (nie != NULL)
       {
-	if (rozofs_is_attribute_valid(nie)) {
+        /*
+	** in batch mode: attempt to update the directory ientry if there is a change in the tracking file of the directory
+	*/
+        if (conf.batch) rozofs_bt_local_check_parent_attributes(ie->fid,ie);
+	/*
+	** !!WARNING!!: ignore the batch mode for the check
+	*/
+	if (rozofs_is_attribute_valid_with_parent(nie,(conf.batch == 0)?ie:ie)) {
 	  /*
 	  ** check if parent and child are either deleted/deleted or active/active
 	  */
@@ -495,7 +841,6 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     ** In case the EXPORT LBG is down ans we know this ientry, let's respond to
     ** the requester with the current available information
     */
-#if 1
     if ((common_config.client_fast_reconnect) && (child != 0)) {
       expgw_tx_routing_ctx_t routing_ctx; 
       
@@ -512,19 +857,32 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
           fast_reconnect = 1;
 	  goto success;        
       }      
-    }  
-#endif         
-    
-#if 1
+    }          
+    if (conf.batch )
+    {
+      /*
+      ** attempt to use the local dirent cache for searching the inode
+      */
+      rozofs_bt_lookup_local_attempt++;
+      ret = rozofs_bt_lookup_req_from_main_thread(arg.arg_gw.eid, ie->fid,buffer_p);
+      if (ret == 0)
+      {
+	/*
+	** OK, we attempt to get the inode from the local dirent cache
+	*/
+	return;
+      }
+    }
+    /*
+    ** there is an error: either the dirent file are not present on the local client or other error
+    */
+
+    rozofs_bt_lookup_local_reject_from_main++;
+
     ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,ie->fid,EXPORT_PROGRAM, EXPORT_VERSION,
                               EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,
                               rozofs_ll_lookup_cbk,buffer_p); 
     
-#else
-    ret = rozofs_export_send_common(&exportclt,EXPORT_PROGRAM, EXPORT_VERSION,
-                              EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,
-                              rozofs_ll_lookup_cbk,buffer_p); 
-#endif
     if (ret < 0) {
       /*
       ** In case of fast reconnect mode let's respond with the previously knows 
@@ -598,13 +956,19 @@ lookup_objectmode:
 
 //    info("FDL %d mode %d  uid %d gid %d",allocated,nie->attrs.attrs.mode,nie->attrs.attrs.uid,nie->attrs.attrs.gid);
 success:
+    /*
+    ** update the timestamp of the ientry (batch mode only)
+    ** it applies only on regular files
+    */
+    if (conf.batch) rozofs_bt_local_set_regular_file_timestamp(nie->attrs.attrs.fid,nie);
+
     memset(&fep, 0, sizeof (fep));
     fep.ino =stbuf.st_ino;  
     if (fast_reconnect) {
       fep.attr_timeout = rozofs_get_linux_fast_reconnect_caching_time_second();
     }
     else {
-      rozofs_get_linux_caching_time_second(nie);
+      fep.attr_timeout = rozofs_get_linux_caching_time_second(nie);
     }  
     fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
@@ -614,11 +978,14 @@ success:
     fep.generation = finode->fid[0];    
     
     rz_fuse_reply_entry(req, &fep);
+    errno = 0;
 
-    rozofs_trc_rsp(srv_rozofs_ll_lookup,(nie==NULL)?0:nie->inode,(nie==NULL)?NULL:nie->attrs.attrs.fid,0,trc_idx);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_lookup,0xfaceface,(nie==NULL)?NULL:nie->attrs.attrs.fid,0,(nie==NULL)?-1:nie->attrs.attrs.size,trc_idx);
     goto out;
 }
-
+/*
+**__________________________________________________________________________________________________
+*/
 /**
 *  Call back function call upon a success rpc, timeout or any other rpc failure
 *
@@ -895,8 +1262,15 @@ success:
     nie->nlookup++;
 
     rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.attrs.fid;
-    fep.generation = finode->fid[0];  
-    
+    fep.generation = finode->fid[0]; 
+    /*
+    ** update the ientry of the object with the update time of the parent directory
+    ** this occur only if the parent attributes are returned
+    */
+    if (pie != NULL)
+    {
+      nie->parent_update_time = rozofs_get_parent_update_time_from_ie(pie);
+    }    
     rz_fuse_reply_entry(req, &fep);
     /*
     ** OK now let's check if there was some other lookup request for the same

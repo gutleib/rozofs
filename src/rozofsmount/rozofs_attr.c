@@ -370,6 +370,14 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
         goto error;
     }
     /*
+    ** update the ientry of the object with the update time of the parent directory
+    ** this occur only if the parent attributes are returned
+    */
+    if (pie != NULL)
+    {
+      ie->parent_update_time = rozofs_get_parent_update_time_from_ie(pie);
+    }  
+    /*
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(ie,&attr);  
