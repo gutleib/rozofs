@@ -475,6 +475,12 @@ void check_for_changes() {
     cfg_mtime = new_cfg_mtime;
   }  
 }
+
+
+
+struct sched_param my_priority;
+int my_policy=-1;
+
 /*________________________________________________________________
 ** Main
 **
@@ -540,14 +546,12 @@ int main(int argc, char *argv[]) {
   create_rozofsmount_charts();
 
   {
-    struct sched_param my_priority;
-    int policy=-1;
-    int ret= 0;
+    int ret= 0;    
 
-    pthread_getschedparam(pthread_self(),&policy,&my_priority);
+   pthread_getschedparam(pthread_self(),&my_policy,&my_priority);
     my_priority.sched_priority= 98;
-    policy = SCHED_RR;
-    ret = pthread_setschedparam(pthread_self(),policy,&my_priority);
+    my_policy = SCHED_RR;
+    ret = pthread_setschedparam(pthread_self(),my_policy,&my_priority);
     if (ret < 0) 
     {
       severe("error on sched_setscheduler: %s",strerror(errno));	
