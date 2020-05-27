@@ -295,6 +295,7 @@ uint32_t ruc_init(uint32_t test,uint16_t dbg_port,uint16_t rozofsmount_instance)
 }
 
 
+int rozofs_bt_stc_init(uint16_t rozofsmount_id,int storcli_id);
 
 /**
 *  Init of the data structure used for the non blocking entity
@@ -310,6 +311,9 @@ int rozofs_storcli_non_blocking_init(uint16_t dbg_port, uint16_t rozofsmount_ins
 
  ret = ruc_init(FALSE,dbg_port,rozofsmount_instance);
  
+ if (ret != RUC_OK) return -1;
+ 
+ ret = rozofs_bt_stc_init((int)conf.rozofsmount_instance,(int) conf.module_index);
  if (ret != RUC_OK) return -1;
 
  /*

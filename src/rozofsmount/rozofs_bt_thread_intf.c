@@ -97,7 +97,7 @@ int rozofs_bt_thread_create( int nb_threads) ;
 
  
 static char * rozofs_bt_thread_debug_help(char * pChar) {
-  pChar += rozofs_string_append(pChar,"usage:\nfuseThreads reset       : reset statistics\nfuseThreads             : display statistics\n");  
+  pChar += rozofs_string_append(pChar,"usage:\nbatchThreads reset       : reset statistics\nbatchThreads             : display statistics\n");  
   return pChar; 
 }  
 #define THREAD_PER_LINE 6

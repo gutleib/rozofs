@@ -19,6 +19,7 @@ include_directories(${CMAKE_BINARY_DIR}) # for config.h
 include_directories(${CMAKE_SOURCE_DIR}) # for librozofs headers
 include_directories(${PTHREAD_INCLUDE_DIR})
 link_directories(${CMAKE_BINARY_DIR}/rozofs)
+link_directories(${CMAKE_SOURCE_DIR}/libfuse/lib)
 
 add_executable(rozofsmount
     file.h
@@ -93,16 +94,43 @@ add_executable(rozofsmount
 #   ../exportd/rozofs_stdalone_eprotosvc_nb.c
 #   ../exportd/rozofs_stdalone_eprotosvc_nb.h
    rozofs_io_error_trc.h
-   rozofs_io_error_trc.c   
-   rozofsmount_netdata_cfg.c   
+   rozofs_io_error_trc.c 
+   
+   rozofs_bt_init.c
+   rozofs_bt_north_intf.c
+   rozofs_bt_proto.h  
+   rozofs_bt_thread_intf.c
+   rozofs_bt_api.h 
+   rozofs_bt_memreg.c 
+   rozofs_bt_inode.c
+   rozofs_bt_inode.h
+   rozofs_bt_ioread.c
+   rozofs_bt_dirent.c
+   rozofs_bt_client_lbg.c
+   rozofs_bt_client_trk_reader.c
+   rozofs_bt_dirent_thread_intf.c
+   rozofs_bt_dirent_cache.c
+   ../exportd/dirent_file.c
+   ../exportd/dirent_cache.c
+   ../exportd/dirent_search.c
+   ../exportd/dirent_insert.c
+   ../exportd/dirent_file_repair.c
+##   ../exportd/test_mdirent_stub.c
+   ../exportd/dirent_writeback_cache.c
+   ../exportd/writeback_cache.c
+  rozofs_bt_dirent_stub.c
+ rozofsmount_netdata_cfg.c
 )
 #pthread need by fuse
-target_link_libraries(rozofsmount rozofs fuse dl ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+#target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+target_link_libraries(rozofsmount rozofs fuse dl ${PTHREAD_LIBRARY}  ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RT_LIBRARY})
+
+
 
 add_executable(rozo_locate_projections
        rozo_locate_projections.c    
 )
-target_link_libraries(rozo_locate_projections rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_locate_projections rozofs ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${PTHREAD_LIBRARY})
 
 add_executable(rozo_mount_send_stats 
     rozo_mount_send_stats.c
@@ -113,7 +141,7 @@ add_executable(rozofsmount_netdata.plugin
     rozofsmount_netdata.c
     rozofsmount_netdata_cfg.c
 )
-target_link_libraries(rozofsmount_netdata.plugin rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozofsmount_netdata.plugin rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 
 
 add_executable(rozo_multifile 

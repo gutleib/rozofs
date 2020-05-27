@@ -30,6 +30,7 @@
 #include "rozofs_kpi.h"
 #include "rozofs_cachetrack.h"
 #include "rozofs_io_error_trc.h"
+#include "rozofs_bt_proto.h"
 
 // For trace purpose
 struct timeval Global_timeDay;
@@ -229,7 +230,6 @@ uint32_t ruc_init(uint32_t test, uint16_t debug_port,uint16_t export_listening_p
         ret = rozofs_expgateway_init( exportclt->host,(int)exportclt->eid, export_listening_port,
 	                              (af_stream_poll_CBK_t) rozofs_export_lbg_cnx_polling);
         if (ret != RUC_OK) break;
-
         break;
 
     }
@@ -833,6 +833,23 @@ int rozofs_stat_start(void *args) {
     ** init of the write error logging
     */    
     rozofs_iowr_err_init(args_p->instance);  
+    
+    ret = rozofs_shm_init( args_p->instance,1);
+    if (ret < 0)
+    {
+       fatal("error while creating shared memory ressources");
+    }  
+    if (conf.batch)
+    {
+      /*
+      ** init of the batch part of rozofsmount: this will depend on a mount parameter 
+      */
+      ret = rozofs_bt_init(args_p->instance,exportclt_p->eid,args_p->max_transactions);
+      if (ret < 0)
+      {
+	 fatal("error while creating batch ressources");
+      }
+    }
     /*
     **  Indicates that the main thread is ready
     */

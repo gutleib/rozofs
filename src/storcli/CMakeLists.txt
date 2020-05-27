@@ -43,7 +43,8 @@ add_executable(storcli
     storcli_main.c
     rozofs_storcli_north_intf.c
     storcli_stub.c
-    rozofs_storcli_read.c
+#    rozofs_storcli_read.c
+    rozofs_bt_storcli_read.c
     rozofs_storcli_resize.c
     rozofs_storcli_rebuild_prj.c
     rozofs_storcli_reload_storage_config.c
@@ -62,6 +63,8 @@ add_executable(storcli
     rozofs_storcli_sharedmem.h
     standalone_client_send.c  
     standalone_client_send.h
+   ../rozofsmount/rozofs_bt_memreg.c
+   rozofs_bt_storcli.c
  )
 
 if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
@@ -74,10 +77,10 @@ if(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   )
   add_library(storcli_rmda STATIC ${storcli_rmda_sources})
   set_target_properties(storcli_rmda PROPERTIES COMPILE_FLAGS "-fPIC")
-  target_link_libraries(storcli  storcli_rmda rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RDMA_LIBRARY} ${INFINIBAND_LIBRARY})
+  target_link_libraries(storcli  storcli_rmda rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RDMA_LIBRARY} ${RT_LIBRARY} ${INFINIBAND_LIBRARY})
 else(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
   message(STATUS "Compiling storcli without RDMA support")
-  target_link_libraries(storcli rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+  target_link_libraries(storcli rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY} ${NUMA_LIBRARY})
 endif(INFINIBAND_FOUND AND RDMA_FOUND AND NOT NO_RDMA)
 
 
