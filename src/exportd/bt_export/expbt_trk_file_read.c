@@ -67,9 +67,25 @@ int expbt_read_inode_tracking_file(uint32_t eid,uint16_t type,uint16_t usr_id,ui
    ssize_t ret;
    char *export_path;
    rozofs_inode_t inode;
+   int nb_retries = 0;
+   uint64_t mtime_start;
+   uint32_t change_count_start;
+   uint32_t change_count_end;
    
    *change_count = 0;
    
+   /*
+   ** get the change count for the tracking file
+   */
+   inode.s.eid = eid;
+   inode.s.usr_id = usr_id;
+   inode.s.file_id = file_id;
+   inode.s.key = type;
+   /*
+   ** do not care about the index
+   */
+   inode.s.idx = 0;      
+   change_count_start = expbt_track_inode_get_counter(&inode,1);
    /*
    ** get the export_path
    */
@@ -96,49 +112,94 @@ int expbt_read_inode_tracking_file(uint32_t eid,uint16_t type,uint16_t usr_id,ui
    }
    fd = open(filename,O_RDONLY);
    if (fd < 0) return -1;
+   /*
+   ** Get the file attributes
+   */
    ret = fstat(fd,&statbuf);
    if (ret < 0)
    {
      close(fd);
      return -1;
    } 
-   
+   /*
+   ** keep the mtime at which we initiate the read
+   */
+   mtime_start = statbuf.st_mtime;
+    /*
+    ** check if ir was a mtime & change_count check
+    */
    if (buf_p == NULL)
    {
      /*
      ** it was just a mtime check
      */
-     *mtime = statbuf.st_mtime;
+     *mtime = mtime_start;
      close(fd);
+     *change_count = change_count_start;
      return 0;
    }
-   /*
-   ** Attempt to read the file
-   */ 
-   ret = pread( fd, buf_p, statbuf.st_size, 0);
-   if (ret != statbuf.st_size)
+   
+   while(1)
    {
      /*
-     ** we might need to check the length since it might be possible that one inode has been added or remove
+     ** Attempt to read the file
+     */ 
+     ret = pread( fd, buf_p, statbuf.st_size, 0);
+     if (ret != statbuf.st_size)
+     {
+       /*
+       ** we might need to check the length since it might be possible that one inode has been added or remove
+       */
+       close(fd);
+       return -1;        
+     }
+     /*
+     ** check if there is a change during the read
      */
-     close(fd);
-     return -1;        
+     ret = fstat(fd,&statbuf);
+     if (ret < 0)
+     {
+       close(fd);
+       return -1;
+     }
+     change_count_end = expbt_track_inode_get_counter(&inode,1);
+     /*
+     ** check if the file was stable during the read
+     */
+     if ((change_count_end == change_count_start) && (mtime_start == statbuf.st_mtime))
+     {
+       /*
+       ** all is fine
+       */
+       *mtime = statbuf.st_mtime;
+       close(fd);
+       *change_count = change_count_start;
+       return statbuf.st_size;     
+     }
+     /*
+     ** there was a change, so let us retry
+     */
+     nb_retries++;
+     if (nb_retries >= 3)
+     {
+       /*
+       ** unlucky
+       */
+       close(fd);
+       break;
+     }
+     /*
+     ** let's retry
+     */
+     change_count_start = change_count_end;
+     mtime_start = statbuf.st_mtime;
    }
-   *mtime = statbuf.st_mtime;
-   close(fd);
+
    /*
-   ** get the change count for the tracking file
+   ** we fail after 3 retries
    */
-   inode.s.eid = eid;
-   inode.s.usr_id = usr_id;
-   inode.s.file_id = file_id;
-   inode.s.key = type;
-   /*
-   ** do care about the index
-   */
-   inode.s.idx = 0;      
-   *change_count = expbt_track_inode_get_counter(&inode,1);
-   return statbuf.st_size;
+   errno = EAGAIN;
+   return -1;
 }
 
 
@@ -217,8 +278,11 @@ void expb_trk_check_in_thread(rozorpc_srv_ctx_t *rozorpc_srv_ctx_p)
       continue;     
      }
      entry_rsp_p->errcode = 0;
-//     info("FDL mtime (local/remote): %llu/%llu change_count: %d/%d",(long long unsigned int) mtime ,(long long unsigned int) entry_rq_p->mtime,(int)change_count,(int) entry_rq_p->change_count);
-     if (mtime ==  entry_rq_p->mtime) entry_rsp_p->status = 0;
+    // info("FDL mtime (local/remote): %llu/%llu change_count: %d/%d",(long long unsigned int) mtime ,(long long unsigned int) entry_rq_p->mtime,(int)change_count,(int) entry_rq_p->change_count);
+     /*
+     ** check the mtime and the change count of the tracking file
+     */
+     if ((entry_rq_p->change_count == change_count) && (mtime ==  entry_rq_p->mtime)) entry_rsp_p->status = 0;
      else entry_rsp_p->status = 1;
    }
    /*

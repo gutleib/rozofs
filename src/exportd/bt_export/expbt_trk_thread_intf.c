@@ -50,6 +50,7 @@ expbt_trk_thread_ctx_t expbt_trk_thread_ctx_tb[EXPBT_MAX_TRK_THREADS];
 struct  sockaddr_un expbt_recv_af_unix_socket_name;
 int expbt_recv_af_unix_socket_ref = -1;
 int expbt_xmit_af_unix_socket_ref = -1;
+time_t thread_profiler_updatetime;
 
  /**
  * prototypes
@@ -70,7 +71,144 @@ ruc_sockCallBack_t af_unix_trk_callBack_sock=
      af_unix_trk_xmitEvtsock
   };
   
-  /*
+
+
+
+#define new_line(title,empty) { \
+  if (lineEmpty) { pChar = pLine;}\
+  lineEmpty = empty;\
+  pLine = pChar;\
+  *pChar++ = '\n';\
+  pChar += rozofs_string_padded_append(pChar,25,rozofs_left_alignment,title);\
+  *pChar++ = '|';\
+}  
+    
+#define display_val(val){\
+  pChar += rozofs_u64_padded_append(pChar, 17, rozofs_right_alignment, val);\
+  *pChar++ = ' ';\
+  *pChar++ = '|';\
+}
+  
+#define display_div(val1,val2) if (val2==0) { display_val(0)} else { display_val(val1/val2)}
+#define display_txt(txt) {\
+  pChar += rozofs_string_padded_append(pChar,17, rozofs_right_alignment, txt);\
+  *pChar++ = ' ';\
+  *pChar++ = '|';\
+}
+
+#define display_line_topic(title) \
+  new_line(title,0);\
+  for (i=startIdx; i<(stopIdx+last); i++) {\
+    pChar += rozofs_string_append(pChar,"__________________|");\
+  }
+    
+#define display_line_val(title,val) \
+  new_line(title,1);\
+  for (i=startIdx; i<stopIdx; i++) {\
+    sum.val += p[i].stat.val;\
+    display_val(p[i].stat.val);\
+  }\
+  if (sum.val!=0) { lineEmpty=0; }\
+  if (last) { display_val(sum.val);}
+    
+
+#define display_line_div(title,val1,val2) \
+  new_line(title,1);\
+  for (i=startIdx; i<stopIdx; i++) {\
+    display_div(p[i].stat.val1,p[i].stat.val2);\
+  }\
+  if (sum.val1!=0) { lineEmpty=0; }\
+  if (last) { display_div(sum.val1,sum.val2); }
+
+
+ 
+static char * show_thread_profiler_help(char * pChar) {
+  pChar += rozofs_string_append(pChar,"usage:\nth_profiler reset       : reset statistics of the reader threads\nth_profiler             : display statistics\n");  
+  return pChar; 
+}  
+#define THREAD_PER_LINE 6
+
+void show_thread_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char *pChar = uma_dbg_get_buffer();
+    time_t elapse;
+    int days, hours, mins, secs;
+    time_t  this_time = time(0);    
+    char           *pLine=pChar;
+    int             lineEmpty=0;
+    int             doreset=0;
+    int i;
+    expbt_trk_thread_ctx_t *p = expbt_trk_thread_ctx_tb;
+    int startIdx,stopIdx;
+    expbt_trk_thread_stat_t sum;
+    int                       last=0;
+
+
+    
+    elapse = (int) (this_time - thread_profiler_updatetime);
+    days = (int) (elapse / 86400);
+    hours = (int) ((elapse / 3600) - (days * 24));
+    mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
+    secs = (int) (elapse % 60);
+
+
+   if (argv[1] != NULL) {
+     if (strcmp(argv[1],"reset")==0) {
+       doreset = 1;
+     }
+     else {  
+       pChar = show_thread_profiler_help(pChar);
+       uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+       return;
+     }        
+   }
+
+    memset(&sum, 0, sizeof(sum));
+    stopIdx  = 0;
+    last = 0;
+
+    pChar += sprintf(pChar, "thread profiler uptime =  %d days, %2.2d:%2.2d:%2.2d\n",days, hours, mins, secs);
+
+    while (last == 0) {
+
+      startIdx = stopIdx;
+      if ((af_unix_trk_thread_count - startIdx) > THREAD_PER_LINE) {
+	stopIdx = startIdx + THREAD_PER_LINE;
+      }  
+      else {
+	stopIdx = af_unix_trk_thread_count;
+	last = 1;
+      }  
+
+      new_line("Thread number",0);
+      for (i=startIdx; i<stopIdx; i++) {
+	display_val(p[i].thread_idx);
+      } 
+      if (last) {
+	display_txt("Total");
+      }   
+  #if 1
+      display_line_topic("Procedures:");  
+      display_line_val("      read trk", read_count);
+      display_line_val("      check trk",check_count);      
+      display_line_val("      load_dirent",load_dentry_count);
+  #endif
+
+      display_line_topic("");  
+      *pChar++= '\n';
+      *pChar = 0;
+    }
+
+    if (doreset) {
+      for (i=0; i<af_unix_trk_thread_count; i++) {
+	memset(&p[i].stat,0,sizeof(p[i].stat));
+      } 
+      pChar += sprintf(pChar,"reset done\n");    
+    }    
+
+    thread_profiler_updatetime = this_time;   
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
+/*
 **__________________________________________________________________________
 */
 /**
@@ -599,7 +737,8 @@ int expbt_trk_thread_create(char * hostname, int nb_threads) {
    /*
    ** clear the thread table
    */
-   memset(expbt_trk_thread_ctx_tb,0,sizeof(expbt_trk_thread_ctx_t));
+   
+   memset(expbt_trk_thread_ctx_tb,0,sizeof(expbt_trk_thread_ctx_tb));
    /*
    ** Now create the threads
    */
@@ -721,6 +860,7 @@ int af_unix_bt_response_socket_create(char *socketname)
 int expbt_trk_thread_intf_create(char * hostname, int instance_id,int nb_threads,int cmdring_size) {
 
   af_unix_trk_thread_count = nb_threads;
+  thread_profiler_updatetime = time(NULL);
   
   
   
@@ -744,7 +884,11 @@ int expbt_trk_thread_intf_create(char * hostname, int instance_id,int nb_threads
   {
      fatal("cannot create ring buffer");
      return -1;
-  }   
+  } 
+  /*
+  ** create the debug topic
+  */
+   uma_dbg_addTopic_option("th_profiler", show_thread_profiler,UMA_DBG_OPTION_RESET);  
   /*
   ** attach the callback on socket controller
   */
