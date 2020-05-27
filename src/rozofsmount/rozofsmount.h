@@ -146,6 +146,7 @@ typedef struct rozofsmnt_conf {
     unsigned kernel_max_read; /**< image of the block size at kernel level */
     unsigned kernel_max_write; /**< image of the block size at kernel level */
     unsigned rozo_module;  /**< assert to one if rozo fuse module is in use */
+    unsigned batch; /**< when asserted the RozoFSmount support attr & file reading in batch with tracking files & dirent caching on client */
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 
@@ -187,6 +188,7 @@ typedef struct ientry {
     char      * symlink_target;
     uint64_t    symlink_ts;
     int         pending_getattr_cnt;   /**< pending get attr count  */
+    uint64_t    parent_update_time;    /**< update time of the parent directory */
     int         pending_setattr_with_size_update; /**< number of pending setattr triggered by a truncate callback */
 //    uint32_t    io_write_error_counter;   /**< incremented each time there is an I/O write error for that i-node  */
     rozofs_slave_inode_t   *slave_inode_p;      /**< case of the multiple file */
@@ -630,16 +632,34 @@ static inline struct stat *mattr_to_stat(struct inode_internal_t * attr, struct 
     st->st_mtime = attr->attrs.mtime;    
     st->st_blksize = ROZOFS_BSIZE_BYTES(bsize);
     /*
-    ** check the case of the thin provisioning
+    ** check the case of the thin provisioning:
+    ** !! WARNING : for the case of the batch mode, the client acts as the exportd, however upon mount the
+    **              exportd always tells that thin provisioning is active, and the size is adjusted on the exportd
+    **              for both case.
+    **             So by default, when batch mode is active, the thin provisioning MUST not be configured on the exportd.
+    **             On the other hand, it does not make sense to activate the batch mode when thin provisioning is active, since
+    **             it is intended to be used for the case of the VM for which there is not a lot of files.
     */
-    if ((rozofs_get_thin_provisioning()) && (S_ISREG(st->st_mode)))
-    {
+    if ((conf.batch == 0) && ((rozofs_get_thin_provisioning()) && (S_ISREG(st->st_mode))))
+    {      
       uint64_t local_blocks = attr->hpc_reserved.reg.nb_blocks_thin;
       local_blocks *=4096;
       st->st_blocks = ((local_blocks + 512 - 1) / 512);
     }
     else
-      st->st_blocks = ((attr->attrs.size + 512 - 1) / 512);
+    {
+      if(conf.batch)
+      {
+        /*
+	** by default the filesystem uses 4096 block size
+	*/
+	uint64_t local_blocks = (attr->attrs.size+ 4096 -1)/4096;
+	 local_blocks *=4096; 
+        st->st_blocks = ((local_blocks + 512 - 1) / 512);
+      }
+      else
+        st->st_blocks = ((attr->attrs.size + 512 - 1) / 512);      
+    }
     st->st_dev = 0;
     st->st_uid = attr->attrs.uid;
     st->st_gid = attr->attrs.gid;
@@ -772,6 +792,25 @@ int export_write_block_asynchrone(void *fuse_ctx_p, file_t *file_p,
 int clear_read_data(file_t *p);
 
 /*
+**__________________________________________________________________________
+*/
+/**
+*  Get the update time of the parent directory
+
+   @param ie: pointer to the ientry of the parent directory
+   
+   @retval update_time: update time of the parent directory
+*/
+static inline uint64_t rozofs_get_parent_update_time_from_ie(ientry_t *ie)
+{
+  ext_dir_mattr_t *stats_attr_p;
+  struct inode_internal_t *inode_p = &ie->attrs;  
+  
+  stats_attr_p = (ext_dir_mattr_t *)&inode_p->attrs.sids[0];
+
+  return stats_attr_p->s.update_time;
+}
+/*
 **________________________________________________________________
 **
 ** Decide the caching time to use for an ientry given
@@ -788,9 +827,50 @@ static inline uint64_t rozofs_compute_attribute_validity_us(ientry_t *ie) {
   uint64_t stability;
   uint64_t caching_time_us;
   uint64_t limited_cache_us;
+  uint64_t update_time;
+  
   
   if (S_ISDIR(ie->attrs.attrs.mode)) {
-    return rozofs_tmr_get_attr_us(1);
+    if (conf.batch == 0) return rozofs_tmr_get_attr_us(1);
+    /*
+    ** for the batch mode we looked at the update time of the directory
+    */
+    update_time = rozofs_get_parent_update_time_from_ie(ie);
+    /*
+    ** Get the configured caching time of a directory
+    */
+    caching_time_us = rozofs_tmr_get_attr_us(1);
+    /*
+    ** Caching time lower than 1 sec are always granted
+    */
+    if (caching_time_us <= 1000000) {
+      return caching_time_us;
+    } 
+    /*
+    ** Reduce the caching time depending on how long the file has been stable
+    */  
+    stability = time(NULL) - 5;
+    if (stability <= update_time) {
+      /*
+      ** When the file has changed within the last 5 second
+      ** the cache time is 1s
+      */
+      return 1000000;
+    }  
+    stability = stability - update_time;
+    if (stability > 20) return caching_time_us;
+
+    /*
+    ** 5 seconds after a modification, cache is limited to 1 second
+    ** After one win 1/4 of second caching per second
+    ** Modif 0..5  6    7    8    9    10   11   12   13   14   15   16   17   18   19   20   21   22   23   24   25
+    ** cache 1  1  1,26 1,52 1,78 2,04 2,31 2,57 2,83 3,09 3,35 3,62 3,88 4,14 4,4  4,67 4,93 5,19 5,45 5,71 5,98 6,24
+    */
+    limited_cache_us = 1000000; 
+    limited_cache_us += (stability * 1024 * 1024)/4;
+
+    if (limited_cache_us < caching_time_us) return limited_cache_us;
+    return caching_time_us;
   }
 
   /*
@@ -879,6 +959,8 @@ static inline double rozofs_get_linux_fast_reconnect_caching_time_second(void) {
   */
   return (0.5);
 }
+
+
 /*
 **________________________________________________________________
 **
@@ -904,6 +986,57 @@ static inline int rozofs_is_attribute_valid(ientry_t *ie) {
   ** In block mode, files are always valid
   */
   if (rozofs_mode == 1) return 1;
+  return 0;
+}
+
+
+/*
+**________________________________________________________________
+**
+*/
+/** Update time stamp as well as caching time of an ientry
+
+   @param ie    The ientry who attribute validity are to be checked
+  @param pie : parent ientry
+  
+  @retval 1: valid
+  @retval 0: not valid
+ 
+*/
+static inline int rozofs_is_attribute_valid_with_parent(ientry_t *ie,ientry_t *pie) { 
+
+  uint64_t parent_update_time;
+//  uint64_t cur_time;
+  /*
+  ** use the legacly procedure if the parent ientry is not provided
+  */
+  if (pie == NULL) return rozofs_is_attribute_valid(ie);
+
+  /*
+  ** take care of the block mode for the case of the VM
+  */  
+  if ((S_ISREG(ie->attrs.attrs.mode)) &&  (rozofs_mode == 1))
+  {
+    return 1;
+  }
+  parent_update_time = rozofs_get_parent_update_time_from_ie(pie);
+  if (ie->parent_update_time != parent_update_time)
+  {
+     /*
+     ** we need to get the information from the exportd
+     */
+     return 0;
+  }
+
+  /*
+  ** check if the timestamp of the parent is still OK
+  */
+  if ((pie->timestamp+pie->caching_time_us) > rozofs_get_ticker_us()) {
+    return 1;
+  }
+  /*
+  ** parent cache time has expired , need to get attributes from exportd
+  */
   return 0;
 }
 /*
@@ -1669,4 +1802,43 @@ void af_unix_fuse_write_process_response_multiple(void *msg_p);
     @retval -1 on error (see errno for details)
 */
 int rozofs_storcli_wr_thread_send_multiple(void *fuse_ctx_p,uint64_t off,uint32_t len);
+
+/*
+**__________________________________________________________________________
+*/
+/*
+** That function returns the type of the inode
+
+   @param inode
+   
+   @retval rozofs inode type (ROZOFS_REG,ROZOFS_DIR,ROZOFS_SLNK...)
+*/
+static inline export_attr_type_e rozofs_get_inode_type(uint64_t inode)
+{
+   rozofs_inode_t fake_inode;
+   /*
+   ** check for root inode
+   */
+   if (inode == 1)
+   {
+     inode = 0x1800000000000000;
+   }
+   /*
+   ** check if the fid designate a directory referenced by its FID (relative path) or if is the trash associated with the
+   ** directory: the delete bit in the fid can be set for the case of the trash only.
+   */   
+   fake_inode.fid[1]= inode;
+   if (ROZOFS_TRASH != fake_inode.s.key)
+   {
+     fake_inode.s.del = 0;
+
+   }
+   if ( ROZOFS_DIR_FID == fake_inode.s.key )
+   {
+     fake_inode.s.key = ROZOFS_DIR;
+   }
+   return (export_attr_type_e) fake_inode.s.key;
+}
+
+
 #endif
