@@ -19,6 +19,7 @@
 #include <rozofs/rpc/eproto.h>
 
 #include "rozofs_fuse_api.h"
+#include "rozofs_bt_dirent.h"
 
 DECLARE_PROFILING(mpp_profiler_t);
 
@@ -713,10 +714,60 @@ out:
  * @param fi   
  */
  
-int rozofs_ll_readdir2_send_to_export(fid_t fid, uint64_t cookie,void	 *buffer_p) {
+int rozofs_ll_readdir2_send_to_export_no_batch(fid_t fid, uint64_t cookie,void	 *buffer_p) {
     int               ret;        
     epgw_readdir_arg_t  arg;
 
+    /*
+    ** fill up the structure that will be used for creating the xdr message
+    */    
+    arg.arg_gw.eid = exportclt.eid;
+    memcpy(arg.arg_gw.fid,  fid, sizeof (fid_t));
+    arg.arg_gw.cookie = cookie;
+    
+    /*
+    ** now initiates the transaction towards the remote end
+    */
+    ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,(unsigned char*)arg.arg_gw.fid,EXPORT_PROGRAM, EXPORT_VERSION,
+                              EP_READDIR2,(xdrproc_t) xdr_epgw_readdir_arg_t,(void *)&arg,
+                              rozofs_ll_readdir2_cbk,buffer_p); 
+
+    return ret;  
+} 
+
+/*
+**__________________________________________________________________
+*/
+/**
+ * Set the value of an extended attribute to a file
+ *
+ * Valid replies:
+ *   fuse_reply_entry
+ *   fuse_reply_err
+ *
+ * @param req  request handle
+ * @param ino  the inode of the directory to read
+ * @param size the maximum size of the data to return 
+ * @param off  off to start to read from
+ * @param fi   
+ */
+ 
+int rozofs_ll_readdir2_send_to_export(fid_t fid, uint64_t cookie,void	 *buffer_p) {
+    int               ret;        
+    epgw_readdir_arg_t  arg;
+    
+    /*
+    ** when the batch mode is enable, attempt to get the information from the dirent file that
+    ** might be present n the client.
+    */
+    if (conf.batch) 
+    {
+       ret = rozofs_bt_readdir_req_from_main_thread(fid,cookie,buffer_p);
+       if (ret == 0) return ret;
+       /*
+       ** it is not possible to use the local dirent files, so go to the exportd
+       */
+    }
     /*
     ** fill up the structure that will be used for creating the xdr message
     */    

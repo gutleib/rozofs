@@ -27,6 +27,8 @@
 #include "rozofs_kpi.h"
 DECLARE_PROFILING(mpp_profiler_t);
 
+int rozofs_bt_local_check_parent_attributes(fid_t parent_fid,ientry_t *pie);
+
 /**
 * Open a directory
 *
@@ -84,6 +86,11 @@ void rozofs_ll_opendir_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
         errno = ENOENT;
         goto error;
     }
+    /*
+    ** Check if the validity of the directory inode and update its timestamp depending on the presence of the tracking
+    ** file
+    */
+    if (conf.batch) rozofs_bt_local_check_parent_attributes(ie->fid,ie);    
     /*
     ** check if it is configured in block mode, in that case we avoid
     ** a transaction with the exportd
