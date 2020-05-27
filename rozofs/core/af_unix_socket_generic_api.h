@@ -386,4 +386,19 @@ int af_inet_set_connection_user_ref(uint32_t cnx_idx,void *userRef);
   @retval pointer to the userRef or NULL
 */
 void *af_inet_get_connection_user_ref(uint32_t cnx_idx);    
+/*
+**____________________________________________________
+*/
+/**
+   Provide the caller with the ip address of either the source or destination
+   
+   @param socket_ctx_id: index of the context
+   @param src: 1: for source IP@ ; 1: destination @Ip
+   @param pChar: pointer to the buffer in which the IP address will be returned in ASCII format
+   
+   @retval 0 on success
+   @retval -1 on error
+*/
+int af_unix_get_ip_addr_with_sock_idx(int  socket_ctx_id,int src,char *pChar);
+
 #endif

@@ -611,8 +611,63 @@ uint32_t af_unix_getObjCtx_ref(af_unix_ctx_generic_t *p) {
     return index;
 }
 
+/*
+**____________________________________________________
+*/
+/**
+   Provide the caller with the ip address of either the source or destination
+   
+   @param socket_ctx_id: index of the context
+   @param src: 1: for source IP@ ; 1: destination @Ip
+   @param pChar: pointer to the buffer in which the IP address will be returned in ASCII format
+   
+   @retval 0 on success
+   @retval -1 on error
+*/
+int af_unix_get_ip_addr_with_sock_idx(int  socket_ctx_id,int src,char *pChar)
+{
 
-
+  struct sockaddr_in vSckAddr;
+  int vSckAddrLen = sizeof (struct sockaddr);
+  uint32_t ipAddr;
+  af_unix_ctx_generic_t *sock_p;
+  
+  sock_p = af_unix_getObjCtx_p(socket_ctx_id);
+  if (sock_p == NULL)
+  {
+    errno = ENOENT;
+    return -1;
+  }
+  if (sock_p->af_family == AF_UNIX)
+  {
+    *pChar = 0;
+    errno = ENOTSUP;
+    return -1;  
+  }
+  if (src == 0)
+  {
+     /*
+     ** get the ip address of the destination
+     */
+     if ((getpeername(sock_p->socketRef, (struct sockaddr *) &vSckAddr, (socklen_t*) & vSckAddrLen)) == -1) {
+          *pChar = 0;
+	  return -1;
+     }
+     ipAddr = (uint32_t) ntohl((uint32_t) (/*(struct sockaddr *)*/vSckAddr.sin_addr.s_addr));
+     pChar += sprintf(pChar, "%u.%u.%u.%u", (ipAddr >> 24)&0xFF, (ipAddr >> 16)&0xFF, (ipAddr >> 8)&0xFF, (ipAddr)&0xFF);
+     return 0;
+  }
+  /*
+  ** get the ip address of the source
+  */
+  if ((getsockname(sock_p->socketRef, (struct sockaddr *) &vSckAddr, (socklen_t*) & vSckAddrLen)) == -1) {
+      *pChar = 0;
+      return 0;
+  }
+  ipAddr = (uint32_t) ntohl((uint32_t) (/*(struct sockaddr *)*/vSckAddr.sin_addr.s_addr));
+  pChar += sprintf(pChar, "%u.%u.%u.%u", (ipAddr >> 24)&0xFF, (ipAddr >> 16)&0xFF, (ipAddr >> 8)&0xFF, (ipAddr)&0xFF);  
+  return 0;
+}
 
 /*
  **____________________________________________________
