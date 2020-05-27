@@ -28,8 +28,10 @@ set (librozofs_sources
     common/export_track.h
     common/rozofs_site.c
     common/rozofs_site.h
-    common/export_track_change.h
-    common/export_track_change.c
+#    common/export_track_change.h
+#    common/export_track_change.c
+     common/expbt_inode_file_tracking.h
+     common/expbt_inode_file_tracking.c
     common/common_config.c    
     common/common_config_extra_checks.c    
     common/common_config.h
