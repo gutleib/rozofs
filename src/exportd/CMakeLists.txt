@@ -112,7 +112,7 @@ add_executable(exportd
     rozofs_suffix.h
     rozofs_suffix.c
 )
-target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
+target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RT_LIBRARY})
 
 
 #add_executable(expgateway
@@ -254,7 +254,7 @@ add_executable(rozo_fid2pathname
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h   
 )
-target_link_libraries(rozo_fid2pathname rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_fid2pathname rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 
 
 #________________________________________________________
@@ -265,7 +265,7 @@ add_executable(rozo_clusterstats
     rozofs_ip4_flt.h  
         
 )
-target_link_libraries(rozo_clusterstats rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_clusterstats rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 #________________________________________________________
 add_executable(rozo_scan_by_criteria
     rozo_scan_by_criteria.c  
@@ -281,7 +281,7 @@ add_executable(rozo_scan_by_criteria
     xattr_trusted.c
     xattr_user.c
 )
-target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${PCRE_LIBRARY})
+target_link_libraries(rozo_scan_by_criteria rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${PCRE_LIBRARY} ${RT_LIBRARY})
 #________________________________________________________
 add_executable(rozo_rebalance
     rozo_rebalance.c  
@@ -295,7 +295,7 @@ add_executable(rozo_rebalance
     rebalance_config.h
     rebalance_config_read_show.h
 )
-target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 #________________________________________________________
 add_executable(rozo_vmove
     rozo_vmove.c  
@@ -306,7 +306,7 @@ add_executable(rozo_vmove
     rozofs_mover.h
     volume.c
 )
-target_link_libraries(rozo_vmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_vmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 #________________________________________________________
 add_executable(rozo_cmove
     rozo_cmove.c  
@@ -317,7 +317,7 @@ add_executable(rozo_cmove
     rozofs_mover.h
     volume.c
 )
-target_link_libraries(rozo_cmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_cmove rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 
 #________________________________________________________
 add_executable(rozo_rcmd_server
@@ -338,7 +338,7 @@ add_executable(rozo_trashd
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h   
 )
-target_link_libraries(rozo_trashd rozofs_inode rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_trashd rozofs_inode rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 
 
 #________________________________________________________
@@ -348,7 +348,7 @@ add_executable(rozo_buildfid_list
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h    
 )
-target_link_libraries(rozo_buildfid_list rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_buildfid_list rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 
 
 #________________________________________________________
@@ -361,7 +361,7 @@ add_executable(rozo_rbsList
     rozofs_ip4_flt.c 
     rozofs_ip4_flt.h        
 )
-target_link_libraries(rozo_rbsList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_rbsList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 
 
 add_executable(rozo_du
@@ -371,7 +371,7 @@ add_executable(rozo_du
     rozofs_ip4_flt.h   
     rozofs_du.c  
 )
-target_link_libraries(rozo_du rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_du rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY} ${RT_LIBRARY})
 
 #________________________________________________________
 # Send export stats to an InfluDB host
@@ -384,10 +384,26 @@ add_executable(rozo_export_send_stats
     rozofs_ip4_flt.h    
     rozo_export_send_stats.c
 )
-target_link_libraries(rozo_export_send_stats rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(rozo_export_send_stats rozofs ${CONFIG_LIBRARY} ${PTHREAD_LIBRARY} ${RT_LIBRARY})
 
 # Install
 install(CODE "EXECUTE_PROCESS (COMMAND mkdir -p ${ROZOFS_CONFIG_DIR})" COMPONENT export)
+
+add_executable(rozo_expbt
+./bt_export/expbt_global.h
+./bt_export/expbt_main.c
+./bt_export/expbt_nblock_init.c
+./bt_export/expbt_north_intf.c
+./bt_export/expbt_trk_file_read.c
+./bt_export/expbt_trk_thread_intf.c
+./bt_export/expbt_trk_thread_intf.h
+econfig.c
+econfig.h
+rozofs_ip4_flt.c
+)
+target_link_libraries(rozo_expbt rozofs     ${PTHREAD_LIBRARY}  ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY} ${RT_LIBRARY})
+
+
 
 install(TARGETS exportd
     RUNTIME DESTINATION bin

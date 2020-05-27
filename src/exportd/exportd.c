@@ -70,6 +70,7 @@
 //#include "geo_profiler.h"
 #include "export_thin_prov_api.h"
 #include "rozofs_suffix.h"
+#include <rozofs/common/expbt_inode_file_tracking.h>
 
 #define EXPORTD_PID_FILE "exportd.pid"
 /* Maximum open file descriptor number for exportd daemon */
@@ -128,6 +129,54 @@ uint32_t export_profiler_eid;
 ** rmbins thread context tabel
 */
 rmbins_thread_t rmbins_thread[ROZO_NB_RMBINS_THREAD];
+
+
+
+/*
+ *_______________________________________________________________________
+ */
+/**
+*    export tracking file reader launcher pid file
+
+   @param vid: volume identifier of the rebalancer
+  
+   @retval none
+*/
+static inline void export_expbt_pid_file(char * pidfile, int instance) {
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_expbt_inst_%d.pid",instance);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start an export tracking file reader
+
+   @param vid: volume identifier of the rebalancer
+   @param cfg: rebalancer configuration file name
+  
+   @retval none
+*/
+void export_start_one_expbt(int instance) {
+  char cmd[1024];
+  char pidfile[256];
+  int  ret = -1;
+
+  char *cmd_p = &cmd[0];
+  cmd_p += sprintf(cmd_p, "%s ", "rozo_expbt ");
+  cmd_p += sprintf(cmd_p, "-i %d ", instance);
+  cmd_p += sprintf(cmd_p, "-c %s ", exportd_config_file);
+
+  export_expbt_pid_file(pidfile,instance);
+
+  // Launch exportd slave
+  ret = rozo_launcher_start(pidfile, cmd);
+  if (ret !=0) {
+    severe("rozo_launcher_start(%s,%s) %s",pidfile, cmd, strerror(errno));
+    return;
+  }
+
+  info("start rozo_expbt:%d",instance);
+}
 
 /*
  *_______________________________________________________________________
@@ -1593,7 +1642,21 @@ static int load_exports_conf() {
             goto out;
         }
 	info("initializing export %d OK",econfig->eid);
-     
+	/*
+	** Init of the shared memory used for tracking changes for directories and files
+	*/
+	info("tracking file inode shared memory init (eid:%d)",econfig->eid);
+	status = expb_open_shared_memory(econfig->eid,ROZOFS_REG,(expgwc_non_blocking_conf.slave == 0)?1:0);
+	if (status < 0)
+	{
+	  severe("%s shared memory for Regular file failure (eid:%d):%s",(expgwc_non_blocking_conf.slave == 0)?"Creation of":"Opening of",econfig->eid,strerror(errno));
+	}
+	info("tracking directory inode shared memory init (eid:%d)",econfig->eid);
+	status = expb_open_shared_memory(econfig->eid,ROZOFS_DIR,(expgwc_non_blocking_conf.slave == 0)?1:0);
+	if (status < 0)
+	{
+	  severe("%s shared memory for Directory failure (eid:%d):%s",(expgwc_non_blocking_conf.slave == 0)?"Creation of":"Opening of",econfig->eid,strerror(errno));
+	}     
        // Allocate default profiler structure
         export_profiler_allocate(econfig->eid);
 #ifdef GEO_REPLICATION         
@@ -1927,6 +1990,10 @@ static void on_start() {
       ** Start rebalancer when in automatic mode
       */
       export_rebalancer(1);
+      /*
+      ** Start a file tracking reader (instance 0)
+      */
+      export_start_one_expbt(0);
       
       /*
       ** Start remote command server that enables storage node to 

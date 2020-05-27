@@ -71,6 +71,8 @@
 #include "rozofs_quota_api.h"
 #include "export_quota_thread_api.h"
 #include "export_thin_prov_api.h"
+#include <rozofs/common/expbt_inode_file_tracking.h>
+
 
 DECLARE_PROFILING(epp_profiler_t);
 
@@ -1311,7 +1313,13 @@ int expgwc_start_nb_blocking_th(void *args) {
     uma_dbg_addTopicAndMan("metadata",show_metadata_device,show_metadata_device_usage,0);        
 
     if (exportd_is_master()==0) {
-      uma_dbg_addTopic_option("SecretSetProjectToDirectory", rozofs_SecretSetProjectToDirectory,UMA_DBG_OPTION_HIDE);
+      uma_dbg_addTopic_option("SecretSetProjectToDirectory", rozofs_SecretSetProjectToDirectory,UMA_DBG_OPTION_HIDE);      
+    }
+    if (exportd_is_master()) {
+      /*
+      ** set the debug function for directories & files changes tracking
+      */
+      uma_dbg_addTopic("expbt_inode_track",show_expbt_track_inode_display_for_slice); 
     }
     /*
     ** add export versioning
