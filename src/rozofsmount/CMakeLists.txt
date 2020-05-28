@@ -179,13 +179,6 @@ install(TARGETS rozo_mount_send_stats
     COMPONENT rozo_mount_send_stats
 )
 
-# Install rozofsmount_netdata
-install(TARGETS rozofsmount_netdata.plugin
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    COMPONENT rozofsmount_netdata.plugin
-)
     
 # Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse (mount.rozofs command)
 install(CODE "MESSAGE(\"Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse\")")
