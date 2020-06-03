@@ -1094,6 +1094,16 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
      return 0;
    }   
    
+   /*
+   ** Check that the CID of this inode is valid
+   */
+   // Cluster 0 does not exist
+   if (inode_p->s.attrs.cid == 0) return 0;
+   // Maximum cluster value is ROZOFS_CLUSTERS_MAX in rozofs.h
+   if (inode_p->s.attrs.cid >= ROZOFS_CLUSTERS_MAX) return 0;
+   // Cluster statistics should have been loaded previously  
+   if (export_rebalance_cluster_stat_p[inode_p->s.attrs.cid] == 0) return 0;
+     
    rozo_balancing_ctx.current_scanned_file_cpt++;   
 
    if (rozofs_fwd < 0) 
