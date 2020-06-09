@@ -33,6 +33,7 @@
 void trash_process_config_read(char * fname);
 
 int trash_process_config_does_file_exist(char * fname);
+uint64_t trash_process_config_get_mtime(char * fname);
 
 /*_______________________________
 ** ENUM definion

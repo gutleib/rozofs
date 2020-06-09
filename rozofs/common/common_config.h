@@ -33,6 +33,7 @@
 void common_config_read(char * fname);
 
 int common_config_does_file_exist(char * fname);
+uint64_t common_config_get_mtime(char * fname);
 
 /*_______________________________
 ** ENUM definion

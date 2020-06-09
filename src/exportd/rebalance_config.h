@@ -33,6 +33,7 @@
 void rebalance_config_read(char * fname);
 
 int rebalance_config_does_file_exist(char * fname);
+uint64_t rebalance_config_get_mtime(char * fname);
 
 /*_______________________________
 ** ENUM definion
