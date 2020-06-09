@@ -268,15 +268,15 @@ static long int          intval;
 #define TRASH_PROCESS_CONFIG_SET_LONG_MINMAX(val,def,mini,maxi)  {\
   long long         longval;\
   if (sscanf(def,"%lld",&longval) != 1) {\
-    pChar += rozofs_string_append_error(pChar,"long long integer value expected.\n"));\
+    pChar += rozofs_string_append_error(pChar,"long long integer value expected.\n");\
     return -1;\
   }\
   if (longval<mini) {\
-    pChar += rozofs_string_append_error(pChar,"value lower than minimum.\n"));\
+    pChar += rozofs_string_append_error(pChar,"value lower than minimum.\n");\
     return -1;\
   }\
   if (longval>maxi) { \
-    pChar += rozofs_string_append_error(pChar,"value bigger than maximum.\n"));\
+    pChar += rozofs_string_append_error(pChar,"value bigger than maximum.\n");\
     return -1;\
   }\
   pChar += rozofs_string_append(pChar,#val);\
