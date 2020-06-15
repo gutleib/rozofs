@@ -73,6 +73,12 @@ add_executable(rozo_storage_fid2pathname
 )
 target_link_libraries(rozo_storage_fid2pathname rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
+add_executable(rozofsstorage_netdata.plugin
+    rozofsstorage_netdata.c
+    rozofsstorage_netdata_cfg.c
+)
+target_link_libraries(rozofsstorage_netdata.plugin rozofs ${PTHREAD_LIBRARY} ${CONFIG_LIBRARY})
+
 add_executable(stspare
     sconfig.h
     sconfig.c

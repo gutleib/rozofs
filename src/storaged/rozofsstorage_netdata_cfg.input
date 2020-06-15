@@ -1,0 +1,66 @@
+#_______________________________________________________________________________________
+# 
+# Call  ../../tools/generate_all_config.py to generate rozofsmount_common.h as well as rozofsmount_config.c
+#
+#_______________________________________________________________________________________
+#
+# Syntax is as follow:
+# 
+# ......................................................
+# // one or more...
+# // ... comment lines
+# <type> <scope> <name> <default> [<extra>]
+# ......................................................
+#
+# Where
+#   //          is the begining of a comment line for the following parameter
+#   <type>      is the parameter type within 
+#               - INT   : at least 32 bits signed integer
+#               - LONG  : 64 bits signed integer
+#               - STRING: character string
+#               - ENUM  : a character string within a list of values
+#               - BOOL      True boolean False or False
+#   <scope>     is any string you want to classify the different parameters in groups
+#   <name>      is any parameter name
+#   <default>   is the default parameter value. (STRING must be quoted).
+#   <extra>     is an optional field of the parameter dependant on the <type>
+#               - INT and LONG extra: 
+#                 min:max : minimum and maximum values (included) of the integer
+#               - ENUM mandatory extra
+#                 a comma separated list of possible values.
+#
+#_______________________________________________________________________________________
+
+
+// Whether to display counts graph
+BOOL   global  display_count                      True
+// Whether to display duration graph
+BOOL   global  display_duration                   True
+// Whether to display bytes graph
+BOOL   global  display_bytes                      True
+// Whether to display bytes graph
+BOOL   global  debug                              False
+
+// Count to display
+
+BOOL   count          display_count_read             False
+BOOL   count          display_count_write            False
+BOOL   count          display_count_truncate         False
+BOOL   count          display_count_rebuild_start    False
+BOOL   count          display_count_write_empty      False
+BOOL   count          display_count_stat             False
+BOOL   count          display_count_remove           False
+
+// duration to display
+
+BOOL   duration          display_duration_read           False
+BOOL   duration          display_duration_write          False
+BOOL   duration          display_duration_truncate       False
+BOOL   duration          display_duration_write_empty    False
+BOOL   duration          display_duration_stat           False
+BOOL   duration          display_duration_remove         False
+
+// Bytes to display
+
+BOOL   bytes          display_bytes_read     True
+BOOL   bytes          display_bytes_write    True

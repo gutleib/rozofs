@@ -37,3 +37,7 @@ config_generate(file_name       = "rozofsmount_netdata_cfg.conf",
                 input_file_name = "../src/rozofsmount/rozofsmount_netdata_cfg.input",   
                 cli_name        = "netdata")
                                                 
+config_generate(file_name       = "rozofsstorage_netdata_cfg.conf",     
+                input_file_name = "../src/storaged/rozofsstorage_netdata_cfg.input",   
+                cli_name        = "netdata")
+                                                
