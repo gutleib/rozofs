@@ -39,7 +39,7 @@ BOOL   global  display_duration                   True
 // Whether to display bytes graph
 BOOL   global  display_bytes                      True
 // Trace to syslog
-BOOL   global  debug                              True
+BOOL   global  debug                              False
 
 // Count to display
 

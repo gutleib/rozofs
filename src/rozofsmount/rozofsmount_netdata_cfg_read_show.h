@@ -325,10 +325,10 @@ static inline int rozofsmount_netdata_cfg_generated_search(char * pChar, char *p
 
   if (strcasestr("debug",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
@@ -1000,10 +1000,10 @@ char * show_rozofsmount_netdata_cfg_module_global(char * pChar) {
   ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -1040,10 +1040,10 @@ char * show_rozofsmount_netdata_cfg_module_global_short(char * pChar) {
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
   }
   return pChar;
 }
@@ -1992,10 +1992,10 @@ char * save_rozofsmount_netdata_cfg_module_global(char * pChar) {
     ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
   }
   return pChar;
 }
@@ -2829,7 +2829,7 @@ static inline void rozofsmount_netdata_cfg_generated_read(char * fname) {
   // Whether to display bytes graph 
   ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_bytes,True);
   // Trace to syslog 
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(debug,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(debug,False);
   /*
   ** count scope configuration parameters
   */
