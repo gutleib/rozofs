@@ -54,7 +54,7 @@ typedef struct _rozofsmount_netdata_cfg_t {
   int32_t     display_duration;
   // Whether to display bytes graph
   int32_t     display_bytes;
-  // Whether to display bytes graph
+  // Trace to syslog
   int32_t     debug;
 
   /*
@@ -62,88 +62,94 @@ typedef struct _rozofsmount_netdata_cfg_t {
   */
 
   // Count to display
-  int32_t     display_count_lookup;
-  int32_t     display_count_lookup_agg;
-  int32_t     display_count_forget;
-  int32_t     display_count_getattr;
-  int32_t     display_count_setattr;
-  int32_t     display_count_readlink;
-  int32_t     display_count_mknod;
-  int32_t     display_count_mkdir;
-  int32_t     display_count_unlink;
-  int32_t     display_count_rmdir;
-  int32_t     display_count_symlink;
-  int32_t     display_count_rename;
-  int32_t     display_count_open;
-  int32_t     display_count_link;
-  int32_t     display_count_read;
-  int32_t     display_count_write;
-  int32_t     display_count_flush;
-  int32_t     display_count_release;
-  int32_t     display_count_opendir;
-  int32_t     display_count_readdir;
-  int32_t     display_count_releasedir;
-  int32_t     display_count_fsyncdir;
-  int32_t     display_count_statfs;
-  int32_t     display_count_setxattr;
-  int32_t     display_count_getxattr;
-  int32_t     display_count_listxattr;
-  int32_t     display_count_removexattr;
-  int32_t     display_count_access;
-  int32_t     display_count_create;
-  int32_t     display_count_getlk;
-  int32_t     display_count_setlk;
-  int32_t     display_count_setlk_int;
-  int32_t     display_count_ioctl;
-  int32_t     display_count_clearlkowner;
+  int32_t     display_mount_count_lookup;
+  int32_t     display_mount_count_lookup_agg;
+  int32_t     display_mount_count_forget;
+  int32_t     display_mount_count_getattr;
+  int32_t     display_mount_count_setattr;
+  int32_t     display_mount_count_readlink;
+  int32_t     display_mount_count_mknod;
+  int32_t     display_mount_count_mkdir;
+  int32_t     display_mount_count_unlink;
+  int32_t     display_mount_count_rmdir;
+  int32_t     display_mount_count_symlink;
+  int32_t     display_mount_count_rename;
+  int32_t     display_mount_count_open;
+  int32_t     display_mount_count_link;
+  int32_t     display_mount_count_read;
+  int32_t     display_mount_count_write;
+  int32_t     display_mount_count_flush;
+  int32_t     display_mount_count_release;
+  int32_t     display_mount_count_opendir;
+  int32_t     display_mount_count_readdir;
+  int32_t     display_mount_count_releasedir;
+  int32_t     display_mount_count_fsyncdir;
+  int32_t     display_mount_count_statfs;
+  int32_t     display_mount_count_setxattr;
+  int32_t     display_mount_count_getxattr;
+  int32_t     display_mount_count_listxattr;
+  int32_t     display_mount_count_removexattr;
+  int32_t     display_mount_count_access;
+  int32_t     display_mount_count_create;
+  int32_t     display_mount_count_getlk;
+  int32_t     display_mount_count_setlk;
+  int32_t     display_mount_count_setlk_int;
+  int32_t     display_mount_count_ioctl;
+  int32_t     display_mount_count_clearlkowner;
+  int32_t     display_storcli_count_read;
+  int32_t     display_storcli_count_write;
 
   /*
   ** duration scope configuration parameters
   */
 
   // Duration to display
-  int32_t     display_duration_lookup;
-  int32_t     display_duration_lookup_agg;
-  int32_t     display_duration_forget;
-  int32_t     display_duration_getattr;
-  int32_t     display_duration_setattr;
-  int32_t     display_duration_readlink;
-  int32_t     display_duration_mknod;
-  int32_t     display_duration_mkdir;
-  int32_t     display_duration_unlink;
-  int32_t     display_duration_rmdir;
-  int32_t     display_duration_symlink;
-  int32_t     display_duration_rename;
-  int32_t     display_duration_open;
-  int32_t     display_duration_link;
-  int32_t     display_duration_read;
-  int32_t     display_duration_write;
-  int32_t     display_duration_flush;
-  int32_t     display_duration_release;
-  int32_t     display_duration_opendir;
-  int32_t     display_duration_readdir;
-  int32_t     display_duration_releasedir;
-  int32_t     display_duration_fsyncdir;
-  int32_t     display_duration_statfs;
-  int32_t     display_duration_setxattr;
-  int32_t     display_duration_getxattr;
-  int32_t     display_duration_listxattr;
-  int32_t     display_duration_removexattr;
-  int32_t     display_duration_access;
-  int32_t     display_duration_create;
-  int32_t     display_duration_getlk;
-  int32_t     display_duration_setlk;
-  int32_t     display_duration_setlk_int;
-  int32_t     display_duration_ioctl;
-  int32_t     display_duration_clearlkowner;
+  int32_t     display_mount_duration_lookup;
+  int32_t     display_mount_duration_lookup_agg;
+  int32_t     display_mount_duration_forget;
+  int32_t     display_mount_duration_getattr;
+  int32_t     display_mount_duration_setattr;
+  int32_t     display_mount_duration_readlink;
+  int32_t     display_mount_duration_mknod;
+  int32_t     display_mount_duration_mkdir;
+  int32_t     display_mount_duration_unlink;
+  int32_t     display_mount_duration_rmdir;
+  int32_t     display_mount_duration_symlink;
+  int32_t     display_mount_duration_rename;
+  int32_t     display_mount_duration_open;
+  int32_t     display_mount_duration_link;
+  int32_t     display_mount_duration_read;
+  int32_t     display_mount_duration_write;
+  int32_t     display_mount_duration_flush;
+  int32_t     display_mount_duration_release;
+  int32_t     display_mount_duration_opendir;
+  int32_t     display_mount_duration_readdir;
+  int32_t     display_mount_duration_releasedir;
+  int32_t     display_mount_duration_fsyncdir;
+  int32_t     display_mount_duration_statfs;
+  int32_t     display_mount_duration_setxattr;
+  int32_t     display_mount_duration_getxattr;
+  int32_t     display_mount_duration_listxattr;
+  int32_t     display_mount_duration_removexattr;
+  int32_t     display_mount_duration_access;
+  int32_t     display_mount_duration_create;
+  int32_t     display_mount_duration_getlk;
+  int32_t     display_mount_duration_setlk;
+  int32_t     display_mount_duration_setlk_int;
+  int32_t     display_mount_duration_ioctl;
+  int32_t     display_mount_duration_clearlkowner;
+  int32_t     display_storcli_duration_read;
+  int32_t     display_storcli_duration_write;
+  int32_t     display_storcli_bytes_read;
+  int32_t     display_storcli_bytes_write;
 
   /*
   ** bytes scope configuration parameters
   */
 
   // Bytes to display   
-  int32_t     display_bytes_read;
-  int32_t     display_bytes_write;
+  int32_t     display_mount_bytes_read;
+  int32_t     display_mount_bytes_write;
 } rozofsmount_netdata_cfg_t;
 
 extern rozofsmount_netdata_cfg_t rozofsmount_netdata_cfg;

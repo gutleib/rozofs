@@ -17,6 +17,7 @@
  */
 #include <stdlib.h>
 #include <rozofs/rpc/mpproto.h>
+#include <rozofs/rpc/stcpproto.h>
 #include <rozofs/common/log.h>
 #include <rozofs/common/list.h>
 #include "rozofsmount_netdata_cfg.h"
@@ -24,13 +25,22 @@
 
 typedef struct _rozofsmount_ctx_t {
   list_t         list;
+  list_t         storcli_list;
   int            instance; /*<< Rozofsmount instance. */
   int            fd;       /*<< Profiler file fd */
   mpp_profiler_t profiler;
   mpp_profiler_t old_profiler;
 } rozofsmount_ctx_t;
 
-rozofsmount_ctx_t   * ctx_all = NULL;
+typedef struct _storcli_ctx_t {
+  list_t         list;
+  int            instance; /*<< Rozofsmount instance. */
+  int            fd;       /*<< Profiler file fd */
+  stcpp_profiler_t profiler;
+  stcpp_profiler_t old_profiler;
+} storcli_ctx_t;
+
+
 uint64_t              rozofsmout_period_micro = 0;
 list_t                rozofsmount_list;
 uint64_t              next_run = 0;
@@ -51,14 +61,14 @@ uint32_t              rozofsmount_count = 0;
 **
 *_________________________________________________________________
 */
-#define CREATE_ONE_CHART_COUNT(X) {\
+#define MOUNT_CREATE_ONE_CHART_COUNT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
   char                              line[4096];\
   char                            * pChar = line;\
 \
-  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
-    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_count '' 'number of calls to "#X" api' 'calls' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
+  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_mount_count_##X)) {\
+    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_count '' 'Number of calls to "#X" API of every rozofsmount instance' 'calls' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       pChar += rozofs_string_append(pChar,"DIMENSION mount");\
@@ -68,14 +78,40 @@ uint32_t              rozofsmount_count = 0;
     fputs(line,stdout);\
   }\
 }
-#define CREATE_ONE_CHART_DURATION(X) {\
+#define STORCLI_CREATE_ONE_CHART_COUNT(X) {\
+  list_t                          * p;\
+  rozofsmount_ctx_t               * ctx;\
+  list_t                          * q;\
+  storcli_ctx_t                   * storcliCtx;\
+  char                              line[4096];\
+  char                            * pChar = line;\
+\
+  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_storcli_count_##X)) {\
+    list_for_each_forward(p, &rozofsmount_list) {\
+      ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      pChar += rozofs_string_append(pChar,"CHART rozofsmount.");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"."#X"_count '' 'Number of calls to "#X" API of each storcli instance of mount");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"' 'calls' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
+      list_for_each_forward(q, &ctx->storcli_list) {\
+        storcliCtx = list_entry(q, storcli_ctx_t, list);\
+        pChar += rozofs_string_append(pChar,"DIMENSION storcli");\
+        pChar += rozofs_u32_append(pChar,storcliCtx->instance);\
+        pChar += rozofs_string_append(pChar," '' incremental\n");\
+      }\
+    }\
+    fputs(line,stdout);\
+  }\
+}
+#define MOUNT_CREATE_ONE_CHART_DURATION(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
   char                              line[4096];\
   char                            * pChar = line;\
 \
-  if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_duration_##X)) {\
-    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_duration '' 'duration of a call to "#X" api' 'microseconds' "#X" '' area 100 1 rozofsmount_netdata.plugin\n");\
+  if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_mount_duration_##X)) {\
+    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_duration '' 'Duration of a call to "#X" API of every rozofsmount instance' 'microseconds' "#X" '' area 100 1 rozofsmount_netdata.plugin\n");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       pChar += rozofs_string_append(pChar,"DIMENSION mount");\
@@ -85,14 +121,40 @@ uint32_t              rozofsmount_count = 0;
     fputs(line,stdout);\
   }\
 }
-#define CREATE_ONE_CHART_THROUGHPUT(X) {\
+#define STORCLI_CREATE_ONE_CHART_DURATION(X) {\
+  list_t                          * p;\
+  rozofsmount_ctx_t               * ctx;\
+  list_t                          * q;\
+  storcli_ctx_t                   * storcliCtx;\
+  char                              line[4096];\
+  char                            * pChar = line;\
+\
+  if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_storcli_duration_##X)) {\
+    list_for_each_forward(p, &rozofsmount_list) {\
+      ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      pChar += rozofs_string_append(pChar,"CHART rozofsmount.");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"."#X"_duration '' 'duration of a call to "#X" API of each storcli instance of mount");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"' 'microseconds' "#X" '' area 100 1 rozofsmount_netdata.plugin\n");\
+      list_for_each_forward(q, &ctx->storcli_list) {\
+        storcliCtx = list_entry(q, storcli_ctx_t, list);\
+        pChar += rozofs_string_append(pChar,"DIMENSION storcli");\
+        pChar += rozofs_u32_append(pChar,storcliCtx->instance);\
+        pChar += rozofs_string_append(pChar," '' absolute\n");\
+      }\
+    }\
+    fputs(line,stdout);\
+  }\
+}
+#define MOUNT_CREATE_ONE_CHART_THROUGHPUT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
   char                              line[4096];\
   char                            * pChar = line;\
 \
-  if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_bytes_##X)) {\
-    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_throughput '' '"#X" throughput' 'MB/s' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
+  if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_mount_bytes_##X)) {\
+    pChar += rozofs_string_append(pChar,"CHART rozofsmount."#X"_throughput '' '"#X" throughput of every rozofsmount instance' 'MB/s' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       pChar += rozofs_string_append(pChar,"DIMENSION mount");\
@@ -102,64 +164,102 @@ uint32_t              rozofsmount_count = 0;
     fputs(line,stdout);\
   }\
 }
-#define CREATE_2_CHARTS(X) {\
-  CREATE_ONE_CHART_COUNT(X)\
-  CREATE_ONE_CHART_DURATION(X)\
+#define STORCLI_CREATE_ONE_CHART_THROUGHPUT(X) {\
+  list_t                          * p;\
+  rozofsmount_ctx_t               * ctx;\
+  list_t                          * q;\
+  storcli_ctx_t                   * storcliCtx;\
+  char                              line[4096];\
+  char                            * pChar = line;\
+\
+  if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_storcli_bytes_##X)) {\
+    list_for_each_forward(p, &rozofsmount_list) {\
+      ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      pChar += rozofs_string_append(pChar,"CHART rozofsmount.");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"."#X"_throughput '' '"#X" throughput of each storcli instance of mount");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"' 'MB/s' "#X" '' stacked 100 1 rozofsmount_netdata.plugin\n");\
+      list_for_each_forward(q, &ctx->storcli_list) {\
+        storcliCtx = list_entry(q, storcli_ctx_t, list);\
+        pChar += rozofs_string_append(pChar,"DIMENSION storcli");\
+        pChar += rozofs_u32_append(pChar,storcliCtx->instance);\
+        pChar += rozofs_string_append(pChar," '' incremental\n");\
+      }\
+    }\
+    fputs(line,stdout);\
+  }\
+}
+#define MOUNT_CREATE_2_CHARTS(X) {\
+  MOUNT_CREATE_ONE_CHART_COUNT(X)\
+  MOUNT_CREATE_ONE_CHART_DURATION(X)\
 }   
-#define CREATE_3_CHARTS(X) {\
-  CREATE_ONE_CHART_COUNT(X)\
-  CREATE_ONE_CHART_DURATION(X)\
-  CREATE_ONE_CHART_THROUGHPUT(X)\
+#define MOUNT_CREATE_3_CHARTS(X) {\
+  MOUNT_CREATE_ONE_CHART_COUNT(X)\
+  MOUNT_CREATE_ONE_CHART_DURATION(X)\
+  MOUNT_CREATE_ONE_CHART_THROUGHPUT(X)\
 }  
+#define STORCLI_CREATE_2_CHARTS(X) {\
+  STORCLI_CREATE_ONE_CHART_COUNT(X)\
+  STORCLI_CREATE_ONE_CHART_DURATION(X)\
+} 
+#define STORCLI_CREATE_3_CHARTS(X) {\
+  STORCLI_CREATE_ONE_CHART_COUNT(X)\
+  STORCLI_CREATE_ONE_CHART_DURATION(X)\
+  STORCLI_CREATE_ONE_CHART_THROUGHPUT(X)\
+}   
 void create_rozofsmount_charts() { 
   if (rozofsmount_count==0) return;
-  CREATE_2_CHARTS(lookup);
-  CREATE_2_CHARTS(lookup_agg);
-  CREATE_2_CHARTS(forget);
-  CREATE_2_CHARTS(getattr);
-  CREATE_2_CHARTS(setattr);
-  CREATE_2_CHARTS(readlink);
-  CREATE_2_CHARTS(mknod);
-  CREATE_2_CHARTS(mkdir);
-  CREATE_2_CHARTS(unlink);
-  CREATE_2_CHARTS(rmdir);
-  CREATE_2_CHARTS(symlink);
-  CREATE_2_CHARTS(rename);
-  CREATE_2_CHARTS(open);
-  CREATE_2_CHARTS(link);
-  CREATE_3_CHARTS(read);
-  CREATE_3_CHARTS(write);
-  CREATE_2_CHARTS(flush);
-  CREATE_2_CHARTS(release);
-  CREATE_2_CHARTS(opendir);
-  CREATE_2_CHARTS(readdir);
-  CREATE_2_CHARTS(releasedir);
-  CREATE_2_CHARTS(fsyncdir);
-  CREATE_2_CHARTS(statfs);
-  CREATE_2_CHARTS(setxattr);
-  CREATE_2_CHARTS(getxattr);
-  CREATE_2_CHARTS(listxattr);
-  CREATE_2_CHARTS(removexattr);
-  CREATE_2_CHARTS(access);
-  CREATE_2_CHARTS(create);
-  CREATE_2_CHARTS(getlk);
-  CREATE_2_CHARTS(setlk);
-  CREATE_2_CHARTS(setlk_int);
-  CREATE_2_CHARTS(ioctl);
-  CREATE_2_CHARTS(clearlkowner); 
+  MOUNT_CREATE_2_CHARTS(lookup);
+  MOUNT_CREATE_2_CHARTS(lookup_agg);
+  MOUNT_CREATE_2_CHARTS(forget);
+  MOUNT_CREATE_2_CHARTS(getattr);
+  MOUNT_CREATE_2_CHARTS(setattr);
+  MOUNT_CREATE_2_CHARTS(readlink);
+  MOUNT_CREATE_2_CHARTS(mknod);
+  MOUNT_CREATE_2_CHARTS(mkdir);
+  MOUNT_CREATE_2_CHARTS(unlink);
+  MOUNT_CREATE_2_CHARTS(rmdir);
+  MOUNT_CREATE_2_CHARTS(symlink);
+  MOUNT_CREATE_2_CHARTS(rename);
+  MOUNT_CREATE_2_CHARTS(open);
+  MOUNT_CREATE_2_CHARTS(link);
+  MOUNT_CREATE_3_CHARTS(read);
+  MOUNT_CREATE_3_CHARTS(write);
+  MOUNT_CREATE_2_CHARTS(flush);
+  MOUNT_CREATE_2_CHARTS(release);
+  MOUNT_CREATE_2_CHARTS(opendir);
+  MOUNT_CREATE_2_CHARTS(readdir);
+  MOUNT_CREATE_2_CHARTS(releasedir);
+  MOUNT_CREATE_2_CHARTS(fsyncdir);
+  MOUNT_CREATE_2_CHARTS(statfs);
+  MOUNT_CREATE_2_CHARTS(setxattr);
+  MOUNT_CREATE_2_CHARTS(getxattr);
+  MOUNT_CREATE_2_CHARTS(listxattr);
+  MOUNT_CREATE_2_CHARTS(removexattr);
+  MOUNT_CREATE_2_CHARTS(access);
+  MOUNT_CREATE_2_CHARTS(create);
+  MOUNT_CREATE_2_CHARTS(getlk);
+  MOUNT_CREATE_2_CHARTS(setlk);
+  MOUNT_CREATE_2_CHARTS(setlk_int);
+  MOUNT_CREATE_2_CHARTS(ioctl);
+  MOUNT_CREATE_2_CHARTS(clearlkowner); 
+  
+  STORCLI_CREATE_3_CHARTS(read);
+  STORCLI_CREATE_3_CHARTS(write);
 }
 /*________________________________________________________________
 ** Update all rozofsmount charts
 **
 *_________________________________________________________________
 */
-#define UPDATE_ONE_CHART_COUNT(X) {\
+#define MOUNT_UPDATE_ONE_CHART_COUNT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
   char                              line[4096];\
   char                            * pChar = line;\
 \
-  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_count_##X)) {\
+  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_mount_count_##X)) {\
     pChar += rozofs_string_append(pChar,"BEGIN rozofsmount."#X"_count ");\
     pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
@@ -173,24 +273,51 @@ void create_rozofsmount_charts() {
     fputs(line,stdout);\
   }\
 }
-#define UPDATE_ONE_CHART_DURATION(X) {\
+#define STORCLI_UPDATE_ONE_CHART_COUNT(X) {\
+  list_t                          * p;\
+  rozofsmount_ctx_t               * ctx;\
+  list_t                          * q;\
+  storcli_ctx_t                   * storcliCtx;\
+  char                              line[4096];\
+  char                            * pChar = line;\
+\
+  if ((rozofsmount_netdata_cfg.display_count) && (rozofsmount_netdata_cfg.display_storcli_count_##X)) {\
+    list_for_each_forward(p, &rozofsmount_list) {\
+      ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      pChar += rozofs_string_append(pChar,"BEGIN rozofsmount.");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"."#X"_count ");\
+      pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
+      list_for_each_forward(q, &ctx->storcli_list) {\
+        storcliCtx = list_entry(q, storcli_ctx_t, list);\
+        pChar += rozofs_string_append(pChar,"\nSET storcli");\
+        pChar += rozofs_u32_append(pChar, storcliCtx->instance);\
+        pChar += rozofs_string_append(pChar," = ");\
+        pChar += rozofs_u64_append(pChar, storcliCtx->profiler.X[P_COUNT]);\
+      }\
+      pChar += rozofs_string_append(pChar,"\nEND\n");\
+    }\
+    fputs(line,stdout);\
+  }\
+}
+#define MOUNT_UPDATE_ONE_CHART_DURATION(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
   char                              line[4096];\
   char                            * pChar = line;\
 \
-  if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_duration_##X)) {\
+  if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_mount_duration_##X)) {\
     pChar += rozofs_string_append(pChar,"BEGIN rozofsmount."#X"_duration ");\
     pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
       ctx = list_entry(p, rozofsmount_ctx_t, list);\
       pChar += rozofs_string_append(pChar,"\nSET mount");\
       pChar += rozofs_u32_append(pChar, ctx->instance);\
-      pChar += rozofs_string_append(pChar," = ");\
       if (ctx->profiler.rozofs_ll_##X[P_COUNT] == ctx->old_profiler.rozofs_ll_##X[P_COUNT]) {\
-        pChar += rozofs_string_append(pChar,"0");\
+        pChar += rozofs_string_append(pChar," = 0");\
       }\
       else {\
+        pChar += rozofs_string_append(pChar," = ");\
         pChar += rozofs_u64_append(pChar,(ctx->profiler.rozofs_ll_##X[P_ELAPSE] - ctx->old_profiler.rozofs_ll_##X[P_ELAPSE])/(ctx->profiler.rozofs_ll_##X[P_COUNT] - ctx->old_profiler.rozofs_ll_##X[P_COUNT]));\
       }\
     }\
@@ -198,13 +325,45 @@ void create_rozofsmount_charts() {
     fputs(line,stdout);\
   }\
 }
-#define UPDATE_ONE_CHART_TROUGHPUT(X) {\
+#define STORCLI_UPDATE_ONE_CHART_DURATION(X) {\
+  list_t                          * p;\
+  rozofsmount_ctx_t               * ctx;\
+  list_t                          * q;\
+  storcli_ctx_t                   * storcliCtx;\
+  char                              line[4096];\
+  char                            * pChar = line;\
+\
+  if ((rozofsmount_netdata_cfg.display_duration) && (rozofsmount_netdata_cfg.display_storcli_duration_##X)) {\
+    list_for_each_forward(p, &rozofsmount_list) {\
+      ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      pChar += rozofs_string_append(pChar,"BEGIN rozofsmount.");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"."#X"_duration ");\
+      pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
+      list_for_each_forward(q, &ctx->storcli_list) {\
+        storcliCtx = list_entry(q, storcli_ctx_t, list);\
+        pChar += rozofs_string_append(pChar,"\nSET storcli");\
+        pChar += rozofs_u32_append(pChar, storcliCtx->instance);\
+        pChar += rozofs_string_append(pChar," = ");\
+        if (storcliCtx->profiler.X[P_COUNT] == storcliCtx->old_profiler.X[P_COUNT]) {\
+          pChar += rozofs_string_append(pChar,"0");\
+        }\
+        else {\
+          pChar += rozofs_u64_append(pChar,(storcliCtx->profiler.X[P_ELAPSE] - storcliCtx->old_profiler.X[P_ELAPSE])/(storcliCtx->profiler.X[P_COUNT] - storcliCtx->old_profiler.X[P_COUNT]));\
+        }\
+      }\
+      pChar += rozofs_string_append(pChar,"\nEND\n");\
+    }\
+    fputs(line,stdout);\
+  }\
+}
+#define MOUNT_UPDATE_ONE_CHART_TROUGHPUT(X) {\
   list_t                          * p;\
   rozofsmount_ctx_t               * ctx;\
   char                              line[4096];\
   char                            * pChar = line;\
 \
-  if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_bytes_##X)) {\
+  if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_mount_bytes_##X)) {\
     pChar += rozofs_string_append(pChar,"BEGIN rozofsmount."#X"_throughput ");\
     pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
     list_for_each_forward(p, &rozofsmount_list) {\
@@ -218,51 +377,90 @@ void create_rozofsmount_charts() {
     fputs(line,stdout);\
   }\
 }
-#define UPDATE_2_CHARTS(X) {\
-  UPDATE_ONE_CHART_COUNT(X)\
-  UPDATE_ONE_CHART_DURATION(X)\
+#define STORCLI_UPDATE_ONE_CHART_TROUGHPUT(X) {\
+  list_t                          * p;\
+  rozofsmount_ctx_t               * ctx;\
+  list_t                          * q;\
+  storcli_ctx_t                   * storcliCtx;\
+  char                              line[4096];\
+  char                            * pChar = line;\
+\
+  if ((rozofsmount_netdata_cfg.display_bytes) && (rozofsmount_netdata_cfg.display_storcli_bytes_##X)) {\
+    list_for_each_forward(p, &rozofsmount_list) {\
+      ctx = list_entry(p, rozofsmount_ctx_t, list);\
+      pChar += rozofs_string_append(pChar,"BEGIN rozofsmount.");\
+      pChar += rozofs_u32_append(pChar,ctx->instance);\
+      pChar += rozofs_string_append(pChar,"."#X"_throughput ");\
+      pChar += rozofs_u64_append(pChar, rozofsmout_period_micro);\
+      list_for_each_forward(q, &ctx->storcli_list) {\
+        storcliCtx = list_entry(q, storcli_ctx_t, list);\
+        pChar += rozofs_string_append(pChar,"\nSET storcli");\
+        pChar += rozofs_u32_append(pChar, storcliCtx->instance);\
+        pChar += rozofs_string_append(pChar," = ");\
+        pChar += rozofs_u64_append(pChar,storcliCtx->profiler.X[P_BYTES]/1000000);\
+      }\
+      pChar += rozofs_string_append(pChar,"\nEND\n");\
+    }\
+    fputs(line,stdout);\
+  }\
 }
-#define UPDATE_3_CHARTS(X) {\
-  UPDATE_ONE_CHART_COUNT(X)\
-  UPDATE_ONE_CHART_DURATION(X)\
-  UPDATE_ONE_CHART_TROUGHPUT(X)\
+#define MOUNT_UPDATE_2_CHARTS(X) {\
+  MOUNT_UPDATE_ONE_CHART_COUNT(X)\
+  MOUNT_UPDATE_ONE_CHART_DURATION(X)\
+}
+#define MOUNT_UPDATE_3_CHARTS(X) {\
+  MOUNT_UPDATE_ONE_CHART_COUNT(X)\
+  MOUNT_UPDATE_ONE_CHART_DURATION(X)\
+  MOUNT_UPDATE_ONE_CHART_TROUGHPUT(X)\
+}
+#define STORCLI_UPDATE_2_CHARTS(X) {\
+  STORCLI_UPDATE_ONE_CHART_COUNT(X)\
+  STORCLI_UPDATE_ONE_CHART_DURATION(X)\
+}
+#define STORCLI_UPDATE_3_CHARTS(X) {\
+  STORCLI_UPDATE_ONE_CHART_COUNT(X)\
+  STORCLI_UPDATE_ONE_CHART_DURATION(X)\
+  STORCLI_UPDATE_ONE_CHART_TROUGHPUT(X)\
 }
 void update_rozofsmount_charts() { 
   if (rozofsmount_count==0) return;
-  UPDATE_2_CHARTS(lookup);
-  UPDATE_2_CHARTS(lookup_agg);
-  UPDATE_2_CHARTS(forget);
-  UPDATE_2_CHARTS(getattr);
-  UPDATE_2_CHARTS(setattr);
-  UPDATE_2_CHARTS(readlink);
-  UPDATE_2_CHARTS(mknod);
-  UPDATE_2_CHARTS(mkdir);
-  UPDATE_2_CHARTS(unlink);
-  UPDATE_2_CHARTS(rmdir);
-  UPDATE_2_CHARTS(symlink);
-  UPDATE_2_CHARTS(rename);
-  UPDATE_2_CHARTS(open);
-  UPDATE_2_CHARTS(link);
-  UPDATE_3_CHARTS(read);
-  UPDATE_3_CHARTS(write);
-  UPDATE_2_CHARTS(flush);
-  UPDATE_2_CHARTS(release);
-  UPDATE_2_CHARTS(opendir);
-  UPDATE_2_CHARTS(readdir);
-  UPDATE_2_CHARTS(releasedir);
-  UPDATE_2_CHARTS(fsyncdir);
-  UPDATE_2_CHARTS(statfs);
-  UPDATE_2_CHARTS(setxattr);
-  UPDATE_2_CHARTS(getxattr);
-  UPDATE_2_CHARTS(listxattr);
-  UPDATE_2_CHARTS(removexattr);
-  UPDATE_2_CHARTS(access);
-  UPDATE_2_CHARTS(create);
-  UPDATE_2_CHARTS(getlk);
-  UPDATE_2_CHARTS(setlk);
-  UPDATE_2_CHARTS(setlk_int);
-  UPDATE_2_CHARTS(ioctl);
-  UPDATE_2_CHARTS(clearlkowner); 
+  MOUNT_UPDATE_2_CHARTS(lookup);
+  MOUNT_UPDATE_2_CHARTS(lookup_agg);
+  MOUNT_UPDATE_2_CHARTS(forget);
+  MOUNT_UPDATE_2_CHARTS(getattr);
+  MOUNT_UPDATE_2_CHARTS(setattr);
+  MOUNT_UPDATE_2_CHARTS(readlink);
+  MOUNT_UPDATE_2_CHARTS(mknod);
+  MOUNT_UPDATE_2_CHARTS(mkdir);
+  MOUNT_UPDATE_2_CHARTS(unlink);
+  MOUNT_UPDATE_2_CHARTS(rmdir);
+  MOUNT_UPDATE_2_CHARTS(symlink);
+  MOUNT_UPDATE_2_CHARTS(rename);
+  MOUNT_UPDATE_2_CHARTS(open);
+  MOUNT_UPDATE_2_CHARTS(link);
+  MOUNT_UPDATE_3_CHARTS(read);
+  MOUNT_UPDATE_3_CHARTS(write);
+  MOUNT_UPDATE_2_CHARTS(flush);
+  MOUNT_UPDATE_2_CHARTS(release);
+  MOUNT_UPDATE_2_CHARTS(opendir);
+  MOUNT_UPDATE_2_CHARTS(readdir);
+  MOUNT_UPDATE_2_CHARTS(releasedir);
+  MOUNT_UPDATE_2_CHARTS(fsyncdir);
+  MOUNT_UPDATE_2_CHARTS(statfs);
+  MOUNT_UPDATE_2_CHARTS(setxattr);
+  MOUNT_UPDATE_2_CHARTS(getxattr);
+  MOUNT_UPDATE_2_CHARTS(listxattr);
+  MOUNT_UPDATE_2_CHARTS(removexattr);
+  MOUNT_UPDATE_2_CHARTS(access);
+  MOUNT_UPDATE_2_CHARTS(create);
+  MOUNT_UPDATE_2_CHARTS(getlk);
+  MOUNT_UPDATE_2_CHARTS(setlk);
+  MOUNT_UPDATE_2_CHARTS(setlk_int);
+  MOUNT_UPDATE_2_CHARTS(ioctl);
+  MOUNT_UPDATE_2_CHARTS(clearlkowner); 
+  
+  STORCLI_UPDATE_3_CHARTS(read);
+  STORCLI_UPDATE_3_CHARTS(write)
   fflush(stdout);
 }
 /*________________________________________________________________
@@ -279,6 +477,7 @@ rozofsmount_ctx_t * allocate_rozofsmount_context(int instance, int fd) {
   
   ctx = malloc(sizeof(rozofsmount_ctx_t));
   memset(ctx,0,sizeof(rozofsmount_ctx_t));
+  list_init(&ctx->storcli_list);
   
   list_init(&ctx->list);
   list_push_back(&rozofsmount_list,&ctx->list);
@@ -286,6 +485,29 @@ rozofsmount_ctx_t * allocate_rozofsmount_context(int instance, int fd) {
   ctx->instance = instance;
   ctx->fd       = fd;
   return ctx;
+}
+/*________________________________________________________________
+** Allocate a storcli context
+**
+** @param ctx              Rozofsmout context
+** @param instance         Rozofsmout instance
+** @param fd               file descriptor of the profiler file
+**
+** @retval rozofsmount context address
+*_________________________________________________________________
+*/
+storcli_ctx_t * allocate_storcli_context(rozofsmount_ctx_t * ctx, int instance, int fd) {
+  storcli_ctx_t   * storliCtx;  
+  
+  storliCtx = malloc(sizeof(storcli_ctx_t));
+  memset(storliCtx,0,sizeof(storcli_ctx_t));
+  list_init(&storliCtx->list);
+  
+  list_push_back(&ctx->storcli_list,&storliCtx->list);
+  
+  storliCtx->instance = instance;
+  storliCtx->fd       = fd;
+  return storliCtx;
 }
 /*________________________________________________________________
 ** Find out a rozofsmount context from its instance
@@ -306,12 +528,31 @@ rozofsmount_ctx_t * find_rozofsmount_context(int instance) {
   return NULL;  
 }
 /*________________________________________________________________
-** Read profiler file 
+** Find out a storcli context from its instance
+**
+** @param ctx         Rozofsmout context
+** @param stc         Storcli instance
+**
+** @retval storcli context address or null
+*_________________________________________________________________
+*/
+storcli_ctx_t * find_storcli_context(rozofsmount_ctx_t * ctx, int stc) {
+  list_t                          * p;
+  storcli_ctx_t                   * storliCtx;
+
+  list_for_each_forward(p, &ctx->storcli_list) {
+    storliCtx = list_entry(p, storcli_ctx_t, list);
+    if (storliCtx->instance == stc) return storliCtx;
+  }
+  return NULL;  
+}
+/*________________________________________________________________
+** Read rozofsmount profiler file 
 **
 ** @param       ctx         Rozofsmout context
 *_________________________________________________________________
 */
-void read_profiler_file(rozofsmount_ctx_t * ctx) {
+void read_rozofsmount_profiler_file(rozofsmount_ctx_t * ctx) {
   /*
   ** Save old values
   */
@@ -322,6 +563,22 @@ void read_profiler_file(rozofsmount_ctx_t * ctx) {
   pread(ctx->fd, &ctx->profiler, sizeof(mpp_profiler_t), 0); 
 }
 /*________________________________________________________________
+** Read storcli profiler file 
+**
+** @param       ctx         Storcli context
+*_________________________________________________________________
+*/
+void read_storcli_profiler_file(storcli_ctx_t * ctx) {
+  /*
+  ** Save old values
+  */
+  memcpy(&ctx->old_profiler,&ctx->profiler, sizeof(ctx->profiler));
+  /*
+  ** Read new values
+  */
+  pread(ctx->fd, &ctx->profiler, sizeof(stcpp_profiler_t), 0); 
+}
+/*________________________________________________________________
 ** re-read profiler files 
 **
 ** @param       ctx         Rozofsmout context
@@ -329,13 +586,17 @@ void read_profiler_file(rozofsmount_ctx_t * ctx) {
 */
 void read_all_profiler_files() {
   list_t                          * p;
+  list_t                          * q;
   rozofsmount_ctx_t               * ctx;
+  storcli_ctx_t                   * storcliCtx;
 
   list_for_each_forward(p, &rozofsmount_list) {
     ctx = list_entry(p, rozofsmount_ctx_t, list);
-    if (ctx->instance != -1) {
-      read_profiler_file(ctx);
-    }  
+    read_rozofsmount_profiler_file(ctx);
+    list_for_each_forward(q, &ctx->storcli_list) {
+      storcliCtx = list_entry(q, storcli_ctx_t, list);
+      read_storcli_profiler_file(storcliCtx);
+    }       
   }
 }
 /*________________________________________________________________
@@ -382,11 +643,16 @@ void wait_time_to_run() {
 int build_rofsmount_context_list() {
   char                 mount_kpi_base_path[256];
   char                 mount_kpi_path[1024];
+  char                 mount_dir[1024];
   char              *  pChar = mount_kpi_base_path;
   DIR               *  d;
+  DIR               *  d1;
+  struct dirent     *  dir1;
   struct dirent     *  dir;
   int                  instance;
+  int                  stc;
   rozofsmount_ctx_t *  ctx;  
+  storcli_ctx_t     *  storcliCtx;  
   int                  fd;
   int                  new = 0;  
 
@@ -408,6 +674,8 @@ int build_rofsmount_context_list() {
     if (sscanf(dir->d_name, "inst_%d", &instance) != 1) {
       continue;
     }
+
+    sprintf(mount_dir, "%sinst_%d/", mount_kpi_base_path, instance);
     
     ctx = find_rozofsmount_context(instance);
     if (ctx) {
@@ -415,30 +683,69 @@ int build_rofsmount_context_list() {
       ** already in list 
       */
       rozofsmount_count++;
-      continue;
+    }
+    else {
+
+      /*
+      ** Open profile file
+      */
+      sprintf(mount_kpi_path, "%s/%s", mount_dir, "mount/profiler");
+      if ((fd = open(mount_kpi_path, O_RDONLY, S_IRWXU)) < 0) {
+        severe("open(%s) %s", mount_kpi_path, strerror(errno));
+        continue;
+      }
+
+      /*
+      ** Allocate a context
+      */
+      ctx = allocate_rozofsmount_context(instance,fd);
+      read_rozofsmount_profiler_file(ctx);
+      new++;
+      rozofsmount_count++;
+    }  
+    
+    
+    d1 = opendir(mount_dir);
+    if (d1==NULL) {
+      severe("open(%s) %s",mount_dir,strerror(errno));
+      return -1;
     }
     
-    /*
-    ** New context
-    */  
-    
-    /*
-    ** Open profile file
-    */
-    sprintf(mount_kpi_path, "%sinst_%d%s", mount_kpi_base_path, instance, "/mount/profiler");
-    if ((fd = open(mount_kpi_path, O_RDONLY, S_IRWXU)) < 0) {
-      severe("open(%s) %s", mount_kpi_path, strerror(errno));
-      continue;
-    }
-    
-    /*
-    ** Allocate a context
-    */
-    ctx = allocate_rozofsmount_context(instance,fd);
-    read_profiler_file(ctx);
-    new++;
-    rozofsmount_count++;
+    while ((dir1 = readdir(d1)) != NULL) { 
+  
+      if (sscanf(dir1->d_name, "storcli_%d", &stc) != 1) {
+        continue;
+      }
+
+      storcliCtx = find_storcli_context(ctx,stc);
+      if (storcliCtx) {
+        /*
+        ** already in list 
+        */
+        rozofsmount_count++;
+        continue;
+      }
+      /*
+      ** Open profiler file
+      */
+      sprintf(mount_kpi_path, "%s%s/profiler", mount_dir, dir1->d_name);
+      if ((fd = open(mount_kpi_path, O_RDONLY, S_IRWXU)) < 0) {
+        severe("open(%s) %s", mount_kpi_path, strerror(errno));
+        continue;
+      }
+
+      /*
+      ** Allocate a context
+      */
+      storcliCtx = allocate_storcli_context(ctx,stc,fd);
+      read_storcli_profiler_file(storcliCtx);
+      new++;
+      rozofsmount_count++;            
+    } 
+    closedir(d1);   
   }  
+  
+  closedir(d);
   return new;
 }
 /*________________________________________________________________

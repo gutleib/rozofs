@@ -19,7 +19,7 @@
 #               - LONG  : 64 bits signed integer
 #               - STRING: character string
 #               - ENUM  : a character string within a list of values
-#               - BOOL  ; boolean False or False
+#               - BOOL  ; boolean True or True
 #   <scope>     is any string you want to classify the different parameters in groups
 #   <name>      is any parameter name
 #   <default>   is the default parameter value. (STRING must be quoted).
@@ -38,83 +38,95 @@ BOOL   global  display_count                      True
 BOOL   global  display_duration                   True
 // Whether to display bytes graph
 BOOL   global  display_bytes                      True
-// Whether to display bytes graph
-BOOL   global  debug                              False
+// Trace to syslog
+BOOL   global  debug                              True
 
 // Count to display
-BOOL count  display_count_lookup  False
-BOOL count  display_count_lookup_agg  False
-BOOL count  display_count_forget  False
-BOOL count  display_count_getattr  False
-BOOL count  display_count_setattr  False
-BOOL count  display_count_readlink  False
-BOOL count  display_count_mknod  False
-BOOL count  display_count_mkdir  False
-BOOL count  display_count_unlink  False
-BOOL count  display_count_rmdir  False
-BOOL count  display_count_symlink  False
-BOOL count  display_count_rename  False
-BOOL count  display_count_open  False
-BOOL count  display_count_link  False
-BOOL count  display_count_read  False
-BOOL count  display_count_write  False
-BOOL count  display_count_flush  False
-BOOL count  display_count_release  False
-BOOL count  display_count_opendir  False
-BOOL count  display_count_readdir  False
-BOOL count  display_count_releasedir  False
-BOOL count  display_count_fsyncdir  False
-BOOL count  display_count_statfs  False
-BOOL count  display_count_setxattr  False
-BOOL count  display_count_getxattr  False
-BOOL count  display_count_listxattr  False
-BOOL count  display_count_removexattr  False
-BOOL count  display_count_access  False
-BOOL count  display_count_create  False
-BOOL count  display_count_getlk  False
-BOOL count  display_count_setlk  False
-BOOL count  display_count_setlk_int  False
-BOOL count  display_count_ioctl  False
-BOOL count  display_count_clearlkowner  False              
+
+BOOL count  display_mount_count_lookup  True
+BOOL count  display_mount_count_lookup_agg  True
+BOOL count  display_mount_count_forget  False
+BOOL count  display_mount_count_getattr  True
+BOOL count  display_mount_count_setattr  False
+BOOL count  display_mount_count_readlink  False
+BOOL count  display_mount_count_mknod  True
+BOOL count  display_mount_count_mkdir  True
+BOOL count  display_mount_count_unlink  True
+BOOL count  display_mount_count_rmdir  True
+BOOL count  display_mount_count_symlink  False
+BOOL count  display_mount_count_rename  False
+BOOL count  display_mount_count_open  False
+BOOL count  display_mount_count_link  False
+BOOL count  display_mount_count_read  True
+BOOL count  display_mount_count_write  True
+BOOL count  display_mount_count_flush  False
+BOOL count  display_mount_count_release  False
+BOOL count  display_mount_count_opendir  False
+BOOL count  display_mount_count_readdir  False
+BOOL count  display_mount_count_releasedir  False
+BOOL count  display_mount_count_fsyncdir  False
+BOOL count  display_mount_count_statfs  False
+BOOL count  display_mount_count_setxattr  False
+BOOL count  display_mount_count_getxattr  False
+BOOL count  display_mount_count_listxattr  False
+BOOL count  display_mount_count_removexattr  False
+BOOL count  display_mount_count_access  False
+BOOL count  display_mount_count_create  True
+BOOL count  display_mount_count_getlk  False
+BOOL count  display_mount_count_setlk  False
+BOOL count  display_mount_count_setlk_int  False
+BOOL count  display_mount_count_ioctl  False
+BOOL count  display_mount_count_clearlkowner  False              
+
+BOOL count  display_storcli_count_read  True              
+BOOL count  display_storcli_count_write  True              
 
 // Duration to display
-BOOL duration  display_duration_lookup  False
-BOOL duration  display_duration_lookup_agg  False
-BOOL duration  display_duration_forget  False
-BOOL duration  display_duration_getattr  False
-BOOL duration  display_duration_setattr  False
-BOOL duration  display_duration_readlink  False
-BOOL duration  display_duration_mknod  False
-BOOL duration  display_duration_mkdir  False
-BOOL duration  display_duration_unlink  False
-BOOL duration  display_duration_rmdir  False
-BOOL duration  display_duration_symlink  False
-BOOL duration  display_duration_rename  False
-BOOL duration  display_duration_open  False
-BOOL duration  display_duration_link  False
-BOOL duration  display_duration_read  True
-BOOL duration  display_duration_write  True
-BOOL duration  display_duration_flush  False
-BOOL duration  display_duration_release  False
-BOOL duration  display_duration_opendir  False
-BOOL duration  display_duration_readdir  False
-BOOL duration  display_duration_releasedir  False
-BOOL duration  display_duration_fsyncdir  False
-BOOL duration  display_duration_statfs  False
-BOOL duration  display_duration_setxattr  False
-BOOL duration  display_duration_getxattr  False
-BOOL duration  display_duration_listxattr  False
-BOOL duration  display_duration_removexattr  False
-BOOL duration  display_duration_access  False
-BOOL duration  display_duration_create  False
-BOOL duration  display_duration_getlk  False
-BOOL duration  display_duration_setlk  False
-BOOL duration  display_duration_setlk_int  False
-BOOL duration  display_duration_ioctl  False
-BOOL duration  display_duration_clearlkowner  False 
+
+BOOL duration  display_mount_duration_lookup  True
+BOOL duration  display_mount_duration_lookup_agg  True
+BOOL duration  display_mount_duration_forget  False
+BOOL duration  display_mount_duration_getattr  True
+BOOL duration  display_mount_duration_setattr  False
+BOOL duration  display_mount_duration_readlink  False
+BOOL duration  display_mount_duration_mknod  True
+BOOL duration  display_mount_duration_mkdir  True
+BOOL duration  display_mount_duration_unlink  True
+BOOL duration  display_mount_duration_rmdir  True
+BOOL duration  display_mount_duration_symlink  False
+BOOL duration  display_mount_duration_rename  False
+BOOL duration  display_mount_duration_open  False
+BOOL duration  display_mount_duration_link  False
+BOOL duration  display_mount_duration_read  True
+BOOL duration  display_mount_duration_write  True
+BOOL duration  display_mount_duration_flush  False
+BOOL duration  display_mount_duration_release  False
+BOOL duration  display_mount_duration_opendir  False
+BOOL duration  display_mount_duration_readdir  False
+BOOL duration  display_mount_duration_releasedir  False
+BOOL duration  display_mount_duration_fsyncdir  False
+BOOL duration  display_mount_duration_statfs  False
+BOOL duration  display_mount_duration_setxattr  False
+BOOL duration  display_mount_duration_getxattr  False
+BOOL duration  display_mount_duration_listxattr  False
+BOOL duration  display_mount_duration_removexattr  False
+BOOL duration  display_mount_duration_access  False
+BOOL duration  display_mount_duration_create  True
+BOOL duration  display_mount_duration_getlk  False
+BOOL duration  display_mount_duration_setlk  False
+BOOL duration  display_mount_duration_setlk_int  False
+BOOL duration  display_mount_duration_ioctl  False
+BOOL duration  display_mount_duration_clearlkowner  False 
+
+BOOL duration  display_storcli_duration_read  True              
+BOOL duration  display_storcli_duration_write  True              
 
 
 // Bytes to display   
-BOOL bytes  display_bytes_read  True
-BOOL bytes  display_bytes_write  True
+
+BOOL bytes  display_mount_bytes_read  True
+BOOL bytes  display_mount_bytes_write  True
+    
+BOOL duration  display_storcli_bytes_read  True              
+BOOL duration  display_storcli_bytes_write  True              
       

@@ -52,215 +52,233 @@ static inline int rozofsmount_netdata_cfg_generated_set(char * pChar, char *para
   if (strcmp(parameter,"debug")==0) {
     ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(debug,value);
   }
-  if (strcmp(parameter,"display_count_lookup")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_lookup,value);
+  if (strcmp(parameter,"display_mount_count_lookup")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_lookup,value);
   }
-  if (strcmp(parameter,"display_count_lookup_agg")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_lookup_agg,value);
+  if (strcmp(parameter,"display_mount_count_lookup_agg")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_lookup_agg,value);
   }
-  if (strcmp(parameter,"display_count_forget")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_forget,value);
+  if (strcmp(parameter,"display_mount_count_forget")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_forget,value);
   }
-  if (strcmp(parameter,"display_count_getattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_getattr,value);
+  if (strcmp(parameter,"display_mount_count_getattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_getattr,value);
   }
-  if (strcmp(parameter,"display_count_setattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_setattr,value);
+  if (strcmp(parameter,"display_mount_count_setattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_setattr,value);
   }
-  if (strcmp(parameter,"display_count_readlink")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_readlink,value);
+  if (strcmp(parameter,"display_mount_count_readlink")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_readlink,value);
   }
-  if (strcmp(parameter,"display_count_mknod")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_mknod,value);
+  if (strcmp(parameter,"display_mount_count_mknod")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_mknod,value);
   }
-  if (strcmp(parameter,"display_count_mkdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_mkdir,value);
+  if (strcmp(parameter,"display_mount_count_mkdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_mkdir,value);
   }
-  if (strcmp(parameter,"display_count_unlink")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_unlink,value);
+  if (strcmp(parameter,"display_mount_count_unlink")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_unlink,value);
   }
-  if (strcmp(parameter,"display_count_rmdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_rmdir,value);
+  if (strcmp(parameter,"display_mount_count_rmdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_rmdir,value);
   }
-  if (strcmp(parameter,"display_count_symlink")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_symlink,value);
+  if (strcmp(parameter,"display_mount_count_symlink")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_symlink,value);
   }
-  if (strcmp(parameter,"display_count_rename")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_rename,value);
+  if (strcmp(parameter,"display_mount_count_rename")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_rename,value);
   }
-  if (strcmp(parameter,"display_count_open")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_open,value);
+  if (strcmp(parameter,"display_mount_count_open")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_open,value);
   }
-  if (strcmp(parameter,"display_count_link")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_link,value);
+  if (strcmp(parameter,"display_mount_count_link")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_link,value);
   }
-  if (strcmp(parameter,"display_count_read")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_read,value);
+  if (strcmp(parameter,"display_mount_count_read")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_read,value);
   }
-  if (strcmp(parameter,"display_count_write")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_write,value);
+  if (strcmp(parameter,"display_mount_count_write")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_write,value);
   }
-  if (strcmp(parameter,"display_count_flush")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_flush,value);
+  if (strcmp(parameter,"display_mount_count_flush")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_flush,value);
   }
-  if (strcmp(parameter,"display_count_release")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_release,value);
+  if (strcmp(parameter,"display_mount_count_release")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_release,value);
   }
-  if (strcmp(parameter,"display_count_opendir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_opendir,value);
+  if (strcmp(parameter,"display_mount_count_opendir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_opendir,value);
   }
-  if (strcmp(parameter,"display_count_readdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_readdir,value);
+  if (strcmp(parameter,"display_mount_count_readdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_readdir,value);
   }
-  if (strcmp(parameter,"display_count_releasedir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_releasedir,value);
+  if (strcmp(parameter,"display_mount_count_releasedir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_releasedir,value);
   }
-  if (strcmp(parameter,"display_count_fsyncdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_fsyncdir,value);
+  if (strcmp(parameter,"display_mount_count_fsyncdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_fsyncdir,value);
   }
-  if (strcmp(parameter,"display_count_statfs")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_statfs,value);
+  if (strcmp(parameter,"display_mount_count_statfs")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_statfs,value);
   }
-  if (strcmp(parameter,"display_count_setxattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_setxattr,value);
+  if (strcmp(parameter,"display_mount_count_setxattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_setxattr,value);
   }
-  if (strcmp(parameter,"display_count_getxattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_getxattr,value);
+  if (strcmp(parameter,"display_mount_count_getxattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_getxattr,value);
   }
-  if (strcmp(parameter,"display_count_listxattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_listxattr,value);
+  if (strcmp(parameter,"display_mount_count_listxattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_listxattr,value);
   }
-  if (strcmp(parameter,"display_count_removexattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_removexattr,value);
+  if (strcmp(parameter,"display_mount_count_removexattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_removexattr,value);
   }
-  if (strcmp(parameter,"display_count_access")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_access,value);
+  if (strcmp(parameter,"display_mount_count_access")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_access,value);
   }
-  if (strcmp(parameter,"display_count_create")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_create,value);
+  if (strcmp(parameter,"display_mount_count_create")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_create,value);
   }
-  if (strcmp(parameter,"display_count_getlk")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_getlk,value);
+  if (strcmp(parameter,"display_mount_count_getlk")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_getlk,value);
   }
-  if (strcmp(parameter,"display_count_setlk")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_setlk,value);
+  if (strcmp(parameter,"display_mount_count_setlk")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_setlk,value);
   }
-  if (strcmp(parameter,"display_count_setlk_int")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_setlk_int,value);
+  if (strcmp(parameter,"display_mount_count_setlk_int")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_setlk_int,value);
   }
-  if (strcmp(parameter,"display_count_ioctl")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_ioctl,value);
+  if (strcmp(parameter,"display_mount_count_ioctl")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_ioctl,value);
   }
-  if (strcmp(parameter,"display_count_clearlkowner")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_count_clearlkowner,value);
+  if (strcmp(parameter,"display_mount_count_clearlkowner")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_count_clearlkowner,value);
   }
-  if (strcmp(parameter,"display_duration_lookup")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_lookup,value);
+  if (strcmp(parameter,"display_storcli_count_read")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_storcli_count_read,value);
   }
-  if (strcmp(parameter,"display_duration_lookup_agg")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_lookup_agg,value);
+  if (strcmp(parameter,"display_storcli_count_write")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_storcli_count_write,value);
   }
-  if (strcmp(parameter,"display_duration_forget")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_forget,value);
+  if (strcmp(parameter,"display_mount_duration_lookup")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_lookup,value);
   }
-  if (strcmp(parameter,"display_duration_getattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_getattr,value);
+  if (strcmp(parameter,"display_mount_duration_lookup_agg")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_lookup_agg,value);
   }
-  if (strcmp(parameter,"display_duration_setattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_setattr,value);
+  if (strcmp(parameter,"display_mount_duration_forget")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_forget,value);
   }
-  if (strcmp(parameter,"display_duration_readlink")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_readlink,value);
+  if (strcmp(parameter,"display_mount_duration_getattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_getattr,value);
   }
-  if (strcmp(parameter,"display_duration_mknod")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_mknod,value);
+  if (strcmp(parameter,"display_mount_duration_setattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_setattr,value);
   }
-  if (strcmp(parameter,"display_duration_mkdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_mkdir,value);
+  if (strcmp(parameter,"display_mount_duration_readlink")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_readlink,value);
   }
-  if (strcmp(parameter,"display_duration_unlink")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_unlink,value);
+  if (strcmp(parameter,"display_mount_duration_mknod")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_mknod,value);
   }
-  if (strcmp(parameter,"display_duration_rmdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_rmdir,value);
+  if (strcmp(parameter,"display_mount_duration_mkdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_mkdir,value);
   }
-  if (strcmp(parameter,"display_duration_symlink")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_symlink,value);
+  if (strcmp(parameter,"display_mount_duration_unlink")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_unlink,value);
   }
-  if (strcmp(parameter,"display_duration_rename")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_rename,value);
+  if (strcmp(parameter,"display_mount_duration_rmdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_rmdir,value);
   }
-  if (strcmp(parameter,"display_duration_open")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_open,value);
+  if (strcmp(parameter,"display_mount_duration_symlink")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_symlink,value);
   }
-  if (strcmp(parameter,"display_duration_link")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_link,value);
+  if (strcmp(parameter,"display_mount_duration_rename")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_rename,value);
   }
-  if (strcmp(parameter,"display_duration_read")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_read,value);
+  if (strcmp(parameter,"display_mount_duration_open")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_open,value);
   }
-  if (strcmp(parameter,"display_duration_write")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_write,value);
+  if (strcmp(parameter,"display_mount_duration_link")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_link,value);
   }
-  if (strcmp(parameter,"display_duration_flush")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_flush,value);
+  if (strcmp(parameter,"display_mount_duration_read")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_read,value);
   }
-  if (strcmp(parameter,"display_duration_release")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_release,value);
+  if (strcmp(parameter,"display_mount_duration_write")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_write,value);
   }
-  if (strcmp(parameter,"display_duration_opendir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_opendir,value);
+  if (strcmp(parameter,"display_mount_duration_flush")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_flush,value);
   }
-  if (strcmp(parameter,"display_duration_readdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_readdir,value);
+  if (strcmp(parameter,"display_mount_duration_release")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_release,value);
   }
-  if (strcmp(parameter,"display_duration_releasedir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_releasedir,value);
+  if (strcmp(parameter,"display_mount_duration_opendir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_opendir,value);
   }
-  if (strcmp(parameter,"display_duration_fsyncdir")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_fsyncdir,value);
+  if (strcmp(parameter,"display_mount_duration_readdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_readdir,value);
   }
-  if (strcmp(parameter,"display_duration_statfs")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_statfs,value);
+  if (strcmp(parameter,"display_mount_duration_releasedir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_releasedir,value);
   }
-  if (strcmp(parameter,"display_duration_setxattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_setxattr,value);
+  if (strcmp(parameter,"display_mount_duration_fsyncdir")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_fsyncdir,value);
   }
-  if (strcmp(parameter,"display_duration_getxattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_getxattr,value);
+  if (strcmp(parameter,"display_mount_duration_statfs")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_statfs,value);
   }
-  if (strcmp(parameter,"display_duration_listxattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_listxattr,value);
+  if (strcmp(parameter,"display_mount_duration_setxattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_setxattr,value);
   }
-  if (strcmp(parameter,"display_duration_removexattr")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_removexattr,value);
+  if (strcmp(parameter,"display_mount_duration_getxattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_getxattr,value);
   }
-  if (strcmp(parameter,"display_duration_access")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_access,value);
+  if (strcmp(parameter,"display_mount_duration_listxattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_listxattr,value);
   }
-  if (strcmp(parameter,"display_duration_create")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_create,value);
+  if (strcmp(parameter,"display_mount_duration_removexattr")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_removexattr,value);
   }
-  if (strcmp(parameter,"display_duration_getlk")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_getlk,value);
+  if (strcmp(parameter,"display_mount_duration_access")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_access,value);
   }
-  if (strcmp(parameter,"display_duration_setlk")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_setlk,value);
+  if (strcmp(parameter,"display_mount_duration_create")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_create,value);
   }
-  if (strcmp(parameter,"display_duration_setlk_int")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_setlk_int,value);
+  if (strcmp(parameter,"display_mount_duration_getlk")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_getlk,value);
   }
-  if (strcmp(parameter,"display_duration_ioctl")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_ioctl,value);
+  if (strcmp(parameter,"display_mount_duration_setlk")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_setlk,value);
   }
-  if (strcmp(parameter,"display_duration_clearlkowner")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_duration_clearlkowner,value);
+  if (strcmp(parameter,"display_mount_duration_setlk_int")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_setlk_int,value);
   }
-  if (strcmp(parameter,"display_bytes_read")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_bytes_read,value);
+  if (strcmp(parameter,"display_mount_duration_ioctl")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_ioctl,value);
   }
-  if (strcmp(parameter,"display_bytes_write")==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_bytes_write,value);
+  if (strcmp(parameter,"display_mount_duration_clearlkowner")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_duration_clearlkowner,value);
+  }
+  if (strcmp(parameter,"display_storcli_duration_read")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_storcli_duration_read,value);
+  }
+  if (strcmp(parameter,"display_storcli_duration_write")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_storcli_duration_write,value);
+  }
+  if (strcmp(parameter,"display_mount_bytes_read")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_bytes_read,value);
+  }
+  if (strcmp(parameter,"display_mount_bytes_write")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_mount_bytes_write,value);
+  }
+  if (strcmp(parameter,"display_storcli_bytes_read")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_storcli_bytes_read,value);
+  }
+  if (strcmp(parameter,"display_storcli_bytes_write")==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SET_BOOL(display_storcli_bytes_write,value);
   }
   pChar += rozofs_string_append_error(pChar,"No such parameter ");
   pChar += rozofs_string_append_error(pChar,parameter);
@@ -307,573 +325,621 @@ static inline int rozofsmount_netdata_cfg_generated_search(char * pChar, char *p
 
   if (strcasestr("debug",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    pChar += rozofs_string_append(pChar,"// Whether to display bytes graph\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
+    pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_lookup",parameter) != NULL) {
+  if (strcasestr("display_mount_count_lookup",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// Count to display\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_lookup_agg",parameter) != NULL) {
+  if (strcasestr("display_mount_count_lookup_agg",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup_agg,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup_agg,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_forget",parameter) != NULL) {
+  if (strcasestr("display_mount_count_forget",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_forget,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_forget,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_getattr",parameter) != NULL) {
+  if (strcasestr("display_mount_count_getattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getattr,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getattr,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_setattr",parameter) != NULL) {
+  if (strcasestr("display_mount_count_setattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_readlink",parameter) != NULL) {
+  if (strcasestr("display_mount_count_readlink",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_mknod",parameter) != NULL) {
+  if (strcasestr("display_mount_count_mknod",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mknod,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mknod,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_mkdir",parameter) != NULL) {
+  if (strcasestr("display_mount_count_mkdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mkdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mkdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_unlink",parameter) != NULL) {
+  if (strcasestr("display_mount_count_unlink",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_unlink,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_unlink,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_rmdir",parameter) != NULL) {
+  if (strcasestr("display_mount_count_rmdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rmdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rmdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_symlink",parameter) != NULL) {
+  if (strcasestr("display_mount_count_symlink",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_symlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_symlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_rename",parameter) != NULL) {
+  if (strcasestr("display_mount_count_rename",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rename,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rename,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_open",parameter) != NULL) {
+  if (strcasestr("display_mount_count_open",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_open,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_open,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_link",parameter) != NULL) {
+  if (strcasestr("display_mount_count_link",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_link,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_link,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_read",parameter) != NULL) {
+  if (strcasestr("display_mount_count_read",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_read,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_read,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_read,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_read,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_write",parameter) != NULL) {
+  if (strcasestr("display_mount_count_write",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_write,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_write,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_write,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_write,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_flush",parameter) != NULL) {
+  if (strcasestr("display_mount_count_flush",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_flush,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_flush,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_release",parameter) != NULL) {
+  if (strcasestr("display_mount_count_release",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_release,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_release,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_opendir",parameter) != NULL) {
+  if (strcasestr("display_mount_count_opendir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_opendir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_opendir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_readdir",parameter) != NULL) {
+  if (strcasestr("display_mount_count_readdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_releasedir",parameter) != NULL) {
+  if (strcasestr("display_mount_count_releasedir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_releasedir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_releasedir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_fsyncdir",parameter) != NULL) {
+  if (strcasestr("display_mount_count_fsyncdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_fsyncdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_fsyncdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_statfs",parameter) != NULL) {
+  if (strcasestr("display_mount_count_statfs",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_statfs,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_statfs,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_setxattr",parameter) != NULL) {
+  if (strcasestr("display_mount_count_setxattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_getxattr",parameter) != NULL) {
+  if (strcasestr("display_mount_count_getxattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_listxattr",parameter) != NULL) {
+  if (strcasestr("display_mount_count_listxattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_listxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_listxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_removexattr",parameter) != NULL) {
+  if (strcasestr("display_mount_count_removexattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_removexattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_removexattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_access",parameter) != NULL) {
+  if (strcasestr("display_mount_count_access",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_access,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_access,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_create",parameter) != NULL) {
+  if (strcasestr("display_mount_count_create",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_create,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_create,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_getlk",parameter) != NULL) {
+  if (strcasestr("display_mount_count_getlk",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_setlk",parameter) != NULL) {
+  if (strcasestr("display_mount_count_setlk",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_setlk_int",parameter) != NULL) {
+  if (strcasestr("display_mount_count_setlk_int",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk_int,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk_int,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_ioctl",parameter) != NULL) {
+  if (strcasestr("display_mount_count_ioctl",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_ioctl,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_ioctl,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_count_clearlkowner",parameter) != NULL) {
+  if (strcasestr("display_mount_count_clearlkowner",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_clearlkowner,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_clearlkowner,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_lookup",parameter) != NULL) {
+  if (strcasestr("display_storcli_count_read",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_read,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_read,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("display_storcli_count_write",parameter) != NULL) {
+    match++;
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_write,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_write,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("display_mount_duration_lookup",parameter) != NULL) {
+    match++;
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// Duration to display\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_lookup_agg",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_lookup_agg",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup_agg,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup_agg,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_forget",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_forget",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_forget,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_forget,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_getattr",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_getattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getattr,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getattr,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_setattr",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_setattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_readlink",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_readlink",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_mknod",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_mknod",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mknod,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mknod,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_mkdir",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_mkdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mkdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mkdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_unlink",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_unlink",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_unlink,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_unlink,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_rmdir",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_rmdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rmdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rmdir,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_symlink",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_symlink",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_symlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_symlink,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_rename",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_rename",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rename,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rename,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_open",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_open",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_open,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_open,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_link",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_link",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_link,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_link,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_read",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_read",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_read,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_read,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_write",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_write",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_write,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_write,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_flush",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_flush",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_flush,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_flush,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_release",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_release",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_release,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_release,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_opendir",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_opendir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_opendir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_opendir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_readdir",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_readdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_releasedir",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_releasedir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_releasedir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_releasedir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_fsyncdir",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_fsyncdir",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_fsyncdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_fsyncdir,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_statfs",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_statfs",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_statfs,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_statfs,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_setxattr",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_setxattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_getxattr",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_getxattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_listxattr",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_listxattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_listxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_listxattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_removexattr",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_removexattr",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_removexattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_removexattr,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_access",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_access",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_access,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_access,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_create",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_create",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_create,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_create,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_getlk",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_getlk",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_setlk",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_setlk",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_setlk_int",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_setlk_int",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk_int,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk_int,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_ioctl",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_ioctl",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_ioctl,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_ioctl,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_duration_clearlkowner",parameter) != NULL) {
+  if (strcasestr("display_mount_duration_clearlkowner",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_clearlkowner,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_clearlkowner,False);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_bytes_read",parameter) != NULL) {
+  if (strcasestr("display_storcli_duration_read",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_read,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_read,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("display_storcli_duration_write",parameter) != NULL) {
+    match++;
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_write,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_write,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("display_mount_bytes_read",parameter) != NULL) {
+    match++;
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_read,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
     pChar += rozofs_string_append(pChar,"// Bytes to display   \n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_read,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
 
-  if (strcasestr("display_bytes_write",parameter) != NULL) {
+  if (strcasestr("display_mount_bytes_write",parameter) != NULL) {
     match++;
-    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_write,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_write,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("display_storcli_bytes_read",parameter) != NULL) {
+    match++;
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_read,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_read,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+  }
+
+  if (strcasestr("display_storcli_bytes_write",parameter) != NULL) {
+    match++;
+    ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_write,True);
+    if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_write,True);
     if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   }
   if (match == 0) {
@@ -934,10 +1000,10 @@ char * show_rozofsmount_netdata_cfg_module_global(char * pChar) {
   ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  pChar += rozofs_string_append(pChar,"// Whether to display bytes graph\n");
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
+  pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -974,10 +1040,10 @@ char * show_rozofsmount_netdata_cfg_module_global_short(char * pChar) {
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
   if (isDefaultValue==0) {
-    pChar += rozofs_string_append(pChar,"// Whether to display bytes graph\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
+    pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
   }
   return pChar;
 }
@@ -992,175 +1058,185 @@ char * show_rozofsmount_netdata_cfg_module_count(char * pChar) {
   pChar += rozofs_string_append_effect(pChar,"    COUNT SCOPE CONFIGURATION PARAMETERS          ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
   pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Count to display\n");
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup_agg,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup_agg,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_forget,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_forget,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getattr,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getattr,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mknod,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mknod,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mkdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mkdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_unlink,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_unlink,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rmdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rmdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_symlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_symlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rename,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rename,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_open,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_open,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_link,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_link,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_read,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_read,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_read,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_read,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_write,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_write,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_flush,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_flush,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_release,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_release,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_opendir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_opendir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_releasedir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_releasedir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_fsyncdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_fsyncdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_statfs,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_statfs,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_listxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_listxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_removexattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_removexattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_access,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_access,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_create,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_create,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk_int,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk_int,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_ioctl,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_ioctl,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_clearlkowner,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_clearlkowner,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_read,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_read,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_write,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -1176,208 +1252,220 @@ char * show_rozofsmount_netdata_cfg_module_count_short(char * pChar) {
   pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup,True);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Count to display\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup_agg,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup_agg,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_forget,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_forget,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getattr,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getattr,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readlink,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mknod,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mknod,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mkdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mkdir,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_unlink,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_unlink,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rmdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rmdir,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_symlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_symlink,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rename,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rename,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_open,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_open,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_link,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_link,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_read,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_read,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_read,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_read,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_write,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_write,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_write,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_write,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_flush,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_flush,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_release,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_release,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_opendir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_opendir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readdir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_releasedir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_releasedir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_fsyncdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_fsyncdir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_statfs,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_statfs,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setxattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getxattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_listxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_listxattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_removexattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_removexattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_access,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_access,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_create,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_create,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getlk,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk_int,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk_int,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_ioctl,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_ioctl,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_clearlkowner,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_clearlkowner,False);
+  }
+
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_read,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_read,True);
+  }
+
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_write,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_write,True);
   }
   return pChar;
 }
@@ -1392,175 +1480,195 @@ char * show_rozofsmount_netdata_cfg_module_duration(char * pChar) {
   pChar += rozofs_string_append_effect(pChar,"    DURATION SCOPE CONFIGURATION PARAMETERS       ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
   pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Duration to display\n");
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup_agg,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup_agg,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_forget,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_forget,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getattr,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getattr,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mknod,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mknod,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mkdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mkdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_unlink,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_unlink,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rmdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rmdir,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_symlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_symlink,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rename,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rename,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_open,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_open,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_link,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_link,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_read,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_read,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_flush,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_flush,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_release,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_release,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_opendir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_opendir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_releasedir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_releasedir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_fsyncdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_fsyncdir,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_statfs,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_statfs,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_listxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_listxattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_removexattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_removexattr,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_access,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_access,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_create,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_create,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk_int,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk_int,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_ioctl,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_ioctl,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_clearlkowner,False);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_clearlkowner,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_read,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_read,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_write,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_write,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_read,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_read,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_write,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -1576,208 +1684,232 @@ char * show_rozofsmount_netdata_cfg_module_duration_short(char * pChar) {
   pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup,True);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Duration to display\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup_agg,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup_agg,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_forget,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_forget,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getattr,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getattr,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readlink,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mknod,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mknod,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mkdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mkdir,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_unlink,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_unlink,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rmdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rmdir,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_symlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_symlink,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rename,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rename,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_open,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_open,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_link,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_link,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_read,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_read,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_write,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_write,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_flush,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_flush,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_release,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_release,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_opendir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_opendir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readdir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_releasedir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_releasedir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_fsyncdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_fsyncdir,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_statfs,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_statfs,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setxattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getxattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_listxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_listxattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_removexattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_removexattr,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_access,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_access,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_create,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_create,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getlk,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk_int,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk_int,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_ioctl,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_ioctl,False);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_clearlkowner,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_clearlkowner,False);
+  }
+
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_read,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_read,True);
+  }
+
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_write,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_write,True);
+  }
+
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_read,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_read,True);
+  }
+
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_write,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_write,True);
   }
   return pChar;
 }
@@ -1792,15 +1924,15 @@ char * show_rozofsmount_netdata_cfg_module_bytes(char * pChar) {
   pChar += rozofs_string_append_effect(pChar,"    BYTES SCOPE CONFIGURATION PARAMETERS          ", ROZOFS_COLOR_YELLOW ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
   pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_read,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Bytes to display   \n");
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_read,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
-  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_write,True);
   if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
@@ -1816,16 +1948,16 @@ char * show_rozofsmount_netdata_cfg_module_bytes_short(char * pChar) {
   pChar += rozofs_string_append_effect(pChar,"     \n#                                                            \n\n", ROZOFS_COLOR_BLUE ROZOFS_COLOR_BOLD ROZOFS_COLOR_REVERSE);
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_read,True);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Bytes to display   \n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_read,True);
   }
 
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_write,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_write,True);
   }
   return pChar;
 }
@@ -1860,10 +1992,10 @@ char * save_rozofsmount_netdata_cfg_module_global(char * pChar) {
     ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(debug,True);
   if (isDefaultValue==0) {
-    pChar += rozofs_string_append(pChar,"// Whether to display bytes graph\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,False);
+    pChar += rozofs_string_append(pChar,"// Trace to syslog\n");
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(debug,True);
   }
   return pChar;
 }
@@ -1880,175 +2012,185 @@ char * save_rozofsmount_netdata_cfg_module_count(char * pChar) {
   pChar += rozofs_string_append(pChar," scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup,True);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Count to display\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_lookup_agg,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_lookup_agg,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_forget,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_forget,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getattr,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getattr,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readlink,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mknod,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mknod,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_mkdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_mkdir,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_unlink,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_unlink,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rmdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rmdir,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_symlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_symlink,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_rename,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_rename,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_open,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_open,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_link,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_link,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_read,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_read,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_read,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_read,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_write,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_write,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_write,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_write,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_flush,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_flush,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_release,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_release,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_opendir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_opendir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_readdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_readdir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_releasedir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_releasedir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_fsyncdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_fsyncdir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_statfs,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_statfs,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setxattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getxattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_listxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_listxattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_removexattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_removexattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_access,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_access,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_create,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_create,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_getlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_getlk,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_setlk_int,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_setlk_int,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_ioctl,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_ioctl,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_count_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_count_clearlkowner,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_count_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_count_clearlkowner,False);
+  }
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_read,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_read,True);
+  }
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_count_write,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_count_write,True);
   }
   return pChar;
 }
@@ -2065,175 +2207,195 @@ char * save_rozofsmount_netdata_cfg_module_duration(char * pChar) {
   pChar += rozofs_string_append(pChar," scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup,True);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Duration to display\n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_lookup_agg,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_lookup_agg,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_lookup_agg,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_lookup_agg,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_forget,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_forget,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_forget,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getattr,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getattr,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readlink,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mknod,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mknod,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mknod,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mknod,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_mkdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_mkdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_mkdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_mkdir,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_unlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_unlink,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_unlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_unlink,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rmdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rmdir,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rmdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rmdir,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_symlink,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_symlink,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_symlink,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_rename,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_rename,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_rename,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_open,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_open,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_open,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_link,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_link,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_link,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_read,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_read,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_write,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_write,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_flush,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_flush,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_flush,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_release,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_release,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_release,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_opendir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_opendir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_opendir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_readdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_readdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_readdir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_releasedir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_releasedir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_releasedir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_fsyncdir,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_fsyncdir,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_fsyncdir,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_statfs,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_statfs,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_statfs,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setxattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getxattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_listxattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_listxattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_listxattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_removexattr,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_removexattr,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_removexattr,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_access,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_access,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_access,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_create,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_create,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_create,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_create,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_getlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_getlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_getlk,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_setlk_int,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_setlk_int,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_setlk_int,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_ioctl,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_ioctl,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_ioctl,False);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_duration_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_duration_clearlkowner,False);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_duration_clearlkowner,False);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_duration_clearlkowner,False);
+  }
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_read,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_read,True);
+  }
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_duration_write,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_duration_write,True);
+  }
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_read,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_read,True);
+  }
+
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_storcli_bytes_write,True);
+  if (isDefaultValue==0) {
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_storcli_bytes_write,True);
   }
   return pChar;
 }
@@ -2250,15 +2412,15 @@ char * save_rozofsmount_netdata_cfg_module_bytes(char * pChar) {
   pChar += rozofs_string_append(pChar," scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#____________________________________________________________\n\n");
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_read,True);
   if (isDefaultValue==0) {
     pChar += rozofs_string_append(pChar,"// Bytes to display   \n");
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_read,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_read,True);
   }
 
-  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_bytes_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_IS_DEFAULT_BOOL(display_mount_bytes_write,True);
   if (isDefaultValue==0) {
-    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_bytes_write,True);
+    ROZOFSMOUNT_NETDATA_CFG_SHOW_BOOL(display_mount_bytes_write,True);
   }
   return pChar;
 }
@@ -2666,90 +2828,96 @@ static inline void rozofsmount_netdata_cfg_generated_read(char * fname) {
   ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration,True);
   // Whether to display bytes graph 
   ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_bytes,True);
-  // Whether to display bytes graph 
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(debug,False);
+  // Trace to syslog 
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(debug,True);
   /*
   ** count scope configuration parameters
   */
   // Count to display 
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_lookup,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_lookup_agg,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_forget,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_getattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_setattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_readlink,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_mknod,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_mkdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_unlink,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_rmdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_symlink,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_rename,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_open,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_link,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_read,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_write,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_flush,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_release,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_opendir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_readdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_releasedir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_fsyncdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_statfs,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_setxattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_getxattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_listxattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_removexattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_access,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_create,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_getlk,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_setlk,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_setlk_int,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_ioctl,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_count_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_lookup,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_lookup_agg,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_getattr,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_mknod,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_mkdir,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_unlink,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_rmdir,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_create,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_count_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_storcli_count_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_storcli_count_write,True);
   /*
   ** duration scope configuration parameters
   */
   // Duration to display 
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_lookup,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_lookup_agg,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_forget,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_getattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_setattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_readlink,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_mknod,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_mkdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_unlink,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_rmdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_symlink,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_rename,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_open,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_link,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_read,True);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_write,True);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_flush,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_release,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_opendir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_readdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_releasedir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_fsyncdir,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_statfs,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_setxattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_getxattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_listxattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_removexattr,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_access,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_create,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_getlk,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_setlk,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_setlk_int,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_ioctl,False);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_duration_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_lookup,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_lookup_agg,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_forget,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_getattr,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_setattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_readlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_mknod,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_mkdir,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_unlink,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_rmdir,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_symlink,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_rename,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_open,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_link,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_flush,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_release,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_opendir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_readdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_releasedir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_fsyncdir,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_statfs,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_setxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_getxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_listxattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_removexattr,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_access,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_create,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_getlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_setlk,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_setlk_int,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_ioctl,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_duration_clearlkowner,False);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_storcli_duration_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_storcli_duration_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_storcli_bytes_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_storcli_bytes_write,True);
   /*
   ** bytes scope configuration parameters
   */
   // Bytes to display    
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_bytes_read,True);
-  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_bytes_write,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_bytes_read,True);
+  ROZOFSMOUNT_NETDATA_CFG_READ_BOOL(display_mount_bytes_write,True);
  
   config_destroy(&cfg);
 }
