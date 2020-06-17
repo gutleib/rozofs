@@ -1406,10 +1406,10 @@ static void *rozofs_bt_trk_cli_reader_thread(void *v) {
     int ret;
    
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-    sprintf(name,"TRK_READER#%d",thread_ctx_p->thread_idx);
+    sprintf(name,"bt_cli_reader#%d",thread_ctx_p->thread_idx);
     
 
-    uma_dbg_thread_add_self("bt_cli_reader");
+    uma_dbg_thread_add_self(name);
 #if 1
 #if 1
     while(zzz_debug)
@@ -1493,7 +1493,6 @@ int rozofs_bt_trk_cli_reader_thread_create(int nb_threads)
    rozofs_bt_trk_cli_reader_thread_count = nb_threads;
 
    p = rozofs_bt_trk_cli_reader_thread_th;
-#warning TESTING ONLY
    for (i = 0; i < rozofs_bt_trk_cli_reader_thread_count; i++,p++)
    {
       memset(p,0,sizeof(rozofs_bt_thread_cli_reader_ctx_t));

@@ -104,7 +104,7 @@ ext_mattr_t *rozofs_bt_load_dirent_from_main_thread(uint64_t inode,rozofs_bt_tra
    rozofs_inode_t  rozofs_inode; 
    ext_dir_mattr_t *ext_dir_mattr_p;
    time_t cur_time;
-   uint64_t time2check;
+   uint64_t time2check;   
    
     *dirent_valid = 0;
    if (dirent_thread_ready == 0) {
@@ -124,6 +124,7 @@ ext_mattr_t *rozofs_bt_load_dirent_from_main_thread(uint64_t inode,rozofs_bt_tra
      ROZOFS_BT_DIRENT_STATS_INO(lookup_inode_miss,inode);
      if (errno == EAGAIN)
      {
+       FDL_INFO("rozofs_queue_put_prio ext_attr_p NULL");
        rozofs_queue_put_prio(&dirent_queue,(void*)inode,PRIO_CMD);
        errno = EAGAIN;
        return NULL;
@@ -159,6 +160,8 @@ ext_mattr_t *rozofs_bt_load_dirent_from_main_thread(uint64_t inode,rozofs_bt_tra
      ROZOFS_BT_DIRENT_STATS_DIR(lookup_bitmap_miss);
      if ((ext_dir_mattr_p->s.update_time + ROZOFS_BT_DIRENT_GUARD_DELAY) < cur_time)
      {
+       FDL_INFO("rozofs_queue_put_prio ext_attr_p != NULL update_time/cur_time: %llu/%llu",(unsigned long long int)ext_dir_mattr_p->s.update_time + ROZOFS_BT_DIRENT_GUARD_DELAY,
+                (unsigned long long int)cur_time);
        rozofs_queue_put_prio(&dirent_queue,(void*)inode,PRIO_CMD);
      }
      /*
@@ -177,6 +180,21 @@ ext_mattr_t *rozofs_bt_load_dirent_from_main_thread(uint64_t inode,rozofs_bt_tra
      ROZOFS_BT_DIRENT_STATS_DIR(lookup_dir_bad_mtime);
      if ((ext_dir_mattr_p->s.update_time + ROZOFS_BT_DIRENT_GUARD_DELAY) < cur_time)
      {
+
+       if (rozofs_bt_debug)
+       {
+	 time_t p1;
+	 char bufall1[64],bufall2[64],bufall3[64];         
+	 memset( bufall1,0,64);      
+	 memset( bufall2,0,64);      
+	 memset( bufall3,0,64);
+	 p1 = (time_t)(ext_dir_mattr_p->s.update_time + ROZOFS_BT_DIRENT_GUARD_DELAY);
+	 ctime_r((const time_t*)(&p1),bufall1);
+	 ctime_r((const time_t*)&cur_time,bufall2);
+	 ctime_r((const time_t*)&ext_attr_p->s.attrs.mtime,bufall3);
+	 
+	 FDL_INFO("rozofs_queue_put_prio bt_map_p->mtime != time2check update_time/cur_time: %s/%s mtime %s",bufall1,bufall2,bufall3);
+       }
        rozofs_queue_put_prio(&dirent_queue,(void*)inode,PRIO_CMD);
      }
      /*
@@ -248,6 +266,7 @@ int rozofs_bt_check_mdirent_validity(rozofs_bt_thread_ctx_t * thread_ctx_p, ext_
   rozofs_inode_t *rozofs_inode_p;
   ext_dir_mattr_t *ext_dir_mattr_p = (ext_dir_mattr_t*)ext_attr_p->s.attrs.sids;  
   uint64_t time2check;
+  uint64_t cur_time; 
   
   time2check = (rozofs_bt_dirent_mtime_valid!=0)?ext_attr_p->s.attrs.mtime:ext_dir_mattr_p->s.update_time;
   
@@ -262,6 +281,20 @@ int rozofs_bt_check_mdirent_validity(rozofs_bt_thread_ctx_t * thread_ctx_p, ext_
    {
      return ret;
    }
+   /*
+   ** if the update time of the directory to too close to the current time, do not trust the dirent content
+   */
+   cur_time = time(NULL);
+   /*
+   ** check if it is the good time for loading the dirent files
+   */
+   if ((time2check+ROZOFS_BT_DIRENT_GUARD_DELAY) > cur_time)
+   {
+      FDL_INFO("FDL time2check too close to current time  %llu/%llu diff %llu",(unsigned long long int)time2check+ROZOFS_BT_DIRENT_GUARD_DELAY,(unsigned long long int)cur_time,
+      (unsigned long long int)(time2check+ROZOFS_BT_DIRENT_GUARD_DELAY-cur_time));
+     return -1;      
+   }
+
    /*
    ** check the mtime
    */
@@ -751,7 +784,7 @@ static void *rozofs_bt_dirent_thread(void *v) {
      switch (prio)
      {
        case PRIO_CMD:	    
-	 FDL_INFO("load dirent files for inode %llu\n",(unsigned long long int)msg);
+	 FDL_INFO("load dirent files for inode %llx\n",(unsigned long long int)msg);
 	 rozofs_bt_dirent_load_request(thread_ctx_p,(uint64_t)msg,NULL); 
 	 break; 
        case PRIO_RSP:

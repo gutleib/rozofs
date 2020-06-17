@@ -49,6 +49,7 @@ typedef struct _rozofs_bt_lkup_thread_stats_t
 
 uint64_t rozofs_bt_lookup_local_attempt = 0;
 uint64_t rozofs_bt_lookup_local_reject_from_main = 0;
+uint64_t rozofs_bt_lookup_local_reject_from_main_too_early = 0;
 uint64_t rozofs_bt_lookup_local_reject_from_dirent_thread = 0;
 uint64_t rozofs_bt_lookup_reject_from_dirent_thread_bad_errno = 0;
 uint64_t rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode = 0;
@@ -182,6 +183,7 @@ void rozofs_bt_show_dirent_lkup_thread_reset_all()
    }
    rozofs_bt_lookup_local_attempt = 0;
    rozofs_bt_lookup_local_reject_from_main = 0;
+   rozofs_bt_lookup_local_reject_from_main_too_early = 0;
    rozofs_bt_lookup_local_reject_from_dirent_thread = 0;
    rozofs_bt_lookup_reject_from_dirent_thread_bad_errno =  0 ;
    rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode = 0;
@@ -208,6 +210,7 @@ void rozofs_bt_show_dirent_lkup_thread(char * argv[], uint32_t tcpRef, void *buf
       pChar +=sprintf(pChar,"Number of threads : %d\n",af_unix_bt_dirent_thread_count);
       pChar +=sprintf(pChar," lookup attempts from main thread : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_attempt);
       pChar +=sprintf(pChar," lookup rejects from main thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_main);
+      pChar +=sprintf(pChar," lookup rejects too early cause   : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_main_too_early);
       pChar +=sprintf(pChar," lookup rejects from lkup thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_dirent_thread);
       pChar +=sprintf(pChar,"                - no child inode  : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode);
       pChar +=sprintf(pChar,"                - bad errno       : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_bad_errno);
@@ -225,6 +228,7 @@ void rozofs_bt_show_dirent_lkup_thread(char * argv[], uint32_t tcpRef, void *buf
         pChar +=sprintf(pChar,"Number of threads : %d\n",af_unix_bt_dirent_thread_count);
 	pChar +=sprintf(pChar," lookup attempts from main thread : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_attempt);
 	pChar +=sprintf(pChar," lookup rejects from main thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_main);
+        pChar +=sprintf(pChar," lookup rejects too early cause   : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_main_too_early);
 	pChar +=sprintf(pChar," lookup rejects from lkup thread  : %llu\n",(unsigned long long int)rozofs_bt_lookup_local_reject_from_dirent_thread);
 	pChar +=sprintf(pChar,"                - no child inode  : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_no_child_inode);
 	pChar +=sprintf(pChar,"                - bad errno       : %llu\n",(unsigned long long int)rozofs_bt_lookup_reject_from_dirent_thread_bad_errno);
@@ -573,6 +577,8 @@ int rozofs_bt_lookup_req_from_main_thread(uint32_t eid,fid_t parent_fid,void *fu
      FDL_INFO ("FDL rozofs_bt_lookup_req_from_main_thread not valid ext_attr_parent_p %p dirent_valid %d\n",ext_attr_parent_p,dirent_valid);
      return -1;
    }
+
+  FDL_INFO ("FDL rozofs_bt_lookup_req_from_main_thread valid ext_attr_parent_p %p dirent_valid %d\n",ext_attr_parent_p,dirent_valid);
   /*
   ** allocate a buffer for the readdir: we allocate a large buffer since it is also used
   ** to provide the result of the readdir
