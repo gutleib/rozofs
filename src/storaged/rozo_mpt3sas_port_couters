@@ -53,8 +53,8 @@ class host_class:
     for p in self.port_list:
       if p.port != port: continue
       return p
-    return port_class(self,port)      
-
+    return port_class(self,port)   
+   
 #____________________________________
 # Class port
 #____________________________________
@@ -63,6 +63,23 @@ class port_class:
   def __init__(self,host,port):
     self.host = host
     self.port = port
+    host.port_list.append(self)
+    self.phy_list = []
+
+  def find_phy(self,phy):  
+    for p in self.phy_list:
+      if p.phy != phy: continue
+      return p
+    return phy_class(self,phy)   
+    
+#____________________________________
+# Class port
+#____________________________________
+class phy_class:
+
+  def __init__(self,port,phy):
+    self.port = port
+    self.phy  = phy
     self.speed = do_read_file("%s/negotiated_linkrate"%(self.getpath())) 
     self.invalid_dword_count = int(0)
     self.invalid_dword_delta = int(0)
@@ -74,10 +91,10 @@ class port_class:
     self.running_disparity_error_delta = int(0)  
     self.alarm = True  
     self.checked = False
-    host.port_list.append(self)
+    port.phy_list.append(self)
     
   def getpath(self):    
-    return "/sys/class/scsi_host/%s/device/%s/sas_phy/%s"%(self.host.host,self.port,self.port)
+    return "/sys/class/scsi_host/%s/device/%s/sas_phy/%s"%(self.port.host.host,self.phy,self.phy)
     
   def check(self):
     #
@@ -137,43 +154,49 @@ def do_display(now,run):
 
   for h in host_list:        
     print "      { \"name\" : \"%s\", \"host\" :  \"%s\", \"ports\" : ["%(h.board_name, h.host)
-    for p in h.port_list:
-
-      if run == int(0) and p.alarm == True:
-        LINE = REDBOLD
-      else:
-        LINE =""
-       
-      LINE += "           { \"port\" : \"%s\",  \"speed\" : \"%s\""%(p.port,p.speed)
+    for port in h.port_list:
+      print "          { \"port\" : \"%s\", \"phys\" : ["%(port.port)
+      for p in port.phy_list:
       
-      LINE += ",\n                \"invalid_dword_count\" : %d"%(p.invalid_dword_count)
-      if run != int(0) and p.invalid_dword_delta != int(0):
-        LINE += REDBOLD + ", \"invalid_dword_delta\" : %d"%(p.invalid_dword_delta) + NORMAL
+        if run == int(0) and p.alarm == True:
+          LINE = REDBOLD
+        else:
+          LINE =""
 
-      LINE += ", \"loss_of_dword_sync_count\" : %d"%(p.loss_of_dword_sync_count)
-      if run != int(0) and p.loss_of_dword_sync_delta != int(0):
-        LINE += REDBOLD + ", \"loss_of_dword_sync_delta\" : %d"%(p.loss_of_dword_sync_delta) + NORMAL
-        
-      LINE += ", \"phy_reset_problem_count\" : %d"%(p.phy_reset_problem_count)
-      if run != int(0) and p.phy_reset_problem_delta != int(0):
-        LINE += REDBOLD + ", \"phy_reset_problem_delta\" : %d"%(p.phy_reset_problem_delta) + NORMAL
-        
-      LINE += ", \"running_disparity_error_count\" : %d"%(p.running_disparity_error_count) 
-      if run != int(0) and p.running_disparity_error_delta != int(0):
-        LINE += REDBOLD + ", \"running_disparity_error_delta\" : %d"%(p.running_disparity_error_delta) + NORMAL
-        
-      LINE += " }"
-                
-      last = len(h.port_list) - int(1)
-      if p != h.port_list[last] : LINE += ","
-      if run == int(0) and p.alarm == True: LINE += NORMAL
-        
-      print LINE  
-      #
-      # Raise alarm until next check
-      #  
-      p.alarm = True
-                
+        LINE += "             { \"phy\" : \"%s\",  \"speed\" : \"%s\""%(p.phy,p.speed)
+
+        LINE += ",\n               \"invalid_dword_count\" : %d"%(p.invalid_dword_count)
+        if run != int(0) and p.invalid_dword_delta != int(0):
+          LINE += REDBOLD + ", \"invalid_dword_delta\" : %d"%(p.invalid_dword_delta) + NORMAL
+
+        LINE += ", \"loss_of_dword_sync_count\" : %d"%(p.loss_of_dword_sync_count)
+        if run != int(0) and p.loss_of_dword_sync_delta != int(0):
+          LINE += REDBOLD + ", \"loss_of_dword_sync_delta\" : %d"%(p.loss_of_dword_sync_delta) + NORMAL
+
+        LINE += ", \"phy_reset_problem_count\" : %d"%(p.phy_reset_problem_count)
+        if run != int(0) and p.phy_reset_problem_delta != int(0):
+          LINE += REDBOLD + ", \"phy_reset_problem_delta\" : %d"%(p.phy_reset_problem_delta) + NORMAL
+
+        LINE += ", \"running_disparity_error_count\" : %d"%(p.running_disparity_error_count) 
+        if run != int(0) and p.running_disparity_error_delta != int(0):
+          LINE += REDBOLD + ", \"running_disparity_error_delta\" : %d"%(p.running_disparity_error_delta) + NORMAL
+
+        LINE += " }"
+
+        last = len(port.phy_list) - int(1)
+        if p != port.phy_list[last] : LINE += ","
+        if run == int(0) and p.alarm == True: LINE += NORMAL
+        print LINE  
+        #
+        # Raise alarm until next check
+        #  
+        p.alarm = True
+      print "             ]"  
+      last  = len(h.port_list) - int(1) 
+      if port == h.port_list[last] :
+        print "          }"
+      else:
+        print "          },"                        
     print "        ]"  
     last  = len(host_list) - int(1) 
     if h == host_list[last] :
@@ -601,16 +624,15 @@ while True:
       #
       # Loop on ports of this HBA
       #
-      for port in os.listdir("/sys/class/scsi_host/%s/device/"%(host)):
-      
-        if not "phy-" in port: continue
+      for portNum in os.listdir("/sys/class/scsi_host/%s/device/"%(host)):      
 
-        # 
-        # Find or create port context
-        # and then read error counters
-        #
-        p = h.find_port(port)
-        p.check()
+        if not "port-" in portNum: continue
+        port = h.find_port(portNum)
+        
+        for phyNum in os.listdir("/sys/class/scsi_host/%s/device/%s"%(host,portNum)):
+          if not "phy-" in phyNum: continue          
+          phy = port.find_phy(phyNum)
+          phy.check()
     except:
       continue      
 
