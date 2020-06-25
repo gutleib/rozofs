@@ -404,5 +404,7 @@ int rozofs_bt_get_slave_inode(rozofs_bt_tracking_cache_t *tracking_ret_p,rozofs_
 
 extern uint64_t rozofs_bt_lookup_local_attempt;
 extern uint64_t rozofs_bt_lookup_local_reject_from_main;
+extern uint64_t rozofs_bt_lookup_local_reject_from_main_too_early;
 extern uint64_t rozofs_bt_lookup_local_reject_from_dirent_thread;
+extern int rozofs_bt_dirent_mtime_valid;
 #endif

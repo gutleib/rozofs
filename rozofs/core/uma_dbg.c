@@ -884,11 +884,11 @@ void uma_dbg_system_ps(char * argv[], uint32_t tcpRef, void *bufRef) {
     p += rozofs_string_append(p,"\ncommand : ");
     p += rozofs_string_append(p,cmd);
   }
-  p += rozofs_string_append(p,"THREAD NAME       TID SCHED PRIO\n");
+  p += rozofs_string_append(p,"THREAD NAME               TID SCHED PRIO\n");
     
   for (i=0; i< UMA_DBG_MAX_THREAD; i++) {
     if (uma_dbg_thread_table[i].name) {
-      p += rozofs_string_padded_append(p, 16, rozofs_left_alignment, uma_dbg_thread_table[i].name);
+      p += rozofs_string_padded_append(p, 24, rozofs_left_alignment, uma_dbg_thread_table[i].name);
       p += rozofs_u32_padded_append(p, 5, rozofs_right_alignment, uma_dbg_thread_table[i].tid);
 
       pthread_getschedparam(uma_dbg_thread_table[i].pthreadId,&policy,&my_priority);

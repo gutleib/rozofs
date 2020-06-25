@@ -324,12 +324,43 @@ int rozofs_bt_local_check_parent_attributes(fid_t parent_fid,ientry_t *pie)
      ** all is fine: copy the current timestamp of tracking file
      */
      pie->timestamp = tracking_ret_p->timestamp;
+     if (rozofs_bt_debug)
+     {
+       char bufall1[64];         
+       ctime_r((const time_t*)(&update_time),bufall1);
+       FDL_INFO("ientry and tracking file cache have the same update timestamp: %s",bufall1);
+     }
      return 0;
+   }
+   if (update_time > stats_attr_p->s.update_time)
+   {
+      /*
+      ** the ientry has an higher update time, so the content of the tracking file cache is obsolete
+      ** as a consequence we do not update the timestamp and the content of the ientry of the directory
+      */
+     if (rozofs_bt_debug)
+     {
+       char bufall1[64];         
+       char bufall2[64];         
+       ctime_r((const time_t*)(&update_time),bufall1);
+       ctime_r((const time_t*)(&stats_attr_p->s.update_time),bufall2);
+       FDL_INFO("ientry has a better update time: ientry %s cache %s",bufall1,bufall2);
+     }
+     return 0;   
    }
    /*
    ** we need to update the parent attributes in the ientry cache
    ** among the update, the cache time is also asserted according to the mtime of the regular file, we should do the same for the directories
    */
+     if (rozofs_bt_debug)
+     {
+       char bufall1[64];         
+       char bufall2[64];         
+       ctime_r((const time_t*)(&update_time),bufall1);
+       ctime_r((const time_t*)(&stats_attr_p->s.update_time),bufall2);
+       FDL_INFO("update the ientry with the update timestamp of  tracking file cache ientry %s cache %s",bufall1,bufall2);
+     }
+
    rozofs_ientry_update(pie,(struct inode_internal_t*)ext_attr_parent_p);      
    /*
    ** the timestamp of the directory is update with the current time in the rozofs_ientry_update(), it will be better if we update
@@ -860,18 +891,43 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     }          
     if (conf.batch )
     {
+      ext_dir_mattr_t *ext_dir_mattr_p;
+      time_t cur_time;
+      uint64_t time2check; 
+      struct inode_internal_t *attrs_p;
+      
+      cur_time = time(NULL);
+      attrs_p = &ie->attrs;
+      ext_dir_mattr_p = (ext_dir_mattr_t*)attrs_p->attrs.sids;
       /*
-      ** attempt to use the local dirent cache for searching the inode
+      ** we check the mtime of the parent directory. If the mtime is in the right timeframe 
+      ** we can attempt to use the dirent/file tracking local cache
       */
-      rozofs_bt_lookup_local_attempt++;
-      ret = rozofs_bt_lookup_req_from_main_thread(arg.arg_gw.eid, ie->fid,buffer_p);
-      if (ret == 0)
+      time2check = (rozofs_bt_dirent_mtime_valid!=0)?attrs_p->attrs.mtime:ext_dir_mattr_p->s.update_time;
+      if ((time2check + ROZOFS_BT_DIRENT_GUARD_DELAY) < cur_time)
       {
 	/*
-	** OK, we attempt to get the inode from the local dirent cache
+	** attempt to use the local dirent cache for searching the inode
 	*/
-	return;
+	rozofs_bt_lookup_local_attempt++;
+	ret = rozofs_bt_lookup_req_from_main_thread(arg.arg_gw.eid, ie->fid,buffer_p);
+	if (ret == 0)
+	{
+	  /*
+	  ** OK, we attempt to get the inode from the local dirent cache
+	  */
+	  return;
+	}
       }
+      else
+      {
+         /*
+	 ** the update time or mtime of the directory is too recent to trigger a loading of the dirent file
+	 ** of the directory, since when a new file is created it might be possible that the dirent file 
+	 ** has not yet been updated by the exportd on nvme
+	 */
+        rozofs_bt_lookup_local_reject_from_main_too_early++;
+      } 
     }
     /*
     ** there is an error: either the dirent file are not present on the local client or other error
