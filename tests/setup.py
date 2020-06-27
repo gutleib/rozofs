@@ -755,7 +755,7 @@ class export_class:
     self.volume= volume
     self.thin = False
     if layout == None:
-      self.layout = volume.layout
+      self.layout = None
     else:
       self.layout = rozofs.layout(layout)
     self.hquota= ""
@@ -1065,7 +1065,7 @@ class exportd_class:
         if e.thin == True: 
           LINE += " thin-provisioning = True;"
 	LINE += " vid=%s;"%(v.vid)
-	LINE += " layout=%s;"%(rozofs.layout2int(e.layout))
+        if e.layout != None: LINE += " layout=%s;"%(rozofs.layout2int(e.layout))
         if e.vid_fast != None:
   	  LINE += " vid_fast=%s;"%(e.vid_fast.vid)
         if e.fast_mode != None:
@@ -1094,7 +1094,10 @@ class exportd_class:
         d.set_column(3,"%s/%s"%(e.fast_mode,e.vid_fast.vid))
       else:
         d.set_column(3,"none")
-      d.set_column(4,"%s"%(e.layout))  
+      if e.layout == None:
+        d.set_column(4,"NONE")  
+      else:     
+        d.set_column(4,"%s"%(e.layout))  
       if e.striping_unit!= None:
         d.set_column(5,"%s/%s"%(e.striping_factor,e.striping_unit))
       else:

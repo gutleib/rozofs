@@ -417,6 +417,16 @@ static int read_stripping_config(struct config_setting_t * stripping_set, estrip
 out:
     return status;
 }
+static volume_config_t * econfig_get_vid(econfig_t *config, vid_t vid) {
+    list_t          * l;
+    volume_config_t * v;
+
+    list_for_each_forward(l, &config->volumes) {
+        v = list_entry(l, volume_config_t, list);
+        if (vid == v->vid) return v;
+    }
+    return NULL;
+}
 static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout) {
     int status = -1, v, c, s;
     struct config_setting_t *volumes_set = NULL;
@@ -1331,6 +1341,17 @@ static int load_exports_conf(econfig_t *ec, struct config_t *config) {
           } 
         } 
         
+        /*
+        ** When layout is not set, it must come from the volume
+        */
+        if (layout == -1) {
+          volume_config_t * v = econfig_get_vid(ec, vid);
+          if (v == NULL) {
+            severe("Invalid vid %d in eid %d", vid, eid);
+            goto out;
+          }
+          layout = v->layout;
+        }    
 	
         econfig = xmalloc(sizeof (export_config_t));
         if (export_config_initialize(econfig, (eid_t) eid, (vid_t) vid, layout, bsize, root, name,
