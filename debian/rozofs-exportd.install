@@ -8,6 +8,7 @@
 /usr/bin/rozo_scan_by_criteria
 /usr/bin/rozo_quota_fix
 /usr/bin/rozo_rebalance
+/usr/bin/rozo_vmove
 /usr/bin/rozo_locate_fid
 /usr/bin/rozo_rcmd_server
 /usr/bin/rozo_trashd
