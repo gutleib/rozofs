@@ -12,6 +12,7 @@ syntax() {
   echo "rozo_core rm [corefile]   Remove local core file(s)"
   echo "rozo_core gdb [corefile]  Launch gdb on core file(s)"
   echo "rozo_core uptime          Get uptime of all nodes n1, n2, ..."
+  echo "rozo_core df              Get disk usage of all nodes n1, n2, ..."
   exit 0
 }
 #_________________________________________
@@ -68,6 +69,37 @@ rozo_core_uptime () {
     esac
     printf "%s : %s\033[0m\n" ${h} "${res}"
   done
+  exit 0
+}
+#_________________________________________
+# Get nodes uptime
+#_________________________________________
+#
+rozo_core_df () {
+  case "$1" in
+    "") FILTER="n";;
+    *)  FILTER=$1;;
+  esac
+  # Find out the list of host to run the command on
+  HOSTLIST=`grep -oP "${FILTER}\d+$" /etc/hosts | sort -u`
+  case "${HOSTLIST}" in
+    "") {
+      cat /etc/hosts
+      printf "\033[91m\033[40mNo host matching prefix \"%s\" in /etc/hosts.\n" ${FILTER}
+      printf "Try other prefix \"rozo_core all <prefix>\".\033[0m\n"
+      exit 1
+    };;
+  esac  
+
+  echo > /tmp/rozo_df 
+  for h in ${HOSTLIST}
+  do
+    ssh -o ConnectTimeout=5 ${h} "rozo_df" >> /tmp/rozo_df
+  done
+  sed -i '/_______/d' /tmp/rozo_df
+  sed -i -r "s/\x1B\[(([0-9]+)(;[0-9]+)*)?[m,K,H,f,J]//g" /tmp/rozo_df
+  sort -u -k1.51 /tmp/rozo_df
+  rm -f /tmp/rozo_df
   exit 0
 }
 #_________________________________________
@@ -158,6 +190,6 @@ rozo_core_rm () {
 #_________________________________________
 #
 case "$1" in
-  ls|rm|gdb|all|uptime) rozo_core_$1 $2;;
+  ls|rm|gdb|all|uptime|df) rozo_core_$1 $2;;
 esac
 syntax  
