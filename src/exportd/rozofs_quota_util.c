@@ -452,26 +452,16 @@ int quota_wait_response(rozofs_qt_header_t *rsp_buf, int length,int fd,int trans
 */
 int export_config_read(econfig_t *config, const char *fname)
 {
-    int status = -1;
-    config_t cfg;
-    config_init(&cfg);
-    
+    int status = -1;    
     econfig_initialize(config);
-
-    if (config_read_file(&cfg, fname) == CONFIG_FALSE) {
+    
+    if (econfig_read(config, fname) != 0) {
         errno = EIO;
-        severe("can't read %s : %s.", fname, config_error_text(&cfg));
+        severe("can't read %s ", fname);
         goto out;
     }
-
-    if (load_exports_conf_api(config, &cfg) != 0) {
-        severe("can't load exports config.");
-        goto out;
-    }
-
     status = 0;
 out:
-    config_destroy(&cfg);
     return status;
 }
 /*
