@@ -87,12 +87,6 @@ extern unsigned long long Global_timeBefore, Global_timeAfter;
 #define RUC_DISC 2        /* socket error or disconnection */
 #define RUC_PARTIAL 3        /* partial read on socket*/
 
-/*
-**   AGING constants
-*/
-#define UMA_AGING_IDLE  0
-#define UMA_AGING_RUN   1
-#define UMA_AGING_AGED  2
 
 
 typedef void (*ruc_pf_2uint32_t)(uint32_t par1, uint32_t par2);
