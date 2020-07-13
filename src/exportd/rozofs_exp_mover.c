@@ -266,11 +266,14 @@ int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_
 
     if (new_vid == old_vid) break;
     
+
+    hybrid_blocks = rozofs_get_hybrid_size(&master->attributes.s.multi_desc,&master->attributes.s.hybrid_desc);
+    hybrid_blocks /= ROZOFS_BSIZE_BYTES(e->bsize);
+    
     /*
-    ** Aging case
+    ** Not an hybrid file
     */
-    if (master->attributes.s.bitfield1 & ROZOFS_BITFIELD1_AGING) {    
-      
+    if (hybrid_blocks == 0) {      
       bbytes = ROZOFS_BSIZE_BYTES(e->bsize);
       blocks = ((master->attributes.s.attrs.size + bbytes - 1) / bbytes);
       /*
@@ -287,11 +290,7 @@ int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_
     /*
     ** Hybrid case, when the master inode is moved
     */
-    if (master != lv2) break;
-    hybrid_blocks = rozofs_get_hybrid_size(&master->attributes.s.multi_desc,&master->attributes.s.hybrid_desc);
-    hybrid_blocks /= ROZOFS_BSIZE_BYTES(e->bsize);
-    if (hybrid_blocks == 0) break;
-      
+    if (master != lv2) break;      
     bbytes = ROZOFS_BSIZE_BYTES(e->bsize);
     blocks = ((master->attributes.s.attrs.size + bbytes - 1) / bbytes);
     /*

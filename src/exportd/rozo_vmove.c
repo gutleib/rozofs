@@ -54,10 +54,10 @@ int                cluster[ROZOFS_CLUSTERS_MAX] = {ROZOFS_VMOVE_UNDEFINED};
 list_t             cluster_distributor;
 export_config_t  * econfig = NULL;
 
-uint64_t  scanned_match_path   = 0;
-uint64_t  scanned_mono_volume  = 0;
 uint64_t  scanned_hybrid  = 0;
-uint64_t  scanned_aging  = 0;
+uint64_t  scanned_single  = 0;
+uint64_t  scanned_multi  = 0;
+uint64_t  scanned_multiSub  = 0;
 uint64_t  scanned_already = 0;
 uint64_t  scanned_to_move = 0;
 uint64_t  scanned_error   = 0;
@@ -686,31 +686,6 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   }
 
   /*
-  ** In hybrid mode we move the 1rst stride
-  ** In aging mode we move every stride
-  */
-  
-  if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
-    scanned_aging++;
-  }
-  else if (inode_p->s.multi_desc.byte == 0) {
-    /*
-    ** Single file without aging
-    */
-    scanned_mono_volume++;
-    return 0;  
-  }  
-  else if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
-    scanned_hybrid++;
-  }
-  else {
-    scanned_mono_volume++;
-    /* Neither hybrid nor aging */
-    return 0;
-  }
-    
-
-  /*
   ** Check the directory it is in
   */
   if (rozofs_vmove_scope == rozofs_vmove_scope_directories) {
@@ -729,19 +704,38 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
     if (ino1_p->s.usr_id  != ino2_p->s.usr_id)    return 0;
     if (ino1_p->s.idx     != ino2_p->s.idx)       return 0;
   }
-  
-  /*
-  ** It is under the tree 
-  */
-  scanned_match_path++;
-  
 
+  /*
+  ** In hybrid mode we move the 1rst stride
+  ** In aging mode we move every stride
+  */
+  
+  if (inode_p->s.multi_desc.byte == 0) {
+    /*
+    ** Single file
+    */
+    scanned_single++;
+    nb_slave = 1;
+  }  
+  else if (inode_p->s.hybrid_desc.s.no_hybrid == 0) {
+    scanned_hybrid++;
+    nb_slave = 1;
+  }
+  else {
+    /*
+    ** Multi file
+    */
+    nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);    
+    scanned_multi++;
+    scanned_multiSub += nb_slave;
+  }    
+  
   /*
   ** Check project
   */
   if (project !=  -1) {
     if (project != inode_p->s.hpc_reserved.reg.share_id) {
-      scanned_bad_prj++;
+      scanned_bad_prj += nb_slave;
       return 0;      
     }
   }
@@ -750,11 +744,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   ** Check the file size against given size criteria
   */
   if (inode_p->s.attrs.size > size_under) {
-    scanned_over_sized++;
+    scanned_over_sized += nb_slave;
     return 0;
   }
   if (inode_p->s.attrs.size < size_over) {
-    scanned_under_sized++;
+    scanned_under_sized += nb_slave;
     return 0;
   }
   
@@ -763,13 +757,13 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   */
   if (modification_time_before != 0) {
     if (inode_p->s.attrs.mtime > modification_time_before) {
-      scanned_under_age++; 
+      scanned_under_age += nb_slave; 
       return 0;
     }
   }  
   if (creation_time_before != 0) {
     if (inode_p->s.cr8time > creation_time_before) {
-      scanned_under_age++; 
+      scanned_under_age += nb_slave; 
       return 0;
     }
   }     
@@ -780,7 +774,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   rozofs_get_multiple_file_sizes(inode_p, &vector);
   
   /*
-  ** Hybrid case or si. Check the 1rts inode 
+  ** Hybrid case or single. Check the 1rts inode 
   */
   if ((inode_p->s.hybrid_desc.s.no_hybrid == 0)||(inode_p->s.multi_desc.byte == 0)) {
 
@@ -791,7 +785,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
       /*
       ** Already on the requested volume
       */
-      scanned_already++;
+      scanned_already += nb_slave;
       return 0;
     }
 
@@ -802,7 +796,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
       char fidstr[40];
       rozofs_fid_append(fidstr,inode_p->s.attrs.fid);
       severe("Found cid %d for FID %s",inode_p->s.attrs.cid, fidstr);
-      scanned_error++;    
+      scanned_error += nb_slave;    
       return 0;
     }  
     
@@ -811,46 +805,41 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
   }
   
   /*
-  ** Aging case. Check every sub file 
+  ** Multi files : Check every sub file 
   */
   match = 0;
-  if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
-    slave_p = inode_p;
-    slave_p ++;
-    nb_slave = rozofs_get_striping_factor(&inode_p->s.multi_desc);
+  slave_p = inode_p;
+  slave_p ++;
+  /*
+  ** Check every slave
+  */
+  for (idx=0; idx<nb_slave; idx++,slave_p++) {
+
     /*
-    ** Check every slave
+    ** Check whether it needs to be moved
     */
-    for (idx=0; idx<nb_slave; idx++,slave_p++) {
-    
+    if (cluster[slave_p->s.attrs.cid] == destination) {
       /*
-      ** Check whether it needs to be moved
+      ** Already on the requested volume
       */
-      if (cluster[slave_p->s.attrs.cid] == destination) {
-        /*
-        ** Already on the requested volume
-        */
-        scanned_already++;
-        continue;
-      }
-
-      /*
-      ** Unexpected cluster identifier
-      */
-      if (cluster[slave_p->s.attrs.cid] == ROZOFS_VMOVE_UNDEFINED) {
-        char fidstr[40];
-        rozofs_fid_append(fidstr,slave_p->s.attrs.fid);
-        severe("Found cid %d for FID %s",slave_p->s.attrs.cid, fidstr);
-        scanned_error++;    
-        continue;
-      }     
-      rozofs_add_file_to_move(slave_p,vector.vectors[idx+1].len);
-      match = 1;
+      scanned_already++;
+      continue;
     }
-    return match;      
-  }  
 
-  return 0;
+    /*
+    ** Unexpected cluster identifier
+    */
+    if (cluster[slave_p->s.attrs.cid] == ROZOFS_VMOVE_UNDEFINED) {
+      char fidstr[40];
+      rozofs_fid_append(fidstr,slave_p->s.attrs.fid);
+      severe("Found cid %d for FID %s",slave_p->s.attrs.cid, fidstr);
+      scanned_error++;    
+      continue;
+    }     
+    rozofs_add_file_to_move(slave_p,vector.vectors[idx+1].len);
+    match = 1;
+  }
+  return match;      
 }  
 /*
 **_______________________________________________________________________
@@ -1121,7 +1110,7 @@ static void usage(char * fmt, ...) {
   
   printf("RozoFS hybrid/aging volume mover - %s\n", VERSION);    
   printf("Move subfiles between slow and fast volumes in hybrid or aging mode.\n");
-  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory/file FID>|--name <directory/file name>|--eid <eid>} [--recursive] [OPTIONS]"ROZOFS_COLOR_NONE"\n");
+  printf("Usage: "ROZOFS_COLOR_BOLD"rozo_vmove {--fast|--slow} {--fid <directory/file FID>|--name <directory/file name>|-gid <eid>} [--recursive] [OPTIONS]"ROZOFS_COLOR_NONE"\n");
   printf("The direction of the move is defined by one of the following mandatory parameter:\n");
   printf(ROZOFS_COLOR_BOLD"\t-f, --fast"ROZOFS_COLOR_NONE"\t\t\tMove subfiles from slow volume to fast volume.\n");
   printf(ROZOFS_COLOR_BOLD"\t-s, --slow"ROZOFS_COLOR_NONE"\t\t\tMove subfiles from fast volume to slow volume.\n");
@@ -1323,7 +1312,7 @@ int main(int argc, char *argv[]) {
 
       case 'F':
         if (target != NULL) {
-          usage("2 targets are defined unding -n -e or -F");
+          usage("2 targets are defined using -n -e or -F");
         }  
         target = optarg;
         if (rozofs_uuid_parse(optarg,target_fid) != 0) {
@@ -1333,6 +1322,7 @@ int main(int argc, char *argv[]) {
         
       case 'm':
         mountpoint = optarg;
+        
         break;
                 
       case 'M':
@@ -1598,10 +1588,10 @@ int main(int argc, char *argv[]) {
   if (rozofs_vmove_scope == rozofs_vmove_scope_directories) {
     printf("     \"directories\"    : %llu,\n",(long long unsigned int)scanned_directories);
   }  
-  printf("     \"mono volume\"    : %llu,\n",(long long unsigned int)scanned_mono_volume);
+  printf("     \"singelFiles\"    : %llu,\n",(long long unsigned int)scanned_single);
   printf("     \"hybridFiles\"    : %llu,\n",(long long unsigned int)scanned_hybrid);
-  printf("     \"agingFiles\"     : %llu,\n",(long long unsigned int)scanned_aging);
-  printf("     \"match path\"     : %llu,\n",(long long unsigned int)scanned_match_path);
+  printf("     \"multiFiles\"     : %llu,\n",(long long unsigned int)scanned_multi);
+  printf("     \"subFiles\"       : %llu,\n",(long long unsigned int)scanned_multiSub);
   printf("     \"bad project\"    : %llu,\n",(long long unsigned int)scanned_bad_prj);
   printf("     \"under sized\"    : %llu,\n",(long long unsigned int)scanned_under_sized);
   printf("     \"under age\"      : %llu,\n",(long long unsigned int)scanned_under_age);

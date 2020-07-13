@@ -1431,13 +1431,17 @@ static int export_update_blocks(export_t * e,lv2_entry_t *lv2, uint64_t newblock
     /*
     ** get the size of the hybrid section
     */
-    if (ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING)) {
+    fast_blocks = rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc,&lv2->attributes.s.hybrid_desc);
+    /*
+    ** When not hybrid, the whole file is to be accounted either of fast or slow volume 
+    */
+    if (fast_blocks == 0) {
       fast_blocks = 0xFFFFFFFF;
-    }
-    else {
-      fast_blocks = rozofs_get_hybrid_size(&lv2->attributes.s.multi_desc,&lv2->attributes.s.hybrid_desc);
-      fast_blocks /= ROZOFS_BSIZE_BYTES(e->bsize);
     }   
+    else {
+      fast_blocks /= ROZOFS_BSIZE_BYTES(e->bsize);
+    }  
+
     vid_fast.u32 = children;
     status = export_fstat_update_blocks(e->eid, newblocks, oldblocks,e->thin,vid_fast.fid_st_idx.vid_fast,fast_blocks);
     STOP_PROFILING(export_update_blocks);
@@ -3634,7 +3638,6 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
       ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
       */
       if (fast_mode == rozofs_econfig_fast_aging) {
-        ROZOFS_SET_BITFIELD1(ext_attrs_p,ROZOFS_BITFIELD1_AGING);
         /*
         ** Select the volume
         */          
@@ -3651,7 +3654,6 @@ int export_mknod_multiple2(export_t *e,uint32_t site_number,fid_t pfid, char *na
         }         
       }  
       else {
-        ROZOFS_CLEAR_BITFIELD1(ext_attrs_p,ROZOFS_BITFIELD1_AGING); 
         if (quota_slow) {
           volume = e->volume;
         }
@@ -4033,11 +4035,6 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
       lv2_recycle = export_get_recycled_inode(e,pfid,&ext_attrs);
       if (lv2_recycle == NULL)
       {
-        /*
-        ** In case fast volume exists and aging is enabled the file has to be created on the fast volume
-        */
-        if (fast_mode == rozofs_econfig_fast_aging) ROZOFS_SET_BITFIELD1(&ext_attrs,ROZOFS_BITFIELD1_AGING)
-        else                                        ROZOFS_CLEAR_BITFIELD1(&ext_attrs,ROZOFS_BITFIELD1_AGING)        
 	/*
 	** get the distribution for the file:
 	**  When the export has a fast volume, we check the suffix of the file to figure out if the file can be allocated
@@ -8455,7 +8452,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
       DISPLAY_ATTR_UINT("S_UNIT",ROZOFS_STRIPING_UNIT_BASE <<striping_unit); 
       DISPLAY_ATTR_TXT("S_HYBRID",(fast_mode==rozofs_econfig_fast_hybrid)?"Yes":"No");
       if (fast_mode==rozofs_econfig_fast_hybrid) {
-        DISPLAY_ATTR_UINT("S_HSIZE",(hybrid_nb_blocks==0)? ROZOFS_STRIPING_UNIT_BASE <<striping_unit:ROZOFS_STRIPING_UNIT_BASE <<hybrid_nb_blocks); 
+        DISPLAY_ATTR_UINT("S_HSIZE",(hybrid_nb_blocks==0)? ROZOFS_STRIPING_UNIT_BASE <<striping_unit:ROZOFS_HYBRID_UNIT_BASE * hybrid_nb_blocks); 
       }     
       DISPLAY_ATTR_TXT ("AGING",(fast_mode==rozofs_econfig_fast_aging)?"Yes":"No");
     }
@@ -8568,9 +8565,7 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   }
   /*
   ** case of the multi file
-  */
-  DISPLAY_ATTR_TXT ("AGING",ROZOFS_IS_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING)?"Yes":"No");    
-  
+  */  
   if ((S_ISREG(lv2->attributes.s.attrs.mode)) && ( lv2->attributes.s.multi_desc.common.master != 0))
   {
     ext_mattr_t *slave_p;
@@ -9293,18 +9288,11 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     {
       lv2->attributes.s.hybrid_desc.s.no_hybrid = 0;
       lv2->attributes.s.hybrid_desc.s.hybrid_sz = hybrid_nb_blocks;
-      ROZOFS_CLEAR_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);	
     }
     else
     {
       lv2->attributes.s.hybrid_desc.s.no_hybrid = 1;
-      lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;
-      if (hybrid_enable == 2) {
-        ROZOFS_SET_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);
-      }	
-      else {
-        ROZOFS_CLEAR_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);	
-      }      	
+      lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;    	
     }
     return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);  
   }

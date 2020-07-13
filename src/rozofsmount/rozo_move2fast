@@ -1,0 +1,174 @@
+#!/bin/bash
+# Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
+# This file is part of Rozofs.
+#
+# Rozofs is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, version 2.
+#
+# Rozofs is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+#set -x
+
+#
+# This script is used to moved old files of a hybrig/tiering export 
+# from the fast volume toward the fast volume
+
+#
+# USAGE
+#
+usage() {
+  if [[ ! -z "$1" ]]
+  then
+    printf "\n\033[1m\033[91m  !!! %s !!!\033[0m\n\n" "$1"
+  fi  
+  echo "rozo_move2fast - RozoFS utility to move a file or directory from the slow volume"
+  echo "                 toward the fast volume."
+  echo " "
+  echo "usage: rozo_move2fast [name]"
+  exit 1
+}
+#
+# Register parameters
+#
+#eid=""
+local="NO"
+path=""
+throughput=""
+hours=""
+path=${PWD}
+while [ ! -z $1 ]
+do
+  
+  #
+  # Debug mode
+  #
+  if [ "$1" == "--debug" ]
+  then
+    set -x
+    shift 1
+    continue
+  fi
+
+  #
+  # Help
+  #
+  if [ "$1" == "-h" ]
+  then
+    usage
+  fi
+  if [ "$1" == "--help" ]
+  then
+    usage
+  fi
+    
+  #
+  # local mode : use local host name as active export
+  #  
+  if [ "$1" == "--local" ]
+  then
+    local="YES"
+    shift 1
+    continue
+  fi
+  
+  if [ ! -z $1 ]
+  then
+    path=$1
+  else  
+    path=${PWD}
+  fi  
+  break  
+done
+
+#
+# Test environment ?
+#
+if [ "${ROOT_ROZO}" == "" ];
+then
+  MOVECMD="rozo_vmove"
+  DIAG="rozodiag"
+  which ${DIAG} >> /dev/null
+  if [ $? -ne 0 ];
+  then 
+    usage "${DIAG} not found !!!"
+  fi
+  MNT=""
+else
+  MOVECMD="${ROOT_ROZO}/tests/build/src/exportd/rozo_vmove"  
+  DIAG="${ROOT_ROZO}/tests/build/src/rozodiag/rozodiag"
+  idx=`attr -qg rozofs.export ${path} 2>/dev/null | awk '{print $4;}'`
+  MNT=`rozodiag -T mount:${idx} -c mount | awk '{if ($1=="mount") print $3;}'`
+  MNT="--mount ${MNT}"  
+fi
+
+
+#
+# Find out the current RozoFS exportd from the current path
+#
+res=`attr -qg rozofs.export ${path} 2>/dev/null`
+if [ $? -ne 0 ]
+then
+  usage "\"${path}\" is not a RozoFS mountpoint"
+fi  
+#
+# This is a RozoFS mountpoint
+#
+exports=`echo ${res} | awk '{print $1}'`
+#eid=`echo ${res} | awk '{print $2}'`
+
+
+# 
+# Find out which of these exports is the active one using rozodiag
+#
+if [ "${local}" == "YES" ]
+then
+  active="$HOSTNAME"
+else
+  for active in `echo $exports | tr \/ ' '`
+  do
+    ${DIAG} -i ${active} -T export:0 -c up | grep uptime >> /dev/null
+    case "$?" in
+      "0") break;;
+      *)   active="";;
+    esac      
+  done
+  case "${active}" in
+    "") {
+      echo "Active exportd not found within ${exports}"
+      exit 1
+    };;
+   esac   
+fi
+
+#
+# Translate name to FID
+#
+FID=`attr -qg rozofs ${path} 2>/dev/null | awk '{if ($1=="FID") print $3;}'`
+if [ $? -ne 0 ]
+then
+  usage "\"${path}\" is not a RozoFS mountpoint"
+fi  
+# 
+# Is the current node the active export
+#
+cmd="${MOVECMD} ${MNT} --fast --fid ${FID}" 
+if [ "$HOSTNAME" == "${active}" ]
+then
+  #
+  # Curent node is the active export 
+  #
+  ${cmd}
+else
+  #
+  # Forward the command to the active axport
+  #
+  ssh ${active} "${cmd}"
+fi
+exit $?
