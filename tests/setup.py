@@ -491,7 +491,7 @@ class cid_class:
 #____________________________________
 class mount_point_class:
 
-  def __init__(self, eid, layout, site=0, name=None):
+  def __init__(self, eid, site=0, name=None):
     global mount_points
     instance = len(mount_points)
     self.numanode=instance+1
@@ -534,7 +534,12 @@ class mount_point_class:
       print "vid_fast = %s"%(self.eid.vid_fast.vid)
     print "site = %s"%(self.site)
     print "path = %s"%(self.get_mount_path())
-    l=self.layout.split('_')
+    # Get layout from export that may get it from volume
+    if self.eid.layout == None:
+      l = rozofs.layout(self.eid.volume.layout)
+    else:
+      l = self.eid.layout
+    l = l.split('_')
     print "layout = %s %s %s"%(l[1],l[2],l[3])
     print "failures = %s"%(self.eid.failures)
     list=[]
@@ -696,7 +701,7 @@ class mount_point_class:
       d.new_line()
       d.set_column(1,"%s"%(m.instance))
       d.set_column(2,"%s"%(m.eid.eid))
-      d.set_column(3,"%s"%(m.layout))
+      d.set_column(3,"%s"%(m.eid.layout))
       d.set_column(4,"%s"%(rozofs.bsize(m.eid.bsize))) 
       d.set_column(5,"%s"%(m.site))   
       d.set_column(6,"%s"%(m.get_mount_path())) 
@@ -797,7 +802,7 @@ class export_class:
     return "eid%s"%(self.eid)  
      
   def add_mount(self,site=0,name=None):
-    m = mount_point_class(self,self.layout,site=site,name=name)
+    m = mount_point_class(self,site=site,name=name)
     self.mount.append(m)
   
   def create_path(self):  
