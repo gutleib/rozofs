@@ -123,8 +123,8 @@ compute_next_date() {
   then 
     return
   fi
-  
-  NEXT_RUN=`date "+%Y-%m-%d-%H:%M:%S" --date="${timestamp} ${PERIOD} min"`
+  TS=`echo ${timestamp} | awk -F'-' '{print $1"-"$2"-"$3" "$4;}'` 
+  NEXT_RUN=`date "+%Y-%m-%d-%H:%M:%S" --date="${TS} ${PERIOD} min"`
 }      
 #_________________________________________________
 # Display one specific synchronization status
@@ -216,13 +216,8 @@ display_one_synchronization() {
     printf "      \"%s\" \t: %s,\n" "PROJECT" ${PROJECT}
   fi  
 
-  BW=`read_cfg BW`
-  if [ "$BW" == "" -o "$BW" == "0" ];
-  then
-    printf "      \"%s\" \t: 0,\n" "BW(MB/s)" 
-  else  
-    printf "      \"%s\" \t: %s,\n" "BW(MB/s)" ${BW}
-  fi  
+  BW=`read_cfg BW 0`  
+  printf "      \"%s\" \t: %s,\n" "BW(MB/s)" ${BW}
 
   MNT=`read_cfg MNT`
   printf "      \"%s\" \t: \"%s\",\n" "SRC MNT" ${MNT}
@@ -400,12 +395,20 @@ reinit() {
 # Read a configuration file element
 #_________________________________________________
 read_cfg() {
+
   if [[ "$1" == "" ]]
   then
-    echo ""
+    val=""
   else  
-    awk '{if ($1==element) print $3;}' element=$1 ${DIR}/cfg
-  fi  
+    val=`awk '{if ($1==element) print $3;}' element=$1 ${CFG}`
+  fi 
+   
+  if [ "$val" == "" -a "$2" != "" ];
+  then
+    echo $2
+  else
+    echo ${val}
+  fi        
 }
 #_________________________________________________
 # Create syntax
@@ -618,7 +621,7 @@ modify() {
   #
   if [[ "${BW}" == "" ]]
   then
-    TARGET=`read_cfg BW`
+    TARGET=`read_cfg BW 0`
   else  
     mod="YES"
   fi

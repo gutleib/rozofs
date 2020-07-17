@@ -7,8 +7,8 @@
 make_node_file() {
   echo "localhost1"
   echo "localhost2" 
-#  echo "localhost3"
-#  echo "localhost4"  
+  echo "localhost3"
+  echo "localhost4"  
 }
 #-----------------------------------------------------------------
 # Install the rozo needed software

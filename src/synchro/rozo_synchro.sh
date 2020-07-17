@@ -34,7 +34,13 @@ read_cfg() {
     echo "read_cfg without parameter"
     exit 1
   fi  
-  awk '{if ($1==element) print $3;}' element=$1 ${CFG}
+  val=`awk '{if ($1==element) print $3;}' element=$1 ${CFG}`
+  if [ "$val" == "" -a "$2" != "" ];
+  then
+    echo $2
+  else
+    echo ${val}
+  fi     
 }
 #_________________________________________________
 # Check whether every input directory has been processed
@@ -765,7 +771,7 @@ fi
 #
 EID=`read_cfg EID`
 PROJECT=`read_cfg PROJECT`
-BW=`read_cfg BW`
+BW=`read_cfg BW 0`
 MNT=`read_cfg MNT`
 DIRECTORY=`read_cfg DIRECTORY`
 TARGET=`read_cfg TARGET`
