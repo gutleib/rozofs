@@ -9292,7 +9292,15 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
     else
     {
       lv2->attributes.s.hybrid_desc.s.no_hybrid = 1;
-      lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;    	
+      lv2->attributes.s.hybrid_desc.s.hybrid_sz = 0;    
+      if (S_ISDIR(lv2->attributes.s.attrs.mode)) {
+        if (hybrid_enable == 2) {
+          ROZOFS_SET_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);
+        }	
+        else {
+          ROZOFS_CLEAR_BITFIELD1(&lv2->attributes,ROZOFS_BITFIELD1_AGING);	
+        }           
+      }	
     }
     return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);  
   }
