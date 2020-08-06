@@ -99,7 +99,7 @@ int rbs_stor_cnt_initialize(rb_stor_t * rb_stor, int cid) {
     int status = -1;
     int i = 0;
     mp_io_address_t io_address[STORAGE_NODE_PORTS_MAX];
-    DEBUG_FUNCTION;
+    int    storio_id;
 
     // Copy hostname for this storage
     mclient_new(&rb_stor->mclient, rb_stor->host, 0, 0);
@@ -117,11 +117,18 @@ int rbs_stor_cnt_initialize(rb_stor_t * rb_stor, int cid) {
         goto out;
     } else {
         // Send request to get TCP ports for this storage
-        if (mclient_ports(&rb_stor->mclient, io_address) != 0) {
+        if (mclient_ports_and_storio_nb(&rb_stor->mclient, io_address, &rb_stor->storio_nb) != 0) {
             severe("Warning: failed to get ports for storage (host: %s)."
                     , rb_stor->host);
             goto out;
         }
+    }
+    
+    if (rb_stor->storio_nb == 0) {
+      storio_id = cid;
+    }
+    else {
+      storio_id = ((cid-1)%rb_stor->storio_nb) + 1;
     }
 
     // Initialize each TCP ports connection with this storage (by sproto)
@@ -143,7 +150,7 @@ int rbs_stor_cnt_initialize(rb_stor_t * rb_stor, int cid) {
             }
 
             rb_stor->sclients[i].ipv4 = ip;	    
-            rb_stor->sclients[i].port = io_address[i].port+cid;	     
+            rb_stor->sclients[i].port = io_address[i].port+storio_id;	     
             rb_stor->sclients[i].status = 0;
             rb_stor->sclients[i].rpcclt.sock = -1;
 

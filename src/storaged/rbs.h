@@ -35,7 +35,7 @@
 
 #define DEFAULT_REBUILD_RELOOP           4  
 
-#define REBUILD_MSG(fmt, ...) { if (!nolog) logmsg(EINFO, fmt, ##__VA_ARGS__); if (!quiet) printf(fmt"\n", ##__VA_ARGS__); }
+#define REBUILD_MSG(fmt, ...) { if (!nolog) logmsg(EINFO, fmt, ##__VA_ARGS__); }
 #define REBUILD_FAILED(fmt, ...) { REBUILD_MSG("storage_rebuild failed !!!"); REBUILD_MSG(fmt, ##__VA_ARGS__); rbs_monitor_update("failed",NULL);}
 
 /* Timeout in seconds for exportd requests */
@@ -83,6 +83,7 @@ typedef struct rb_stor {
     mclient_t mclient;
     sclient_t sclients[STORAGE_NODE_PORTS_MAX];
     uint8_t sclients_nb;
+    uint32_t storio_nb;
     list_t list;
 } rb_stor_t;
 

@@ -486,4 +486,13 @@ void uma_dbg_declare_core_dir(char * path);
 * @param name The syslog name
 */
 void uma_dbg_record_syslog_name(char * name);
+/*
+**-------------------------------------------------------
+** Add a listen port for diagnostic
+**
+** @param ipAddr       IP Address to use
+** @param serverPort   Port to listen to in server mode
+**-------------------------------------------------------
+*/
+void uma_dbg_add_listening_port(uint32_t ipAddr, uint16_t serverPort);
 #endif

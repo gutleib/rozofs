@@ -309,6 +309,7 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
          **   D E B U G   M O D U L E
          **--------------------------------------
          */  
+         
         {
            int     idx;
            int      bindOnAnyAddr = 0;
@@ -335,9 +336,67 @@ uint32_t ruc_init(uint32_t test, storaged_start_conf_param_t *arg_p) {
            */
            if ((strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0)
            &&  (bindOnAnyAddr == 0)) {         
-	      uma_dbg_init(10, 0x7F000001, arg_p->debug_port, target);	                              
+	      uma_dbg_init_no_system(10, 0x7F000001, arg_p->debug_port, target);	                              
            }
-        }                
+        } 
+        /*
+        ** In case there is a limited number of storio
+        ** listen on every required port
+        */
+        if (storaged_config.storio_nb != 0) {
+          uint64_t  bitmask[4] = {0};
+          uint8_t   cid,rank,bit; 
+          list_t   *l;
+         
+          memset(bitmask, 0, sizeof(bitmask));
+          rank = (arg_p->instance_id-1)/64;
+	  bit  = (arg_p->instance_id-1)%64; 
+          bitmask[rank] |= (1ULL<<bit);
+
+          /* For each storage on configuration file */
+          l = NULL;
+          list_for_each_forward(l, &storaged_config.storages) {
+
+            storage_config_t *sc = list_entry(l, storage_config_t, list);
+	    cid = sc->cid;
+
+            /* Is this storage already started */
+	    rank = (cid-1)/64;
+	    bit  = (cid-1)%64; 
+	    if (bitmask[rank] & (1ULL<<bit)) {
+	      continue;
+	    }
+
+	    bitmask[rank] |= (1ULL<<bit);                     
+            {
+               int     idx;
+               int      bindOnAnyAddr = 0;
+               uint32_t ip;
+
+               /*
+               ** Get number of configured IP addresses in config file
+               */           
+               int nbAddr = sconfig_get_nb_IP_address(&storaged_config);
+
+               for (idx=0; idx< nbAddr; idx++) {
+                  ip = sconfig_get_this_IP(&storaged_config,idx);
+                  if (ip == INADDR_ANY) {
+                    bindOnAnyAddr = 1;
+                  }           
+	          uma_dbg_add_listening_port(ip, arg_p->debug_port + sc->cid - arg_p->instance_id);	                 
+               }
+               /*
+               ** When no configuration file is given, one uses the default config file.
+               ** Only one storaged and one storio of each instance can exist on this node.
+               ** One can listen on 127.0.0.1 for rozodiag commands       
+               */
+               if ((strcmp(storaged_config_file,STORAGED_DEFAULT_CONFIG) == 0)
+               &&  (bindOnAnyAddr == 0)) {         
+	          uma_dbg_add_listening_port(0x7F000001, arg_p->debug_port + sc->cid - arg_p->instance_id);	                              
+               }
+            } 
+          }
+        }                       
         {
             char name[256];
             char * pChar = name;

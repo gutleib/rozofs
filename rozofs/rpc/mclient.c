@@ -60,7 +60,7 @@ int mclient_connect(mclient_t *clt, struct timeval timeout) {
   return -1;
 }
 
-int mclient_ports(mclient_t * mclt, mp_io_address_t * io_address_p) {
+int mclient_ports_and_storio_nb(mclient_t * mclt, mp_io_address_t * io_address_p, uint32_t * storio_nb) {
     int status = -1;
     mp_ports_ret_t *ret = 0;
     DEBUG_FUNCTION;
@@ -74,14 +74,17 @@ int mclient_ports(mclient_t * mclt, mp_io_address_t * io_address_p) {
         goto out;
     }
     memcpy(io_address_p, &ret->mp_ports_ret_t_u.ports.io_addr, STORAGE_NODE_PORTS_MAX * sizeof (struct mp_io_address_t));
-
+    
+    *storio_nb = 0;
+    if (ret->mp_ports_ret_t_u.ports.mode > 1) {
+      *storio_nb = ret->mp_ports_ret_t_u.ports.mode;
+    }  
     status = 0;
 out:
     if (ret)
         xdr_free((xdrproc_t) xdr_mp_ports_ret_t, (char *) ret);
     return status;
 }
-
 
 
 

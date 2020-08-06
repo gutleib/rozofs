@@ -60,6 +60,7 @@ typedef struct mstorage {
     sid_t sids_nb;
     mstorage_cnf_status_t cnf_status;
     uint32_t              cnf_count;
+    uint32_t              storio_nb;
     int                   error;
     list_t list;
 } mstorage_t;

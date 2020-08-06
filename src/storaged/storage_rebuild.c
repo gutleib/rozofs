@@ -87,7 +87,7 @@ char          * status_given_file_path = NULL;
  
 
 static char rebuild_status[128];
-char myFormatedString[1024*64];
+char myFormatedString[1024*512];
 
 /* RPC client for exports server */
 static rpcclt_t rpcclt_export;
@@ -112,7 +112,7 @@ typedef struct rbs_monitor_s {
   uint64_t read;  
   char     status[64];
 } RBS_MONITOR_S;
-RBS_MONITOR_S rbs_monitor[STORAGES_MAX_BY_STORAGE_NODE*2];
+RBS_MONITOR_S rbs_monitor[STORAGES_MAX_BY_STORAGE_NODE*4];
 
 
 typedef enum RBS_STATUS_e {
@@ -132,7 +132,7 @@ typedef struct rbs_stor_config {
     rbs_file_type_e  ftype;  
 } rbs_stor_config_t;
 
-rbs_stor_config_t rbs_stor_configs[STORAGES_MAX_BY_STORAGE_NODE*2] ;
+rbs_stor_config_t rbs_stor_configs[STORAGES_MAX_BY_STORAGE_NODE*4] ;
 
 
 int rbs_index=0;
@@ -309,9 +309,9 @@ void do_exit(int code) {
 */
 
 time_t loc_time;
-char   initial_date[80];
+char   initial_date[128];
 static inline char * format_status_file(char * pJSON) {
-  char   delay[32];
+  char   delay[128];
   char * pt;
   int    i;
   uint64_t nb_files=0;
@@ -324,7 +324,7 @@ static inline char * format_status_file(char * pJSON) {
   uint64_t read=0;
   uint32_t listing=0;
   int json_offset=0;   
-  char     mystring[128];
+  char     mystring[256];
   
   JSON_begin;
   
@@ -1336,6 +1336,10 @@ void rbs_monitor_file_update(void) {
     }
     
     pEnd = format_status_file(myFormatedString);
+    if ((pEnd-myFormatedString) >= sizeof(myFormatedString)) {
+      severe("status file is %d while status string is %d",(int)(pEnd-myFormatedString),(int)sizeof(myFormatedString));
+    }  
+    
     if (pwrite(fd,myFormatedString,pEnd-myFormatedString,0)<=0) {
       severe("pwrite(%s) %s",path, strerror(errno));
     }
@@ -1355,16 +1359,11 @@ void rbs_monitor_update(char * global, char * local) {
 }
 
 int rbs_monitor_display() {
-  char cmdString[512];
-  
-  if (quiet) return 0;
-
-  if (rbs_monitor_file_path[0] == 0) return 0;
-
-  sprintf(cmdString,"cat %s",rbs_monitor_file_path);
-  return system(cmdString);
+  return 0;
 }
-
+int rbs_monitor_final_display() {  
+  return 0;
+}
 /*
 **____________________________________________________
 
@@ -1848,7 +1847,7 @@ int rbs_storio_reinit(cid_t cid, sid_t sid, uint8_t dev, uint8_t reinit) {
 **==========================================================================*/
 int rbs_build_job_list_from_export() {
   int       socketId = -1;
-  char      command[512];
+  char      command[4096];
   char      local[256];
   char      remote[256];
   int       idx;
@@ -2950,7 +2949,7 @@ static inline int rebuild_storage_thread(rbs_stor_config_t *stor_confs) {
     */
     if (run_loop != 1) {
 
-      rbs_monitor_display();  
+      //rbs_monitor_display();  
       REBUILD_MSG("Rebuild failed ! Attempt #%u/%u will start in %d minutes", run_loop, parameter.max_reloop, delay);      
           	
       sleep(delay * 60);       
@@ -3588,7 +3587,7 @@ static inline int rbs_rebuild_process() {
     */    
     run_loop = 0;
     status = rebuild_storage_thread(rbs_stor_configs);
-    rbs_monitor_display();  
+    rbs_monitor_final_display();  
 
     /*
     ** Clean pid file
@@ -3716,7 +3715,7 @@ static inline int rbs_rebuild_resume() {
   ** Process to the rebuild
   */   
   status = rebuild_storage_thread(rbs_stor_configs);
-  rbs_monitor_display();  
+  rbs_monitor_final_display();  
   forget_pid();
   
   /*

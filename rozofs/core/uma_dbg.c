@@ -2101,6 +2101,33 @@ void uma_dbg_set_target( char * target) {
 }
 /*
 **-------------------------------------------------------
+** Add a listen port for diagnostic
+**
+** @param ipAddr       IP Address to use
+** @param serverPort   Port to listen to in server mode
+**-------------------------------------------------------
+*/
+void uma_dbg_add_listening_port(uint32_t ipAddr, uint16_t serverPort) {
+
+  /*
+  ** set the export dscp code
+  */
+  rozodiag_conf.dscp = (uint8_t) common_config.export_dscp; 
+  rozodiag_conf.dscp = rozodiag_conf.dscp<<2;
+  
+  /*
+  ** Create the listening socket if port is given and module is in mode server or client&server
+  */
+  if ((serverPort != 0) && (common_config.diagnostic_mode != common_config_diagnostic_mode_client)) {
+    
+    if (af_inet_sock_listening_create("DIAG", ipAddr, serverPort, &rozodiag_conf) < 0) {
+      fatal("af_inet_sock_listening_create(DIAG) %s",strerror(errno));
+      return;
+    }  
+  }  
+}
+/*
+**-------------------------------------------------------
 ** Initialiaze debug service in a RozoFS software building block
 ** 1) If server mode is allowed and if a listening port is given
 ** it creates a listening socket to receive incoming debug 
@@ -2124,23 +2151,11 @@ void uma_dbg_init_internal(uint32_t nbElements,uint32_t ipAddr, uint16_t serverP
   ** Save version reference in global variable
   */
   sprintf(rozofs_github_reference,"%s %s", VERSION, ROZO_GIT_REF);
-
-  /*
-  ** set the export dscp code
-  */
-  rozodiag_conf.dscp = (uint8_t) common_config.export_dscp; 
-  rozodiag_conf.dscp = rozodiag_conf.dscp<<2;
   
   /*
   ** Create the listening socket if port is given and module is in mode server or client&server
   */
-  if ((serverPort != 0) && (common_config.diagnostic_mode != common_config_diagnostic_mode_client)) {
-    
-    if (af_inet_sock_listening_create("DIAG", ipAddr, serverPort, &rozodiag_conf) < 0) {
-      fatal("af_inet_sock_listening_create(DIAG) %s",strerror(errno));
-      return;
-    }  
-  }
+  uma_dbg_add_listening_port(ipAddr, serverPort);
   
   /* Service already initialized */
   if (uma_dbg_initialized) return;

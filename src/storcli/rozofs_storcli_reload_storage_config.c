@@ -211,7 +211,7 @@ int exportclt_reload_check_mstorage_msite(epgw_mount_msite_ret_t *ret,exportclt_
       else 
       {
         /* Send request to get storage TCP ports */
-        if (mclient_ports(&mclt, io_address) != 0) 
+        if (mclient_ports_and_storio_nb(&mclt, io_address, &mstor->storio_nb) != 0) 
         {
             fprintf(stderr,
                     "Warning: failed to get ports for storage (host: %s).\n"

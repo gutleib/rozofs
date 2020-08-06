@@ -375,7 +375,12 @@ void mp_ports_1_svc_nb(void * pt_req,
     memcpy(&ret->mp_ports_ret_t_u.ports.io_addr, storaged_config.io_addr,
             sizeof(storaged_config.io_addr));
 
-    ret->mp_ports_ret_t_u.ports.mode = MP_MULTIPLE;
+    if (storaged_config.storio_nb == 0) {
+      ret->mp_ports_ret_t_u.ports.mode = MP_MULTIPLE;
+    }
+    else {
+      ret->mp_ports_ret_t_u.ports.mode = storaged_config.storio_nb;
+    }  
     STOP_PROFILING(ports);
 }
 

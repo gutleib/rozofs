@@ -2076,8 +2076,18 @@ def rebuild_device() :
   if rebuildCheck == True: 
     gruyere()        
 
+
   ret=1 
+  
+  cid_modulo = int(len(sids)/24) + int(1)    
+  cid_counter       = int(0)
+  
   for s in sids:
+    
+    cid_counter = cid_counter + int(1)
+    if int(cid_counter) != int(cid_modulo): continue
+    cid_counter = int(0)
+    
     
     hid=s.split('-')[0]
     cid=s.split('-')[1]
@@ -2231,7 +2241,20 @@ def get_hid(cid,sid) :
 def selfhealing() :
 # test rebuilding device per device
 #___________________________________________________
-
+    
+  # Check automount is on
+  res = False
+  string = "rozodiag -M %s -c cc long | grep device_automount "%(mnt)
+  parsed = shlex.split(string)  
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    if 'True' in line: 
+      res = True
+      break
+  if res == False:
+    report("No selhealing when no automount")
+    return 0
+      
   clean_rebuild_dir()
 
   # Create reference file
@@ -2345,8 +2368,15 @@ def rebuild_sid() :
   if rebuildCheck == True: 
     gruyere()        
 
+  cid_modulo = int(len(sids)/24) + int(1)  
+  cid_counter       = int(0)
+  
   ret=1 
   for s in sids:
+   
+    cid_counter = cid_counter + int(1)
+    if int(cid_counter) != int(cid_modulo): continue
+    cid_counter = int(0)
     
     hid=s.split('-')[0]
     cid=s.split('-')[1]

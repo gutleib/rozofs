@@ -84,7 +84,7 @@ static inline int rozofs_scan_mark_file(char * name, int * cid, int * sid, int *
 #define ROZOFS_MAX_DISK_THREADS  64
 
 /* Storage config to be configured in cfg file */
-#define STORAGE_MAX_DEVICE_NB   64
+#define STORAGE_MAX_DEVICE_NB   128
 #define STORAGE_NB_DEVICE       6
 #define STORAGE_NB_MAPPER       4
 #define STORAGE_NB_MAPPER_RED   2

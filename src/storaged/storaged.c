@@ -357,6 +357,9 @@ static void on_start() {
       
         storage_config_t *sc = list_entry(l, storage_config_t, list);
 	cid = sc->cid;
+        if (storaged_config.storio_nb != 0) {
+          cid = ((cid-1)%storaged_config.storio_nb) + 1;
+        }    
 	
         /* Is this storage already started */
 	rank = (cid-1)/64;

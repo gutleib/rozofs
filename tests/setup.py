@@ -152,6 +152,11 @@ class host_class:
 
   def display_config(self):
     global rozofs    
+    try:
+      global storio_nb
+      print "storio_nb = %d;"%(storio_nb)
+    except:
+      pass;  
     print "listen = ( "
     nextl=" "
     for i in range(rozofs.nb_listen):
@@ -332,7 +337,6 @@ class sid_class:
       
   def create_device_file(self,device,h,size):
     if size == None: 
-      console("Missing device size for %s:%s:%s"%(self.cid.cid,self.sid,device))
       return   
 #    if size == None: size = rozofs.disk_size_mb
 #    if size == None: return
@@ -990,7 +994,6 @@ class exportd_class:
      
   def display_config (self):  
     global volumes
-    
     print "layout = 1;"
     print "volumes ="
     print "("
@@ -1221,9 +1224,10 @@ class rozofs_class:
     
   def set_ext4(self,mb):
     self.fstype = "ext4"
-    self.disk_size_mb = mb
-    self.set_device_automount()
-    self.set_mkfscmd("mkfs.ext4 -b 4096 -m 0 -q ")      
+    if int(mb) != int(0):
+      self.disk_size_mb = mb
+      self.set_device_automount()
+      self.set_mkfscmd("mkfs.ext4 -b 4096 -m 0 -q ")      
 
   def get_config_path(self):
     path = "/usr/local/etc/rozofs"
@@ -1323,7 +1327,6 @@ class rozofs_class:
 
   def create_loopback_device_regular(self,path,cid,sid,dev,size):  
     if size == None: 
-      console("Missing device size for %s:%s:%s"%(cid,sid,dev))
       return   
     nbDev = 1  
     #nbDev = 2
@@ -1430,7 +1433,7 @@ class rozofs_class:
     display_config_int("nb_trash_thread",8)
     display_config_bool("standalone",rozofs.standalone)
     display_config_bool("rdma_enable",False)
-    display_config_string("diagnostic_mode","client")
+#    display_config_string("diagnostic_mode","client")
     
   def create_common_config(self):
     if not os.path.exists("/usr/local/etc/rozofs"): os.system("mkdir -p /usr/local/etc/rozofs")  

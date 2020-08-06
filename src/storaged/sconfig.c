@@ -50,6 +50,7 @@
 #define SIOADDR     "addr"
 #define SIOPORT     "port"
 #define SNODEID     "nodeid"
+#define SSTORIO_NB  "storio_nb"
 
 #define SSPARE_MARK     "spare-mark"
 #define SDEV_TOTAL      "device-total"
@@ -195,6 +196,13 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         config->numa_node_id = nodeid;
     }    
 
+    /*
+    ** Is a ther a limit to the storio number
+    */
+    config->storio_nb = 0;
+    if (config_lookup_int(&cfg, SSTORIO_NB, &nodeid) != CONFIG_FALSE) {
+      config->storio_nb = nodeid;
+    }    
     
     /*
     ** Read default number of read queues per FID
@@ -313,7 +321,14 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         /*
 	** Only keep the clusters we take care of
 	*/
-	if ((cluster_id!=0)&&(cluster_id!=cid)) continue;
+        if (config->storio_nb == 0) {
+	  if ((cluster_id!=0)&&(cluster_id!=cid)) continue;
+        }
+        else {
+	  if (cluster_id!=0) {
+            if (cluster_id != (((cid-1) % config->storio_nb)+1)) continue;
+          }  
+        }   
         
         if (config_setting_lookup_int(cl, SREADQ, &readQ) == CONFIG_FALSE) {
             readQ = config->readQ; /* Get default parallel read queue count */
@@ -386,7 +401,14 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         /*
 	** Only keep the clusters we take care of
 	*/
-	if ((cluster_id!=0)&&(cluster_id!=cid)) continue;
+        if (config->storio_nb == 0) {
+	  if ((cluster_id!=0)&&(cluster_id!=cid)) continue;
+        }
+        else {
+	  if (cluster_id!=0) {
+            if (cluster_id != (((cid-1) % config->storio_nb)+1)) continue;
+          }  
+        }   
 
         /*
         ** When only one cluster or one sid

@@ -1166,7 +1166,7 @@ static int get_storage_ports(mstorage_t *s) {
     
     
     /* Send request to get storage TCP ports */
-    if (mclient_ports(&mclt, io_address) != 0) {
+    if (mclient_ports_and_storio_nb(&mclt, io_address, &s->storio_nb) != 0) {
         s->error = errno;
         DEBUG("Warning: failed to get ports for storage (host: %s).\n",
                 s->host);
@@ -1319,7 +1319,8 @@ void rozofs_storcli_start_connect_storage_thread() {
  */
 int rozofs_storcli_setup_all_lbg_of_storage(mstorage_t *s) {
   int sid;
-  int cid;  
+  int cid;
+  int storio_id;  
   int i,idx;
   int ret;
   int hostlen;
@@ -1334,25 +1335,37 @@ int rozofs_storcli_setup_all_lbg_of_storage(mstorage_t *s) {
 
     cid = s->cids[idx];
     sid = s->sids[idx];
+    /*
+    ** Which storio instance takes care of this cluster id
+    */
+    if (s->storio_nb == 0) {
+      storio_id = cid;
+    }
+    else {   
+      /*
+      ** Check whether LBG exists toward this storio
+      */
+      storio_id = ((cid-1)%s->storio_nb) + 1;
+    }  
     
     /*
     ** LBG already configured for this cluster
     */
-    if (s->lbg_id[cid-1] == -1) {
+    if (s->lbg_id[storio_id-1] == -1) {
 
       /*
       ** allocate the load balancing group for the mstorage
       */
-      s->lbg_id[cid-1] = north_lbg_create_no_conf();
-      if (s->lbg_id[cid-1] < 0) {
-	severe(" out of lbg contexts %d",cid);
+      s->lbg_id[storio_id-1] = north_lbg_create_no_conf();
+      if (s->lbg_id[storio_id-1] < 0) {
+	severe(" out of lbg contexts %d",storio_id);
 	return -1;
       }
 
       /* Add the cid number to the service port */
       for (i = 0; i < STORAGE_NODE_PORTS_MAX; i++) {
 	if (s->sclients[i].port != 0) {
-	  s->sclients[i].port += cid;
+	  s->sclients[i].port += storio_id;
 	}
       }
       
@@ -1360,12 +1373,12 @@ int rozofs_storcli_setup_all_lbg_of_storage(mstorage_t *s) {
       ** Add cluster number to the LBG name
       */
       hostlen = strlen(s->host);
-      sprintf(&s->host[hostlen],"_c%d",cid);
+      sprintf(&s->host[hostlen],"_c%d",storio_id);
 
       /*
       ** proceed with storage configuration if the number of port is different from 0
       */
-      ret = storaged_lbg_initialize(s,cid-1);
+      ret = storaged_lbg_initialize(s,storio_id-1);
 
       /*
       ** Restore host name
@@ -1375,17 +1388,22 @@ int rozofs_storcli_setup_all_lbg_of_storage(mstorage_t *s) {
       /* Restore the base service port number */
       for (i = 0; i < STORAGE_NODE_PORTS_MAX; i++) {
 	if (s->sclients[i].port != 0) {
-	  s->sclients[i].port -= cid;
+	  s->sclients[i].port -= storio_id;
 	}
       }
       
       /* Initialization failed */	
       if (ret < 0) {
-	severe("storaged_lbg_initialize %d",cid);      
+	severe("storaged_lbg_initialize %d",storio_id);      
         return -1;
       }
     }
     
+    /*
+    ** Store LBG id
+    */
+    s->lbg_id[cid-1] = s->lbg_id[storio_id-1];   
+     
     /*
     ** init of the cid/sid<-->lbg_id association table
     */
@@ -1501,7 +1519,7 @@ int rozofs_storcli_get_export_config(storcli_conf *conf) {
         }
 
         /* Send request to get storage TCP ports */
-        if (mclient_ports(&mclt, io_address) != 0) {
+        if (mclient_ports_and_storio_nb(&mclt, io_address, &s->storio_nb) != 0) {
             fprintf(stderr,
                     "Warning: failed to get ports for storage (host: %s).\n"
                     , s->host);

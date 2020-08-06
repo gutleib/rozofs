@@ -60,8 +60,11 @@ def setVolumeHosts(nbHosts, nbclusters, nbSidPerHost=0,vid=None):
   # Create clusters on this volume
   for i in range(nbclusters):
 
-    devSIze = int(rozofs.disk_size_mb)
-    if int(xtraDevice) != int(0): devSIze += (i * xtraDevice)
+    try:
+      devSIze = int(rozofs.disk_size_mb)
+      if int(xtraDevice) != int(0): devSIze += (i * xtraDevice)
+    except:
+      devSIze = int(0)
     c = v1.add_cid(devices,mapper,redundancy,dev_size=devSIze)  
     cnf_clusters.append(c)
     nbSid = xtraSID * i
@@ -186,12 +189,16 @@ xtraSID = 0
 # Add extra MB on devices of each new cluster
 xtraDevice = 0
 
+
+
+
 #_________________________________________________
 #          NB devices per sid
 #_________________________________________________
 
 device_mode = "mono"
 sid_size_MB = 320
+#sid_size_MB = 320
 
 #-------------------
 # Mono device mode : no header file
@@ -262,7 +269,13 @@ if config_choice == "single":
 #
 if config_choice == "multiple":
 
-  vol = setVolumeHosts(nbHosts = 4, nbclusters = 5)
+  #
+  # Number of storio
+  #
+#  storio_nb = 4
+  
+  vol = setVolumeHosts(nbHosts = 8, nbclusters = 6, nbSidPerHost = 1)
+#  vol = setVolumeHosts(nbHosts = 8, nbclusters = 33, nbSidPerHost=3)
   exp = addExport(vol,layout=1,eid=1)
   exp.set_striping(factor_3_files,unit_1M)
   
