@@ -1087,7 +1087,7 @@ int north_lbg_configure_af_inet(int lbg_idx,char *name,
     warning("north_lbg_configure_af_inet: no instance for lbg %d ",lbg_idx);
     return -1;   
   }
-  if (nb_instances >= NORTH__LBG_MAX_ENTRY)
+  if (nb_instances > NORTH__LBG_MAX_ENTRY)
   {
     /*
     ** to many instances!!
