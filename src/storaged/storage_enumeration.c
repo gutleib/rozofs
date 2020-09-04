@@ -50,6 +50,11 @@
 #include "storio_device_mapping.h"
 #include "storio_device_mapping.h"
 #include "storage_enumeration.h"
+#include <rozofs/rpc/rpcclt.h>
+#include "rozofs/rpc/eproto.h"
+#include "rozofs/core/rozofs_host_list.h"
+
+static int is_storaged = 0;      
 
 int      re_enumration_required=0; 
 time_t   storio_last_enumeration_date = 0;
@@ -78,6 +83,96 @@ struct ext2_super_block {
 #define OFFSET_LABEL	  (offsetof(struct ext2_super_block, s_volume_name)+OFFSET_SUPERBLOCK)
 #define OFFSET_MAGIC	  (offsetof(struct ext2_super_block, s_magic)+OFFSET_SUPERBLOCK)
 
+/*__________________________________________________________________________
+** Find out the vid a storio serves
+**
+** @retval  The vid this cid serves or 0 in case of error
+**==========================================================================*/
+static uint16_t my_vid = 0;
+uint16_t storio_get_vid() {
+  rpcclt_t               rpcCtl;
+  epgw_cluster2_ret_t *  ret = 0;
+  epgw_cluster_arg_t     arg;
+  int                    export_idx;
+  char                 * pHost = NULL;
+  int                    retry;
+  storage_t            * st = NULL;
+  
+  /*
+  ** Vid alread resolved 
+  */
+  if (my_vid) return my_vid;
+
+  /*
+  ** Find out le first storage context
+  */
+  st = storaged_next(NULL);
+  if (st == NULL) return my_vid;
+
+  struct timeval timeo;
+  timeo.tv_sec  = 0; 
+  timeo.tv_usec = 100000;
+
+  memset(&rpcCtl, 0, sizeof(rpcCtl));
+  rpcCtl.sock = -1;
+
+  /*
+  ** Parse host list
+  */
+  if (rozofs_host_list_parse(common_config.export_hosts,'/') == 0) {
+    severe("rozofs_host_list_parse(%s)",common_config.export_hosts);
+  }        
+
+  for (retry=4; retry > 0; retry--) {
+  
+    for (export_idx=0; export_idx<ROZOFS_HOST_LIST_MAX_HOST; export_idx++) {
+
+      // Free resources from previous loop
+      if (ret) xdr_free((xdrproc_t) xdr_ep_cluster2_ret_t, (char *) ret);
+      rpcclt_release(&rpcCtl);
+
+      pHost = rozofs_host_list_get_host(export_idx);
+      if (pHost == NULL) break;
+
+      // Initialize connection with exportd server
+      if (rpcclt_initialize(&rpcCtl, pHost, EXPORT_PROGRAM, EXPORT_VERSION,
+              ROZOFS_RPC_BUFFER_SIZE, ROZOFS_RPC_BUFFER_SIZE,
+	      rozofs_get_service_port_export_master_eproto(), timeo) != 0)
+          continue;
+
+      // Send request
+      arg.hdr.gateway_rank = 0;
+      arg.cid              = st->cid;
+
+      ret = ep_list_cluster2_1(&arg, rpcCtl.client);
+      if (ret == 0) {
+        errno = EPROTO;
+        continue;
+      }
+
+      if (ret->status_gw.status == EP_FAILURE) {
+        errno = ret->status_gw.ep_cluster2_ret_t_u.error;
+        continue;
+      }
+
+      my_vid = ret->status_gw.ep_cluster2_ret_t_u.cluster.vid;
+
+      // Free resources from current loop
+      xdr_free((xdrproc_t) xdr_ep_cluster2_ret_t, (char *) ret);
+      rpcclt_release(&rpcCtl);
+      return my_vid;
+    }
+
+    if (timeo.tv_usec == 100000) {
+      timeo.tv_usec = 500000; 
+    }
+    else {
+      timeo.tv_usec = 0;
+      timeo.tv_sec++;	
+    }  
+  }		
+  return my_vid;  
+}  
 /*
  *_______________________________________________________________________
  *
@@ -90,13 +185,15 @@ void rozofs_set_label(storage_enumerated_device_t * pDev) {
   char readLabel[ROZOFS_LABEL_SIZE];
   unsigned char  magic[2];
   int  fd = -1;
+  uint32_t    vid;
  
   
   if (pDev->spare) {
     char * pt = label;
     pt += sprintf(label, "%s", ROZOFS_SPARE_LABEL); 
-    if (pDev->spare_mark) {
-      pt += sprintf(label, "%s",pDev->spare_mark);  
+    vid = storio_get_vid();
+    if (vid != 0) {
+      pt += sprintf(pt, "%d",vid);  
     } 
   }
   else {
@@ -240,10 +337,6 @@ int rozofs_analyze_label(storage_enumerated_device_t * pDev) {
   pDev->cid   = 0;
   pDev->sid   = 0;
   pDev->dev   = 0;   
-  if (pDev->spare_mark) {
-    xfree(pDev->spare_mark);
-    pDev->spare_mark = NULL;
-  } 
     
   if (common_config.mandatory_device_label) {  
     /*
@@ -282,7 +375,8 @@ int rozofs_analyze_label(storage_enumerated_device_t * pDev) {
     pDev->sid   = sid;
     pDev->dev   = dev;
     return 0;
-  } 
+  }
+  
 
   /*
   ** Check for spare device label
@@ -300,52 +394,39 @@ int rozofs_analyze_label(storage_enumerated_device_t * pDev) {
   pDev->spare = 1; 
 
   /*
-  ** Check for spare mark at the end of the label "RozoFS_spare.<spare mark>"
+  ** Storaged do not care about spare device
+  */
+  if (is_storaged) return -1;  
+
+
+  /*
+  ** Check for spare mark at the end of the label "RozoFS_spare.<vid>"
   */
   length = strlen(pDev->label);
   if (length > strlen(ROZOFS_SPARE_LABEL)) {    
+    uint32_t vid;
     /*
-    ** Read the spare mark
+    ** Read the vid at the end of the spare mark
     */
-    length -= strlen(ROZOFS_SPARE_LABEL); 
-    length++;    
-    pDev->spare_mark = xmalloc(length);
-    strcpy(pDev->spare_mark, &pDev->label[strlen(ROZOFS_SPARE_LABEL)]);       
+    if (sscanf(pDev->label+strlen(ROZOFS_SPARE_LABEL), "%d", &vid) != 1) {
+      return unknow_label;      
+    }
+    /*
+    ** Check wether this is our vid
+    */
+    if (vid != storio_get_vid()) return -1;    
+  }
+  else {
+    /*
+    ** When no mark, the spare device is for volume 1
+    */
+    if (storio_get_vid() != 1) return -1;
   }
 
   /*
-  ** Does the mark fit with the configuration
+  ** The mark file fits with the storio vid
   */
-  st = NULL;
-  while ((st = storaged_next(st)) != NULL) {
-    /*
-    ** This storage requires a mark in the spare file
-    */
-    if (st->spare_mark != NULL) {
-      /*
-      ** There is none in this spare file
-      */
-      if (pDev->spare_mark == NULL) continue;
-      /*
-      ** There is one but not the expected one
-      */
-      if (strcmp(st->spare_mark,pDev->spare_mark)!= 0) continue;
-      /*
-      ** This spare device is usable by this logical storage
-      */
-      return 0;
-    }
-    /*
-    ** This storage requires no spare mark
-    */
-    if (pDev->spare_mark == NULL) {
-      return 0;
-    }
-  }     
-  /*
-  ** The mark file do not fit with this storage configuration
-  */
-  return -1;
+  return 0;
 }   
 /*
  *_______________________________________________________________________
@@ -362,14 +443,6 @@ static inline void storage_enumerated_device_cleanup(storage_enumerated_device_t
   ** Check pointer is not NULL
   */
   if (pDev == NULL) return;
-
-  /*
-  ** Free spare mark if any
-  */  
-  if (pDev->spare_mark != NULL) {
-    xfree(pDev->spare_mark);
-    pDev->spare_mark = NULL;
-  }
 
   /*
   ** Get 1rst name
@@ -424,8 +497,8 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
   char          * pChar;
   int             cid, sid, dev;
   int             status = -1;
-  int             i;
   char            mark[MAX_MARK_LEN+1];
+  int             vid;
   int             size;
   
   /*
@@ -452,16 +525,20 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
     pDev->dev   = 0;
     
     /*
-    ** There is one spare mark file.
-    ** Check its content
+    ** Storaged do not care about spare device
     */
-    pDev->spare_mark = NULL;
+    if (is_storaged) return -1;  
 
     /*
     ** Empty mark file
     */
-    if (buf.st_size == 0) return 0;
-    
+    if (buf.st_size == 0) {
+      /*
+      ** Empty spare mark is only valid for volume 1
+      */
+      if (storio_get_vid() == 1) return 0;
+      return -1;
+    }
     /*
     ** Mark file too big
     */
@@ -477,18 +554,16 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
     ** Read mark file
     */  
     size = pread(fd, mark, MAX_MARK_LEN, 0);
+    if (size <= 0) return -1;
     close(fd);
       
     /*
-    ** Remove carriage return
-    */  
-    for (i=0; i<size; i++) {
-      if (mark[i] == 0) break;
-      if (mark[i] == '\n') break;
-    } 
-    mark[i] = 0;
-    pDev->spare_mark = xmalloc(i+1);
-    strcpy(pDev->spare_mark, mark);
+    ** Find the vid in the mark file
+    */
+    if (sscanf(mark,"%d",&vid) != 1) {
+      return -1;
+    }    
+    if (vid != storio_get_vid()) return -1;
     return 0;
   }    
 
@@ -1010,7 +1085,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
      
 
     /*
-    ** Allocate a device information structure or use the laready allocated one
+    ** Allocate a device information structure or use the already allocated one
     */
     if (pDev == NULL) {
       pDev = xmalloc(sizeof(storage_enumerated_device_t));
@@ -1103,47 +1178,13 @@ int storage_enumerate_devices(char * workDir, int unmount) {
         if (storage_umount(pMount)==0) {   
 	  pDevName->mounted = 0;
 	}       
-        
         /*
-        ** Check if someone cares about this spare file in this module        
+        ** Write the correct label on it
         */
-        st = NULL;
-        while ((st = storaged_next(st)) != NULL) {
-          /*
-          ** This storage requires a mark in the spare file
-          */
-          if (st->spare_mark != NULL) {
-            /*
-            ** There is none in this spare file
-            */
-            if (pDev->spare_mark == NULL) continue;
-            /*
-            ** There is one but not the expected one
-            */
-            if (strcmp(st->spare_mark,pDev->spare_mark)!= 0) continue;
-            /*
-            ** This spare device is interresting for this logical storage
-            */
-            break;
-          }
-          /*
-          ** This storage requires no mark in the spare file (empty file)
-          */
-          if (pDev->spare_mark == NULL) break;
-        }
-	/*
-	** Record device in enumeration table when relevent
-	*/
-        if (st != NULL) {
-
-          /*
-          ** Write the correct label on it
-          */
-          rozofs_set_label(pDev);              
+        rozofs_set_label(pDev);              
         
-  	  storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
-	  pDev = NULL;
-        }  
+  	storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
+        pDev = NULL;
         CONT;
       }	   
       
@@ -1216,41 +1257,8 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     ** Spare device
     */
     if (pDev->spare) {
-      
-      /*
-      ** Check if someone cares about this spare file in this module
-      */
-      st = NULL;
-      while ((st = storaged_next(st)) != NULL) {
-        /*
-        ** This storage requires a mark in the spare file
-        */
-        if (st->spare_mark != NULL) {
-          /*
-          ** There is none in this spare file
-          */
-          if (pDev->spare_mark == NULL) continue;
-          /*
-          ** There is one but not the expected one
-          */
-          if (strcmp(st->spare_mark,pDev->spare_mark)!= 0) continue;
-          /*
-          ** This spare device is interresting for this logical storage
-          */
-          break;
-        }
-        /*
-        ** This storage requires no mark in the spare file (empty file)
-        */
-        if (pDev->spare_mark == NULL) break;
-      }
-      /*
-      ** Record device in enumeration table when relevent
-      */
-      if (st != NULL) {
-        storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
-        pDev = NULL;
-      }  
+      storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
+      pDev = NULL;
       CONT;
     }	   
       
@@ -1446,10 +1454,6 @@ void storage_show_enumerated_devices(char * argv[], uint32_t tcpRef, void *bufRe
     pChar += rozofs_string_append(pChar, "\", \"role\" : \"");
     if (pDev1->spare) {
       pChar += rozofs_string_append(pChar, "spare\"");      
-      pChar += rozofs_string_append(pChar, ", \"mark\" : \"");
-      if (pDev1->spare_mark) {
-        pChar += rozofs_string_append(pChar, pDev1->spare_mark);
-      }
     }
     else {
       pChar += rozofs_u32_append(pChar,pDev1->cid);
@@ -1672,29 +1676,7 @@ int storage_replace_with_spare(storage_t * st, int dev) {
     pDev = storage_enumerated_device_tbl[idx];
     if (pDev == NULL)   continue;
     if (pDev->spare==0) continue;
-    
-    
-    if (st->spare_mark == 0) {
-      /*
-      ** Looking for an empty spare mark file
-      */
-      if (pDev->spare_mark != NULL) continue; 
-    }
-    else {
-      /*
-      ** Looking for a given string in the spare mark file
-      */
-      if (pDev->spare_mark == NULL) continue;
-      if (strcmp(pDev->spare_mark,st->spare_mark) != 0) continue;  
-    }
-
-    /*
-    ** This is either the empty spare mark file we were expecting
-    ** or a spare mark file containing the string we were expecting.
-    ** This spare device can be used by this cid/sid.
-    */
-    
-    
+        
     /*
     ** Mount this spare disk instead
     */
@@ -1855,6 +1837,7 @@ int storage_process_automount_devices(char * workDir, int storaged) {
  * @param count     Returns the number of devices that have been mounted
  */
 void storaged_do_automount_devices(char * workDir, int * count) {
+  is_storaged = 1;
   *count = storage_process_automount_devices(workDir,1);
 }
 void storio_do_automount_devices(char * workDir, int * count) {

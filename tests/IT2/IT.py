@@ -2236,19 +2236,42 @@ def get_hid(cid,sid) :
     return hid
   report("get_hid( cid=%s, sid=%s) No such cid/sid"%(cid,hid))
   sys.exit(1) 
-     
+#___________________________________________________
+def selfhealing_check_files(dir) :
+  result = int(0)
+  for i in range(60):
+    zefile="%s/ref%s"%(dir,i)
+    if filecmp.cmp(zefile,"./ref") == False: 
+      report("%s and %s differ"%(zefile,"./ref"))
+      result = int(1)     
+      
+  return result     
+#___________________________________________________
+def selfhealing_create_files(dir) :
+
+    # Create self healing directory
+  os.system("rm -rf %s; mkdir -p %s"%(dir,dir))
+  
+  # Create files
+  for i in range(60):
+    zefile="%s/ref%s"%(dir,i)
+    os.system("cp ./ref %s"%(zefile))  
+
 #___________________________________________________
 def selfhealing() :
 # test rebuilding device per device
 #___________________________________________________
+
+  dir="%s/selfHealing"%(mnt)
     
   # Check automount is on
   res = False
-  string = "rozodiag -M %s -c cc long | grep device_automount "%(mnt)
+  string = "rozodiag -M %s -c cc search device_automount "%(mnt)
   parsed = shlex.split(string)  
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
-    if 'True' in line: 
+    if "device_automount" not in line: continue
+    if "= True;" in line: 
       res = True
       break
   if res == False:
@@ -2258,11 +2281,7 @@ def selfhealing() :
   clean_rebuild_dir()
 
   # Create reference file
-  dir="%s/selfHealing"%(mnt)
-  os.system("rm -rf %s; mkdir -p %s"%(dir,dir))
-  for i in range(60):
-    zefile="%s/ref%s"%(dir,i)
-    os.system("cp ./ref %s"%(zefile))  
+  selfhealing_create_files(dir)
 
   # Get file distribution
   reffile="%s/ref1"%(dir)
@@ -2307,23 +2326,26 @@ def selfhealing() :
 
   hid0 = get_hid(cid,sid0)
   ret = selfhealing_resecure(hid0,cid,sid0,dev0)
+  ret += selfhealing_check_files(dir)
   if ret != 0:
-    os.system("./setup.py spare") 
+    os.system("./setup.py spare %s"%(cid)) 
     selfhealing_spare(hid0,cid,sid0,dev0)
     return 1
-     
+       
   hid1 = get_hid(cid,sid1)
   ret = selfhealing_resecure(hid1,cid,sid1,dev1)
+  ret += selfhealing_check_files(dir)
   if ret != 0: 
-    os.system("./setup.py spare; ./setup.py spare") 
+    os.system("./setup.py spare %s 2"%(cid)) 
     selfhealing_spare(hid0,cid,sid0,dev0)
     selfhealing_spare(hid1,cid,sid1,dev1)
     return 1
      
   hid2 = get_hid(cid,sid2)
   ret = selfhealing_resecure(hid2,cid,sid2,dev2)
+  ret += selfhealing_check_files(dir)
   if ret != 0: 
-    os.system("./setup.py spare; ./setup.py spare; ./setup.py spare") 
+    os.system("./setup.py spare %s 3"%(cid)) 
     selfhealing_spare(hid0,cid,sid0,dev0)
     selfhealing_spare(hid1,cid,sid1,dev1)
     selfhealing_spare(hid2,cid,sid2,dev2)
@@ -2331,8 +2353,9 @@ def selfhealing() :
      
   hid3 = get_hid(cid,sid3)
   ret = selfhealing_resecure(hid3,cid,sid3,dev3)
+  ret += selfhealing_check_files(dir)
   if ret != 0: 
-    os.system("./setup.py spare; ./setup.py spare; ./setup.py spare; ./setup.py spare") 
+    os.system("./setup.py spare %s 4"%(cid)) 
     selfhealing_spare(hid0,cid,sid0,dev0)
     selfhealing_spare(hid1,cid,sid1,dev1)
     selfhealing_spare(hid2,cid,sid2,dev2)
@@ -2340,18 +2363,13 @@ def selfhealing() :
     return 1
 
     
-  result = 0
     
   # Re-read files  
-  for i in range(60):
-    zefile="%s/ref%s"%(dir,i)
-    if filecmp.cmp(zefile,"./ref") == False: 
-      report("%s and %s differ"%(zefile,"./ref"))
-      result = 1       
+  result = selfhealing_check_files(dir)
 
   # Create 2 spare device
   log("Create spare devices")
-  os.system("./setup.py spare; ./setup.py spare; ./setup.py spare; ./setup.py spare")
+  os.system("./setup.py spare %s 4"%(cid)) 
   ret =       selfhealing_spare(hid0,cid,sid0,dev0)  
   ret = ret + selfhealing_spare(hid1,cid,sid1,dev1)
   ret = ret + selfhealing_spare(hid2,cid,sid2,dev2)

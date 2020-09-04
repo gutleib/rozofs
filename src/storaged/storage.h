@@ -266,12 +266,6 @@ typedef struct storage {
     cid_t cid; //< unique id of cluster that owns this storage
     char root[FILENAME_MAX]; ///< absolute path.
     uint32_t next_device;    ///< for strict round robin allocation
-    /*
-    ** String to search for inside spare mark file when looking for a spare device
-    ** When null : look for empty "rozofs_spare" file
-    ** else      : look for "rozofs_spare" file containing string <spare-mark>"
-    */    
-    char * spare_mark; 
    uint64_t  crc_error;   ///> CRC32C error counter
     uint32_t mapper_modulo; // Last device number that contains the fid to device mapping
     uint32_t device_number; // Number of devices to receive the data for this sid
@@ -865,13 +859,11 @@ char *storage_map_projection(fid_t fid, char *path);
  * @param mapper_modulo: number of device for device mapping
  * @param mapper_redundancy: number of mapping device
  * @param mapper_redundancy: number of mapping device
- * @param spare_mark: to tell the exact mark file of spare device
  *
  * @return: 0 on success -1 otherwise (errno is set)
  */
 int storage_initialize(storage_t *st, cid_t cid, sid_t sid, const char *root,
-                       uint32_t device_number, uint32_t mapper_modulo, uint32_t mapper_redundancy,
-                       const char *spare_mark);
+                       uint32_t device_number, uint32_t mapper_modulo, uint32_t mapper_redundancy);
 
 /** Release a storage
  *

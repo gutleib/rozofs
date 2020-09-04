@@ -534,10 +534,6 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += rozofs_string_append(pChar, common_config_device_selfhealing_mode2String(common_config.device_selfhealing_mode));
     pChar += rozofs_string_append(pChar,"\n    self-healing-delay = ");
     pChar += rozofs_u32_append(pChar,common_config.device_selfhealing_delay);
-    pChar += rozofs_string_append(pChar,"\n    spare-mark         = \"");
-    if (st->spare_mark != NULL) {   
-      pChar += rozofs_string_append(pChar, st->spare_mark);
-    }  
     pChar += rozofs_string_append(pChar, "\"\n"); 
       
     pChar += rozofs_string_append(pChar,"\n    device | status | failures |    blocks    |    errors    | diagnostic      |  monitor | inactive | last activity\n");

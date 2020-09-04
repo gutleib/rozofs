@@ -63,7 +63,7 @@
 
 
 int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
-        const char *root, int dev, int dev_mapper, int dev_red, const char * spare_mark) {
+        const char *root, int dev, int dev_mapper, int dev_red) {
     DEBUG_FUNCTION;
 
     s->sid = sid;
@@ -72,38 +72,14 @@ int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
     s->device.total      = dev;
     s->device.mapper     = dev_mapper; 
     s->device.redundancy = dev_red;
-    if (spare_mark == NULL) {
-      /*
-      ** Spare device have an empty "rozofs_spare" file
-      */
-      s->spare_mark = NULL;
-    }
-    else {
-      /*
-      ** Spare device have a "rozofs_spare" file with <spare_mark> string in it
-      */      
-      s->spare_mark = xstrdup(spare_mark);
-    }
     list_init(&s->list);
     return 0;
 }
-int cluster_config_initialize(cluster_config_t *c, cid_t cid, int readQ, const char * spare_mark) {
+int cluster_config_initialize(cluster_config_t *c, cid_t cid, int readQ) {
     DEBUG_FUNCTION;
 
     c->cid = cid;
     c->readQ = readQ;
-    if (spare_mark == NULL) {
-      /*
-      ** Spare device have an empty "rozofs_spare" file
-      */
-      c->spare_mark = NULL;
-    }
-    else {
-      /*
-      ** Spare device have a "rozofs_spare" file with <spare_mark> string in it
-      */      
-      c->spare_mark = xstrdup(spare_mark);
-    }
     list_init(&c->list);
     return 0;
 }
@@ -117,17 +93,9 @@ cluster_config_t * cluster_config_get(sconfig_t *config, cid_t cid) {
     return NULL;
 }
 void storage_config_release(storage_config_t *s) {
-    if (s->spare_mark != NULL) {
-      xfree(s->spare_mark);
-      s->spare_mark = NULL;
-    }  
     return;
 }
 void cluster_config_release(cluster_config_t *c) {
-    if (c->spare_mark != NULL) {
-      xfree(c->spare_mark);
-      c->spare_mark = NULL;
-    }      
     return;
 }
 int sconfig_initialize(sconfig_t *sc) {
@@ -303,9 +271,7 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
 #else
         long int readQ;
         long int cid;
-#endif
-        const char *spare_mark = NULL;
-        
+#endif        
         if (!(cl = config_setting_get_elem(cluster_settings, i))) {
             errno = ENOKEY;
             severe("can't fetch cluster %d.",i);
@@ -340,16 +306,8 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
             }
         }    
         
-        if (config_setting_lookup_string(cl, SSPARE_MARK, &spare_mark) == CONFIG_FALSE) {
-          spare_mark = NULL;
-        }
-        else {
-          if (strlen(spare_mark) > 9) {
-            severe("cid%d has too long spare-mark : strlen(%s) = %d >9.", (int)cid, spare_mark, (int)strlen(spare_mark));
-          }
-        }        
         new = xmalloc(sizeof (cluster_config_t));
-        if (cluster_config_initialize(new, (cid_t) cid, readQ, spare_mark) != 0) {
+        if (cluster_config_initialize(new, (cid_t) cid, readQ) != 0) {
             if (new) free(new);
             goto out;
         }
@@ -377,7 +335,6 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         long int cid;
 #endif
         const char *root = 0;
-        const char *spare_mark = NULL;
         
 	char       rootPath[PATH_MAX];
         
@@ -552,31 +509,9 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
             goto out;
         }
 
-        
-        /*
-        ** What string should be set in rozofs_spare mark files of spare disk for
-        ** this volume
-        */  
-        spare_mark = NULL;
-        if (config_setting_lookup_string(ms, SSPARE_MARK, &spare_mark) == CONFIG_FALSE) {
-          spare_mark = NULL;
-          /*
-          ** Get the configured value for this cluster
-          */
-          cluster_config_t * cl = cluster_config_get(config, cid);
-          if (cl) {
-            spare_mark = cl->spare_mark;
-          }        
-        }
-        else {
-          if (strlen(spare_mark) > 9) {
-            severe("cid%d/sid%d has too long spare-mark : strlen(%s) = %d >9.", (int)cid, (int)sid, spare_mark, (int)strlen(spare_mark));
-          }
-        }
-
         new = xmalloc(sizeof (storage_config_t));
         if (storage_config_initialize(new, (cid_t) cid, (sid_t) sid,
-                root, devices, mapper, redundancy,spare_mark) != 0) {
+                root, devices, mapper, redundancy) != 0) {
             if (new)
                 free(new);
             goto out;

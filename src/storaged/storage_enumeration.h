@@ -75,7 +75,6 @@ typedef struct _storage_enumerated_device_t {
   time_t                  date;         // Date of the mark file that gave cid/sid/device  
   uint32_t                ext4:1;       // Is it ext4 (else xfs)
   uint32_t                spare:1;      // Is it a spare drive (cid/sid/device are meaningless)
-  char *                  spare_mark;   // String written in spare mark file in case of a spare device
   storage_device_name_t * pName;
 } storage_enumerated_device_t;
 

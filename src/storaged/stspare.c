@@ -1665,8 +1665,7 @@ static int storages_initialize() {
               sc->cid, sc->sid, sc->root,
 	      sc->device.total,
 	      sc->device.mapper,
-	      sc->device.redundancy,
-              sc->spare_mark) != 0) {
+	      sc->device.redundancy) != 0) {
           severe("can't initialize storage (cid:%d : sid:%d) with path %s",
                   sc->cid, sc->sid, sc->root);
           return -1;

@@ -1485,8 +1485,7 @@ int storage_initialize(storage_t *st,
 		       const char *root, 
                        uint32_t device_number, 
 		       uint32_t mapper_modulo, 
-		       uint32_t mapper_redundancy,
-                       const char *spare_mark) {
+		       uint32_t mapper_redundancy) {
     int status = -1;
     int dev;
 
@@ -1512,21 +1511,6 @@ int storage_initialize(storage_t *st,
     st->mapper_redundancy = mapper_redundancy;
     st->share             = NULL;
     st->next_device       = 0;
-    
-    if (spare_mark == NULL) {
-      /*
-      ** Spare disks have an empty mark file "rozofs_spare"
-      */
-      st->spare_mark = NULL;
-    }
-    else {
-      /*
-      ** Spare disks have the mark file "rozofs_spare" containing string <spare_mark>"
-      */
-      st->spare_mark = strdup(spare_mark);
-    }
-      
-    
     st->device_free.active = 0;
     for (dev=0; dev<STORAGE_MAX_DEVICE_NB; dev++) {
       st->device_free.blocks[0][dev] = 20000;

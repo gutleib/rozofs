@@ -337,6 +337,7 @@ class sid_class:
       
   def create_device_file(self,device,h,size):
     if size == None: 
+
       return   
 #    if size == None: size = rozofs.disk_size_mb
 #    if size == None: return
@@ -505,7 +506,7 @@ class mount_point_class:
     self.name = name
     self.eid = eid
     self.site= site    
-    self.layout = layout
+
     self.nfs_path="/mnt/nfs-%s"%(self.instance) 
     self.trc_count = int(4000)
     # Timers
@@ -1526,7 +1527,7 @@ class rozofs_class:
     for h in hosts: h.del_if()
     self.delete_path()
 
-  def ddd(self,target):
+  def debug(self,target):
     string="./build/src/rozodiag/rozodiag %s -c ps"%(target)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1742,10 +1743,6 @@ def syntax_storage() :
 def syntax_cou() :
   console("./setup.py \tcou     \t<fileName>")
 #_____________________________________________  
-def syntax_ddd() :
-  console("./setup.py \tddd <target>\t: Attach ddd to rozodiag target <target> ")
-  console("                         \t  i.e ddd -T mount:2, ddd -i localhost1 -T storio:1")
-#_____________________________________________  
 def syntax_sid() :
   console("./setup.py \tsid     \t<cid> <sid>\tdevice-delete {all|<#device>} ")
   console("./setup.py \tsid     \t<cid> <sid>\tdevice-create {all|<#device>} [sizeMB]")
@@ -1762,6 +1759,8 @@ def syntax_monitor() :
 def syntax_debug() :
   console("./setup.py \tcore    \tremove {all|<coredir>/<corefile>}")
   console("./setup.py \tcore    \t[<coredir>/<corefile>]")
+  console("./setup.py \tdebug <target>\t: Attach ddd to rozodiag target <target> ")
+  console("                         \t  i.e debug -T mount:2, debug -i localhost1 -T storio:1")
 #_____________________________________________  
 def syntax_diag() :
   console("./setup.py \tdiag    \t{mount|storcli|export|storaged|storio|stspare} <command>")
@@ -1778,7 +1777,6 @@ def syntax_all() :
   console("./setup.py \t{build|rebuild|clean|start|stop|pause|resume}")
   console("./setup.py \tcmd <cmd>\t: execute command <cmd> in the setup context")
 
-  syntax_ddd()
   syntax_config()
   syntax_monitor()
     
@@ -1790,7 +1788,7 @@ def syntax_all() :
   syntax_if()
   syntax_debug()
   syntax_diag()
-  console("./setup.py \tspare \t\t[sizeMB] [mark]")
+  console("./setup.py \tspare \t\tcid nb")
   console("./setup.py \tprocess \t[pid]")
   console("./setup.py \tvnr ...")
   sys.exit(-1)   
@@ -1893,14 +1891,14 @@ def test_parse(command, argv):
 
   if   command == "display"            : rozofs.display()  
   elif command == "log"                : rozofs.log()
-  elif command == "ddd"                : 
+  elif command == "debug"                : 
     if len(argv) < 3 : syntax("Missing Target","ddd")
     target=""
     i = int(2)
     while i < len(argv): 
       target = target + " %s"%(argv[i])
       i = i + 1
-    rozofs.ddd(target)
+    rozofs.debug(target)
   elif command == "cmd"                : 
     cmd=""
     for arg in argv[2:]: cmd=cmd+" "+arg
@@ -1929,21 +1927,21 @@ def test_parse(command, argv):
   elif command == "diag"               : diag(argv)
     
   elif command == "spare" : 
-    size = rozofs.disk_size_mb
     mark = None
-    if len(argv) > 3:
+    nb = int(1)
+    if len(argv) > 2:
       try:
-        size = int(argv[2])
-        mark = argv[3]
-      except:
-        size = int(argv[3])
-        mark = argv[2] 
-    elif len(argv) > 2:  
-      try:
-        size = int(argv[2])
-      except:  
-        mark = argv[2]
-    rozofs.newspare(size=size,mark=mark) 
+        c = get_cid(int(argv[2]))
+        if c.volume.vid == 1:
+          mark = None
+        else:
+          mark = "%s"%(c.volume.vid)  
+        if len(argv) > 3:
+          nb = int(argv[3])
+      except: pass    
+    while  nb > int(0) :
+      nb = nb - int(1) 
+      rozofs.newspare(size=rozofs.disk_size_mb,mark=mark) 
       
   elif command == "ifup":
     itf=None 

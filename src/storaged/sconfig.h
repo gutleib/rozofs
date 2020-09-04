@@ -37,19 +37,12 @@ typedef struct storage_config {
     cid_t cid;
     char root[PATH_MAX];
     sconfig_devices_t       device;  
-    /*
-    ** String to search for inside spare mark files when looking for a spare device
-    ** When null : look for empty "rozofs_spare" file
-    ** else      : look for "rozofs_spare" file containing string <spare_mark>"
-    */    
-    char                  * spare_mark;  
     list_t list;
 } storage_config_t;
 
 typedef struct cluster_config {
     cid_t cid;
     int   readQ; /* Number of queues in FID context for parallel reading */
-    char                  * spare_mark;  
     list_t list;
 } cluster_config_t;
 
