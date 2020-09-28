@@ -818,7 +818,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
    int bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);
    ientry_t *ie;
    int update_pending_buffer_todo = 1;
-
+   unsigned long long time;/* Time when the request has been received */
    
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    RESTORE_FUSE_PARAM(param,req);
@@ -829,6 +829,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
    RESTORE_FUSE_PARAM(param,off);
    RESTORE_FUSE_PARAM(param,trc_idx);
    RESTORE_FUSE_PARAM(param,shared_buf_ref);
+   RESTORE_FUSE_PARAM(param,time); /* Time when the request has been received */
 
    file = (file_t *) (unsigned long)  fi->fh;  
    ie = file->ie; 
@@ -1084,11 +1085,9 @@ void rozofs_ll_read_cbk(void *this,void *param)
       ** after the reply read thread processing
       */
       update_pending_buffer_todo = 0;
-      rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0,use_page_cache); 
-      /*
-      ** Update the bandwidth/IO statistics
-      */
-      rozofsmount_update_read_io(length, param, __LINE__);
+          
+      rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref, time,use_page_cache); 
+      
       /*
       ** update the current position in the file
       */
@@ -1542,11 +1541,7 @@ void rozofs_ll_read_cbk(void *this,void *param)
 	  ** after the reply read thread processing
 	  */
           update_pending_buffer_todo = 0;
-	  rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,0,use_page_cache);
-          /*
-          ** Update the bandwidth/IO statistics
-          */
-          rozofsmount_update_read_io(length, param, __LINE__);
+	  rozofs_thread_fuse_reply_buf(req, (char *) buff, length,shared_buf_ref,time,use_page_cache);
 	}
 	else
 #endif

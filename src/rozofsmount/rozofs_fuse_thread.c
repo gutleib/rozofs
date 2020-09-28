@@ -154,14 +154,20 @@ static inline void rozofs_fuse_th_fuse_reply_buf(rozofs_fuse_thread_ctx_t *threa
   } 
   else  fuse_reply_buf(msg->req, (char *) buf_sharem, msg->size);
 
-  rozofs_fuse_th_send_response(thread_ctx_p,msg,0);
-
   /*
   ** Update statistics
   */
   gettimeofday(&timeDay,(struct timezone *)0);  
   timeAfter = MICROLONG(timeDay);
-  thread_ctx_p->stat.write_time +=(timeAfter-timeBefore);  
+  thread_ctx_p->stat.write_time +=(timeAfter-timeBefore); 
+  
+  /*
+  ** timeStart contains the date when the request has been received.
+  ** Now the respone is sent. Compute the request duration and write it in timeStart
+  */
+  msg->timeStart = timeAfter - msg->timeStart;
+  rozofs_fuse_th_send_response(thread_ctx_p,msg,0);
+ 
 }
 
 

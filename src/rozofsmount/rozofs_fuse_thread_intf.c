@@ -384,6 +384,13 @@ void af_unix_fuse_read_response(rozofs_fuse_thread_msg_t *msg)
      return;
   }
   /*
+  ** Update read IO counters.
+  */
+  rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_IO], 1);
+  rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_THR],(uint64_t)msg->size);
+  rozofs_thr_cnt_update(rozofs_thr_counter[ROZOFSMOUNT_COUNTER_READ_LATENCY],msg->timeStart);       
+   
+  /*
   ** update the count of available shared buffer
   */
   if (rozofs_storcli_pending_req_count > 0) rozofs_storcli_pending_req_count--;
