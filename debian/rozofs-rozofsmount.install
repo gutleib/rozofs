@@ -2,6 +2,7 @@
 /usr/bin/storcli
 /usr/bin/rozo_trash
 /usr/bin/rozo_scan
+/usr/bin/rozo_scan_helper
 /usr/bin/rozo_throughput
 /usr/bin/rozo_io
 /usr/bin/rozo_aging

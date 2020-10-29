@@ -1,0 +1,1754 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# Copyright (c) 2010 Fizians SAS. <http://www.fizians.com>
+# This file is part of Rozofs.
+#
+# Rozofs is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, version 2.
+#
+# Rozofs is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+import sys
+import os.path
+import subprocess
+import time
+import re
+import shlex
+import datetime
+import shutil
+from uuid import UUID
+from optparse import OptionParser
+from os.path import expanduser
+
+RED='\033[91m\033[40m\033[1m'
+GREEN='\033[92m\033[40m'
+DARKGREEN='\033[32m\033[40m'
+YELLOW='\033[93m\033[40m'
+ORANGE='\033[33m\033[40m'
+BLUE='\033[94m\033[40m'
+LIGHTBLUE='\033[34m\033[40m\033[1m'
+PURPLE='\033[95m\033[40m'
+DEEPPURPLE='\033[95m\033[40m\033[1m'
+CYAN='\033[96m\033[40m'
+WHITE='\033[97m\033[40m'
+LIGHTCYAN='\033[36m\033[40m'
+BOLD='\033[1m'
+REVERSE='\033[7m'
+ITALIC='\033[3m'
+NORMAL='\033[0m'
+RESET='\033c'
+CLEAR_LINE='\r\033[K'
+
+#___________________________________________________
+#
+# Check whether the local path is a RozoFS mountpoint
+#
+def get_rozofs_local_mount_point(path):
+  instance = None
+
+  try:
+    string = "attr -qg rozofs.export %s"%(path)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:
+      words = line.split()
+      if len(words) < int(4) : continue
+      instance = words[3]
+    if instance == None: return None
+
+    string = "rozodiag -T mount:%s -c mount"%(instance)
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for line in cmd.stdout:
+      words = line.split()
+      if len(words) < int(3) : continue
+      if words[0] == "mount": return words[2]
+    return None
+
+  except:
+    return None
+#___________________________________________________
+#
+# Check whether the local path is a RozoFS mountpoint
+#
+def get_rozofs_mount_point_eid(path):
+
+  string = "attr -qg rozofs.export %s"%(path)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    words = line.split()
+    if len(words) < int(4) : continue
+    return words[1]
+  return None
+#___________________________________________________
+#
+# List RozoFS mount points
+#
+def get_rozofs_mount_point_list():
+  LIST_MNT = []
+  private = None
+
+  cmd = subprocess.Popen(['mount'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+     if "rozofs" in line.split()[0]:
+       if "/private" in line:
+         private = line.split()[2]
+       else:
+         LIST_MNT.append(line.split()[2])
+  if private != None:
+    LIST_MNT.append(private)
+  return LIST_MNT
+#___________________________________________________
+#
+# List of possible criteria
+# For each criteria :
+# [0] User displayed attribute name
+# [1] Rozo_scan keyword for yes
+# [2] Rozo_scan keyword for no
+# [3] List of valid targets for this attribute
+#
+CRITERIA_LIST = [
+   ["Extended attribute presence",                  'xattr',    "file directory"],
+   ["Waiting in trash for deletion",                'trash',    "file"],
+   ["File writing error as occured",                'wrerror',  "file"],
+   ["File lock are persistent",                     'pflock',   "file"],
+   ["The beginning of file is on the fast volume",  'hybrid',   "file directory"],
+   ["Files are created on the fast volume",         'aging',    "directory"],
+   ["File uses the fast volume",                    'vfast',    "file"],
+   ["File uses the slow volume",                    'vslow',    "file"],
+   ["sticky bit",                                   'sticky',   "file directory"],
+   ["set uid bit",                                  'suid',     "file"],
+   ["set gid bit",                                  'sgid',     "file directory"],
+   ["Owner executable permission granted",          'Ux',       "file directory symlink"],
+   ["Owner write permission granted",               'Uw',       "file directory symlink"],
+   ["Owner read permission granted",                'Ur',       "file directory symlink"],
+   ["Group executable permission granted",          'Gx',       "file directory symlink"],
+   ["Group write permission granted",               'Gw',       "file directory symlink"],
+   ["Group read permission granted",                'Gr',       "file directory symlink"],
+   ["Other user executable permission granted",     'Ox',       "file directory symlink"],
+   ["Other user write permission granted",          'Ow',       "file directory symlink"],
+   ["Other user read permission granted",           'Or',       "file directory symlink"],
+]
+#___________________________________________________
+#
+# List of operators
+# For each operator, is defined a user displayable name
+# and its rozo keyword
+#
+EQ_OPE_LIST = [
+  ["=", '=' ]
+]
+EQ_NE_OPE_LIST = [
+  ["=", '=' ],
+  ["!=", '!=' ]
+]
+NAME_OPE_LIST = [
+  ["=", '=' ],
+  ["contain", 'ge' ],
+  ["regex", 'regex' ]
+]
+DATE_OPE_LIST = [
+  [ "between", "between" ],
+  [ "strictly between", "between" ],
+  [ "<", "lt" ],
+  [ "<=", "le" ],
+  [ "=", "=" ],
+  [ ">=", "ge"],
+  [ ">", "gt"],
+  [ "!=", "!="],
+];
+ALL_OPE_LIST = [
+  [ "between", "between" ],
+  [ "strictly between", "between" ],
+  [ ">", "gt" ],
+  [ ">=", "ge" ],
+  [ "=", "=" ],
+  [ "<=", "le"],
+  [ "<", "lt"],
+  [ "!=", "!="],
+]
+#___________________________________________________
+#
+# List of possible attribute comparison
+# For each attribute :
+# [0] User displayed attribute name
+# [1] Rozo_scan keyword for this attribute
+# [2] List of possible operators
+# [3] Function to read the comparison value
+# [4] List of valid targets for this attribute
+#
+COMPARISON_LIST = [
+  ["Creation time",                     'cr8',      DATE_OPE_LIST,  'read_date',                 "file directory symlink"],
+  ["Modification time",                 'mtime',    DATE_OPE_LIST,  'read_date',                 "file directory symlink"],
+  ["Change time",                       'ctime',    DATE_OPE_LIST,  'read_date',                 "file directory symlink"],
+  ["Access time",                       'atime',    DATE_OPE_LIST,  'read_date',                 "file directory symlink"],
+  ["Directory update time",             'update',   DATE_OPE_LIST,  'read_date',                "directory"],
+  ["Name",                              'name',     NAME_OPE_LIST,  'read_name',                 "file directory symlink"],
+  ["Link target name",                  'lname',    NAME_OPE_LIST,  'read_name',                 "symlink"],
+  ["Parent directory name",             'pdname',   NAME_OPE_LIST,  'read_name',                 "file directory symlink"],
+  ["Parent directory full path",        'parent',   NAME_OPE_LIST,  'read_name',                 "file directory symlink"],
+  ["Parent directory FID",              'pfid',     EQ_OPE_LIST,    'read_fid',                  "file directory symlink"],
+  ["Project identifier",                'project',  EQ_NE_OPE_LIST, 'read_int',                  "file directory symlink"],
+  ["Group identifier",                  'gid',      EQ_NE_OPE_LIST, 'read_int',                  "file directory symlink"],
+  ["User identifier",                   'uid',      EQ_NE_OPE_LIST, 'read_int',                  "file directory symlink" ],
+  ["RozoFS cluster identifier",         'cid',      EQ_NE_OPE_LIST, 'read_int',                  "file"] ,
+  ["RozoFS logical storage identifer",  'sid',      EQ_NE_OPE_LIST, 'read_cid_sid',              "file"],
+  ["Logical storage in distribution range", 'sidrange', EQ_NE_OPE_LIST, 'read_cid_sid_range',     "file"],
+  ["Number of links",                   'link',     ALL_OPE_LIST,   'read_int',                  "file directory"],
+  ["Length",                            'size',     ALL_OPE_LIST,   'read_int',                  "file directory symlink"],
+  ["Number of childrens",               'children', ALL_OPE_LIST,   'read_int',                  "directory"],
+  ["Number of deleted inodes in trash", 'deleted',  ALL_OPE_LIST,   'read_int',                  "directory"],
+  ["Number of sub-files (multifile)",   'slave',    ALL_OPE_LIST,   'read_int',                  "file directory" ],
+  ["Extended attribute name",           'xname',    NAME_OPE_LIST,  'read_name',                 "file directory" ],
+]
+#___________________________________________________
+#
+# List of defined criteria and comparison
+#
+list_criteria = []
+list_comparison = []
+list_expression = []
+#___________________________________________________
+# Get a free entry for criteria
+#
+def new_criteria_insert(new) :
+  idx = int(0)
+  for cr in list_criteria:
+    if cr == None: 
+      list_criteria[idx] = new
+      return idx
+    idx += int(1)
+ 
+  list_criteria.append(new)   
+  return idx 
+#___________________________________________________
+#
+# Create a new user defined criteria
+# criteria : criteria choosen from CRITERIA_LIST
+# value    : 'yes' or 'no'
+#
+class criteria_class:
+  def __init__(self, criteria, value, idx=None):
+
+    global list_criteria
+    self.criteria = criteria
+    self.value = value
+    if idx == None:
+      idx = new_criteria_insert(self)
+    else:
+      while len(list_criteria) <= idx:  
+        list_criteria.append(None)
+      list_criteria[idx] = self  
+    permanent("    " + user_style(get_user_criteria(idx)))
+    return
+#___________________________________________________
+# Get a free entry for comparison
+#
+def new_comparison_insert(new) :
+  idx = int(0)
+  for cr in list_comparison:
+    if cr == None: 
+      list_comparison[idx] = new
+      return idx
+    idx += int(1)
+ 
+  list_comparison.append(new)   
+  return idx 
+#___________________________________________________
+#
+# Create a new user defined comparison
+# field     : attribute comparison choosen from COMPARISON_LIST
+# ope_user  : operator choosen by the user
+# ope_rozo  : rozo translated operator from user operator
+# value     : value to compare the attribute to
+# range     : extra value specific to sidrange attribute
+#
+class comparison_class:
+  def __init__(self, field, ope_user, ope_rozo, value1, value2=None,idx=None):
+
+    global list_comparison
+    self.field      = field
+    self.ope_user   = ope_user
+    self.ope_rozo   = ope_rozo
+    self.value1     = value1
+    self.value2     = value2
+    if idx == None:    
+      idx = new_comparison_insert(self)
+    else:
+      while len(list_comparison) <= idx:  
+        list_comparison.append(None)
+      list_comparison[idx] = self  
+      
+    permanent("    " + user_style(get_user_comparison(idx)))
+
+#___________________________________________________
+# Get a free entry for expression
+#
+def new_expression_insert(new) :
+  idx = int(0)
+  for cr in list_expression:
+    if cr == None: 
+      list_expression[idx] = new
+      return idx
+    idx += int(1)
+ 
+  list_expression.append(new)   
+  return idx 
+#___________________________________________________
+#
+# Create a new expression
+#
+class expression_class:
+  def __init__(self, expression,idx=None):
+
+    global list_expression
+
+    if idx == None:    
+      idx = new_expression_insert(expression)
+    else:
+      while len(list_expression) <= idx:  
+        list_expression.append(None)
+      list_expression[idx] = expression  
+    permanent("    " + user_style(get_user_expression(idx)))
+
+#___________________________________________________
+#
+# Choose within a list of 2 values
+# txt     : text to display
+#
+def choose_yes_no(txt):
+  # Print text as well as values. Default value is in green
+  LINE = "%s ("%(txt) + default_style("yes") + "/no)"
+  # Read user value
+  try:
+    winer = read_user_data(LINE,"yes")
+    if winer == "yes" or winer == "no":
+      temporary("    " + user_style(winer))
+      return winer
+    return "interrupted"
+  except:
+    return "interrupted"
+  return "maybe"
+#___________________________________________________
+#
+# Choose within a list of 2 values
+# txt     : text to display
+#
+def choose_no_yes(txt):
+  # Print text as well as values. Default value is in green
+  LINE = "%s ("%(txt) + default_style("no") + "/yes)"
+  # Read user value
+  try:
+    winer = read_user_data(LINE,"no")
+    if winer == "yes" or winer == "no":
+      temporary("    " + user_style(winer))
+      return winer
+    return "maybe"
+  except:
+    return "interrupted"
+  return "maybe"
+#___________________________________________________
+#
+# Choose a value within a list of possible values
+# txt     : text to display
+# list    : list of values to choose in
+# default : default value
+#
+def choose_numbered_list(txt,list,default=None):
+  # Empty list is bad
+  if len(list) == int(0):
+    erro( "%s : no choice"%(txt))
+    sys.exit(1)
+
+  # Print text as well as values. Default value is in green
+  IDX = None
+  temporary(" ")
+  temporary(" ")
+  temporary(tool_style("  %s"%(txt)))
+  idx = 0
+  IDX = None
+  for choice in list:
+    if default != None and choice == default:
+      temporary("    " + choice_style("%2d ")%(idx) + default_style(" %s"%(choice)))
+      IDX = idx
+    else:
+      temporary("    " + choice_style("%2d ")%(idx) +" %s"%(choice))
+    idx += int(1)
+
+  winer = read_user_data(tool_style("Choose a number"),IDX)
+  if winer == None: return None
+  try:
+    if int(winer) >= int(0) and int(winer) < int(idx):
+      temporary("  " + user_style(list[int(winer)]))
+      return list[int(winer)]
+
+  except:
+    if default != None:
+      temporary("  " + user_style(default))
+      return default
+    return None
+  return None
+#___________________________________________________
+# Retrieve the attribute comparison in COMPARISON_LIST
+# that correspond to input string
+# field : the attribute comparison string
+def get_comparison(field):
+   for comp in COMPARISON_LIST:
+      if comp[0] == field: return comp
+   return None
+#___________________________________________________
+# Retrieve the attribute comparison in COMPARISON_LIST
+# that correspond to input string
+# field : the attribute comparison string
+def get_comparison_short(field):
+   for comp in COMPARISON_LIST:
+      if comp[1] == field: return comp
+   return None
+#___________________________________________________
+# Check the input UUID is valie
+def is_valid_uuid(uuid_to_test):
+  try:
+    uuid_obj = UUID(uuid_to_test, version=3)
+    return True
+  except:
+    return False
+#___________________________________________________
+# Translate a user operator choosen from an operator
+# list in a rozo operator
+def ope_translate_from_user(ope,list):
+  for o in list:
+    if o[0] == ope: return o[1]
+  return None
+#___________________________________________________
+# Read an integer value
+def read_int():
+
+  value = read_user_data("Enter integer value eventually followed by units (k,K,m,M,g,G)")
+  if value == "": return None, None
+  try:
+    val = re.findall(r'(\D+|\d+)',value)
+    test = int(val[0])
+    if len(val) == 1: return value, None
+    if len(val) == 2:
+      if val[1] in ['k','K','m','M','g','G'] :
+        return "%s%s"%(val[0],val[1]), None
+    return None, None
+  except:
+    return None, None
+  return value, None
+#___________________________________________________
+# Read CID and SID
+def read_cid_sid():
+  while True:
+    value1 = read_user_data("Enter CID value")
+    try:
+      value1 = int(value1)
+      break
+    except:
+      return None, None
+
+  while True:
+    value2 = read_user_data("Enter SID value")
+    try:
+      value2 = int(value2)
+      break
+    except:
+      return None, None
+  return "%s/%s"%(value1, value2), None
+#___________________________________________________
+# Read CID and SID range
+def read_cid_sid_range():
+  range = read_sid_range()
+  if range == None: return None, None
+  value1, value2 = read_cid_sid()
+  if value1 == None: return None, None
+  return value1, range
+#___________________________________________________
+# Read a sid range
+def read_sid_range():
+  while True:
+    value1 = read_user_data("Start of range in SID distribution")
+    try:
+      value1 = int(value1)
+      if value1 < int(0) or value1 > int(7):
+        error("Bad value")
+        return None
+      break
+    except:
+      error("Bad value")
+      return None
+
+  while True:
+    value2 = read_user_data("End of range in SID distribution")
+    try:
+      value2 = int(value2)
+      if value2 < int(0) or value2 > int(7):
+        error("Bad value")
+        return None
+      break
+    except:
+      error("Bad value")
+      return None
+  if value1 > value2:
+    error("Bad range")
+    return None
+
+  return "[%s:%s]"%(value1, value2)
+#___________________________________________________
+# Read a name
+def read_name():
+  while True:
+    value = read_user_data("Enter name or regex to search for")
+    if value == None:
+      error("Bad name")
+      return None, None
+    value = re.sub('"','',value)
+    return "\\\"%s\\\""%(value), None
+#___________________________________________________
+# Read a FID and check it
+def read_fid():
+  fid = read_user_data("Enter the parent FID to match")
+  if is_valid_uuid(fid) == False:
+    return None, None
+  return fid, None
+#___________________________________________________
+# Read a date
+def read_date():
+  while True:
+    default = datetime.datetime.today().year
+    year = read_user_data("Enter the year " + default_style("(%d)"%(default)),default)
+    if year == None: return None, None
+    try:
+      int(year)
+      break
+    except:
+      error("Not a possible year value")
+      return None, None
+  while True:
+    default = datetime.datetime.today().month
+    month = read_user_data("Enter the month " + default_style("(%2.2d)"%(default)),default)
+    if month == None: return None, None
+    try:
+      if int(month) >= int(1) and int(month) <= 12: break
+      error("Month must be defined within [1..12]")
+      return None, None
+    except:
+      error("Not a possible month value")
+      return None, None
+
+  while True:
+    default = datetime.datetime.today().day
+    day = read_user_data("Enter the day " + default_style("(%2.2d)"%(default)),default)
+    if day == None: return None, None
+    try:
+      if int(day) >= int(1) and int(day) <= 31: break
+      error("Day must be defined within [1..31]")
+      return None, None
+    except:
+      error("Not a possible day value")
+      return None, None
+  while True:
+    hour = read_user_data("Enter the hour " + default_style("(00)"),"0")
+    if hour == None: return None, None
+    try:
+      if int(hour) >= int(0) and int(hour) <= 23: break
+      error("Hour must be defined within [0..23]")
+      return None, None
+    except:
+      error("Not a possible hour value")
+      return None, None
+  while True:
+    min = read_user_data("Enter the minutes " + default_style("(00)"),"0")
+    if min == None: return None, None
+    try:
+      if int(min) >= int(0) and int(min) <= 59: break
+      error("Minutes must be defined within [0..59]")
+      return None, None
+    except:
+      error("Not a possible minute value")
+      return None, None
+  while True:
+    sec = read_user_data("Enter the seconds " + default_style("(00)"),"0")
+    if sec == None: return None, None
+    try:
+      if int(sec) >= int(0) and int(sec) <= 59: break
+      error("Seconds must be defined within [0..59]")
+      return None, None
+    except:
+      error("Not a possible second value")
+      return None, None
+
+  date = "%4d-%2.2d-%2.2d-%2.2d:%2.2d:%2.2d"%(int(year),int(month),int(day),int(hour),int(min),int(sec))
+  temporary("    " + user_style(date))
+  return date, None
+#___________________________________________________
+# Define a new execution file name under /tmp
+def new_execution_file():
+  global exec_count
+
+  DIR = "/tmp/rozo_scan_helper"
+  if not os.path.exists(DIR):
+    os.mkdir(DIR)
+  NAME = "%s/%d.%d"%(DIR, os.getpid(), exec_count)
+  exec_count += int(1)
+  return NAME
+#___________________________________________________
+# Custom output choice
+def custom_output_choice(out,txt,value,separator):
+  global custom_display
+
+  if custom_display == None:
+    choice = choose_yes_no(txt)
+  else:
+    if value in custom_display:
+      choice = choose_yes_no(txt)
+    else:
+      choice = choose_no_yes(txt)
+
+  if choice == 'yes':
+    out = out + separator + value
+    return out, ','
+  if choice == "interrupted":
+    int("toto")
+  return out, separator
+
+#___________________________________________________
+# Custom output
+def define_custom_output():
+ global target
+ separator = ' '
+ output = " out"
+
+ try:
+   output,separator = custom_output_choice(output,"size ", "size", separator)
+   output,separator = custom_output_choice(output,"project ", "project", separator)
+   if target == "directory":
+     output,separator = custom_output_choice(output,"children count ", "children", separator)
+     output,separator = custom_output_choice(output,"deleted count ", "deleted", separator)
+   output,separator = custom_output_choice(output,"number of links ", "nlink", separator)
+   output,separator = custom_output_choice(output,"uid ", "uid", separator)
+   output,separator = custom_output_choice(output,"gid ", "gid", separator)
+   output,separator = custom_output_choice(output,"creation time ", "hcr8", separator)
+   output,separator = custom_output_choice(output,"modification time ", "hmtime", separator)
+   output,separator = custom_output_choice(output,"change time ", "hctime", separator)
+   output,separator = custom_output_choice(output,"access time ", "hatime", separator)
+   if target == "directory":
+     output,separator = custom_output_choice(output,"update time ", "hupdate", separator)
+   output,separator = custom_output_choice(output,"privileges ", "priv", separator)
+   output,separator = custom_output_choice(output,"extended attributes ", "xattr", separator)
+   output,separator = custom_output_choice(output,"distribution ", "distrib", separator)
+   output,separator = custom_output_choice(output,"fid ", "id", separator)
+   output,separator = custom_output_choice(output,"trash ", "trash", separator)
+   output,separator = custom_output_choice(output,"write error ", "error", separator)
+   output,separator = custom_output_choice(output,"file striping ", "strip", separator)
+   output,separator = custom_output_choice(output,"json ", "json", separator)
+
+   return output
+ except:
+   return None
+
+#___________________________________________________
+# Display and execute an expression
+def display_and_execute_expression(expr,expression):
+  global last_choice
+  global custom_display
+
+  expr = re.sub("  "," ",expr)
+  expr = re.sub("not \[","not[",expr)
+  expr = re.sub("not not","",expr)
+  expr = re.sub(" \]","]",expr)
+  expr = re.sub("\[ ","[",expr)
+  expr = re.sub("\[ ","[",expr)
+
+  while True:
+
+    # Just scan one FID
+    if " e 0 " in CMD_BASE:
+      CMD = "%s %s out all,json,xattr"%(CMD_BASE, expr)
+
+    # Other scope scan
+    else:
+      LIST = ['every attribute','only the names','only the global count','define custom display']
+      default = 'every attribute'
+      if custom_display != None:
+        LIST.append('customized')
+        default = 'customized'
+
+      out = choose_numbered_list("Display : ",LIST, default)
+      clear_all()
+
+      if out == None: return
+      if out == 'every attribute':
+        if "xname" in expr or "pflock" in expr or "xattr" in expr:
+          CMD = "%s { %s } out all,json,xattr"%(CMD_BASE, expr)
+        else:
+          CMD = "%s { %s } out all,json"%(CMD_BASE, expr)
+      elif out == 'only the names':
+        CMD = "%s { %s } out json"%(CMD_BASE, expr)
+      elif out == 'only the global count':
+        CMD = "%s { %s } out json,none"%(CMD_BASE, expr)
+      elif out == 'customized':
+        CMD = "%s { %s } %s"%(CMD_BASE, expr,custom_display)
+      elif out == 'define custom display':
+        custom_display = define_custom_output()
+        if custom_display == None: continue
+        CMD = "%s { %s } %s"%(CMD_BASE, expr,custom_display)
+      else:
+        return
+
+    permanent( " ")
+    permanent( "  " + user_style("%s"%(expression)))
+    permanent( "  " + user_style("%s"%(CMD)))
+
+    LIST = ['result in file','result on screen','do not execute']
+    last_choice = choose_numbered_list("Execute rozo_scan : ",LIST, last_choice)
+    clear_all()
+
+
+    fileName = new_execution_file()
+    os.system("%s > %s"%(CMD,fileName))
+
+    if last_choice == "result in file":
+      permanent("  " + tool_style("Result is in %s"%(fileName)) )
+      put_line()
+      return
+    if last_choice == "result on screen":
+      os.system("cat %s"%(fileName))
+      put_line()
+      return
+
+    return
+#___________________________________________________
+# Retrieve the criteria in CRITERIA_LIST
+def get_criteria(criteria):
+  for crit in CRITERIA_LIST:
+    if criteria == crit[0]: return crit
+  return None
+#___________________________________________________
+# Retrieve the criteria in CRITERIA_LIST
+def get_criteria_short(criteria):
+  for crit in CRITERIA_LIST:
+    if criteria == crit[1]: return crit
+  return None
+#___________________________________________________
+# Display extra help about the choice
+def extra_condition_help(criteria, target):
+  NAME = criteria[1]
+  temporary(" " )
+  temporary("    " + user_style("%s : %s"%(NAME,criteria[0])))
+
+  if NAME == "xattr":
+    temporary("    " + tool_style("A %s may have or not extended attribute defined."%(target)))
+    return
+  if NAME == "trash":
+    temporary("      " + tool_style("When the trash feature is defined in a directory, a file remove is not"))
+    temporary("      " + tool_style("processed immediatly. The file just becomes invisible. The file is kept"))
+    temporary("      " + tool_style("in the trash for a retention delay, and will actually be deleted at the"))
+    temporary("      " + tool_style("end of this delay. This criteria request the scanned file to be waiting"))
+    temporary("      " + tool_style("in the trash."))
+    return
+
+  if NAME == "wrerror":
+    temporary("      " + tool_style("When an error occurs while writing a %s, part of the file may be"%(target)) )
+    temporary("      " + tool_style("inconsistent and unreadable. This information is registered at the"))
+    temporary("      " + tool_style("exportd when possible.") )
+    return
+
+  if NAME == "hybrid":
+    temporary("      " + tool_style("When the Hybrid feature is enabled on a directory, new files are created") )
+    temporary("      " + tool_style("with their starting part on the fast volume, while the rest of it is written"))
+    temporary("      " + tool_style("on the slow volume. The hybrid feature requires at least two configured volumes.") )
+    return
+    
+  if NAME == "vfast":
+    temporary("      " + tool_style("A file satisfies this criteria when at least one of its sub-file is located") )
+    temporary("      " + tool_style("on the fast volume in case of multi volume export identifier."))
+
+  if NAME == "vslow":
+    temporary("      " + tool_style("A file satisfies this criteria when at least one of its sub-file is located") )
+    temporary("      " + tool_style("on the slow volume in case of multi volume export identifier."))
+    
+  if NAME == "aging":
+    temporary("      " + tool_style("When the Aging feature is enabled on a directory, new files are created"))
+    temporary("      " + tool_style("on the fast volume. When Aging is not set files are created on the slow") )
+    temporary("      " + tool_style("volume. It is always possible to move files betwwen volumes at any time."))
+    temporary("      " + tool_style("The Aging feature requires at least two configured volumes."))
+    return
+    
+  if NAME == "sticky":
+    temporary("      " + tool_style("When sticky bit is set, only the owner can delete the file/directory."))
+    temporary("      " + tool_style("Linux ls cli displays the sticky bit as t or T at the place of the other execution rights."))
+    temporary("      " + tool_style("-rw-r--r-")+"-"+tool_style(" becomes -rw-r--r-")+"T"+tool_style(" and -rwxr-xr-")+"x"+tool_style(" becomes -rwxr-xr-")+"t.")
+    temporary("      " + tool_style("The sticky bit is 1 in the upper bit trio of the octal mode field (chmod 1755)."))
+    return
+
+  if NAME == "suid":
+    if target == "file":
+      temporary("      " + tool_style("When set uid bit is set on an executable file, it is not executed with the rigths"))
+      temporary("      " + tool_style("of the user that execute it, but with those of the file owner."))
+      temporary("      " + tool_style("Linux ls cli displays the set uid bit as s or S at the place of the user execution rights."))
+      temporary("      " + tool_style("-rw")+"x"+tool_style("r-xr-x becomes -rw")+"s"+tool_style("r-xr-x and -rw")+"-"+tool_style("rw-rw- becomes -rw")+"S"+tool_style("rw-rw-."))
+      temporary("      " + tool_style("The set uid bit is 4 in the upper bit trio of the octal mode field (chmod 4755)."))
+      return
+      
+  if NAME == "sgid":
+    if target == "file":
+      temporary("      " + tool_style("When set gid bit is set on an executable file, it is not executed with the rigths"))
+      temporary("      " + tool_style("of the group that execute it, but with those of the group owner."))
+      temporary("      " + tool_style("Linux ls cli displays the set gid bit as s or S at the place of the group execution rights."))
+      temporary("      " + tool_style("-rwxr-")+"x"+tool_style("r-x becomes -rwxr-")+"s"+tool_style("r-x and -rw-rw")+"-"+tool_style("rw- becomes -rw-rw")+"S"+tool_style("rw-."))
+      temporary("      " + tool_style("The set uid bit is 2 in the upper bit trio of the octal mode field (chmod 2755)."))
+      return
+    if target == "directory":
+      temporary("      " + tool_style("When set gid bit is set on a directory, the files created in the directory take"))
+      temporary("      " + tool_style("their gid from the directory and not the one of the user."))
+      temporary("      " + tool_style("Linux ls cli displays the set gid bit as s or S at the place of the group execution rights."))
+      temporary("      " + tool_style("drwxr-")+"x"+tool_style("r-x becomes drwxr-")+"s"+tool_style("r-x and drw-rw")+"-"+tool_style("rw- becomes drw-rw")+"S"+tool_style("rw-."))
+      temporary("      " + tool_style("The set uid bit is 2 in the upper bit trio of the octal mode field (chmod 2755)."))
+      return
+
+  if NAME == "pflock":
+      temporary("      " + tool_style("When persistent file lock bit is set on a file, the file locks set on it"))
+      temporary("      " + tool_style("are save in the extended attributes and can so persist an export switchover."))
+      return
+       
+  if NAME == "Ux":
+    temporary("      " + tool_style("The %s owner may or may not have Linux execution permission on it."%(target)))
+    return
+  if NAME == "Uw":
+    temporary("      " + tool_style("The %s owner may or may not have Linux write permission on it."%(target)))
+    return
+
+  if NAME == "Ur":
+    temporary("      " + tool_style("The %s owner may or may not have Linux read permission on it."%(target)))
+    return
+
+  if NAME == "Gx":
+    temporary("      " + tool_style("The %s group may or may not have Linux execution permission on it."%(target)))
+    return
+
+  if NAME == "Gw":
+    temporary("      " + tool_style("The %s group may or may not have Linux write permission on it."%(target)))
+    return
+
+  if NAME == "Gr":
+    temporary("      " + tool_style("The %s group may or may not have Linux read permission on it."%(target)))
+    return
+  if NAME == "Ox":
+    temporary("      " + tool_style("The non owner user or group may or may not have Linux executable permission on the %s."%(target)))
+    return
+
+  if NAME == "Ow":
+    temporary("      " + tool_style("The non owner user or group may or may not have Linux write permission on the %s."%(target)))
+    return
+  if NAME == "Or":
+    temporary("      " + tool_style("The non owner user or group may or may not have Linux read permission on the %s."%(target)))
+    return
+  return
+#___________________________________________________
+# Display extra help about the choice
+def extra_comparison_help(comparison, target):
+  NAME = comparison[1]
+  temporary(" " )
+  temporary("    " + user_style("%s : %s"%(NAME,comparison[0])))
+
+  if NAME == "cr8":
+    temporary("      " + tool_style("This specific RozoFS attribute registers the date of the creation of the %s."%(target)))
+    return
+  if NAME == "mtime":
+    temporary("      " + tool_style("This attribute is the Linux POSIX modification time of the %s."%(target)))
+    temporary("      " + tool_style("It tracks any content change."))
+    return
+  if NAME == "ctime":
+    temporary("      " + tool_style("This attribute is the Linux POSIX change time of the %s."%(target)))
+    temporary("      " + tool_style("It tracks any attribute change."))
+    return
+  if NAME == "atime":
+    temporary("      " + tool_style("This attribute is NOT the Linux POSIX access time of the %s."%(target)))
+    temporary("      " + tool_style("As most of the efficient file systems, RozoFS do not track the %s"%(target)))
+    temporary("      " + tool_style("POSIX access time for performance reason.") )
+    if target == "directory":
+      temporary("      " + tool_style("This attribute is updated on a directory each time it is moved."))
+    else:
+      temporary("      " + tool_style("This attribute is updated on a %s each time it is trashed or restored."%(target)))
+    return
+  if NAME == "update":
+    temporary("      " + tool_style("This specific RozoFS attribute registers the date of the last modification") )
+    temporary("      " + tool_style("inside a directory. This encompasses any file creation, modification, deletion"))
+    temporary("      " + tool_style("or writing. Whatever changes inside a directory, it updates this attribute."))
+    return
+  if NAME == "name":
+    temporary("      " + tool_style("This is the name of the scanned %s, not its full path."%(target)) )
+    return
+  if NAME == "parent":
+    temporary("      " + tool_style("This is the full path of the parent directory of the scanned %s."%(target)) )
+    temporary("      " + tool_style("A file may have several parent directory (hard links). This parent is the latest") )
+    temporary("      " + tool_style("defined parent.") )
+    return
+  if NAME == "pdname":
+    temporary("      " + tool_style("This is the name (not full path) of the parent directory of the scanned %s."%(target)) )
+    temporary("      " + tool_style("A %s may have several upper directory (hard link). This parent is the latest"%(target)) )
+    temporary("      " + tool_style("defined parent.") )
+    return
+  if NAME == "pfid":
+    temporary("      " + tool_style("This is the FID of the parent directory of the scanned %s."%(target)))
+    temporary("      " + tool_style("A %s may have several parents (hard link). This parent is the latest"%(target)) )
+    temporary("      " + tool_style("defined parent."))
+    return
+  if NAME == "project":
+    temporary("      " + tool_style("This is the RozoFS project identifier within the scanned export identifier."))
+    return
+  if NAME == "gid":
+    temporary("      " + tool_style("This is the POSIX group identifier of the %s."%(target)))
+    return
+  if NAME == "uid":
+    temporary("      " + tool_style("This is the POSIX user identifier of the %s."%(target)))
+    return
+  if NAME == "cid":
+    temporary("      " + tool_style("This is the RozoFS cluster identifier you search files for."))
+    temporary("      " + tool_style("With equal operator, a file will match if at least one of its sub-file"))
+    temporary("      " + tool_style("uses this CID. With the different operator, a file will match if none"))
+    temporary("      " + tool_style("of its sub-file uses this CID."))
+    return
+  if NAME == "sid":
+    temporary("      " + tool_style("You are scanning files using or not a specific RozoFS logical storage."))
+    temporary("      " + tool_style("With equal operator, a file will match if at least one of its sub-file") )
+    temporary("      " + tool_style("uses this CID/SID at any rank of its distribution."))
+    temporary("      " + tool_style("With the different operator, a file will match if none of its sub-file"))
+    temporary("      " + tool_style("uses this CID/SID at any rank of its distribution."))
+    temporary("      " + tool_style("If the rank in the distribution matters, you should have selected the next choice number"))
+    temporary("      " + tool_style("\"sidrange\"."))
+    return
+  if NAME == "sidrange":
+    temporary("      " + tool_style("You are scanning files using or not a specific RozoFS logical storage at a given rank of its distibution."))
+    temporary("      " + tool_style("The SID rank in a sub-file distribution ranges from 0 to 7.") )
+    temporary("      " + tool_style("From 0 to 3 are the inverse 1rst SID normally used from reading."))
+    temporary("      " + tool_style("From 0 to 5 are the forward 1rst SID normally used for writing."))
+    temporary("      " + tool_style("From 4 to 5 are the SID normally used for writing but not reading."))
+    temporary("      " + tool_style("From 6 to 7 are the spare SID."))
+    temporary("      " + tool_style("With equal operator, a file will match if at least one of its sub-file"))
+    temporary("      " + tool_style("uses this CID/SID at the defined rank of its distribution."))
+    temporary("      " + tool_style("With the different operator, a file will match if none of its sub-file"))
+    temporary("      " + tool_style("uses this CID/SID at the defined rank of its distribution."))
+    return
+  if NAME == "link":
+    temporary("      " + tool_style("This is the POSIX number of links of the %s."%(target)) )
+    return
+  if NAME == "size":
+    if target == "file":
+      temporary("      " + tool_style("This is the length of the file."))
+      return
+    if target == "directory":
+      temporary("      " + tool_style("This sums up the size of the 4K blocks used by all the files of the directory."))
+      return
+    if target == "symlink":
+      temporary("      " + tool_style("This is the length of the target name of this symlink."))
+      return
+  if NAME == "children":
+    temporary("      " + tool_style("This is the POSIX number of chidlren of the %s."%(target)))
+    return
+  if NAME == "deleted":
+    temporary("      " + tool_style("When the trash feature is defined in a directory, a file remove is not"))
+    temporary("      " + tool_style("processed immediatly. The file just becomes invisible. The file is kept"))
+    temporary("      " + tool_style("in the trash for a retention delay, and will actually be deleted at the") )
+    temporary("      " + tool_style("end of this delay. This attributes accounts for the number of files of"))
+    temporary("      " + tool_style("this directory waiting in the trash."))
+    return
+  if NAME == "slave":
+    temporary("      " + tool_style("This is the number of sub-files a file must have in multifile mode.") )
+    return
+  if NAME == "xname":
+    temporary("      " + tool_style("You are scanning for %s having extended attributes with a specific name."%(target)))
+    temporary("      " + tool_style("Extended attributes belong to on of these namespaces: user, trusted, security or system."))
+    temporary("      " + tool_style("An extended attribute name is prefixed by its namespace."))
+    temporary("      " + tool_style("e.g: security.NTACL, system.posix_acl_access, user.foo") )
+    return
+  return
+#___________________________________________________
+#
+# Choose an elemntary condition
+#
+def choose_condition(target):
+  temporary(" ")
+  temporary(" ")
+  temporary(tool_style("  %s attribute to define a condition on : "%(target)))
+
+  for comp in COMPARISON_LIST:
+    if target in comp[-1]: 
+     temporary("    " + choice_style(" %-9s")%(comp[1]) +" %s"%(comp[0]))
+      
+  for crit in CRITERIA_LIST:
+    if target in crit[-1]: 
+      temporary("    " + choice_style(" %-9s")%(crit[1]) +" %s"%(crit[0]))
+
+  winer = read_user_data(tool_style("Choose a condition"),None)
+  return winer  
+#___________________________________________________
+# Define an elementary condition
+#
+def Define_an_elementary_condition():
+   global target
+
+   choice = choose_condition(target)
+   clear_all()
+   if choice == None: return
+
+   # Criteria is chosen?
+   criteria = get_criteria_short(choice)
+   if criteria != None:
+     # Display extra help about the choice
+     extra_condition_help(criteria, target)
+     # 2 choices : yes or no
+     list = ['yes','no']
+     choice = choose_yes_no("Condition to apply to " + user_style("%s"%(choice)))
+     if choice == 'yes': return criteria_class(criteria,  'yes',idx=None)
+     if choice == 'no':  return criteria_class(criteria,  'no',idx=None)
+     return
+
+   # Comparison chosen
+   comparison = get_comparison_short(choice)
+   if comparison == None:
+     return
+   # Display extra help about the choice
+   extra_comparison_help(comparison, target)
+
+   attribute_name = choice
+   operator_list  = comparison[2]
+   read_function  = comparison[3]
+   # Only one operator : no choice
+   if len(operator_list) == int(1):
+     ope_user = operator_list[0][0]
+   else:
+     # Choose operator within operator list
+     list = []
+     default = None
+     for o in operator_list:
+       list.append(o[0])
+       if o[0] == "between":
+         default = "between"
+         continue
+       if o[0] == "contain":
+         if default != "between":
+           default = "contain"
+         continue
+       if o[0] == "=":
+         if default == None:
+           default = "="
+         continue
+
+     ope_user = choose_numbered_list("Comparator to apply to attribute " + user_style("%s"%(attribute_name)), list, default)
+     if not ope_user in list:
+       return
+   ope_rozo = ope_translate_from_user(ope_user,operator_list)
+
+   # Between operator read 2 values
+   if ope_rozo == "between":
+     temporary(tool_style("  Lowest range value ") )
+     value1, tmp = getattr(sys.modules[__name__],read_function)()
+     if value1 == None or value1 == "":
+       return
+     temporary(tool_style("  Highest range value"))
+     value2, tmp = getattr(sys.modules[__name__],read_function)()
+     if value2 == None or value2 == "": return
+     comparison_class(comparison,ope_user, ope_rozo, value1, value2,idx=None)
+     return
+
+   value1, value2 = getattr(sys.modules[__name__],read_function)()
+   if value1 == None or value1 == "": return
+   comparison_class(comparison,ope_user, ope_rozo, value1, value2,idx=None)
+#___________________________________________________
+# Check whether some elementary conditions have been defined
+def elementary_conditions_exist():
+  for c in list_criteria:
+    if c != None: return True
+  for c in list_comparison:
+    if c != None: return True
+  return False
+#___________________________________________________
+def expressions_exist():
+  for c in list_expression:
+    if c != None: return True
+  return False
+#___________________________________________________
+# Get use language criteria
+def get_user_criteria(idx):
+  if int(idx) > len(list_criteria): return ""
+  crit = list_criteria[idx]
+  return "C%2.2d ~~ [%s = %s]"%(idx,crit.criteria[0], crit.value)
+#___________________________________________________
+# Get use language criteria
+def get_user_comparison(idx):
+  if int(idx) > len(list_comparison): return ""
+  comp = list_comparison[idx]
+  if comp.value2 == None:
+    return "F%2.2d ~~ [%s %s %s]"%(idx,comp.field[0],comp.ope_user, comp.value1)
+
+  if comp.ope_rozo == "between":
+    return "F%2.2d ~~ [%s %s %s and %s]"%(idx,comp.field[0],comp.ope_user, comp.value1, comp.value2)
+
+  return "F%2.2d ~~ [%s %s %s %s]"%(idx,comp.field[0],comp.value2,comp.ope_user, comp.value1)
+#___________________________________________________
+# Get use language criteria
+def get_user_expression(idx):
+  if int(idx) > len(list_expression): return ""
+  expr = list_expression[idx]
+  return "E%2.2d ~~ %s"%(idx,expr)    
+
+#___________________________________________________
+# Display the list of defined elementary conditions
+def list_elementary_conditions():
+
+  if not elementary_conditions_exist() : return
+
+  temporary(" ")
+  temporary(tool_style("  List of defined elementary conditions:" ))
+
+  if len(list_criteria) != int(0):
+    idx = 0
+    for crit in list_criteria:
+      if crit != None:
+        temporary(  "    " + get_user_criteria(idx))
+      idx +=  int(1)
+
+  if len(list_comparison) != int(0):
+    idx = 0
+    for comp in list_comparison:
+      if comp != None:
+        temporary(   "    " + get_user_comparison(idx))
+      idx +=  int(1)
+  return
+
+
+#___________________________________________________
+# Display the list of defined elementary conditions
+# as well as the defined expressions
+def list_defined_expressions():
+
+  if not expressions_exist() : return
+
+  temporary(tool_style("  List of defined expressions:" ))
+  idx = 0
+  for expr in list_expression:
+    if expr != None:
+      temporary("    " + get_user_expression(idx))
+    idx +=  int(1)
+#___________________________________________________
+# Check whether a criteria is unused
+def check_unused_criteria(idx):
+  for expr in list_expression:
+    if expr != None:
+      s = "c%2.2d"%(idx)
+      if s in expr: return False
+      s = "C%2.2d"%(idx)
+      if s in expr: return False
+  return True
+#___________________________________________________
+def criteria_delete(idx):
+
+  if check_unused_criteria(idx) == False:
+    error("Criteria is referenced  in an expression")
+    return
+  permanent("    DELETE " + user_style(get_user_criteria(idx)))
+  list_criteria[idx] = None
+#___________________________________________________
+# Check whether a comparison is unused
+def check_unused_comparison(idx):
+  for expr in list_expression:
+    if expr != None:
+      s = "f%2.2d"%(idx)
+      if s in expr: return False
+      s = "F%2.2d"%(idx)
+      if s in expr: return False
+  return True
+##___________________________________________________
+def comparison_delete(idx):
+
+  if check_unused_comparison(idx) == False:
+    error("Comparison is referenced in an expression")
+    return
+  permanent("    DELETE " + user_style(get_user_comparison(idx)))
+  list_comparison[idx] = None
+
+#___________________________________________________
+# Check whether an expression is unused
+def check_unused_expression(idx):
+  for expr in list_expression:
+    if expr != None:
+      s = "e%2.2d"%(idx)
+      if s in expr: return False
+      s = "E%2.2d"%(idx)
+      if s in expr: return False
+  return True
+#___________________________________________________
+# Try to delete an expression
+def expression_delete(idx):
+
+  if check_unused_expression(idx) == False:
+    error("Expression in reverence by an other expression")
+    return
+  permanent("    DELETE " + user_style(get_user_expression(idx)))
+  list_expression[idx] = None
+#___________________________________________________
+#
+# Choose something to delete
+#
+def choose_delete():
+  global custom_display
+
+  temporary(" ")
+  temporary(" ")
+  temporary(tool_style("  Which condition/expression to delete."))
+
+  idx = int(0)
+  for c in list_criteria:
+    if c != None:
+      if check_unused_criteria(idx):
+        c = get_user_criteria(idx).split("~~")
+        temporary("    " + choice_style(" %4s")%(c[0]) +" %s"%(c[1]))
+    idx += int(1)
+
+  idx = int(0)
+  for c in list_comparison:
+    if c != None:
+      if check_unused_comparison(idx):
+        c = get_user_comparison(idx).split("~~")
+        temporary("    " + choice_style(" %4s")%(c[0]) +" %s"%(c[1]))
+    idx += int(1)
+
+  idx = int(0)
+  for c in list_expression:
+    if c != None:
+      if check_unused_expression(idx):
+        c = get_user_expression(idx).split("~~")
+        temporary("    " + choice_style(" %4s")%(c[0]) +" %s"%(c[1]))
+    idx += int(1)
+
+  if custom_display != None:
+    temporary("    " + choice_style(" cdis") +" %s"%(custom_display))
+
+  winer = read_user_data(tool_style("Choice"),None)
+  return winer  
+#__________________________________________________
+# Delete some conditions or expression
+def menu_delete():
+
+  expr = choose_delete()
+  if expr == None: return
+  expr = expr.strip()
+  if expr == "": return
+
+  if expr == "cdis":
+    custom_display = None
+    return
+
+  try:
+    idx = int(re.search(r'\d+', expr[1:]).group())
+
+    if expr[0] == 'c' or expr[0] == 'C':
+      if list_criteria[idx] != None:  
+        if check_unused_criteria(idx):
+          res = choose_yes_no("Delete %s"%(expr))
+          if res == 'yes':
+            criteria_delete(idx)
+          return
+
+    if expr[0] == 'f' or expr[0] == 'F':     
+      if list_comparison[idx] != None:  
+        if check_unused_comparison(idx):
+          res = choose_yes_no("Delete %s"%(expr))
+          if res == 'yes':
+            comparison_delete(idx)
+          return
+
+    if expr[0] == 'e' or expr[0] == 'E':     
+      if list_expression[idx] != None:  
+        if check_unused_expression(idx):
+          res = choose_yes_no("Delete %s"%(expr))
+          if res == 'yes':
+            expression_delete(idx)
+          return
+  except:
+    pass
+  error("Unexpected expression")
+  return
+#___________________________________________________
+def check_expression(expr):
+  expr = expr.replace("[","")
+  expr = expr.replace("]","")
+  expr = expr.replace("(","")
+  expr = expr.replace(")","")
+  expr = expr.replace("{","")
+  expr = expr.replace("}","")
+  expr = expr.replace("and","")
+  expr = expr.replace("or","")
+  expr = expr.replace("not","")
+  idx = int(0)
+  for c in list_criteria: 
+    if c != None: 
+      expr = expr.replace("c%2.2d"%(idx),"")
+      expr = expr.replace("C%2.2d"%(idx),"")
+    idx += int(1)  
+  idx = int(0)
+  for c in list_comparison: 
+    if c != None: 
+      expr = expr.replace("f%2.2d"%(idx),"")
+      expr = expr.replace("F%2.2d"%(idx),"")
+    idx += int(1)  
+  idx = int(0)
+  for c in list_expression: 
+    if c != None: 
+      expr = expr.replace("e%2.2d"%(idx),"")
+      expr = expr.replace("E%2.2d"%(idx),"")
+    idx += int(1)  
+  final = expr.replace(" ","")
+  
+  if final == "": return True
+  
+  temporary("    Expression does not look correct "+RED+"%s"%(expr)+NORMAL)
+  choice = choose_no_yes("Do you really validate this expression")
+  if choice == 'yes':
+    return True
+  return False    
+     
+#___________________________________________________
+# Define a complex condition from defined elementary condition
+def Define_a_complex_condition_from_the_defined_elementary_conditions():
+
+  temporary(""  )
+  temporary(tool_style("  Combine the defined elementary conditions and/or complex expressions using") )
+  temporary("  and, or, not, ], [" + tool_style(" to build a complex condition."))
+  temporary(tool_style("     e.g:  C00 and not F00"))
+  temporary(tool_style("           not[C00 or C01] and F00"))
+  temporary(tool_style("           [[C00 or C01] and [F00 or not F01]] or [ F02 and C02 ]"))
+  temporary(tool_style("           E00 and not E01"))
+  list_elementary_conditions()
+  list_defined_expressions()
+  temporary(""  )
+
+  expr = read_user_data("Enter your expression")
+  if expr == "" or expr == None:
+    return
+
+  if check_expression(expr) != True: return
+  
+  if not expr in list_expression:
+    expression_class(expr,idx=None)
+#___________________________________________________
+# Save defined conditions and expresions
+def save_config():
+  global target
+
+  save_stdout = sys.stdout
+  try:
+    F = "%s/.rozo_scan_helper.%s"%(expanduser("~"),target)
+    sys.stdout = open(F,"w")
+
+    idx = int(0)
+    for crit in list_criteria:
+      if crit != None:
+        print "CRITERIA#%d#%s#%s"%(idx, crit.criteria[0], crit.value)
+      idx += int(1)  
+
+    idx = int(0)
+    for comp in list_comparison:
+      if comp != None:
+        if comp.value2 == None:
+          print "COMPARISON#%d#%s#%s#%s#%s"%(idx,comp.field[0],comp.ope_user, comp.ope_rozo,comp.value1)
+        else:
+          if comp.ope_rozo == "between":
+            print "BETWEEN#%d#%s#%s#%s#%s#%s"%(idx,comp.field[0],comp.ope_user,comp.ope_rozo, comp.value1, comp.value2)
+          else:
+            print "RANGE#%d#%s#%s#%s#%s#%s"%(idx,comp.field[0],comp.value2,comp.ope_user,comp.ope_rozo, comp.value1)
+      idx += int(1)  
+
+    idx = int(0)
+    for expr in list_expression:
+      if expr != None:
+        print "EXPRESSION#%d#%s"%(idx,expr)
+      idx += int(1)  
+
+    if custom_display != None:
+      print "DISPLAY#%s"%(custom_display)
+
+    sys.stdout.close()
+  except:
+    pass
+
+  sys.stdout = save_stdout
+#___________________________________________________
+# Reload saved conditions and expressions
+def reload_config():
+  global target
+  global custom_display
+
+
+  F = "%s/.rozo_scan_helper.%s"%(expanduser("~"),target)
+  if not os.path.exists(F): return
+
+  print "    " + tool_style("reload %s"%(F))
+  FD = open(F,"r")
+
+  for line in FD.readlines():
+
+    word = line.rstrip().split('#')
+    try:
+      idx  = int(word[1])
+    except:
+      continue
+  
+    if word[0] == "CRITERIA":
+      criteria = get_criteria(word[2])
+      if criteria == None:
+        print "Unexpected criteria : %s"%(line)
+        continue
+      value    = word[3]
+      criteria_class(criteria, value, idx=idx)
+      continue
+
+    if word[0] == "COMPARISON":
+      comparison = get_comparison(word[2])
+      if comparison == None:
+        print "Unexpected comparison : %s"%(line)
+        continue
+      ope_user = word[3]
+      ope_rozo = word[4]
+      value    = word[5]
+      comparison_class(comparison,ope_user, ope_rozo, value, None,idx=idx)
+      continue
+
+    if word[0] == "BETWEEN":
+      comparison = get_comparison(word[2])
+      if comparison == None:
+        print "Unexpected comparison : %s"%(line)
+        continue
+      ope_user = word[3]
+      ope_rozo = word[4]
+      value1   = word[5]
+      value2   = word[6]
+      comparison_class(comparison,ope_user, ope_rozo, value1, value2,idx=idx)
+      continue
+
+    if word[0] == "RANGE":
+      comparison = get_comparison(word[2])
+      if comparison == None:
+        print "Unexpected comparison : %s"%(line)
+        continue
+      value2   = word[3]
+      ope_user = word[4]
+      ope_rozo = word[5]
+      value1   = word[6]
+      comparison_class(comparison,ope_user, ope_rozo, value1, value2,idx=idx)
+      continue
+
+    if word[0] == "EXPRESSION":
+      expression_class(word[2],idx=idx)
+      continue
+
+    if word[0] == "DISPLAY":
+      custom_display = word[1]
+      print "    " + user_style("DISPLAY:%s"%(custom_display))
+      continue
+
+
+#___________________________________________________
+#
+# Choose something to execute
+#
+def choose_execution():
+  temporary(" ")
+  temporary(" ")
+  temporary(tool_style("  Choose an expression to execute."))
+
+  idx = int(0)
+  for c in list_criteria:
+    if c != None:
+      c = get_user_criteria(idx).split("~~")
+      temporary("    " + choice_style(" %4s")%(c[0]) +" %s"%(c[1]))
+    idx += int(1)
+
+  idx = int(0)
+  for c in list_comparison:
+    if c != None:
+      c = get_user_comparison(idx).split("~~")
+      temporary("    " + choice_style(" %4s")%(c[0]) +" %s"%(c[1]))
+    idx += int(1)
+
+  idx = int(0)
+  for c in list_expression:
+    if c != None:
+      c = get_user_expression(idx).split("~~")
+      temporary("    " + choice_style(" %4s")%(c[0]) +" %s"%(c[1]))
+    idx += int(1)
+
+  winer = read_user_data(tool_style("Choice"),None)
+  return winer  
+#___________________________________________________
+# Execute a defined expression
+def menu_execute():
+  LIST = []
+
+  expr = choose_execution()
+  if expr == None: return
+  expr = expr.strip()
+  if expr == "": return
+
+  execute_an_expression(expr)         
+
+#___________________________________________________
+# Define a cpmlex condition from defined elementary condition
+def execute_an_expression(expression):
+
+  expr = expression
+  expr = re.sub("\(", "[", expr)
+  expr = re.sub("\)", "]", expr)
+
+  goOn = True
+  while goOn:
+    goOn = False
+    idx = int(0)
+    for c in list_expression:
+      if c != None:
+        e = "[ %s ]"%(list_expression[idx])
+        before = expr
+        expr = re.sub("e%2.2d"%(idx), e, expr)
+        expr = re.sub("E%2.2d"%(idx), e, expr)
+        if before != expr: goOn = True
+      idx += int(1)
+
+  idx = len(list_comparison)
+  while idx > int(0):
+    idx -= int(1)
+    comp = list_comparison[idx]
+    if comp == None: continue
+    if comp.value2 == None:
+      comparison = "[ %s %s %s ]"%(comp.field[1],comp.ope_rozo, comp.value1)
+    else:
+      if comp.ope_user == "between":
+        comparison = "[ %s ge %s and %s le %s]"%(comp.field[1],comp.value1,comp.field[1], comp.value2)
+      elif comp.ope_user == "strictly between":
+        comparison = "[ %s gt %s and %s lt %s]"%(comp.field[1],comp.value1,comp.field[1], comp.value2)
+      else:
+        comparison = "[ %s %s %s %s ]"%(comp.field[1],comp.value2,comp.ope_rozo, comp.value1)
+    expr = re.sub("f%2.2d"%(idx), comparison, expr)
+    expr = re.sub("F%2.2d"%(idx), comparison, expr)
+
+  idx = len(list_criteria)
+  while idx > int(0) :
+    idx -= int(1)
+    crit = list_criteria[idx]
+    if crit == None: continue
+    if crit.value == 'yes':
+      val = "%s"%(crit.criteria[1])
+    else:
+      val = "not %s"%(crit.criteria[1])
+    expr = re.sub("c%2.2d"%(idx), " %s "%(val), expr)
+    expr = re.sub("C%2.2d"%(idx), " %s "%(val), expr)
+    
+  display_and_execute_expression(expr,expression)
+#___________________________________________________
+# Display attributes from a FID
+def scan_just_one_fid():
+  global CMD_BASE
+  while True:
+
+    CMD_BASE = "rozo_scan eid 0 "
+    fid = read_user_data("Enter the FID to match")
+
+    if fid == None:
+      sys.exit(0)
+
+    if is_valid_uuid(fid) == False:
+      error("Invalid FID %s"%(fid))
+      continue
+
+    expr = "fid=%s"%(fid)
+    display_and_execute_expression(expr,expr)
+#___________________________________________________
+# 
+def choice_style(msg):
+  return REVERSE + BOLD + CYAN + msg + NORMAL
+#___________________________________________________
+# Make a string green
+def default_style(msg):
+  return BOLD + GREEN + msg + NORMAL
+#___________________________________________________
+# Make a string yellow
+def user_style(msg):
+  return YELLOW + msg + NORMAL
+#___________________________________________________
+# Make a string italic
+def tool_style(msg):
+  BEG = ""
+  for letter in msg:
+    if letter == ' ': BEG += ' '
+    else: break
+
+  return BEG + LIGHTCYAN + ITALIC + msg[len(BEG):] + NORMAL
+#___________________________________________________
+# Print an error message in red
+def error(msg):
+  temporary(RED + msg + NORMAL)
+  time.sleep(2)
+#___________________________________________________
+# Get a user input
+def read_user_data(msg,default=None):
+  global nb_lines
+
+  try:
+    value = raw_input(tool_style("    %s : "%(msg))).strip()
+    nb_lines += int(1)
+    if value == "" or value == None:
+      if default != None : return default
+      return None
+    return value
+  except:
+    print CLEAR_LINE
+    return None
+
+#___________________________________________________
+# Get a user input
+def temporary(txt):
+  global nb_lines
+  print txt
+#  print "%2.2d %s"%(nb_lines,txt)
+  nb_lines += int(1)
+#___________________________________________________
+# Get a user input
+def permanent(txt):
+  clear_all()
+  print txt
+
+#___________________________________________________
+# Get a user input
+def clear_all():
+  global nb_lines
+  while int(nb_lines) > int(0):
+    sys.stdout.write("\033[F")
+    sys.stdout.write("\033[K")
+    nb_lines = nb_lines -1
+  sys.stdout.flush()
+#___________________________________________________
+def put_line():
+  permanent ("  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" )
+#__________________________________________________
+#
+#                    M A I N
+#
+#__________________________________________________
+#
+
+#
+# Need to be root
+if os.geteuid() != 0:
+  print RED + "You need to have root privileges." + NORMAL
+  sys.exit(1)
+
+# To name the successive result file under /tmp/rozo_scan_helper dir
+exec_count  = int(0)
+# Default choice for expression execution output
+last_choice = "result on screen"
+# Default  custom display
+custom_display = None
+
+nb_lines = int(0)
+
+if len(sys.argv) > int(1):
+  if sys.argv[1] == "nocolor":
+    ITALIC = ""
+    YELLOW = ""
+    LIGHTCYAN = ""
+    CYAN   = ""
+    
+
+#permanent(RESET)
+permanent( tool_style("  rozo_scan_helper is an interactive tool to help writing a rozo_scan expression."))
+permanent( tool_style("  You will have to 1rst define simple conditions on file/directory/symlink attributes."))
+permanent( tool_style("  Then if you like, you can combine these simple conditions into a complex expression"))
+permanent( tool_style("  thanks to") + " and/or/not " + tool_style("operators and") + " [] " + tool_style("separators."))
+permanent( tool_style("  You can then execute either the defined simple condition or complex expressions."))
+permanent(" ")
+permanent( tool_style("  In the menus, defaul values are displayed in " + default_style("green.")))
+permanent(" ")
+permanent(" ")
+#
+# List every mountpoint and ask which one to scan
+#
+list = get_rozofs_mount_point_list()
+# Add in the menu the capability to scan for just a FID
+list.append('Scan just one FID')
+# Check whether local path is a RozoFS mount point
+# in this case it will be the default choice
+default = get_rozofs_local_mount_point(os.getcwd())
+if default == None:
+  # This is not a mountpoint. Default choice will be the 1rst in list                                                            e
+  default = list[0]
+mnt  = choose_numbered_list("Choose a RozoFS mount point or scan just one FID", list, default)
+clear_all()
+if mnt == None: sys.exit(1)
+if mnt == "Scan just one FID": scan_just_one_fid()
+# Retrieve the eid value
+eid  = get_rozofs_mount_point_eid(mnt)
+permanent("    " + user_style(mnt))
+#
+# What target to scan for
+#
+target = choose_numbered_list("What kind of object do you want to scan",['file','directory', 'symlink'], 'file')
+permanent("    " + user_style(target))
+permanent(" ")
+if target == None: sys.exit(1)
+if target == "file":
+  CMD_BASE = "rozo_scan eid %s"%(eid)
+elif target == "directory":
+  CMD_BASE = "rozo_scan eid %s dir"%(eid)
+elif target == "symlink":
+  CMD_BASE = "rozo_scan eid %s slink"%(eid)
+else:
+  error( "Unexpected target")
+  sys.exit(1)
+
+reload_config()
+put_line()
+#
+# Main menu
+#
+action = 'Define an elementary condition'
+while True :
+
+  clear_all()
+  save_config()
+  list_elementary_conditions()
+  list_defined_expressions()
+
+  menu = ['Define an elementary condition']
+  # Add complex expression if elementary conditions exist
+  if elementary_conditions_exist() == True:
+    menu.append('Define a complex condition from the defined elementary conditions')
+    menu.append('Execute')
+    menu.append('Delete')
+    menu.append('Exit')
+  else:
+    action = 'Define an elementary condition'
+  action = choose_numbered_list("Menu ", menu, action)
+  clear_all()
+
+  if action == "Define an elementary condition":
+    Define_an_elementary_condition()
+  elif action == "Define a complex condition from the defined elementary conditions":
+    Define_a_complex_condition_from_the_defined_elementary_conditions()
+  elif action == "Execute":
+    menu_execute()
+  elif action == "Delete":
+    menu_delete()
+  else:
+    sys.exit(1)
+
+
+sys.exit(1)
