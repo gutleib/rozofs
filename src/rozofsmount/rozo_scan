@@ -284,5 +284,5 @@ esac
 #__________________________________________
 # Forward the command to the active axportd
 #
-ssh ${active} "${SCAN} ${verbose} ${eid} ${parameters} "
+ssh -q ${active} "${SCAN} ${verbose} ${eid} ${parameters} "
 exit $?
