@@ -54,6 +54,7 @@ typedef enum _rozofs_alignment_e {
 #define ROZOFS_COLOR_REVERSE    "\033[7m"
 #define ROZOFS_COLOR_UNDERSCORE "\033[4m"
 #define ROZOFS_COLOR_NONE       "\033[0m"
+#define ROZOFS_COLOR_ITALIC     "\033[3m"
 
 static char * ROZOFS_COLOR_LIST[] = {
   ROZOFS_COLOR_CYAN,
@@ -1624,14 +1625,15 @@ out:
 */
 
 
-#define rozofs_add_mode_right(right, letter)\
-  if ((mode & right) == right) *pChar = letter;\
-  else                         *pChar = '-';\
+#define rozofs_add_mode_right(right, letterYes, letterNo)\
+  if ((mode & right) == right) *pChar = letterYes;\
+  else                         *pChar = letterNo;\
   pChar++;
   
 static inline int rozofs_mode2String(char * buffer, int mode) {
   char * pChar = buffer;
   
+  mode &= (S_IFMT + S_ISUID + S_ISGID + S_ISVTX + S_IRWXU + S_IRWXG + S_IRWXO);
   // Put octal value
   pChar += sprintf(pChar, "0%o ",mode); 
   
@@ -1646,18 +1648,54 @@ static inline int rozofs_mode2String(char * buffer, int mode) {
 
   // Display rigths
   
-  rozofs_add_mode_right(S_IRUSR,'r');
-  rozofs_add_mode_right(S_IWUSR,'w');
-  rozofs_add_mode_right(S_IXUSR,'x');
-
-  rozofs_add_mode_right(S_IRGRP,'r');
-  rozofs_add_mode_right(S_IRGRP,'w');
-  rozofs_add_mode_right(S_IXGRP,'x');
-
-  rozofs_add_mode_right(S_IROTH,'r');
-  rozofs_add_mode_right(S_IWOTH,'w');
-  rozofs_add_mode_right(S_IXOTH,'x');
+  /*
+  ** OWNER
+  */
   
+  rozofs_add_mode_right(S_IRUSR,'r','-');
+  rozofs_add_mode_right(S_IWUSR,'w','-');
+  /*
+  ** Check for set uid bit
+  */
+  if (mode & S_ISUID) {
+    rozofs_add_mode_right(S_IXUSR,'s','S');     
+  }
+  else {  
+    rozofs_add_mode_right(S_IXUSR,'x','-');
+  }
+  
+  /*
+  ** GROUP
+  */
+  
+  rozofs_add_mode_right(S_IRGRP,'r','-');
+  rozofs_add_mode_right(S_IRGRP,'w','-');
+  /*
+  ** Check for setb gid bit
+  */
+  if (mode & S_ISGID) {
+    rozofs_add_mode_right(S_IXGRP,'s','S');     
+  }
+  else {  
+    rozofs_add_mode_right(S_IXGRP,'x','-');
+  }
+  
+  /*
+  ** OTHER
+  */
+  
+  rozofs_add_mode_right(S_IROTH,'r','-');
+  rozofs_add_mode_right(S_IWOTH,'w','-');
+  /*
+  ** Check for sticky bit
+  */
+  if (mode & S_ISVTX) {
+    rozofs_add_mode_right(S_IXOTH,'t','T');     
+  }
+  else {  
+    rozofs_add_mode_right(S_IXOTH,'x','-');
+  } 
+  *pChar = 0; 
   return (pChar-buffer);
 }
 #ifdef __cplusplus

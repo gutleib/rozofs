@@ -49,6 +49,11 @@ struct dentry    xattr_entry;
 fid_t            this_fid = {0};
 int              just_this_fid = 0;
 
+/*
+** Bioolean to know that a "not" has just been encountered while parsing 
+** the rozo_scan expression.
+*/
+int next_node_is_not = 0;
 
 /*____________________________________________________________
 ** Global variables for argument populated while parsing command
@@ -129,7 +134,12 @@ typedef enum _rozofs_scan_keyw_e {
   rozofs_scan_keyw_criteria_is_not_hybrid,
   rozofs_scan_keyw_criteria_is_aging,
   rozofs_scan_keyw_criteria_is_not_aging,
-  
+  rozofs_scan_keyw_criteria_sgid,
+  rozofs_scan_keyw_criteria_suid,
+  rozofs_scan_keyw_criteria_sticky,
+  rozofs_scan_keyw_criteria_pflock,
+  rozofs_scan_keyw_criteria_vfast,  
+  rozofs_scan_keyw_criteria_vslow,  
   rozofs_scan_keyw_criteria_max,
 
 
@@ -153,6 +163,8 @@ typedef enum _rozofs_scan_keyw_e {
   rozofs_scan_keyw_field_children,
   rozofs_scan_keyw_field_project,
   rozofs_scan_keyw_field_parent,  
+  rozofs_scan_keyw_field_pdname,  
+  rozofs_scan_keyw_field_lname,  
   rozofs_scan_keyw_field_cid,  
   rozofs_scan_keyw_field_sid,  
   rozofs_scan_keyw_field_sidrange,  
@@ -182,6 +194,7 @@ typedef enum _rozofs_scan_keyw_e {
   
   rozofs_scan_keyw_operator_or,    // or
   rozofs_scan_keyw_operator_and,   // and
+  rozofs_scan_keyw_operator_not,   // not
 
   
   rozofs_scan_keyw_option_skipdate,  
@@ -291,6 +304,7 @@ int display_all = 0;
 int display_json = 0;
 int display_error = 0;
 int display_striping = 0;
+int display_pflock = 0;
 int display_stat = 0;
 int first_entry = 1;
 #define DO_DISPLAY           1
@@ -374,6 +388,7 @@ int first_array_element = 1;
     pDisplay += rozofs_string_append(pDisplay," "#field"=\"");\
   } \
 }
+
 #define START_SUBARRAY(field) {\
   first_array_element = 1;\
   if (display_json) {\
@@ -486,6 +501,7 @@ typedef struct _rozofs_scan_node_param_t {
 
 typedef struct _rozofs_scan_node_t {
   rozofs_scan_type_e               type;
+  int                              not; // negate this node result
   union {
     rozofs_scan_node_param_t       n;
     rozofs_scan_leaf_param_t       l;
@@ -500,11 +516,23 @@ int                  rozofs_scan_node_counter = 0;
 ** The upper node. The one that will be evaluate
 */
 rozofs_scan_node_t * upNode  = NULL;
-
+/*
+**_____________________________________________________
+** Check whether inode has extended attributes
+*/
 static inline int rozo_scan_has_extended_attr(ext_mattr_t * inode_p) {
   if ((inode_p->s.i_state == 0)&&(inode_p->s.i_file_acl == 0)) return 0;
   return 1;
 }
+/*
+**_____________________________________________________
+* Check whether inode is on slow or fast volume
+*/
+static inline int rozo_scan_is_fast_volume(ext_mattr_t * inode_p) {
+  rozofs_mover_children_t *children_p = (rozofs_mover_children_t*) &inode_p->s.attrs.children;
+  return children_p->fid_st_idx.vid_fast;
+}  
+ 
 /*
 **_____________________________________________________
 ** Prototype of criteria and field evaluation functions
@@ -581,7 +609,19 @@ rozofs_scan_node_t * rozofs_scan_pop_node () {
   rozofs_scan_node_stack_count--;   
   return nodeStack[rozofs_scan_node_stack_count];
 }  
-                 
+/*
+**_______________________________________________________________________
+** Get indication that a node is pending for next node
+**
+**_______________________________________________________________________
+*/
+int rozofs_get_next_node_is_not () {
+  if (next_node_is_not) {
+    next_node_is_not = 0;
+    return 1;
+  }
+  return 0;
+}                   
 /*
 **_______________________________________________________________________
 ** Display syntax and examples
@@ -589,6 +629,23 @@ rozofs_scan_node_t * rozofs_scan_pop_node () {
 ** and exit
 **_______________________________________________________________________
 */
+static inline void example(char * txt) {
+  printf("  "ROZOFS_COLOR_LIGHTCYAN""ROZOFS_COLOR_ITALIC"%s"ROZOFS_COLOR_NONE"\n",txt);
+}
+static inline void title(char * txt1, char * txt2) {
+  printf(""ROZOFS_COLOR_BOLD""ROZOFS_COLOR_UNDERSCORE"%s:"ROZOFS_COLOR_NONE"",txt1);
+  if (txt2 != NULL) printf(ROZOFS_COLOR_BOLD"\t%s"ROZOFS_COLOR_NONE"\n",txt2);
+  else printf("\n");
+}
+static inline void option_line(char * name, char * txt) {
+  printf("\t"ROZOFS_COLOR_LIGHTCYAN"%-20s"ROZOFS_COLOR_NONE"%s\n",name, txt);
+}
+static inline void option_subline(char * txt) {
+  printf("\t""%-20s%s\n"," ", txt);
+}
+static inline void man_line(char * txt) {
+  printf("\t%s\n", txt);
+}
 static void usage(char * fmt, ...) {
   va_list   args;
   char      error_buffer[512];
@@ -605,171 +662,186 @@ static void usage(char * fmt, ...) {
   }
 
   printf("\n"ROZOFS_COLOR_BOLD"RozoFS File system scanning utility - %s"ROZOFS_COLOR_NONE"\n", VERSION);
-  printf("This RozoFS utility displays some attributes of one file/directory known by its FID,\nor scans for files or (exclusive) directories matching several conditions in a RozoFS file system.\nIt by-passes the POSIX interface, and directly accesses the meta-data.\n");
-  printf("\n\033[1m\033[4mUSAGE:\033[0m\033[1m\trozo_scan fid=<FID> [OUTPUT]\n");
-  printf("\tor\n");
-  printf("\trozo_scan [SCOPE] [FILESYSTEM] [OPTIONS] [CONDITION] [OUTPUT]\033[0m\n\n");
-  printf("\033[1m\033[4mSCOPE:\033[0m\033[1m\t{dir|slink|junk}\033[0m\n");
-  printf("\tWhen SCOPE is omitted only the regular files are scanned.\n");
-  printf("\t\033[1md, dir\033[0m\t\tScan directories only.\n");
-  printf("\t\033[1mS, slink\033[0m\tScan symbolic links only.\n");
-  printf("\t\033[1mj, junk\033[0m\t\tScan junk files currently in the process of data deletion. All meta-data are\n");
-  printf("\t\t\talready deleted except fid, size, cid, sid.\n");
-  printf("\033[1m\033[4mFILESYSTEM:\033[0m\n");
-  printf("\tThe \033[1mFILESYSTEM\033[0m can be omitted when the current path is the RozoFS mountpoint to scan.\n");
-  printf("\tElse the targeted RozoFS file system must be provided thanks to its eid value.\n");
-  printf("\t\033[1me, eid <eid#> [config <cfg file name>]\033[0m   Export identifier and optionally its configuration file.\n");
-  printf("\033[1m\033[4mOPTIONS:\033[0m\n");
-  printf("\t\033[1mh, help\033[0m\t\tPrint this message along with examples and exit.\n");
-  printf("\t\033[1mv, verbose\033[0m\tPrint input parsing information.\n");
-  printf("\t\033[1mvv, vverbose\033[0m\tPrint input parsing information and scanning execution.\n");
-  printf("\t\033[1mskipdate\033[0m\tSkip tracking files which creation/modification date tells they can not contain files/directory matching\n");
-  printf("\t\t\tthe input scan date criteria. This speeds the scan, but unfortunatly does not work for files imported with tools\n");
-  printf("\t\t\tsuch as rsync, since their creation/modification dates are not related to their importation date under RozoFS.\n");
-  printf("\t\t\tThey may be sometimes no correlation between the tracking file dates and the file creation/modification dates.\n");
-  printf("\033[1m\033[4mCONDITION:\033[0m\n");
-  printf("\tThe \033[1mCONDITION\033[0m is a set of elementary statements combined together thanks to and/or operators,\n");
-  printf("\tthat files/directories have to match . Brackets should be used to unambiguously express the \033[1mCONDITION\033[0m.\n");
-  printf("\t\033[1m[, {, \\(\033[0m\tOpen brackets.\n");
-  printf("\t\033[1m], }, \\)\033[0m\tClose brackets.\n");
-  printf("\t\033[1mand\033[0m\t\tAnd operator.\n");
-  printf("\t\033[1mor\033[0m\t\tOr operator.\n");
-  printf("\tAn elementary statement is either a \033[1mCRITERIA\033[0m or a \033[1mFIELD\033[0m comparison the file/directory has to match\n");
-  printf("\033[1m  \033[4mCRITERIA:\033[0m\n");
-  printf("\t\033[1mxattr\033[0m\t\tFile/directory must have extended attribute.\n");
-  printf("\t\033[1mnoxattr\033[0m\t\tFile/directory must not have extended attribute.\n");    
-  printf("\t\033[1mt, trash\033[0m\tFile/directory must be in the trash (deleted but not yet junked).\n");
-  printf("\t\033[1mT, notrash\033[0m\tFile/directory must not be in the trash.\n");
-  printf("\t\033[1mw, wrerror\033[0m\tFile has registered a write error.\n");
-  printf("\t\033[1mUx, Uw, Ur\033[0m\tFile/directory owner user has executable, write, read priviledge.\n");
-  printf("\t\033[1mUnx, Unw, Unr\033[0m\tFile/directory owner user has NOT executable, write, read priviledge.\n");
-  printf("\t\033[1mGx, Gw, Gr\033[0m\tFile/directory owner group has executable, write, read priviledge.\n");
-  printf("\t\033[1mGnx, Gnw, Gnr\033[0m\tFile/directory owner group has NOT executable, write, read priviledge.\n");
-  printf("\t\033[1mOx, Ow, Or\033[0m\tOther users have executable, write, read priviledge.\n");
-  printf("\t\033[1mOnx, Onw, Onr\033[0m\tOther users have NOT executable, write, read priviledge.\n");
-  printf("\t\033[1mhybrid\033[0m\t\tFile/directory is hybrid.\n");
-  printf("\t\033[1maging\033[0m\tFile/directory is in agging mode.\n");
-  printf("\t\033[1mnoaging\033[0m\t\tFile/directory is not in aging mode.\n");
-  printf("\t\033[1mnohybrid\033[0m\tFile/directory is NOT hybrid.\n");
-  printf("\033[1m  \033[4mFIELD:\033[0m\033[1m <FIELDNAME> <COMPARATOR> <VALUE>\033[0m\n");
-  printf("\033[1m    \033[4mVALUE:\033[0m\n");              
-  printf("\t\033[1m1 unsigned 64 bit\033[0m It can be expressed in 1000 or 1024 units: 8 [8], 1k [1000], 4K [4096], 9M [9663676416]\n");
-  printf("\t\033[1m2 unsigned 32 bit\033[0m In the format <cid#>/<sid#>.\n");
-  printf("\t\033[1mcharacter string\033[0m  A file/directory name, a regex, ...\n");
-  printf("\t\033[1mfid\033[0m\t\t  In UUID format.\n");
-  printf("\t\033[1mdate\033[0m\t\t  Dates must be expressed in one of the following format:\n");
-  printf("\t\t\t   - YYYY-MM-DD\n\t\t\t   - YYYY-MM-DD-HH\n\t\t\t   - YYYY-MM-DD-HH:MM\n\t\t\t   - YYYY-MM-DD-HH:MM:SS\n");
-  printf("\t\t\t or just in seconds from the EPOC.\n");
-  printf("\033[1m    \033[4mCOMPARATOR:\033[0m\n");              
-  printf("\t\033[1mlt, \\<\033[0m\t\t<FIELDNAME> must be lower than <VALUE>.\n");
-  printf("\t\033[1mle, \\<=\033[0m\t\t<FIELDNAME> must be lower or equal to <VALUE>.\n");
-  printf("\t\033[1meq, =\033[0m\t\t<FIELDNAME> must be equal to <VALUE>.\n");
-  printf("\t\033[1mge, \\>=\033[0m\t\t<FIELDNAME> must be bigger or equal to <VALUE>.\n");
-  printf("\t\033[1mgt, \\>\033[0m\t\t<FIELDNAME> must be bigger than <VALUE>.\n");
-  printf("\t\033[1mne, !=\033[0m\t\t<FIELDNAME> must be different from <VALUE>.\n");
-  printf("\t\033[1mregex\033[0m\t\t<FIELDNAME> must match PCRE regex <VALUE>. Regex MUST be quoted and a space MUST be set after the last quote.\n");
-  printf("\033[1m    \033[4mFIELDNAME:\033[0m\033[1m supporting \"=\" or \"!=\" comparators with unsigned 64 bit VALUE\033[0m\n");
-  printf("\t\033[1mproject\033[0m\t\tFile/directory project identifier.\n"); 
-  printf("\t\033[1mg, gid\033[0m\t\tFile/directory group identifier.\n"); 
-  printf("\t\033[1mu, uid\033[0m\t\tFile/directory user identifier.\n"); 
-  printf("\t\033[1mcid\033[0m\t\tFile cluster identifier of any sub-file.\n"); 
-  printf("\033[1m    \033[4mFIELDNAME:\033[0m\033[1m supporting \"=\" or \"!=\" comparators with 2 unsigned 32 bit VALUE\033[0m\n");
-  printf("\t\033[1msid\033[0m\t\tLogical storage identifiers of any sub-file (<cid#>/<sid#>).\n"); 
-  printf("\t\033[1msidrange[x:y]\033[0m\tLogical storages identifiers within rank [x..y] of the distribution of any sub-file.\n"); 
-  printf("\033[1m    \033[4mFIELDNAME:\033[0m\033[1m supporting \"=\", \"\\>=\" or regex comparators with character string VALUE\033[0m\n");
-  printf("\t\033[1mn, name\033[0m\t\tFile/directory name.\n");
-  printf("\t\033[1mparent\033[0m\t\tFile/directory parent name.\n");
-  printf("\t\033[1xname\033[0m\t\textended attribute name.\n");
-  printf("\033[1m    \033[4mFIELDNAME:\033[0m\033[1m supporting  \"\\<\", \"\\<=\", \"=\", \"\\>\", \"\\>=\" or \"!=\" comparators.\033[0m\n");
-  printf("\033[1m      \033[4mwith unsigned VALUE\033[0m\n");
-  printf("\t\033[1mlink\033[0m\t\tFile number of links.\n"); 
-  printf("\t\033[1ms, size\033[0m\t\tFile/directory size.\n"); 
-  printf("\t\033[1mchildren\033[0m\tDirectory number of children.\n"); 
-  printf("\t\033[1mdeleted\033[0m\t\tDirectory number of deleted inode in the trash.\n"); 
-  printf("\t\033[1mslave\033[0m\t\tFile/directory number of slave inodes in multifile mode.\n");
-  printf("\033[1m      \033[4mwith date VALUE\033[0m\n");
-  printf("\t\033[1mcr8\033[0m\t\tFile/directory creation date.\n");
-  printf("\t\033[1mmtime\033[0m\t\tFile/directory modification date.\n"); 
-  printf("\t\033[1mctime\033[0m\t\tFile/directory change date.\n"); 
-  printf("\t\033[1matime\033[0m\t\tFile/directory access date.\n"); 
-  printf("\t\033[1mupdate\033[0m\t\tDirectory update date.\n"); 
-  printf("\033[1m    \033[4mFIELDNAME:\033[0m\033[1m supporting  only \"=\" comparator.\033[0m\n");
-  printf("\t\033[1mpfid\033[0m\t\tParent FID (value is a UUID).\n");
-  printf("\033[1m\033[4mOUTPUT:\033[0m\n");              
-  printf("\t\033[1mout <f1,f2...>\033[0m\tDescribes requested output fields with ',' and no ' '.\n");
-  printf("\t\t\t\tDefault is to have one file/directory path per line.\n");
-  printf("\t\033[1mline<val>\033[0m\t\tDisplay <val> file/directory per line.\n");
-  printf("\t\033[1mjson\033[0m\t\t\toutput is in json format.\n");
-  printf("\t\033[1malls|allh\033[0m\t\tdisplay every field except extended attributes (\033[1mxattr\033[0m option).\n");
-  printf("\t\t\t\t\tdates are expressed in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
-  printf("\t\033[1m<full|rel|fid>\033[0m\t\tDisplay <full names|relative names|fid>.\n");
-  printf("\t\033[1msize\033[0m\t\t\tdisplay file/directory size.\n");
-  printf("\t\033[1mproject\033[0m\t\t\tdisplay project identifier.\n");
-  printf("\t\033[1mchildren\033[0m\t\tdisplay directory number of children.\n");
-  printf("\t\033[1mdeleted\033[0m\t\t\tdisplay directory number of deleted children.\n");
-  printf("\t\033[1mnlink\033[0m\t\t\tdisplay file number of link.\n");
-  printf("\t\033[1muid\033[0m\t\t\tdisplay uid.\n");
-  printf("\t\033[1mgid\033[0m\t\t\tdisplay gid.\n");
-  printf("\t\033[1mscr8|hcr8\033[0m\t\tdisplay creation time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
-  printf("\t\033[1msmtime|hmtime\033[0m\t\tdisplay modification time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
-  printf("\t\033[1msctime|hctime\033[0m\t\tdisplay change time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
-  printf("\t\033[1msupdate|hupdate\033[0m\t\tdisplay update directory time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
-  printf("\t\033[1msatime|hatime\033[0m\t\tdisplay access time in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
-  printf("\t\033[1mstime|htime\033[0m\t\tdisplay every date attribute in \033[7ms\033[0meconds or \033[7mh\033[0muman readable date.\n");
-  printf("\t\033[1mpriv\033[0m\t\t \tdisplay Linux privileges.\n");
-  printf("\t\033[1mxattr\033[0m\t\t \tdisplay extended attributes names and values.\n");
-  printf("\t\t\t\t\t\033[1mall\033[0m or \033[1mallh\033[0m do not display extended attributes.\n");
-  printf("\t\033[1mdistrib\033[0m\t\t\tdisplay RozoFS distribution.\n");
-  printf("\t\033[1mtrash\033[0m\t\t\tdisplay directory trash configuration.\n");
-  printf("\t\033[1mid\033[0m\t\t\tdisplay RozoFS FID.\n");
-  printf("\t\033[1merror\033[0m\t\t\tdisplay file write error detected.\n");
-  printf("\t\033[1mstrip\033[0m\t\t\tdisplay file striping information.\n");
-  printf("\t\033[1msep=<string>\033[0m\t\tdefines a field separator without ' '.\n");
-  printf("\t\033[1mcount<val>\033[0m\t\tStop after displaying the <val> first found entries.\n");
-  printf("\t\033[1mnone\033[0m\t\t\tJust display the count of file/dir but no file/dir information.\n");
-  printf("\t\033[1mstat\033[0m\t\t\tDisplay scanning statistic.\n");
-  printf("\n\033[4mNOTE:\033[0m\tCharacters \')\', \'(\', \'>\' and \'<\' must be escaped using \'\\' to avoid Linux interpretation.\n");
-  printf("\tRegex MUST be quoted and a space MUST be set after the last quote.\n");
-  printf("\t1k is 1000 while 1K is 1024.\n");
+  man_line("This RozoFS utility displays attributes of files/directories/symlinks in a RozoFS file system");
+  man_line("matching user defined conditions upon their attributes. It by-passes the POSIX interface,");
+  man_line("and directly accesses the meta-data providing a performant and comprehensive indexation tool.");
+  title("USAGE",NULL);
+  man_line(""ROZOFS_COLOR_BOLD"rozo_scan [SCOPE] [FILESYSTEM] [OPTIONS] [CONDITION] [OUTPUT]");
+  man_line("or");
+  man_line("rozo_scan fid=<FID> [OUTPUT]"ROZOFS_COLOR_NONE"\n");
+  title("SCOPE","{dir|slink|junk}");
+  man_line("When SCOPE is omitted only the regular files are scanned.");
+  option_line("d, dir","Scan directories only.");
+  option_line("S, slink","Scan symbolic links only.");
+  option_line("j, junk","Scan junk files currently in the process of data deletion. All meta-data are.");
+  option_subline("already deleted except fid, size, cid, sid.");
+  title("FILESYSTEM",NULL);
+  man_line("The "ROZOFS_COLOR_BOLD"FILESYSTEM"ROZOFS_COLOR_NONE" can be omitted when the current path is the RozoFS mountpoint to scan.");
+  man_line("Else the targeted RozoFS file system must be provided thanks to its eid value.");
+  option_line("e, eid <eid#> [config <cfg file name>]"," Export identifier and optionally its configuration file.");
+  title("OPTIONS",NULL);
+  option_line("h, help","Print this message along with examples and exit.");
+  option_line("v, verbose","Print input parsing information.");
+  option_line("vv, vverbose","Print input parsing information and scanning execution.");
+  option_line("skipdate","Skip tracking files which creation/modification date tells they can not contain files/directory matching");
+  option_subline("the input scan date criteria. This speeds up the scan, but unfortunatly does not work for files imported with tools");
+  option_subline("such as rsync, since their creation/modification dates are not related to their importation date under RozoFS.");
+  option_subline("They may be sometimes no correlation between the tracking file dates and the file creation/modification dates.");
+  title("CONDITION",NULL);
+  man_line("The "ROZOFS_COLOR_BOLD"CONDITION"ROZOFS_COLOR_NONE" is a set of elementary statements combined together thanks to and/or/not operators,");
+  man_line("that files/directories have to match . Brackets should be used to unambiguously express the "ROZOFS_COLOR_BOLD"CONDITION"ROZOFS_COLOR_NONE".");
+  option_line("[, {, \\(","Open brackets.");
+  option_line("], }, \\)","Close brackets.");
+  option_line("and","And operator.");
+  option_line("or","Or operator.");
+  option_line("not","Not operator.");
+  man_line("An elementary statement is either a "ROZOFS_COLOR_BOLD"CRITERIA"ROZOFS_COLOR_NONE" or a "ROZOFS_COLOR_BOLD"FIELD"ROZOFS_COLOR_NONE" comparison the file/directory has to match.");
+  printf("  "); 
+  title("CRITERIA",NULL);
+  option_line("[not] xattr","File/directory must [not] have extended attribute.");
+  option_line("[not] trash","File/directory must [not]  be in the trash (deleted but not yet junked).");
+  option_line("[not] wrerror","File has [not] registered a write error.");
+  option_line("[not] Ux, Uw, Ur","File/directory owner user has [not] executable, write, read priviledge.");
+  option_line("[not] Gx, Gw, Gr","File/directory owner group has [not] executable, write, read priviledge.");
+  option_line("[not] Ox, Ow, Or","Other users have [not] executable, write, read priviledge.");
+  option_line("[not] suid","File/directory has [not] SUID bit set.");
+  option_line("[not] sgid","File/directory has [not] SGID bit set.");
+  option_line("[not] sticky","File/directory has [not] sticky bit set.");
+  option_line("[not] hybrid","File/directory is [not] hybrid.");
+  option_line("[not] aging","Directory is [not] in agging mode.");
+  option_line("[not] pflock","File has persistent file lock set.");
+  option_line("[not] vfast","File has at least [not any] subfile under the fast volume.");
+  printf("  "); 
+  title("FIELD","<FIELDNAME> <COMPARATOR> <VALUE>");
+  printf("    "); 
+  title("VALUE",NULL);              
+  option_line("1 unsigned 64 bit","It can be expressed in 1000(lower case) or 1024(upper case) units: 8 [8], 1k [1000], 4K [4096], 9M [9663676416]");
+  option_line("2 unsigned 32 bit","In the format <cid#>/<sid#>.");
+  option_line("character string","A file/directory name, a regex, ...");
+  option_line("fid","In UUID format.");
+  option_line("date"," Dates must be expressed in one of the following format:");
+  option_subline("- YYYY-MM-DD");
+  option_subline("- YYYY-MM-DD-HH");
+  option_subline("- YYYY-MM-DD-HH:MM");
+  option_subline("- YYYY-MM-DD-HH:MM:SS");
+  option_subline("or just in seconds from the EPOC.");
+  printf("    "); 
+  title("COMPARATOR",NULL);              
+  option_line("lt","<FIELDNAME> must be lower than <VALUE>.");
+  option_line("le, \\<=","<FIELDNAME> must be lower or equal to <VALUE>.");
+  option_line("eq, =","<FIELDNAME> must be equal to <VALUE>.");
+  option_line("ge, \\>=","<FIELDNAME> must be bigger or equal to <VALUE>.");
+  option_line("gt, \\>","<FIELDNAME> must be bigger than <VALUE>.");
+  option_line("ne, !=","<FIELDNAME> must be different from <VALUE>.");
+  option_line("regex","<FIELDNAME> must match PCRE regex <VALUE>. Regex MUST be quoted and a space MUST be set after the last quote.");
+  printf("    "); 
+  title("FIELDNAME","supporting \"=\" or \"!=\" comparators with unsigned 64 bit VALUE");
+  option_line("project","File/directory project identifier."); 
+  option_line("g, gid","File/directory group identifier."); 
+  option_line("u, uid","File/directory user identifier."); 
+  option_line("cid","File cluster identifier of any sub-file.."); 
+  printf("    "); 
+  title("FIELDNAME","supporting \"=\" or \"!=\" comparators with 2 unsigned 32 bit VALUE");
+  option_line("sid","Logical storage identifiers of any sub-file (<cid#>/<sid#>)."); 
+  option_line("sidrange[x:y]","Logical storages identifiers within rank [x..y] of the distribution of any sub-file."); 
+  printf("    "); 
+  title("FIELDNAME","supporting \"=\", \"\\>=\" or regex comparators with character string VALUE");
+  option_line("n, name","Scanned file/directory name (not full path).");
+  option_line("parent","Parent directory full path name.");
+  option_line("pdname","Parent directory name (not full path).");
+  option_line("xname","extended attribute name.");
+  printf("    "); 
+  title("FIELDNAME","supporting  \"\\<\", \"\\<=\", \"=\", \"\\>\", \"\\>=\" or \"!=\" comparators.");
+  printf(""ROZOFS_COLOR_BOLD"      "ROZOFS_COLOR_UNDERSCORE"with unsigned VALUE"ROZOFS_COLOR_NONE"\n");
+  option_line("link","Number of links."); 
+  option_line("s, size","File/directory size."); 
+  option_line("children","Directory number of children."); 
+  option_line("deleted","Directory number of deleted inode in the trash."); 
+  option_line("slave","File/directory number of slave inodes in multifile mode.");
+  printf(""ROZOFS_COLOR_BOLD"      "ROZOFS_COLOR_UNDERSCORE"with date VALUE"ROZOFS_COLOR_NONE"\n");
+  option_line("cr8","File/directory creation date.");
+  option_line("mtime","File/directory modification date."); 
+  option_line("ctime","File/directory change date."); 
+  option_line("atime","File/directory access date."); 
+  option_line("update","Directory update date."); 
+  printf("    "); 
+  title("FIELDNAME","supporting  only \"=\" comparator.");
+  option_line("pfid","Parent FID (value is a UUID).");
+  title("OUTPUT",NULL);              
+  option_line("out <f1,f2...>","Describes requested output fields with ',' and no ' '.");
+  option_subline("Default output is to display one file/directory path per line.");
+  option_line("json","output is in json format with one entry per matching inode + scanning statistics at the end.");
+  option_line("line<val>","Display <val> file/directory per line when not in json output.");
+  option_line("sep=<string>","defines a field separator without ' '  when not in json output.");
+  option_line("stat","Display scanning statistic when not in json output.");
+  option_line("alls|all","display every field except extended attributes ("ROZOFS_COLOR_BOLD"xattr"ROZOFS_COLOR_NONE" option).");
+  option_subline("dates are expressed in "ROZOFS_COLOR_REVERSE"s"ROZOFS_COLOR_NONE"econds or human readable date.");
+  option_line("<full|rel|fid>","Display <full names|relative names|fid>.");
+  option_line("size","display file/directory size.");
+  option_line("project","display project identifier.");
+  option_line("children","display directory number of children.");
+  option_line("deleted","display directory number of deleted children.");
+  option_line("nlink","display the number of link.");
+  option_line("uid","display uid.");
+  option_line("gid","display gid.");
+  option_line("scr8|cr8","display creation time in "ROZOFS_COLOR_REVERSE"s"ROZOFS_COLOR_NONE"econds or human readable date.");
+  option_line("smtime|mtime","display modification time in "ROZOFS_COLOR_REVERSE"s"ROZOFS_COLOR_NONE"econds or human readable date.");
+  option_line("sctime|ctime","display change time in "ROZOFS_COLOR_REVERSE"s"ROZOFS_COLOR_NONE"econds or human readable date.");
+  option_line("supdate|update","display update directory time in "ROZOFS_COLOR_REVERSE"s"ROZOFS_COLOR_NONE"econds or human readable date.");
+  option_line("satime|atime","display access time in "ROZOFS_COLOR_REVERSE"s"ROZOFS_COLOR_NONE"econds or human readable date.");
+  option_line("stime|time","display every date attribute in "ROZOFS_COLOR_REVERSE"s"ROZOFS_COLOR_NONE"econds or human readable date.");
+  option_line("priv","display Linux privileges.");
+  option_line("xattr","display extended attributes names and values.");
+  option_subline(""ROZOFS_COLOR_BOLD"alls"ROZOFS_COLOR_NONE" or "ROZOFS_COLOR_BOLD"all"ROZOFS_COLOR_NONE" do not display extended attributes.");
+  option_line("distrib","display RozoFS distribution.");
+  option_line("trash","display directory trash configuration.");
+  option_line("id","display RozoFS FID.");
+  option_line("error","display file write error detected.");
+  option_line("strip","display file striping information.");
+  option_line("count<val>","Stop after displaying the <val> first found entries.");
+  option_line("none","Just display the count of file/dir but no file/dir information.");
+  title("NOTE","Characters \')\', \'(\', \'>\' and \'<\' must be escaped using \'\\' to avoid Linux interpretation.");
+  man_line("Regex MUST be quoted and a space MUST be set after the last quote.");
+  man_line("1k is 1000 while 1K is 1024.");
   
   if (fmt == NULL) {
-    printf("\n\033[4mExamples:\033[0m\n");
+    printf("\n"ROZOFS_COLOR_UNDERSCORE"Examples:"ROZOFS_COLOR_NONE"\n");
     printf("Display every attributes of file with FID 00000000-0000-4000-1800-000000000310.\n");
-    printf("  \033[1mrozo_scan fid=00000000-0000-4000-1800-000000000310 out json,all,xattr\033[0m\n");
-    printf("Searching for files having extended attributes with a size comprised between 76000 and 76100 or equal to 78M .\n");
-    printf("  \033[1mrozo_scan [xattr and [[size\\>=76k and size\\<=76100] or size=78M]] out size,xattr\033[0m\n");
+    example("rozo_scan fid=00000000-0000-4000-1800-000000000310 out json,all,xattr");
+    printf("Searching for files having no extended attributes with a size comprised between 76000 and 76100 or equal to 78M .\n");
+    example("rozo_scan [not xattr and [[sizege 76k and size le 76100] or size=78M]] out size,xattr");
     printf("Searching for files having system extended attributes.\n");
-    printf("  \033[1mrozo_scan xname ge system. out json,xattr\033[0m\n");
+    example("rozo_scan xname ge system. out json,xattr");
     printf("Searching for files with a modification date in february 2017 but created before 2017.\n");
-    printf("  \033[1mrozo_scan mtime ge 2017-02-01 and mtime lt 2017-03-01 and cr8 lt 2017-01-01 out hcr8,hmtime,uid,sep=#\033[0m\n");
+    example("rozo_scan mtime ge 2017-02-01 and mtime lt 2017-03-01 and cr8 lt 2017-01-01 out hcr8,hmtime,uid,sep=#");
     printf("Searching for files created by user 4501 or goup 1023 on 2015 January the 10th in the afternoon.\n");
-    printf("  \033[1mrozo_scan {{uid=4501 or gid=1023} and cr8\\< 2015-01-10-12:00 and cr8\\>=2015-01-11} out hcr8,hmtime,uid,gid\033[0m\n");
+    example("rozo_scan {{uid=4501 or gid=1023} and cr8 lt 2015-01-10-12:00 and cr8 gt 2015-01-11} out hcr8,hmtime,uid,gid");
     printf("Searching for files owned by group 4321 in directory with FID 00000000-0000-4000-1800-000000000018.\n");
-    printf("  \033[1mrozo_scan gid=4321 and pfid=00000000-0000-4000-1800-000000000018 out json,all\033[0m\n");
+    example("rozo_scan gid=4321 and pfid=00000000-0000-4000-1800-000000000018 out json,all");
     printf("Searching for files whoes name constains captainNemo.\n");
-    printf("  \033[1mrozo_scan name ge captainNemo out json,all\033[0m\n");
+    example("rozo_scan name ge captainNemo out json,all");
     printf("Searching for directories whoes name starts by \"Dir_\", ends with \".DIR\", and contains at least one decimal number.\n");
-    printf("  \033[1mrozo_scan dir name regex \"^Dir_.*\\d+.*\\.DIR$\"\033[0m\n");    
+    example("rozo_scan dir name regex \"^Dir_.*\\d+.*\\.DIR$\"");    
     printf("Searching for directories with more than 10000 entries.\n");
-    printf("  \033[1mrozo_scan dir children\\>=10k out json,size,children\033[0m\n");
+    example("rozo_scan dir children\\>=10k out json,size,children");
     printf("Searching for all symbolic links.\n");
-    printf("  \033[1mrozo_scan slink out json,all\033[0m\n");
+    example("rozo_scan slink out json,all");
     printf("Searching for files in project #31 owned by user 2345 off size 120K or 240K.\n");
-    printf("  \033[1mrozo_scan project=31 and uid=2345 and[size=120K or size=240K]\033[0m\n");
+    example("rozo_scan project=31 and uid=2345 and[size=120K or size=240K]");
     printf("Searching for files in cluster 2 not using sid 7 in their distribution.\n");
-    printf("  \033[1mrozo_scan cid=2 and sid!=2/7 out distrib\033[0m\n");
+    example("rozo_scan cid=2 and not sid=2/7 out distrib");
     printf("Searching for files using sid 3/5 as spare.\n");
-    printf("  \033[1mrozo_scan sidrange[6:7]=3/5 out json,all\033[0m\n");
+    example("rozo_scan sidrange[6:7]=3/5 out json,all");
     printf("Searching for non writable files being executable by its group but not by the others.\n");
-    printf("  \033[1mrozo_scan Unw Gx Onx out priv,gid,uid\033[0m\n");
+    example("rozo_scan not Uw and Gx and not Ox out priv,gid,uid");
     printf("Searching for multifiles not hybrid files having more than 4 sub files.\n");
-    printf("  \033[1mrozo_scan nohybrid slave gt 4 out json,all\033[0m\n");
-    printf("Searching for sub-directories under a some directories where any change occured after a given date.\n");
-    printf("  \033[1mrozo_scan dir \\(parent\\>=./joe/ or parent\\>=./jeff/ \\) and update\\>=2019-06-18\033[0m\n");
+    example("rozo_scan not hybrid and slave gt 4 out json,all");
+    printf("Searching for sub-directories under some directories where any change occured after a given date.\n");
+    example("rozo_scan dir \\(parent ge ./joe/ or parent ge ./jeff/ \\) and update\\>=2019-06-18");
     printf("Searching for sub-directories under a some directories that have been moved/renamed after a given date.\n");
-    printf("  \033[1mrozo_scan dir parent ge ./project/BenHur atime ge 0030-04-07-12:00 cr8 lt 0030-04-07-12:00\033[0m\n");
+    example("rozo_scan dir parent ge ./project/BenHur and atime ge 0030-04-07-12:00 and cr8 lt 0030-04-07-12:00 out all,json");
     printf("Searching for .o object files under one directory.\n");
-    printf("  \033[1mrozo_scan dir parent ge ./proj2/compil name ge .o out json,all\033[0m\n");
+    example("rozo_scan dir parent ge ./proj2/compil and name ge .o out json,all");
   }
   exit(EXIT_SUCCESS);     
 } 
@@ -794,12 +866,12 @@ void rozofs_scan_display_error(int argc, char *argv[]) {
     for (j=0; j<rozofs_scan_current_arg_char2skip; j++) {
       printf("%c",argv[i][j]);               
     }                                        
-    printf("\033[91m\033[40m\033[1m");       
+    printf(ROZOFS_COLOR_RED);       
     for (; j<strlen(argv[i]); j++) {         
       printf("%c",argv[i][j]);               
     }                                        
   }                                          
-  printf("\033[0m\n");                       
+  printf(ROZOFS_COLOR_NONE"\n");                       
 }
 #define rozofs_show_error(fmt, ...) {rozofs_scan_display_error(argc,argv); usage(fmt,##__VA_ARGS__); } 
 
@@ -836,6 +908,7 @@ void rozofs_scan_display_tree(rozofs_scan_node_t * node, int level) {
     *pChar = 0;  
   }   
   
+  if (node->not) printf("NOT ");
   switch(node->type) {
   
     /*
@@ -973,10 +1046,12 @@ rozofs_scan_node_t * rozofs_scan_new_node (rozofs_scan_node_t * leaf) {
   memset(node, 0, sizeof(rozofs_scan_node_t));
 
   node->type    = rozofs_scan_type_node;
+  node->not     = rozofs_get_next_node_is_not();
   /*
   ** Default operation is AND 
   */
   node->n.ope     = rozofs_scan_node_ope_and;
+
   /*
   ** Number the nodes
   */
@@ -1049,6 +1124,7 @@ rozofs_scan_node_t * rozofs_scan_new_criteria(rozofs_scan_keyw_e criteria) {
   memset(leaf, 0, sizeof(rozofs_scan_node_t));
 
   leaf->type   = rozofs_scan_type_criteria;
+  leaf->not    = rozofs_get_next_node_is_not();
   leaf->l.name = criteria;
   
   return rozofs_scan_new_node(leaf);
@@ -1073,6 +1149,7 @@ rozofs_scan_node_t * rozofs_scan_new_fid_field(rozofs_scan_keyw_e              n
   memset(leaf, 0, sizeof(rozofs_scan_node_t));
 
   leaf->type         = rozofs_scan_type_field;
+  leaf->not          = rozofs_get_next_node_is_not();
   leaf->l.name       = name;
   leaf->l.valType    = rozofs_scan_value_type_fid;   
   memcpy(leaf->l.value.fid, fid, sizeof(fid_t));
@@ -1099,6 +1176,7 @@ rozofs_scan_node_t * rozofs_scan_new_u64_field(rozofs_scan_keyw_e              n
   memset(leaf, 0, sizeof(rozofs_scan_node_t));
 
   leaf->type         = rozofs_scan_type_field;
+  leaf->not          = rozofs_get_next_node_is_not();
   leaf->l.name       = name;
   leaf->l.valType    = rozofs_scan_value_type_u64;   
   leaf->l.value.u64  = value;
@@ -1126,6 +1204,7 @@ rozofs_scan_node_t * rozofs_scan_new_2u32_field(rozofs_scan_keyw_e              
   memset(leaf, 0, sizeof(rozofs_scan_node_t));
 
   leaf->type           = rozofs_scan_type_field;
+  leaf->not            = rozofs_get_next_node_is_not();
   leaf->l.name         = name;
   leaf->l.valType      = rozofs_scan_value_type_2u32;   
   leaf->l.value.u32[0] = val0;
@@ -1159,6 +1238,7 @@ rozofs_scan_node_t * rozofs_scan_new_2u32_range_field(rozofs_scan_keyw_e        
   memset(leaf, 0, sizeof(rozofs_scan_node_t));
 
   leaf->type           = rozofs_scan_type_field;
+  leaf->not            = rozofs_get_next_node_is_not();
   leaf->l.name         = name;
   leaf->l.valType      = rozofs_scan_value_type_2u32_range;   
   leaf->l.value.u32[0] = val0;
@@ -1188,6 +1268,7 @@ rozofs_scan_node_t * rozofs_scan_new_string_field(rozofs_scan_keyw_e   name,
   memset(leaf, 0, sizeof(rozofs_scan_node_t));
 
   leaf->type           = rozofs_scan_type_field;
+  leaf->not            = rozofs_get_next_node_is_not();
   leaf->l.name         = name;
   leaf->l.valType      = rozofs_scan_value_type_string;   
   leaf->l.value.string = strdup(value);
@@ -1212,6 +1293,7 @@ rozofs_scan_node_t * rozofs_scan_new_regex_field(rozofs_scan_keyw_e     name,
   memset(leaf, 0, sizeof(rozofs_scan_node_t));
 
   leaf->type           = rozofs_scan_type_field;
+  leaf->not            = rozofs_get_next_node_is_not();
   leaf->l.name         = name;
   leaf->l.valType      = rozofs_scan_value_type_regex;   
   leaf->l.value.regex  = regex;
@@ -1746,7 +1828,7 @@ int rozofs_check_cid_and_sid(ext_mattr_t *inode_p, cid_t cid_equal, sid_t sid_eq
 int rozofs_check_cid(ext_mattr_t *inode_p, cid_t cid_equal) {
   int           idx; 
   int           nbSlaves; 
-  ext_mattr_t * slave_p;;
+  ext_mattr_t * slave_p;
   
   /*
   ** hybrid as well as non multifile mode have a distribution in 1rst inde
@@ -1977,7 +2059,7 @@ int rozofs_scan_eval_one_criteria_inode(
       if (rozofs_is_wrerror((lv2_entry_t*)inode_p)) break;
       result = 0;
       break;   
-                    
+                                        
     /*
     ** Must be in trash
     */  
@@ -2217,6 +2299,111 @@ int rozofs_scan_eval_one_criteria_inode(
       }
       result = 0;
       break;
+            
+    /*
+    ** Must have SGID bit set
+    */
+    case rozofs_scan_keyw_criteria_sgid:
+      if (inode_p->s.attrs.mode & S_ISGID) {
+        break;
+      } 
+      result = 0;
+      break; 
+    /*
+    ** Must have SUID bit set 
+    */
+    case rozofs_scan_keyw_criteria_suid:
+      if (inode_p->s.attrs.mode & S_ISUID) {
+        break;
+      } 
+      result = 0;
+      break; 
+    /*
+    ** Must have sticky bit set
+    */
+    case rozofs_scan_keyw_criteria_sticky: 
+      if (inode_p->s.attrs.mode & S_ISVTX) {
+        break;
+      } 
+      result = 0;
+      break; 
+      
+    /*
+    ** Must have persistent file lock
+    */
+    case rozofs_scan_keyw_criteria_pflock: 
+      if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_PERSISTENT_FLOCK)) {
+        /*
+        ** Persistent file lock
+        */
+        break;
+      }
+      result = 0;
+      break; 
+
+    /*
+    ** Must have a sub-file on fast volume
+    */
+    case rozofs_scan_keyw_criteria_vfast: 
+      /*
+      ** No multifile or hybrid. Check 1rst inode
+      */
+      if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.hybrid_desc.s.no_hybrid == 0)){
+        if (rozo_scan_is_fast_volume(inode_p)) {
+          break;  
+        }
+        result = 0;
+        break; 
+      } 
+      /*
+      ** Multi file. Check every sub-inode
+      */ 
+      result = 0;
+      if (inode_p->s.multi_desc.byte != 0) {
+        int idx; 
+        int nbSlaves = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+        ext_mattr_t * slave_p;
+        for (idx=1; idx <= nbSlaves;  idx++) {
+          slave_p = inode_p + idx;
+          if (rozo_scan_is_fast_volume(slave_p)) {
+            result = 1;
+            break;  
+          }
+        }  
+      }
+      break;
+
+    /*
+    ** Must have a sub-file on slow volume
+    */
+    case rozofs_scan_keyw_criteria_vslow: 
+      /*
+      ** No multifile or hybrid. Check 1rst inode
+      */
+      if ((inode_p->s.multi_desc.byte == 0)||(inode_p->s.hybrid_desc.s.no_hybrid == 0)){
+        if (!rozo_scan_is_fast_volume(inode_p)) {
+          break;  
+        }
+        result = 0;
+        break; 
+      } 
+      /*
+      ** Multi file. Check every sub-inode
+      */ 
+      result = 0;
+      if (inode_p->s.multi_desc.byte != 0) {
+        int idx; 
+        int nbSlaves = rozofs_get_striping_factor(&inode_p->s.multi_desc); 
+        ext_mattr_t * slave_p;
+        for (idx=1; idx <= nbSlaves;  idx++) {
+          slave_p = inode_p + idx;
+          if (!rozo_scan_is_fast_volume(slave_p)) {
+            result = 1;
+            break;  
+          }
+        }  
+      }
+      break;
       
     /*
     ** Must be an aging file
@@ -2325,6 +2512,9 @@ int rozofs_scan_validate_one_criteria_directory(
     case rozofs_scan_keyw_criteria_is_not_hybrid:
     case rozofs_scan_keyw_criteria_is_aging:
     case rozofs_scan_keyw_criteria_is_not_aging:
+    case rozofs_scan_keyw_criteria_sgid:
+    case rozofs_scan_keyw_criteria_suid:
+    case rozofs_scan_keyw_criteria_sticky:
       return 1;
       break;
       
@@ -2378,8 +2568,14 @@ int rozofs_scan_validate_one_criteria_regular(
     case rozofs_scan_keyw_criteria_priv_other_not_r: 
     case rozofs_scan_keyw_criteria_is_hybrid:
     case rozofs_scan_keyw_criteria_is_not_hybrid:
-    case rozofs_scan_keyw_criteria_is_aging:
-    case rozofs_scan_keyw_criteria_is_not_aging:
+    case rozofs_scan_keyw_criteria_sgid:
+    case rozofs_scan_keyw_criteria_suid:
+    case rozofs_scan_keyw_criteria_sticky:
+    case rozofs_scan_keyw_criteria_pflock: 
+    case rozofs_scan_keyw_criteria_vfast:
+    case rozofs_scan_keyw_criteria_vslow:
+    //    case rozofs_scan_keyw_criteria_is_aging:
+    //    case rozofs_scan_keyw_criteria_is_not_aging:
       return 1;
       break;
    
@@ -2487,6 +2683,8 @@ int rozofs_scan_eval_one_field_inode(
   int                trailer_slash = 0; 
   char             * pt; 
   int                xattr_idx;
+  ext_mattr_t      * inode_pdir_p; 
+  lv2_entry_t      * plv2;
   
   switch(field_name) {
 
@@ -3105,7 +3303,7 @@ int rozofs_scan_eval_one_field_inode(
     ** nlink
     */
     case rozofs_scan_keyw_field_nlink:
-      if (!S_ISREG(inode_p->s.attrs.mode)) {
+      if ((!S_ISREG(inode_p->s.attrs.mode)) && (!S_ISDIR(inode_p->s.attrs.mode))) {
         return 1;
         break;
       } 
@@ -3449,7 +3647,9 @@ int rozofs_scan_eval_one_field_inode(
         case rozofs_scan_keyw_comparator_ge:
           len = strlen(field_value->string);
           if (nameLen < len) return 0;
-          if (strncmp(field_value->string,pName, len) != 0) return 0;
+          if (strstr(pName, field_value->string)==NULL) {
+             return 0;
+          }  
           return 1;
           break;          
           
@@ -3469,8 +3669,112 @@ int rozofs_scan_eval_one_field_inode(
           break;                 
       }
       return 1;
-      break;    
-      
+      break;              
+
+             
+    /*______________________________________
+    ** parent  
+    */
+    case rozofs_scan_keyw_field_pdname:
+      /*   
+      ** get the attributes of the parent
+      */
+      if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,&cache, inode_p->s.pfid))) {
+        /*
+        ** Parent FID does not exist any more. Put FID only
+        */
+        return 0;   
+      }      
+      inode_pdir_p =  &plv2->attributes;                 
+      pName = exp_read_fname_from_inode(e->root,inode_pdir_p,&nameLen);
+      if (pName==NULL) {
+        return 0;
+      }
+      len = strlen(field_value->string);
+      VVERBOSE_CHAR(pName);
+      switch(comp) {
+        case rozofs_scan_keyw_comparator_eq:
+          if (strcmp(field_value->string,pName) == 0) return 1;
+          return 0;
+          break;
+          
+        case rozofs_scan_keyw_comparator_ge:
+          len = strlen(field_value->string);
+          if (nameLen < len) return 0;
+          if (strstr(pName, field_value->string)==NULL) {
+             return 0;
+          }  
+          return 1;
+          break;          
+          
+        case rozofs_scan_keyw_comparator_regex:
+          /*
+          ** Compare the names
+          */
+          if (pcre_exec (field_value->regex, NULL, pName, nameLen, 0, 0, NULL, 0) != 0) {
+            return 0;
+          }  
+          return 1;
+          break;
+          
+        default:
+          severe("Unexpected comparator for field project %d",comp);
+          return 1;
+          break;                 
+      }
+      return 1;
+      break;
+
+    /*______________________________________
+    ** Link name  
+    */
+    case rozofs_scan_keyw_field_lname:
+      {
+        rozofs_inode_t * inode_fid = (rozofs_inode_t*) inode_p->s.attrs.fid;
+        rozofs_inode_t   slinkFid;
+        slinkFid.fid[1] = inode_p->s.i_link_name;
+        slinkFid.fid[0] = 0;
+        slinkFid.s.eid  = inode_fid->s.eid;        
+        if (exp_metadata_read_attributes(e->trk_tb_p->tracking_table[ROZOFS_SLNK],&slinkFid,fullName,inode_p->s.attrs.size)<0){
+          fullName[0] = 0;
+        }
+        else {        
+          fullName[inode_p->s.attrs.size] = 0; 
+        }
+      }    
+      VVERBOSE_CHAR(fullName);
+      switch(comp) {
+        case rozofs_scan_keyw_comparator_eq:
+          if (strcmp(field_value->string,fullName) == 0) return 1;
+          return 0;
+          break;
+          
+        case rozofs_scan_keyw_comparator_ge:
+          len = strlen(field_value->string);
+          if (strlen(fullName) < len) return 0;
+          if (strstr(fullName, field_value->string)==NULL) {
+             return 0;
+          }  
+          return 1;
+          break;          
+          
+        case rozofs_scan_keyw_comparator_regex:
+          /*
+          ** Compare the names
+          */
+          if (pcre_exec (field_value->regex, NULL, fullName, strlen(fullName), 0, 0, NULL, 0) != 0) {
+            return 0;
+          }  
+          return 1;
+          break;
+          
+        default:
+          severe("Unexpected comparator for field project %d",comp);
+          return 1;
+          break;                 
+      }
+      return 1;
+      break;
             
     default:
      severe("Unexpected inode field %d",field_name);
@@ -3514,6 +3818,7 @@ int rozofs_scan_validate_one_field_regular(
     */
     case rozofs_scan_keyw_field_fname:
     case rozofs_scan_keyw_field_parent:
+    case rozofs_scan_keyw_field_pdname:
     case rozofs_scan_keyw_field_xname:
       switch(comp) {
         case rozofs_scan_keyw_comparator_eq:  
@@ -3610,6 +3915,8 @@ int rozofs_scan_validate_one_field_slink(
     */
     case rozofs_scan_keyw_field_fname:
     case rozofs_scan_keyw_field_parent:
+    case rozofs_scan_keyw_field_pdname:
+    case rozofs_scan_keyw_field_lname:
       switch(comp) {
         case rozofs_scan_keyw_comparator_eq:  
         case rozofs_scan_keyw_comparator_ge:   
@@ -3771,6 +4078,7 @@ int rozofs_scan_validate_one_field_directory(
     */
     case rozofs_scan_keyw_field_fname:
     case rozofs_scan_keyw_field_parent:
+    case rozofs_scan_keyw_field_pdname:
     case rozofs_scan_keyw_field_xname:
       switch(comp) {
         case rozofs_scan_keyw_comparator_eq:  
@@ -3795,6 +4103,7 @@ int rozofs_scan_validate_one_field_directory(
     case rozofs_scan_keyw_field_slave:      
     case rozofs_scan_keyw_field_deleted:
     case rozofs_scan_keyw_field_children:
+    case rozofs_scan_keyw_field_nlink:
       switch(comp) {
         case rozofs_scan_keyw_comparator_lt:
         case rozofs_scan_keyw_comparator_le:
@@ -3851,11 +4160,15 @@ int rozofs_scan_eval_node(export_t                  * e,
   
   switch(node->type) {
     case rozofs_scan_type_criteria:
-      return result = (*rozofs_scan_eval_one_criteria)(e, entry,  node->l.name);
+      result = (*rozofs_scan_eval_one_criteria)(e, entry,  node->l.name);
+      if (node->not) result = 1 - result;
+      return result;
       break;  
 
     case rozofs_scan_type_field:
-      return (*rozofs_scan_eval_one_field)(e, entry,  node->l.name, &node->l.value, &node->l.range, node->l.comp);
+      result = (*rozofs_scan_eval_one_field)(e, entry,  node->l.name, &node->l.value, &node->l.range, node->l.comp);
+      if (node->not) result = 1 - result;
+      return result;
       break; 
         
     default:
@@ -3875,6 +4188,10 @@ int rozofs_scan_eval_node(export_t                  * e,
     if (node->n.ope == rozofs_scan_node_ope_and) {
       if (!result) {
         VVERBOSE(" node %d subnode %d/%d : Failed => AND FAILED\n",node->n.nb, idx,node->n.nbNext);
+        if (node->not) {
+          VVERBOSE(" node %d is NOT => SUCCESS\n",node->n.nb);
+          return 1;
+        }  
         return 0;
       }  
       VVERBOSE(" node %d subnode %d/%d : OK => AND next node\n",node->n.nb,idx,node->n.nbNext);
@@ -3886,10 +4203,20 @@ int rozofs_scan_eval_node(export_t                  * e,
     */ 
     if (result) {
       VVERBOSE(" node %d subnode %d/%d : OK => OR OK\n",node->n.nb,idx,node->n.nbNext);
+      if (node->not) {
+        VVERBOSE(" node %d is NOT => FAILED\n",node->n.nb);
+        return 0;
+      }  
       return 1;
     }  
     VVERBOSE(" node %d subnode %d/%d : FAILED => OR next node\n",node->n.nb,idx,node->n.nbNext);    
-  }    
+  } 
+     
+  if (node->not) {
+    VVERBOSE(" node %d is NOT => %s\n",node->n.nb, result?"FAILED":"SUCCESS");
+    return 1-result;
+  }  
+  VVERBOSE(" node %d => %s\n",node->n.nb, result?"SUCCESS":"FAILED");
   return result;
 }    
 /* 
@@ -3941,13 +4268,20 @@ void rozofs_scan_simplify_tree(rozofs_scan_node_t * node) {
   int                   idx, idx2;
   rozofs_scan_node_t  * next;
   int                   count;
+  int                   not;
     
   if (node==NULL) return;
   if (node->type != rozofs_scan_type_node) return;
-  
+ 
+  /*
+  ** Compact nodes with only one sub-node into one single node 
+  */ 
   if (node->n.nbNext == 1) {
     next = node->n.next[0];
+    not = node->not;
     memcpy(node,next,sizeof(rozofs_scan_node_t));
+    if (node->not == not) node->not = 0;
+    else                  node->not = 1;
     free(next);        
     return rozofs_scan_simplify_tree(node);
   }
@@ -3959,6 +4293,7 @@ void rozofs_scan_simplify_tree(rozofs_scan_node_t * node) {
   count = node->n.nbNext;
   for (idx=0; idx<count; idx++) {
     next = node->n.next[idx];
+    if (next->not) continue;
     if ((next->type != rozofs_scan_type_node)||(next->n.ope != node->n.ope)) {
       continue;
     }
@@ -4205,11 +4540,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     NEW_FIELD(priv);  
     if (display_json) {
       pDisplay += rozofs_string_append(pDisplay,"\"");
-      pDisplay += rozofs_mode2String(pDisplay, inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+      pDisplay += rozofs_mode2String(pDisplay, inode_p->s.attrs.mode);
       pDisplay += rozofs_string_append(pDisplay,"\"");
     }
     else {
-      pDisplay += rozofs_u32_append(pDisplay, inode_p->s.attrs.mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+      pDisplay += rozofs_u32_append(pDisplay, inode_p->s.attrs.mode);
     }  
   }
   
@@ -4297,6 +4632,10 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     IF_DISPLAY(display_children) {       
       NEW_FIELD(children); 
       pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.children);                
+    }
+    IF_DISPLAY(display_nlink) {       
+      NEW_FIELD(nlink); 
+      pDisplay += rozofs_u64_append(pDisplay,inode_p->s.attrs.nlink);                
     }
     IF_DISPLAY(display_deleted) {       
       uint64_t deleted = inode_p->s.hpc_reserved.dir.nb_deleted_files;
@@ -4389,7 +4728,16 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
       else {
         pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
       }
-    }   
+    }    
+    IF_DISPLAY(display_pflock) {
+      NEW_FIELD(pflock);       
+      if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_PERSISTENT_FLOCK)) {
+        pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
+      }
+      else {
+        pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
+      }
+    }
        
     IF_DISPLAY(display_striping) {
       if (inode_p->s.multi_desc.byte != 0){
@@ -4402,13 +4750,6 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
           pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
           NEW_FIELD(hybdrid_size); 
           pDisplay += rozofs_u64_append(pDisplay,rozofs_get_hybrid_size(&inode_p->s.multi_desc,&inode_p->s.hybrid_desc));
-        }
-        else {
-          pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
-        }
-        NEW_FIELD(aging); 
-        if (ROZOFS_IS_BITFIELD1(inode_p,ROZOFS_BITFIELD1_AGING)) {
-          pDisplay += rozofs_string_append(pDisplay,"\"YES\"");
         }
         else {
           pDisplay += rozofs_string_append(pDisplay,"\"NO\"");
@@ -4438,7 +4779,14 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
         SUBARRAY_START_ELEMENT();
         FIRST_QUOTED_NAME(storage_fid);
         pDisplay += rozofs_fid_append(pDisplay,slave_p->s.attrs.fid);
-        pDisplay += rozofs_string_append(pDisplay,"\"");   
+        pDisplay += rozofs_string_append(pDisplay,"\"");             
+        NEW_NAME(volume)
+        if (rozo_scan_is_fast_volume(slave_p)) {
+          pDisplay += rozofs_string_append(pDisplay,"\"fast\"");  
+        }
+        else {
+          pDisplay += rozofs_string_append(pDisplay,"\"slow\"");  
+        }    
         NEW_NAME(cid)
         pDisplay += rozofs_u32_append(pDisplay,slave_p->s.attrs.cid);
         NEW_NAME(sid)
@@ -4463,8 +4811,16 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
           SUBARRAY_START_ELEMENT();
           FIRST_QUOTED_NAME(storage_fid)
           pDisplay += rozofs_fid_append(pDisplay,slave_p->s.attrs.fid);
-          pDisplay += rozofs_string_append(pDisplay,"\"");   
+          pDisplay += rozofs_string_append(pDisplay,"\"");  
            
+          NEW_NAME(volume)
+          if (rozo_scan_is_fast_volume(slave_p)) {
+            pDisplay += rozofs_string_append(pDisplay,"\"fast\"");  
+          }
+          else {
+            pDisplay += rozofs_string_append(pDisplay,"\"slow\"");  
+          }    
+                       
           NEW_NAME(cid)
           pDisplay += rozofs_u32_append(pDisplay,slave_p->s.attrs.cid);
 
@@ -5198,7 +5554,12 @@ int rozofs_parse_output_format(char * fmt, int argc, char * argv[]) {
       display_error = DO_DISPLAY;
       NEXT(p);
     }           
-    
+
+    if (strncmp(p, "pflock", 4)==0) {
+      display_pflock = DO_DISPLAY;
+      NEXT(p);
+    }           
+   
     if (strncmp(p, "trash", 5)==0) {
       display_trash_cfg = DO_DISPLAY;
       NEXT(p);
@@ -5668,6 +6029,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       if (pt[1] == 'e') rozofs_scan_ret_arg_len(2,argLen,rozofs_scan_keyw_comparator_le);
       if (pt[1] == 't') rozofs_scan_ret_arg_len(2,argLen,rozofs_scan_keyw_comparator_lt);
       rozofs_scan_check_against("link",rozofs_scan_keyw_field_nlink);
+      rozofs_scan_check_against("lname",rozofs_scan_keyw_field_lname);
       return rozofs_scan_keyw_input_error;
       break;
       
@@ -5696,6 +6058,7 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       rozofs_scan_check_against("notrash",rozofs_scan_keyw_criteria_not_in_trash);
       rozofs_scan_check_against("nohybrid",rozofs_scan_keyw_criteria_is_not_hybrid);
       rozofs_scan_check_against("noaging",rozofs_scan_keyw_criteria_is_not_aging);  
+      rozofs_scan_check_against("not",rozofs_scan_keyw_operator_not);
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_field_fname);;
       break;
 
@@ -5714,11 +6077,14 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
     ** field:    project      old[-P,--project]
     ** field:    pfid         old[--pfid]
     ** field:    parent       old[--under]
+    ** field:    pdname       
     */
     case 'p' : 
       rozofs_scan_check_against("project",rozofs_scan_keyw_field_project);
       rozofs_scan_check_against("pfid",rozofs_scan_keyw_field_pfid);   
       rozofs_scan_check_against("parent",rozofs_scan_keyw_field_parent);   
+      rozofs_scan_check_against("pdname",rozofs_scan_keyw_field_pdname);   
+      rozofs_scan_check_against("pflock",rozofs_scan_keyw_criteria_pflock);   
       return rozofs_scan_keyw_input_error;
       break;
 
@@ -5760,6 +6126,9 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       rozofs_scan_check_against("satime",rozofs_scan_keyw_field_atime);
       rozofs_scan_check_against("supdate",rozofs_scan_keyw_field_update_time);
       rozofs_scan_check_against("skipdate",rozofs_scan_keyw_option_skipdate);
+      rozofs_scan_check_against("sgid",rozofs_scan_keyw_criteria_sgid);
+      rozofs_scan_check_against("suid",rozofs_scan_keyw_criteria_suid);
+      rozofs_scan_check_against("sticky",rozofs_scan_keyw_criteria_sticky);
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_field_size);
       break;
       
@@ -5780,6 +6149,12 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       rozofs_scan_check_against("uid",rozofs_scan_keyw_field_uid);
       rozofs_scan_check_against("under",rozofs_scan_keyw_field_parent);
       rozofs_scan_check_against("update",rozofs_scan_keyw_field_update_time);
+      rozofs_scan_check_against("ux",rozofs_scan_keyw_criteria_priv_user_x);
+      rozofs_scan_check_against("uw",rozofs_scan_keyw_criteria_priv_user_w);
+      rozofs_scan_check_against("ur",rozofs_scan_keyw_criteria_priv_user_r);
+      rozofs_scan_check_against("uxn",rozofs_scan_keyw_criteria_priv_user_not_x);
+      rozofs_scan_check_against("unw",rozofs_scan_keyw_criteria_priv_user_not_w);
+      rozofs_scan_check_against("unr",rozofs_scan_keyw_criteria_priv_user_not_r);
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_field_uid); 
       break;
 
@@ -5793,7 +6168,9 @@ rozofs_scan_keyw_e rozofs_scan_decode_argument(char * argument) {
       if (pt[1]=='v') {
         if (argLen == 2) return rozofs_scan_keyw_option_vverbose;
         rozofs_scan_ret_arg_len(2,argLen,rozofs_scan_keyw_option_vverbose); 
-      }  
+      }
+      rozofs_scan_check_against("vfast",rozofs_scan_keyw_criteria_vfast);
+      rozofs_scan_check_against("vslow",rozofs_scan_keyw_criteria_vslow);
       rozofs_scan_ret_arg_len(1,argLen,rozofs_scan_keyw_option_verbose); 
       break;
       
@@ -6272,7 +6649,9 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
           
         case rozofs_scan_keyw_field_fname:
         case rozofs_scan_keyw_field_parent:
+        case rozofs_scan_keyw_field_pdname:
         case rozofs_scan_keyw_field_xname:
+        case rozofs_scan_keyw_field_lname:
           switch(comp) {
             case rozofs_scan_keyw_comparator_eq:
             case rozofs_scan_keyw_comparator_ge:
@@ -6448,12 +6827,6 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
       */
       case rozofs_scan_keyw_separator_open:
         /*
-        ** No brackets must be set when only one FID is requested
-        */
-        if (just_this_fid) {
-          rozofs_show_error("No bracket expected after \"fid\" field comparator.");              
-        }
-        /*
         ** Push old node in the stack
         */
         if (rozofs_scan_push_node(oldNode)<0) {
@@ -6473,12 +6846,6 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
       ** Close bracket
       */
       case rozofs_scan_keyw_separator_close: 
-        /*
-        ** No brackets must be set when only one FID is requested
-        */
-        if (just_this_fid) {
-          rozofs_show_error("No bracket expected after \"fid\" field comparator.");              
-        }
         VERBOSE("(%d)",deep);        
         if (deep==0) {
           rozofs_show_error("unbalanced parantheses");                
@@ -6491,6 +6858,15 @@ void rozofs_scan_parse_command(int argc, char *argv[]) {
         if (oldNode == NULL) {
           rozofs_show_error("error poping node");            
         }      
+        break;
+        
+      case rozofs_scan_keyw_operator_not:
+        /*
+        * Next node will get not
+        */
+        if (!rozofs_get_next_node_is_not()) {
+          next_node_is_not = 1;
+        }
         break;
         
       case rozofs_scan_keyw_operator_or:
