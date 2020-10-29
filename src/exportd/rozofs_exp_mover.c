@@ -178,7 +178,7 @@ int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_
   rozofs_mover_sids_t *dist_mv_p;   
   rozofs_mover_children_t mover_idx;  
   lv2_entry_t *master = NULL;
-
+  rozofs_mover_children_t *children_p;
   attr_p = &lv2->attributes;
   mover_idx.u32 = attr_p->s.attrs.children;
 
@@ -259,11 +259,25 @@ int rozofs_mover_file_validate (export_t *e,lv2_entry_t *lv2,rozofs_mv_idx_dist_
     new_vid = export_get_vid_from_cid(lv2->attributes.s.attrs.cid);  
     if (new_vid == e->volume->vid) new_vid = 0; // slow volume is set to 0 in children field
     /*
+    ** Update the vid in the children field of the slave inode
+    */
+    children_p = (rozofs_mover_children_t *) &lv2->attributes.s.attrs.children;
+    if (children_p->fid_st_idx.vid_fast != new_vid) {
+      children_p->fid_st_idx.vid_fast = new_vid;
+    }
+    
+    /*
+    ** Update statistics. The whole file size whill be transfered toward the new volume
+    ** on the first positive response, even if all subfile have not been yet moved successfully.
+    ** We use the master inode children field for that.
+    */
+    
+    /*
     ** Get master current volume id in master inode
     */
-    rozofs_mover_children_t *children_p = (rozofs_mover_children_t *) &master->attributes.s.attrs.children;
+    children_p = (rozofs_mover_children_t *) &master->attributes.s.attrs.children;
     old_vid = children_p->fid_st_idx.vid_fast;
-
+    
     if (new_vid == old_vid) break;
     
 
