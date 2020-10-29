@@ -1289,8 +1289,8 @@ void rbs_monitor_purge(void) {
 **
 ** @param   max : maximum number of directories before purge
 **
-** Remove directories older than 2 weeks
-** and the oldest (within 2 weeks) when more than max
+** Remove directories older than 2 months
+** and the oldest (within 2 months) when more than max
 ** of such directories exist
 **
 */
@@ -1309,12 +1309,12 @@ void rbs_tmp_purge(int max) {
   if (dir==NULL) return;
 
   /*
-  ** Compute date 2 weeks ago
+  ** Compute date 2 months ago
   */
-  veryOld = time(NULL) - (14 * 24 * 3600);
+  veryOld = time(NULL) - (64 * 24 * 3600);
 
   /*
-  ** Prepare to find the oldest directory with the last 2 weeks
+  ** Prepare to find the oldest directory with the last 2 months
   */
   oldestTime = time(NULL)+ 20;
   oldest_path[0] = 0; 
@@ -1336,7 +1336,7 @@ void rbs_tmp_purge(int max) {
     }
 
     /*
-    ** Remove older than 2 weeks
+    ** Remove older than 2 months
     */
     if (statBuf.st_mtime < veryOld) { 
       clean_dir(file_path);
@@ -1344,7 +1344,7 @@ void rbs_tmp_purge(int max) {
     }
     
     /*
-    ** Within a 2 weeks period
+    ** Within a 2 months period
     */
     count ++;
     
