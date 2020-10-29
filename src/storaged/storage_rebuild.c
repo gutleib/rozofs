@@ -1282,22 +1282,43 @@ void rbs_monitor_purge(void) {
   }
   closedir(dir);  
 }
+
 /*
 **____________________________________________________
-** Purge excedent /tmp/rbs.xxx directories
+** Purge oldest /tmp/rbs.xxx directories
+**
+** @param   max : maximum number of directories before purge
+**
+** Remove directories older than 2 weeks
+** and the oldest (within 2 weeks) when more than max
+** of such directories exist
+**
 */
-void rbs_tmp_purge(void) {
-  struct dirent * dirItem;
+void rbs_tmp_purge(int max) {
+  struct dirent * dirItem;  
   struct stat     statBuf;
   DIR           * dir;
   char            file_path[FILENAME_MAX];
-  time_t          lastWeeks;
+  char            oldest_path[FILENAME_MAX];
+  time_t          oldestTime;
+  int             count = 0;
+  time_t          veryOld;
   
   /* Open /tmp file directory */ 
   dir=opendir("/tmp");
   if (dir==NULL) return;
+
+  /*
+  ** Compute date 2 weeks ago
+  */
+  veryOld = time(NULL) - (14 * 24 * 3600);
+
+  /*
+  ** Prepare to find the oldest directory with the last 2 weeks
+  */
+  oldestTime = time(NULL)+ 20;
+  oldest_path[0] = 0; 
   
-  lastWeeks = time(NULL) - (14 * 24 * 3600);
   
   while ((dirItem=readdir(dir))!= NULL) {
     
@@ -1314,13 +1335,36 @@ void rbs_tmp_purge(void) {
       continue;	           
     }
 
-    if (statBuf.st_mtime < lastWeeks) { 
+    /*
+    ** Remove older than 2 weeks
+    */
+    if (statBuf.st_mtime < veryOld) { 
       clean_dir(file_path);
+      continue;
     }
+    
+    /*
+    ** Within a 2 weeks period
+    */
+    count ++;
+    
+    if (statBuf.st_mtime < oldestTime) { 
+      oldestTime = statBuf.st_mtime;
+      strcpy(oldest_path,file_path);
+    }
+  }
+  /*
+  ** Clean oldest directory when more than acceptable
+  */
+  if (count>max) {
+    //info("purge (%d) %s",count,oldest_path);
+    clean_dir(oldest_path);
+  }  
+  else {
+    //info("Nothing to purge (%d)",count);
   }
   closedir(dir);  
 }
-
 char * get_rebuild_status_file_name_to_use() {
   return rbs_monitor_file_path;
 }
@@ -3539,6 +3583,11 @@ static inline int rbs_rebuild_process() {
     int status = -1;
 
     /*
+    ** Remove excedent /tmp/rbs.xxx directories
+    */
+    rbs_tmp_purge(256);
+
+    /*
     ** Create a temporary directory to receive the list files
     */  
     clean_dir(get_rebuild_directory_name(parameter.rebuildRef));
@@ -3606,7 +3655,6 @@ out:
     ** Purge excedent old rebuild result files
     */
     rbs_monitor_purge();
-    rbs_tmp_purge();
     return status;
 }
 /** Start one rebuild process for each storage to rebuild
