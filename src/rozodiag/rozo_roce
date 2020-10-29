@@ -37,14 +37,22 @@ from optparse import OptionParser
 
 #______________________  
 def read_string_file(path):
-    f = open(path,"r")
-    val = f.read()
-    f.close()
-    return val.strip()
+  if os.path.exists(path):
+    try:
+      f = open(path,"r")
+      val = f.read()
+      f.close()
+      return val.strip()
+    except:
+      return "error reading %s"%(path)
+  return "%s does not exist"%(path)          
 #______________________  
 def read_int_file(path):
-    return int(read_string_file(path))
-
+  val = read_string_file(path)
+  try:
+    return int(val)
+  except:
+    return -1
 #______________________  
 class rozo_roce_port:
   def __init__(self,port_num,path):
@@ -137,10 +145,12 @@ def rozo_roce_counters():
       first_device = False
     else:
       print "   ,{ \"device name\" : \"%s\","%(ib_device.name)  
+    numa_node = read_string_file("/sys/class/infiniband/%s/device/numa_node"%(ib_device.name))
     board_id = read_string_file("/sys/class/infiniband/%s/board_id"%(ib_device.name))
     fw_ver   = read_string_file("/sys/class/infiniband/%s/fw_ver"%(ib_device.name))
     hca_type = read_string_file("/sys/class/infiniband/%s/hca_type"%(ib_device.name))
     hw_rev   = read_string_file("/sys/class/infiniband/%s/hw_rev"%(ib_device.name))
+    print "      \"numa node\"   : \"%s\","%(numa_node)  
     print "      \"id\"          : \"%s\","%(board_id)  
     print "      \"fw\"          : \"%s\","%(fw_ver)  
     print "      \"type\"        : \"%s\","%(hca_type)  
