@@ -8364,6 +8364,11 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   {
     DISPLAY_ATTR_TXT("XATTR", "YES");    
   }
+  {
+    char priv[64];
+    rozofs_mode2String(priv, lv2->attributes.s.attrs.mode);
+    DISPLAY_ATTR_TXT("PRIV",priv);
+  }  
   DISPLAY_ATTR_INT("I-STATE",lv2->attributes.s.i_state);
   if (S_ISDIR(lv2->attributes.s.attrs.mode)) {
     rozofs_dir0_sids_t byte_sid0;
